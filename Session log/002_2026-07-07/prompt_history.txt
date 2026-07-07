@@ -167,3 +167,15 @@ this is what I get when I try to login
 
 --- 2026-07-07 19:00 ---
 You are wrong btw, these are NOT example ads I created. I deleted that old supabase project... Also, take Leroy P off the website in the "how-it-works" page.
+
+--- 2026-07-07 19:05 ---
+mode	"fixtures/file store (misconfigured for Vercel — set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY)"
+env	
+SUPABASE_URL	true
+SUPABASE_SERVICE_ROLE_KEY	"missing"
+SESSION_SECRET	false
+ADMIN_PHONES	false
+SITE_URL	"https://theplainexchange.com"
+CRON_SECRET	false
+TELNYX_API_KEY	false
+RESEND_API_KEY	false

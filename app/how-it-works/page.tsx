@@ -62,7 +62,7 @@ export default function HowItWorks() {
         <figcaption>
           Example — text this to {site.smsNumber}, with a photo attached if you have one:
         </figcaption>
-        <p>AD NEW Horse cart for sale, $1,000 OBO. Good shape. Leroy P., 330-555-0142, Mt. Hope.</p>
+        <p>AD NEW Horse cart for sale, $1,000 OBO. Good shape. Call 330-555-0142. Mt. Hope.</p>
       </figure>
       <p>
         Every ad is read and approved by a person before it runs. Once approved, your ad goes

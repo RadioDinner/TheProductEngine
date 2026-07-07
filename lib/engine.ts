@@ -66,7 +66,7 @@ async function handleAdSubmission(from: string, body: string, media?: string[]):
   }
   if (!body) {
     return {
-      body: `To post an ad, text AD NEW and your ad — for example: AD NEW Horse cart for sale, $1,000 OBO. Leroy P., 330-555-0142.`,
+      body: `To post an ad, text AD NEW and your ad — for example: AD NEW Horse cart for sale, $1,000 OBO. Call 330-555-0142.`,
     };
   }
   const settings = await getEngineSettings();
