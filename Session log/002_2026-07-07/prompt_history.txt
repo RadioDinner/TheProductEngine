@@ -128,3 +128,6 @@ merge everything to main
 
 --- 2026-07-07 17:40 ---
 I added all those environment variables
+
+--- 2026-07-07 17:45 ---
+what happens if I don't remove the API_KEY
