@@ -5,9 +5,9 @@
 export const site = {
   name: "The Plain Exchange",
   region: "Holmes County, Ohio",
-  /** Placeholder until the Telnyx number is provisioned (555 = reserved fictional range). */
-  smsNumber: "(330) 555-0100",
-  smsNumberPlain: "3305550100",
+  /** The provisioned Telnyx number. */
+  smsNumber: "(330) 960-7170",
+  smsNumberPlain: "3309607170",
   tagline: "Buy and sell by text message",
   adsPerPage: 15,
 } as const;
@@ -48,6 +48,12 @@ export const engineDefaults = {
   emailSlots: [7, 16],
   maxChars: 250,
   expiryDays: 30,
+  /** Abuse guards: command replies per number per hour before going silent. */
+  smsRepliesPerHour: 20,
+  /** Picture (PIC) replies per number per hour — MMS costs the most to send. */
+  smsPicsPerHour: 12,
+  /** All command replies service-wide per hour — the cost circuit breaker. */
+  smsGlobalPerHour: 500,
   /** Starter word-filter list (flag-for-review). */
   filterWords: ["gun", "firearm", "rifle", "whiskey", "tobacco"],
 } as const;

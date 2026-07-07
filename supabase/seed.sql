@@ -69,8 +69,8 @@ on conflict do nothing;
 -- ---------- config defaults (all admin-tunable) ----------
 
 insert into config (key, value) values
-  ('sms_number',              '"3305550100"'),
-  ('support_number',          '"3305550100"'),
+  ('sms_number',              '"3309607170"'),
+  ('support_number',          '"3309607170"'),
   ('digest_slots_sms',        '[7, 12, 16, 20]'),
   ('digest_slots_email',      '[7, 16]'),
   ('digest_ad_cap',           '10'),
@@ -81,7 +81,10 @@ insert into config (key, value) values
   ('starter_free_ads',        '3'),
   ('ad_expiry_days',          '30'),
   ('ad_max_chars',            '250'),
-  ('offense_ban_threshold',   '3')
+  ('offense_ban_threshold',   '3'),
+  ('sms_replies_per_hour',    '20'),
+  ('sms_pics_per_hour',       '12'),
+  ('sms_global_per_hour',     '500')
 on conflict (key) do nothing;
 
 -- ---------- credit packs ----------

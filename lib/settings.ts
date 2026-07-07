@@ -20,6 +20,10 @@ export interface EngineSettings {
   emailSlots: number[];
   maxChars: number;
   expiryDays: number;
+  /** Abuse guards — see engineDefaults for what each cap means. */
+  smsRepliesPerHour: number;
+  smsPicsPerHour: number;
+  smsGlobalPerHour: number;
 }
 
 export interface WordRule {
@@ -37,6 +41,9 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   emailSlots: "digest_slots_email",
   maxChars: "ad_max_chars",
   expiryDays: "ad_expiry_days",
+  smsRepliesPerHour: "sms_replies_per_hour",
+  smsPicsPerHour: "sms_pics_per_hour",
+  smsGlobalPerHour: "sms_global_per_hour",
 };
 
 // ---------- file implementation ----------
@@ -77,6 +84,9 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     emailSlots: [...engineDefaults.emailSlots],
     maxChars: engineDefaults.maxChars,
     expiryDays: engineDefaults.expiryDays,
+    smsRepliesPerHour: engineDefaults.smsRepliesPerHour,
+    smsPicsPerHour: engineDefaults.smsPicsPerHour,
+    smsGlobalPerHour: engineDefaults.smsGlobalPerHour,
   };
   if (!supabaseConfigured) {
     return { ...defaults, ...load().values };

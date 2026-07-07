@@ -95,7 +95,17 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
       .filter((n) => Number.isInteger(n) && n >= 0 && n <= 23);
 
   const update: Record<string, number | number[]> = {};
-  for (const key of ["costText", "costPhoto", "bumpCost", "digestCap", "maxChars", "expiryDays"]) {
+  for (const key of [
+    "costText",
+    "costPhoto",
+    "bumpCost",
+    "digestCap",
+    "maxChars",
+    "expiryDays",
+    "smsRepliesPerHour",
+    "smsPicsPerHour",
+    "smsGlobalPerHour",
+  ]) {
     const value = num(key);
     if (value !== null) update[key] = value;
   }

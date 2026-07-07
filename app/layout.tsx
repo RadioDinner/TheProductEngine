@@ -94,6 +94,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Link href="/email">Get the ads by email</Link> ·{" "}
               <Link href="/how-it-works">How it works</Link>
             </p>
+            <p>
+              <Link href="/privacy">Privacy policy</Link> ·{" "}
+              <Link href="/terms-and-conditions">Terms and conditions</Link>
+            </p>
           </div>
         </footer>
       </body>

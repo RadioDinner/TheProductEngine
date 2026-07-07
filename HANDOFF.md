@@ -3,7 +3,7 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-07-07 (session 001).
+**Last updated:** 2026-07-07 (session 002).
 
 ## What this project is
 
@@ -31,22 +31,47 @@ scripted Playwright walks against `npx next start`:
 - Admin portal (`/admin`, gated by `ADMIN_PHONES` env)
 - Email edition (confirmed opt-in, union-of-SMS digests, CAN-SPAM)
 
-**Deployment: IN PROGRESS AND CURRENTLY BROKEN.**
+**Deployment: site loads; admin login is the open issue.**
 
-- Vercel: https://the-product-engine.vercel.app — homepage 500s (digest
-  2292519677). Diagnosis: only data-layer routes fail (`/`, `/ad/*`);
-  non-data routes (`/how-it-works`, `/login`) are 200 → Supabase env not
-  reaching the app or wrong key. User first pasted an `sb_publishable_` key;
-  the app needs the **`sb_secret_`** key in `SUPABASE_SERVICE_ROLE_KEY`.
-  User says vars were updated but the error persists — possibly no redeploy
-  after the change, or another var problem.
-- **FIRST MOVE NEXT SESSION:** `GET https://the-product-engine.vercel.app/api/health`
-  (added in `aa8efe8`). It reports the active mode, env presence, key *kind*,
-  and a live DB round-trip. Interpret: `mode: fixtures` → env vars absent at
-  runtime (set them / redeploy); `sb_publishable (WRONG…)` → swap key;
-  `configTable.ok: false` → read the error code/message. After it's green,
-  run a full verification walk against the live site (the Supabase code path
-  has never run against a real database).
+- Vercel: https://the-product-engine.vercel.app — **homepage loads as of
+  2026-07-07 (session 002).** The earlier `mkdir '/var/task/.data'` 500s were
+  the file-store fallback running on Vercel's read-only lambda FS (Supabase
+  env vars not reaching the runtime); a redeploy after the env fix resolved
+  it. Remember: env-var edits only apply to *new* deployments.
+- **OPEN: admin sign-in on production "doesn't work" (symptom not yet
+  pinned).** Triage: `GET /api/health` (mode, env presence, key kind, DB
+  round-trip) → then note the prod DB has no accounts, so first login is
+  phone → on-screen code (no TELNYX_API_KEY) → set-password; `/admin`
+  deliberately 404s for signed-in non-admins. Session 002 fixed an
+  `ADMIN_PHONES` trap on branch `claude/vercel-mkdir-enoent-2ephir`:
+  `isAdminPhone` now normalizes entries (a `+1`/`1` prefix used to defeat the
+  match) — not live until merged to main.
+- Domain: theplainexchange.com bought at Namecheap; plan is A `@` →
+  76.76.21.21 + CNAME `www` → cname.vercel-dns.com (or Vercel nameservers),
+  add both hosts in Vercel → Settings → Domains, then set `SITE_URL` and
+  redeploy. Pushes to `main` already auto-deploy to production, and the
+  domain simply aliases the latest production deployment.
+- `/privacy` + `/terms-and-conditions` exist (session 002, this branch),
+  written to satisfy TCR/CTIA campaign vetting (opt-in/out, frequency,
+  msg&data rates, no-sharing-mobile-info clause). They must be live on the
+  domain before resubmitting the Telnyx campaign — the campaign's compliance
+  links point at them.
+- Telnyx 10DLC status (2026-07-07): the Aug-2025 campaign FAILED TCR creation
+  with "Brand does not qualify for submitted campaign use-case" — a
+  brand-level problem (likely Sole Prop / unverified brand + Marketing use
+  case), not campaign content. Plan: register/fix the brand as a Standard
+  EIN brand (PRIVATE_PROFIT, legal name exactly per IRS CP-575), wait for
+  IDENTITY VERIFIED, then create a NEW campaign — the old one is stale
+  anyway (webhook points at a dead Supabase edge function
+  `gzbpvbrvkbiwencxycgw…/incoming-sms`; commands reference LIST instead of
+  AD NEW; only START as opt-in keyword, needs SUBSCRIBE too). New webhook:
+  `https://www.theplainexchange.com/api/telnyx/inbound`.
+- SMS abuse guards shipped (session 002): per-number 20 replies/hour,
+  12 PIC/hour, 500 replies/hour service-wide; admin-tunable in Settings;
+  digests exempt from the counts; STOP always answered. Run the config-only
+  part of seed.sql (or let defaults apply) — new keys `sms_*_per_hour`.
+- After login works: run a full verification walk against the live site (the
+  Supabase code path has never run against a real database).
 - Supabase: project exists, `supabase/migrations/0001_init.sql` applied by
   the user. **Unknown whether `seed.sql` was run — ask.** For production,
   offer a config-only seed: `seed.sql` mixes config/packs/word-filter

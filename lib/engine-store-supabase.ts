@@ -378,3 +378,23 @@ export async function countRecentOutboundContaining(
   if (error) throw error;
   return count ?? 0;
 }
+
+/** Command replies only — digest broadcasts (digest_id set) and email don't count. */
+export async function countRecentOutbound(
+  address: string | null,
+  sinceMs: number,
+  mmsOnly: boolean,
+): Promise<number> {
+  const since = new Date(Date.now() - sinceMs).toISOString();
+  let query = db()
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("direction", "outbound")
+    .is("digest_id", null)
+    .gte("created_at", since);
+  query = mmsOnly ? query.eq("channel", "mms") : query.in("channel", ["sms", "mms"]);
+  if (address !== null) query = query.eq("address", address);
+  const { count, error } = await query;
+  if (error) throw error;
+  return count ?? 0;
+}
