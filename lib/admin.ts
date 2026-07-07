@@ -1,11 +1,12 @@
 import { notFound, redirect } from "next/navigation";
+import { normalizePhone } from "@/lib/phone";
 import { readSession } from "@/lib/session";
 
 /** Admins are the phone numbers listed in ADMIN_PHONES (comma-separated). */
 export function isAdminPhone(phone: string): boolean {
   return (process.env.ADMIN_PHONES ?? "")
     .split(",")
-    .map((p) => p.replace(/\D/g, ""))
+    .map((p) => normalizePhone(p))
     .filter(Boolean)
     .includes(phone);
 }
