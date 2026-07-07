@@ -81,6 +81,10 @@ scripted Playwright walks against `npx next start`:
   the morning). Plan given to user: consolidate onto the-product-engine,
   move the domain, complete env (ADMIN_PHONES, SESSION_SECRET, CRON_SECRET,
   SITE_URL, verified sb_secret key), run supabase/seed-production.sql.
+  **Partial resolution:** user then found the Supabase key env var was
+  typo'd (`SUPBABASE…`) — which explains the "missing" key. Re-verify
+  `/api/health` on BOTH hosts after the fix; if TELNYX vars still differ
+  between hosts, the second-project theory stands.
 - **Production is in REAL-SMS mode** (user set all TELNYX_* env vars
   2026-07-07 and chose to keep TELNYX_API_KEY despite the campaign not
   being approved yet — "no one knows about the service"). Known consequences
@@ -105,7 +109,7 @@ implementations activate automatically when the provider env var is absent:
 | Data | `lib/db.ts` `supabaseConfigured` | JSON files in `.data/` (gitignored) | Supabase via `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` |
 | SMS | `lib/sms.ts` (`smsDevEcho`) | console log + on-screen code echo + `/dev/sms` simulator | Telnyx via `TELNYX_API_KEY` etc. |
 | Email | `lib/email.ts` (`emailDevEcho`) | audit-log capture + `/dev/email` viewer | Resend via `RESEND_API_KEY` |
-| Payments | `lib/payments.ts` (`paymentsDevMode`) | simulated checkout page | Stripe via `STRIPE_SECRET_KEY` (NOT BUILT YET — the seam exists, real Stripe checkout/webhook is the remaining build task) |
+| Payments | `lib/payments.ts` (`paymentsDevMode`) | simulated checkout page | Stripe hosted Checkout via `STRIPE_SECRET_KEY` + webhook `/api/stripe/webhook` via `STRIPE_WEBHOOK_SECRET` (BUILT session 002 — raw-fetch, no SDK; grants idempotent on `credit_ledger.ref`; card saved off-session + `stripe_customer_id` stored for the future /BUYCREDIT charge) |
 
 Dual-mode modules pair as `lib/X.ts` (types + file impl + dispatch) and
 `lib/X-supabase.ts`: `ads`, `store` (accounts/credits/codes),
@@ -166,9 +170,14 @@ Reset state with `Remove-Item .data -Recurse`. Gotchas learned the hard way:
    msgs/day (~1,500–2,000 subscribers of headroom); $41.50 vetting raises it.
    Then point the messaging profile webhook at `/api/telnyx/inbound` and set
    `TELNYX_*` env vars.
-4. **Stripe**: build the real checkout + webhook behind `lib/payments.ts`
-   (dev simulation currently fulfills the seam), enable saved cards for the
-   future `/BUYCREDIT` confirm flow.
+4. **Stripe**: code is DONE (session 002). Remaining is account-side only:
+   create the Stripe account, copy the secret key → `STRIPE_SECRET_KEY`, add
+   a webhook endpoint for `checkout.session.completed` at
+   `https://www.theplainexchange.com/api/stripe/webhook` and copy its
+   signing secret → `STRIPE_WEBHOOK_SECRET`, redeploy. Test in Stripe test
+   mode (card 4242…) before swapping in live keys. Cards are saved
+   off-session and `users.stripe_customer_id` is populated — the actual
+   `/BUYCREDIT` off-session charge in the SMS engine is still future work.
 5. **Resend + domain**; replace the placeholder PO Box in
    `lib/email-digest.ts` (`BUSINESS_ADDRESS`) with the real CAN-SPAM address.
 

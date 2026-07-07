@@ -92,7 +92,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               Text <strong>HELP</strong> to <strong>{site.smsNumber}</strong> for help · Reply{" "}
               <strong>STOP</strong> to any digest to cancel ·{" "}
               <Link href="/email">Get the ads by email</Link> ·{" "}
-              <Link href="/how-it-works">How it works</Link>
+              <Link href="/how-it-works">How it works</Link> ·{" "}
+              <Link href="/faq">Questions</Link>
             </p>
             <p>
               <Link href="/privacy">Privacy policy</Link> ·{" "}

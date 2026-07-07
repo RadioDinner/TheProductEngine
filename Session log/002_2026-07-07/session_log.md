@@ -1,6 +1,32 @@
 # Session 002 — 2026-07-07
 
-## What shipped (later in session)
+## What shipped (evening)
+
+- **Stripe payments, real mode** (user request "wire up the payment
+  processor"): hosted Stripe Checkout created via raw fetch (no SDK —
+  matches the Telnyx pattern) from `/account/checkout`; signature-verified
+  webhook at `/api/stripe/webhook` grants credits **idempotently** on
+  `credit_ledger.ref` (= payment intent id), auto-creates the account,
+  and stores `stripe_customer_id`; card saved off-session for the future
+  /BUYCREDIT charge. Verified locally: forged + stale signatures → 400;
+  valid event → account + 10 credits + customer id; replay → no double
+  grant. Env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`. Schema needed
+  no migration (`ref` and `stripe_customer_id` existed since 0001).
+- **/faq page** (user request): same `container prose` pattern, 14 plain
+  Q&As, footer link "Questions". Screenshot-verified.
+- **Leroy P. removed** from how-it-works and the engine's AD NEW example.
+- **supabase/seed-production.sql** added (config/packs/word-filter, no
+  demo data).
+- Login: graceful "couldn't send a text" error instead of a crash when the
+  SMS provider fails (verified e2e against a failing provider).
+- Mysteries resolved: the "example ads" on the domain are the app's own
+  fixtures (that deployment runs without a DB); user then found the
+  Supabase key env var was typo'd `SUPBABASE…`. JSX space-swallowing
+  compiler bug hit a **third** time ("PICand", "7170and") — always fix
+  with explicit `{" "}`; sweep rendered HTML with
+  `grep -oE '</strong>[A-Za-z]|</span>[A-Za-z0-9]'`.
+
+## What shipped (afternoon)
 
 - **/privacy and /terms-and-conditions pages** (user request; built per
   `/impeccable` — skill reinstalled from pbakaus/impeccable into gitignored

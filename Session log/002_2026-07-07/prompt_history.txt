@@ -182,3 +182,6 @@ RESEND_API_KEY	false
 
 --- 2026-07-07 19:20 ---
 I had a typo in the supabase secret setting. It was named supbabase . Let's wire up the payment processor
+
+--- 2026-07-07 19:24 ---
+Add a FAQ to the website too
