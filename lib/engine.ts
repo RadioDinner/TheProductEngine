@@ -207,7 +207,10 @@ async function handleOwnerCommand(
 
   if (ad.status === "expired") {
     await reviveAd(id, settings.expiryDays);
-    await queueBump(id);
+    // Refund if a bump was already queued (starved past the old TTL) so this
+    // BUMP doesn't charge a second time for a broadcast that's already pending.
+    const revivedQueued = await queueBump(id);
+    if (!revivedQueued) await refundBump();
     return { body: `Ad #${id} is relisted and will run again in the next digest.` };
   }
   const queued = await queueBump(id);
