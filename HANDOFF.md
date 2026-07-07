@@ -51,6 +51,25 @@ scripted Playwright walks against `npx next start`:
   add both hosts in Vercel → Settings → Domains, then set `SITE_URL` and
   redeploy. Pushes to `main` already auto-deploy to production, and the
   domain simply aliases the latest production deployment.
+- `/privacy` + `/terms-and-conditions` exist (session 002, this branch),
+  written to satisfy TCR/CTIA campaign vetting (opt-in/out, frequency,
+  msg&data rates, no-sharing-mobile-info clause). They must be live on the
+  domain before resubmitting the Telnyx campaign — the campaign's compliance
+  links point at them.
+- Telnyx 10DLC status (2026-07-07): the Aug-2025 campaign FAILED TCR creation
+  with "Brand does not qualify for submitted campaign use-case" — a
+  brand-level problem (likely Sole Prop / unverified brand + Marketing use
+  case), not campaign content. Plan: register/fix the brand as a Standard
+  EIN brand (PRIVATE_PROFIT, legal name exactly per IRS CP-575), wait for
+  IDENTITY VERIFIED, then create a NEW campaign — the old one is stale
+  anyway (webhook points at a dead Supabase edge function
+  `gzbpvbrvkbiwencxycgw…/incoming-sms`; commands reference LIST instead of
+  AD NEW; only START as opt-in keyword, needs SUBSCRIBE too). New webhook:
+  `https://www.theplainexchange.com/api/telnyx/inbound`.
+- SMS abuse guards shipped (session 002): per-number 20 replies/hour,
+  12 PIC/hour, 500 replies/hour service-wide; admin-tunable in Settings;
+  digests exempt from the counts; STOP always answered. Run the config-only
+  part of seed.sql (or let defaults apply) — new keys `sms_*_per_hour`.
 - After login works: run a full verification walk against the live site (the
   Supabase code path has never run against a real database).
 - Supabase: project exists, `supabase/migrations/0001_init.sql` applied by

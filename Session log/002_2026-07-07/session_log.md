@@ -1,6 +1,31 @@
 # Session 002 — 2026-07-07
 
-## What shipped
+## What shipped (later in session)
+
+- **/privacy and /terms-and-conditions pages** (user request; built per
+  `/impeccable` — skill reinstalled from pbakaus/impeccable into gitignored
+  `.claude/skills/`, its setup flow followed: context.mjs, craft.md, product
+  register, DESIGN.md/PRODUCT.md). Pure reuse of the existing `container
+  prose` pattern — zero new CSS. Both pages carry the CTIA/TCR compliance
+  language (opt-in/opt-out, frequency, "msg & data rates", the
+  no-sharing-mobile-info-for-marketing clause) that 10DLC campaign vetting
+  checks for. Footer now links both pages. Verified by production build +
+  Playwright screenshots at 1280/375.
+- **SMS abuse guards** (user request): per-number command-reply cap
+  (20/hour), per-number PIC/MMS cap (12/hour), and a service-wide
+  command-reply circuit breaker (500/hour). All three admin-tunable
+  (`sms_replies_per_hour`, `sms_pics_per_hour`, `sms_global_per_hour` in
+  config + admin Settings UI + seed.sql). Digest broadcasts and email are
+  never counted (filtered by `digest_id is null`, channel sms/mms). STOP is
+  exempt — carriers require the confirmation. Over-cap = engine logs the
+  inbound but sends nothing. Verified end-to-end via the dev simulator:
+  22×HELP → exactly 20 replies then silence; STOP still confirmed.
+- **JSX gotcha learned:** the compiler swallowed the space in
+  `{site.name} is` on one line of the terms page (rendered "Exchangeis")
+  while identical patterns elsewhere kept theirs. Fixed with the explicit
+  `{" "}` idiom. Grep rendered HTML for `<!-- -->[a-z]` to catch these.
+
+## What shipped (early session)
 
 - **CLAUDE.md created at repo root.** The user asked to confirm that
   `new_session_instructions.md` is honored on every new session. Finding: the

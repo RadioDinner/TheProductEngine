@@ -19,6 +19,21 @@ const FIELDS: { key: string; label: string; hint?: string }[] = [
   { key: "digestCap", label: "Max ads per digest" },
   { key: "maxChars", label: "Max ad length (characters)" },
   { key: "expiryDays", label: "Ad run time (days)" },
+  {
+    key: "smsRepliesPerHour",
+    label: "Command replies per number per hour",
+    hint: "past this, the engine stops answering that number",
+  },
+  {
+    key: "smsPicsPerHour",
+    label: "Pictures (PIC) per number per hour",
+    hint: "picture texts cost the most to send",
+  },
+  {
+    key: "smsGlobalPerHour",
+    label: "Command replies service-wide per hour",
+    hint: "circuit breaker — digests are never counted",
+  },
 ];
 
 export default async function AdminSettings({

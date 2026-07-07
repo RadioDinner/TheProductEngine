@@ -48,6 +48,12 @@ export const engineDefaults = {
   emailSlots: [7, 16],
   maxChars: 250,
   expiryDays: 30,
+  /** Abuse guards: command replies per number per hour before going silent. */
+  smsRepliesPerHour: 20,
+  /** Picture (PIC) replies per number per hour — MMS costs the most to send. */
+  smsPicsPerHour: 12,
+  /** All command replies service-wide per hour — the cost circuit breaker. */
+  smsGlobalPerHour: 500,
   /** Starter word-filter list (flag-for-review). */
   filterWords: ["gun", "firearm", "rifle", "whiskey", "tobacco"],
 } as const;

@@ -444,6 +444,18 @@ const file = {
         m.body.includes(needle),
     ).length;
   },
+
+  countRecentOutbound(address: string | null, sinceMs: number, mmsOnly: boolean): number {
+    const cutoff = Date.now() - sinceMs;
+    return load().messages.filter(
+      (m) =>
+        m.direction === "outbound" &&
+        m.digestId === undefined &&
+        (mmsOnly ? m.channel === "mms" : m.channel === "sms" || m.channel === "mms") &&
+        (address === null || m.address === address) &&
+        Date.parse(m.createdAt) >= cutoff,
+    ).length;
+  },
 };
 
 // ---------- public interface (picks the implementation) ----------
@@ -560,4 +572,19 @@ export async function countRecentOutboundContaining(
   return supabaseConfigured
     ? remote.countRecentOutboundContaining(address, needle, sinceMs)
     : file.countRecentOutboundContaining(address, needle, sinceMs);
+}
+
+/**
+ * Command replies sent in the window — digest broadcasts and email excluded.
+ * `address: null` counts across all numbers (the global circuit breaker);
+ * `mmsOnly` counts just picture replies (PIC costs the most to send).
+ */
+export async function countRecentOutbound(
+  address: string | null,
+  sinceMs: number,
+  mmsOnly = false,
+): Promise<number> {
+  return supabaseConfigured
+    ? remote.countRecentOutbound(address, sinceMs, mmsOnly)
+    : file.countRecentOutbound(address, sinceMs, mmsOnly);
 }

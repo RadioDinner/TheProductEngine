@@ -81,7 +81,10 @@ insert into config (key, value) values
   ('starter_free_ads',        '3'),
   ('ad_expiry_days',          '30'),
   ('ad_max_chars',            '250'),
-  ('offense_ban_threshold',   '3')
+  ('offense_ban_threshold',   '3'),
+  ('sms_replies_per_hour',    '20'),
+  ('sms_pics_per_hour',       '12'),
+  ('sms_global_per_hour',     '500')
 on conflict (key) do nothing;
 
 -- ---------- credit packs ----------

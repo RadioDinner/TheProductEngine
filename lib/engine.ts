@@ -7,6 +7,7 @@
 import { parseCommand } from "@/lib/commands";
 import { deriveTitle, adExpiresAt, type Ad } from "@/lib/ads";
 import {
+  countRecentOutbound,
   countRecentOutboundContaining,
   createAd,
   getAdRecord,
@@ -40,6 +41,7 @@ export interface Reply {
 }
 
 const REDIRECT_MARKER = "automated system";
+const HOUR_MS = 60 * 60 * 1000;
 
 function fmtDate(d: Date): string {
   return d.toLocaleDateString("en-US", {
@@ -170,9 +172,8 @@ async function handleOwnerCommand(
     : { body: `You already have a bump scheduled for ad #${id}.` };
 }
 
-async function route(msg: InboundSms): Promise<Reply | null> {
+async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>): Promise<Reply | null> {
   const from = msg.from;
-  const command = parseCommand(msg.text || "");
 
   // A bare photo with no usable text (spec Q13).
   if (msg.media?.length && command.kind === "unknown" && !msg.text.trim()) {
@@ -218,6 +219,14 @@ async function route(msg: InboundSms): Promise<Reply | null> {
         return { body: `No ad found with number ${command.id}.` };
       }
       if (!ad.photo) return { body: `Ad #${command.id} has no picture.` };
+      // Pictures are MMS — the costliest reply — so they get their own cap.
+      const settings = await getEngineSettings();
+      const pics = await countRecentOutbound(from, HOUR_MS, true);
+      if (pics >= settings.smsPicsPerHour) {
+        return {
+          body: `You've reached the hourly picture limit. Text PIC ${command.id} again in an hour, or see the ad at ThePlainExchange.com.`,
+        };
+      }
       return { body: `Photo for ad #${command.id} — ${deriveTitle(ad.body)}:`, media: [ad.photo.src] };
     }
     case "credits": {
@@ -291,7 +300,24 @@ export async function handleInbound(msg: InboundSms): Promise<Reply | null> {
     ...(msg.media?.length && { media: msg.media }),
   });
 
-  const reply = await route(msg);
+  const command = parseCommand(msg.text || "");
+
+  // Abuse guard: once a number — or the whole service — uses up its hourly
+  // reply budget, the engine goes silent instead of paying to answer. STOP is
+  // exempt (carriers require the confirmation), and the inbound message is
+  // already logged above either way, so the audit trail shows the attempts.
+  if (command.kind !== "stop") {
+    const settings = await getEngineSettings();
+    const [toNumber, global] = await Promise.all([
+      countRecentOutbound(msg.from, HOUR_MS),
+      countRecentOutbound(null, HOUR_MS),
+    ]);
+    if (toNumber >= settings.smsRepliesPerHour || global >= settings.smsGlobalPerHour) {
+      return null;
+    }
+  }
+
+  const reply = await route(msg, command);
 
   if (reply) {
     await sms.send(msg.from, reply.body, reply.media);
