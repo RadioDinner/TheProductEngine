@@ -185,3 +185,29 @@ I had a typo in the supabase secret setting. It was named supbabase . Let's wire
 
 --- 2026-07-07 19:24 ---
 Add a FAQ to the website too
+
+--- 2026-07-07 19:55 ---
+Choose destination type
+    Configure your destination
+
+Configure your event destination
+Event destination scope
+View docs on event destination scopes
+Your account
+Events from resources in your account. For Accounts v2, this includes events for accounts created directly within your account.
+Connected accounts
+Events from resources inside your connected accounts — including their payments, customers, and payment methods.
+
+Accounts v2 events route differently than v1. Events for v2 accounts that belong directly to your platform are delivered to Your account destinations - not Connected accounts as in v1. Events for v2 accounts that belong to your connected accounts (such as their customers and recipients) are delivered to Connected accounts destinations. To receive both, create two separate destinations.
+How event routing works for Accounts v2
+
+API version
+API version
+2025-07-30.basil
+
+Events
+All events
+Selected events1
+checkout.session.completed
+
+Occurs when a Checkout Session has been successfully completed.
