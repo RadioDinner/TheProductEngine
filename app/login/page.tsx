@@ -28,6 +28,7 @@ const ERRORS: Record<string, string> = {
   password: "Wrong password. Try again, or text yourself a code instead.",
   weak: "Passwords need at least 8 characters.",
   ticket: "That step timed out — start again with your phone number.",
+  sms: "We couldn't send a text message just now. Wait a few minutes and try again, or call us for help.",
 };
 
 export default async function LoginPage({

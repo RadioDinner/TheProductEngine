@@ -40,10 +40,17 @@ async function issueCode(phone: string, next: string): Promise<never> {
   if (!result.ok) {
     redirect(loginUrl({ step: "code", phone, next, error: "rate" }));
   }
-  await sms.send(
-    phone,
-    `${site.name}: your sign-in code is ${result.code}. It expires in 5 minutes.`,
-  );
+  try {
+    await sms.send(
+      phone,
+      `${site.name}: your sign-in code is ${result.code}. It expires in 5 minutes.`,
+    );
+  } catch (e) {
+    // Provider down or number not yet approved to send: tell the person
+    // plainly instead of crashing to an error page.
+    console.error("[auth] sign-in code send failed:", e);
+    redirect(loginUrl({ phone, next, error: "sms" }));
+  }
   redirect(loginUrl({ step: "code", phone, next }));
 }
 
