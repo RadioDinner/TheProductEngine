@@ -27,6 +27,8 @@ export interface Account {
   subscribedAt?: string | null;
   /** Email-edition opt-in for phone members with a saved email. */
   emailSubscribedAt?: string | null;
+  /** Stripe customer id, set after the first completed checkout. */
+  stripeCustomerId?: string | null;
   /** Starter-grant ad passes: consumed before credits, either ad type. */
   freeAds: number;
   offenseCount?: number;
@@ -49,6 +51,8 @@ export interface LedgerEntry {
   delta: number;
   kind: LedgerKind;
   note: string;
+  /** External reference (Stripe payment intent) — the webhook's idempotency key. */
+  ref?: string;
 }
 
 export type CreateCodeResult = { ok: true; devEcho?: string } | { ok: false; error: "rate" };
@@ -315,6 +319,20 @@ const file = {
     save(store);
   },
 
+  hasLedgerRef(ref: string): boolean {
+    return Object.values(load().ledgers).some((entries) =>
+      entries.some((entry) => entry.ref === ref),
+    );
+  },
+
+  setStripeCustomerId(phone: string, customerId: string): void {
+    const store = load();
+    const account = store.accounts[phone];
+    if (!account) return;
+    account.stripeCustomerId = customerId;
+    save(store);
+  },
+
   createCode(phone: string, echoForDev: boolean): CreateCodeResult & { code?: string } {
     const store = load();
     const now = Date.now();
@@ -465,6 +483,17 @@ export async function addLedgerEntry(
   return supabaseConfigured
     ? remote.addLedgerEntry(phone, entry)
     : file.addLedgerEntry(phone, entry);
+}
+
+/** True when a ledger entry with this external ref already exists (webhook replay guard). */
+export async function hasLedgerRef(ref: string): Promise<boolean> {
+  return supabaseConfigured ? remote.hasLedgerRef(ref) : file.hasLedgerRef(ref);
+}
+
+export async function setStripeCustomerId(phone: string, customerId: string): Promise<void> {
+  return supabaseConfigured
+    ? remote.setStripeCustomerId(phone, customerId)
+    : file.setStripeCustomerId(phone, customerId);
 }
 
 export async function createCode(

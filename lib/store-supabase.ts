@@ -28,10 +28,11 @@ interface UserRow {
   free_ads: number;
   offense_count: number;
   posting_banned_at: string | null;
+  stripe_customer_id: string | null;
 }
 
 const USER_SELECT =
-  "id, phone, email, password_hash, created_at, subscribed_at, email_subscribed_at, free_ads, offense_count, posting_banned_at";
+  "id, phone, email, password_hash, created_at, subscribed_at, email_subscribed_at, free_ads, offense_count, posting_banned_at, stripe_customer_id";
 
 function toAccount(row: UserRow): Account {
   return {
@@ -44,6 +45,7 @@ function toAccount(row: UserRow): Account {
     freeAds: row.free_ads,
     offenseCount: row.offense_count,
     postingBannedAt: row.posting_banned_at,
+    stripeCustomerId: row.stripe_customer_id,
   };
 }
 
@@ -295,7 +297,25 @@ export async function addLedgerEntry(
     delta: entry.delta,
     kind: entry.kind,
     note: entry.note,
+    ref: entry.ref ?? null,
   });
+  if (error) throw error;
+}
+
+export async function hasLedgerRef(ref: string): Promise<boolean> {
+  const { count, error } = await db()
+    .from("credit_ledger")
+    .select("id", { count: "exact", head: true })
+    .eq("ref", ref);
+  if (error) throw error;
+  return (count ?? 0) > 0;
+}
+
+export async function setStripeCustomerId(phone: string, customerId: string): Promise<void> {
+  const { error } = await db()
+    .from("users")
+    .update({ stripe_customer_id: customerId })
+    .eq("phone", phone);
   if (error) throw error;
 }
 

@@ -45,7 +45,12 @@ function adStatusLine(ad: Ad): { label: string; className: string; dates: string
 export default async function AccountPage({
   searchParams,
 }: {
-  searchParams: Promise<{ purchased?: string; saved?: string; error?: string }>;
+  searchParams: Promise<{
+    purchased?: string;
+    checkout?: string;
+    saved?: string;
+    error?: string;
+  }>;
 }) {
   const session = await readSession();
   if (!session) redirect("/login?next=%2Faccount");
@@ -89,6 +94,23 @@ export default async function AccountPage({
         {params.purchased && (
           <p className="notice" role="status">
             {params.purchased} credits added to your account. Thank you!
+          </p>
+        )}
+        {params.checkout === "success" && (
+          <p className="notice" role="status">
+            Payment received — thank you! Your credits will show up here in a moment;
+            refresh the page if you don&rsquo;t see them yet.
+          </p>
+        )}
+        {params.checkout === "cancelled" && (
+          <p className="notice" role="status">
+            Checkout cancelled — nothing was charged.
+          </p>
+        )}
+        {params.checkout === "error" && (
+          <p className="notice" role="status">
+            We couldn&rsquo;t start checkout just now. Wait a few minutes and try again, or
+            call {site.smsNumber} for help.
           </p>
         )}
         <dl className="account-facts">
