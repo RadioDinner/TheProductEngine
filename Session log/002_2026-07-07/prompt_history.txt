@@ -268,3 +268,6 @@ I have the ADMIN_PHONES set but where are the details for the rest of this "Fini
 
 --- 2026-07-07 21:05 ---
 I ran the seed migration. Give me a checklist to launch day
+
+--- 2026-07-07 21:15 ---
+I have session_secret, Cron_secret and site_url all saved.

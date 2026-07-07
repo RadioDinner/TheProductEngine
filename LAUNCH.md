@@ -27,10 +27,10 @@ below.
 Redeploy after any change — env edits never touch running deployments.
 - [x] `SUPABASE_URL` — set
 - [x] `SUPABASE_SERVICE_ROLE_KEY` — the `sb_secret_…` key (health confirms)
-- [ ] `SESSION_SECRET` — long random string (`openssl rand -hex 32`)
+- [x] `SESSION_SECRET` — long random string (`openssl rand -hex 32`)
 - [x] `ADMIN_PHONES` — `3306001834` (comma-separate future admins)
-- [ ] `CRON_SECRET` — another random string (used in A5)
-- [ ] `SITE_URL` — `https://www.theplainexchange.com`
+- [x] `CRON_SECRET` — another random string (used in A5)
+- [x] `SITE_URL` — `https://www.theplainexchange.com`
 - [ ] `TELNYX_API_KEY`, `TELNYX_FROM_NUMBER` (`+13309607170`),
       `TELNYX_MESSAGING_PROFILE_ID`, `TELNYX_PUBLIC_KEY`
 - [ ] `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` — a matched pair
