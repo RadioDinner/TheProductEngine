@@ -196,19 +196,23 @@ async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>):
     case "stop": {
       await ensureAccount(from);
       await setSubscribed(from, false);
-      return { body: `You're unsubscribed and won't get more digests. Reply START any time to come back.` };
+      return {
+        body: `${site.name}: you're unsubscribed and won't get more digests. Reply START any time to come back.`,
+      };
     }
     case "start": {
       await ensureAccount(from);
       await setSubscribed(from, true);
-      return { body: `Welcome back — you're subscribed again. Reply STOP to cancel, HELP for help.` };
+      return {
+        body: `You're subscribed to ${site.name} — up to 4 digests a day. Msg & data rates may apply. Reply STOP to cancel, HELP for help.`,
+      };
     }
     case "help":
       return {
         body:
           `${site.name} commands: SUBSCRIBE for the ads. AD NEW your ad (photo welcome) to post. ` +
           `PIC 1234 for a picture. STATUS 1234 to check an ad. SOLD 1234 / BUMP 1234 / MYADS for your ads. ` +
-          `CREDITS for your balance. STOP to quit. More at ThePlainExchange.com/how-it-works`,
+          `CREDITS for your balance. STOP to quit. More help: call ${site.smsNumber} or ThePlainExchange.com/how-it-works`,
       };
     case "ad":
       return handleAdSubmission(from, command.body, msg.media);
