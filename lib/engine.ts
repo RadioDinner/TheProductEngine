@@ -28,6 +28,7 @@ import {
 import { site } from "@/lib/config";
 import { getEngineSettings, getWordRules, matchWordRules } from "@/lib/settings";
 import { sms } from "@/lib/sms";
+import { notifyAdminNewAd } from "@/lib/notify";
 
 export interface InboundSms {
   from: string; // 10 digits
@@ -128,6 +129,8 @@ async function handleAdSubmission(from: string, body: string, media?: string[]):
     });
     chargeNote = `${cost} credit${cost === 1 ? "" : "s"} — ${balance - cost} left.`;
   }
+
+  await notifyAdminNewAd({ id, from, hasPhoto, body });
 
   return {
     body: `Got it! Your ad is #${id} and is waiting for review. You'll get a text when it's approved for the next digest. (${chargeNote})`,

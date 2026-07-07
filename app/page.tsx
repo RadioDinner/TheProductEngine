@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listAds, type Ad } from "@/lib/ads";
 import { readSession } from "@/lib/session";
+import { recordVisit } from "@/lib/analytics";
 import { site } from "@/lib/config";
 import { AdRow } from "@/components/AdRow";
 
@@ -42,6 +43,7 @@ export default async function Home({
 }) {
   const params = await searchParams;
   const session = await readSession();
+  await recordVisit("/");
   const q = params.q?.trim() || undefined;
   const { ads, total, page, totalPages } = await listAds({
     q,

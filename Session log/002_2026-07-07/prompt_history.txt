@@ -291,3 +291,8 @@ I want my entire system RIGOROUSLY TESTED for weak points. Think exploits, poorl
 
 --- 2026-07-07 22:20 ---
 give me a to-do list to fix anything that could pose a threat to security, leaking costs or failures on launch day
+
+--- 2026-07-07 22:35 ---
+Also, on the admin page, I want a comprehensive reporting tooling built into it. I want to see when people SUBSCRIBe, number of active text subscribers, email subscribers, and I want to see how many people visit the web page. I want to also get notified when people post an ad via text.
+
+[AskUserQuestion answers] Web visits: Built-in counter. Ad alerts: Email to you.

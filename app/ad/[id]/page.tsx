@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { deriveRest, deriveTitle, getAd } from "@/lib/ads";
 import { MaskedText, maskPhonesPlain } from "@/components/MaskedText";
 import { readSession } from "@/lib/session";
+import { recordVisit } from "@/lib/analytics";
 import { site } from "@/lib/config";
 
 function parseId(raw: string): number | null {
@@ -58,6 +59,7 @@ export default async function AdPage({ params }: { params: Promise<{ id: string 
   if (!id) notFound();
   const ad = await getAd(id);
   if (!ad) notFound();
+  await recordVisit("/ad");
 
   if (ad.status === "expired") {
     return (
