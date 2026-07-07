@@ -243,3 +243,22 @@ In the Inbound settings in Profile settings in Messaging profiles in telnyx, the
 
 --- 2026-07-07 20:42 ---
 How do I make sure that my email system is setup properly and ready to run?
+
+--- 2026-07-07 20:55 ---
+www.theplainexchange.com/api/health
+
+mode	"supabase"
+env
+SUPABASE_URL	true
+SUPABASE_SERVICE_ROLE_KEY	"sb_secret (correct)"
+SESSION_SECRET	false
+ADMIN_PHONES	true
+SITE_URL	"https://theplainexchange.com"
+CRON_SECRET	false
+TELNYX_API_KEY	false
+RESEND_API_KEY	false
+configTable ok true rows 0
+adsTable ok true rows 0
+
+https://the-product-engine-bter58fd7-ilandedits-projects.vercel.app/api/health
+[identical output]
