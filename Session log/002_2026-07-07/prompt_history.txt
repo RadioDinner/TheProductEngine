@@ -211,3 +211,26 @@ Selected events1
 checkout.session.completed
 
 Occurs when a Checkout Session has been successfully completed.
+
+--- 2026-07-07 20:05 ---
+Build a checkout page for them too. Always merge to main
+
+--- 2026-07-07 20:08 ---
+I don't see the "admin" portal for my number 3306001834
+
+--- 2026-07-07 20:12 ---
+I JUST GOT THIS EMAIL!!!!!!!!!
+
+ Campaign status update
+
+This campaign's status has been updated to TCR_ACCEPTED.
+
+    Brand name: The Plain Exchange LLC
+    TCR ID: CTSE7B5
+    Telnyx ID: 4b30019f-3dbf-6353-9dbf-2586aedd7f66
+
+Reason for this status update:
+
+TCR accepted this campaign
+
+For any questions regarding this status update, please don't hesitate to reach out by emailing support or calling us toll-free at 1.888.980.9750.

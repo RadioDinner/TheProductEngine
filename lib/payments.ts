@@ -29,7 +29,7 @@ export async function createCheckoutSession(args: {
     mode: "payment",
     client_reference_id: args.phone,
     customer_creation: "always",
-    success_url: `${args.origin}/account?checkout=success#credits`,
+    success_url: `${args.origin}/account/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${args.origin}/account?checkout=cancelled#credits`,
     "line_items[0][quantity]": "1",
     "line_items[0][price_data][currency]": "usd",
@@ -55,4 +55,36 @@ export async function createCheckoutSession(args: {
   const session = (await response.json()) as { url?: string };
   if (!session.url) throw new Error("Stripe session response had no redirect URL");
   return session.url;
+}
+
+export interface CompletedCheckout {
+  paymentStatus: string;
+  phone: string | null;
+  packId: string | null;
+  paymentIntent: string | null;
+  amountTotal: number | null;
+}
+
+/** Look up a Checkout Session to render the order-complete page. */
+export async function getCheckoutSession(sessionId: string): Promise<CompletedCheckout> {
+  const response = await fetch(
+    `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`,
+    { headers: { Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}` } },
+  );
+  if (!response.ok) {
+    throw new Error(`Stripe session fetch failed (${response.status}): ${await response.text()}`);
+  }
+  const session = (await response.json()) as {
+    payment_status?: string;
+    payment_intent?: string | null;
+    amount_total?: number | null;
+    metadata?: { phone?: string; pack?: string };
+  };
+  return {
+    paymentStatus: session.payment_status ?? "unknown",
+    phone: session.metadata?.phone ?? null,
+    packId: session.metadata?.pack ?? null,
+    paymentIntent: session.payment_intent ?? null,
+    amountTotal: session.amount_total ?? null,
+  };
 }
