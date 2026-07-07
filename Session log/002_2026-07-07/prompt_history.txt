@@ -237,3 +237,6 @@ For any questions regarding this status update, please don't hesitate to reach o
 
 --- 2026-07-07 20:20 ---
 I want to do as much as I can to get ready for when that gets accepted. I want to go live ASAP
+
+--- 2026-07-07 20:35 ---
+In the Inbound settings in Profile settings in Messaging profiles in telnyx, the webhook URL is https://gzbpvbrvkbiwencxycgw.functions.supabase.co/incoming-sms is that correct?
