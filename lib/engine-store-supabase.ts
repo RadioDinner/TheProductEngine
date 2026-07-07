@@ -148,17 +148,20 @@ export async function approveAdRecord(
   if (error) throw error;
 }
 
+/** Returns true only if THIS call transitioned the ad pending -> rejected. */
 export async function rejectAdRecord(
   id: number,
   reason: string,
   kind: "benign" | "violation",
-): Promise<void> {
-  const { error } = await db()
+): Promise<boolean> {
+  const { data, error } = await db()
     .from("ads")
     .update({ status: "rejected", rejected_reason: reason, rejection_kind: kind })
     .eq("id", id)
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .select("id");
   if (error) throw error;
+  return (data?.length ?? 0) > 0;
 }
 
 export async function markAdSold(id: number): Promise<void> {
@@ -336,9 +339,41 @@ export async function logMessage(rec: Omit<MessageRecord, "id" | "createdAt">): 
     address: rec.address,
     body: rec.body,
     media: rec.media ?? null,
+    provider_id: rec.providerId ?? null,
     digest_id: rec.digestId ?? null,
   });
   if (error) throw error;
+}
+
+/** Inbound dedup: has a message with this Telnyx provider id already landed? */
+export async function seenInboundProviderId(providerId: string): Promise<boolean> {
+  const { count, error } = await db()
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("provider_id", providerId);
+  if (error) throw error;
+  return (count ?? 0) > 0;
+}
+
+/** Atomically reserve one command-reply slot; false if a cap is hit. */
+export async function reserveSms(
+  address: string,
+  kind: "reply" | "pic",
+  perNumber: number,
+  global: number,
+  perNumberPic: number,
+  windowMs: number,
+): Promise<boolean> {
+  const { data, error } = await db().rpc("reserve_sms", {
+    p_address: address,
+    p_kind: kind,
+    p_per_number: perNumber,
+    p_global: global,
+    p_per_number_pic: perNumberPic,
+    p_window_s: Math.round(windowMs / 1000),
+  });
+  if (error) throw error;
+  return data === true;
 }
 
 export async function listMessages(address?: string, limit = 200): Promise<MessageRecord[]> {

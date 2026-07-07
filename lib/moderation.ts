@@ -43,7 +43,10 @@ export async function rejectAd(
 ): Promise<void> {
   const ad = await getAdRecord(id);
   if (!ad || ad.status !== "pending") return;
-  await rejectAdRecord(id, reason, kind);
+  // Only proceed (refund/strike/notify) if THIS call actually transitioned the
+  // ad — otherwise a concurrent double-submit would refund or strike twice.
+  const transitioned = await rejectAdRecord(id, reason, kind);
+  if (!transitioned) return;
 
   if (kind === "benign") {
     // Full refund of whatever the submission charged (spec Q4/Q8). Match the

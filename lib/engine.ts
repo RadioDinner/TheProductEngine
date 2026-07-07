@@ -7,15 +7,17 @@
 import { parseCommand } from "@/lib/commands";
 import { deriveTitle, adExpiresAt, type Ad } from "@/lib/ads";
 import {
-  countRecentOutbound,
   countRecentOutboundContaining,
   createAd,
   getAdRecord,
   getPendingAds,
   logMessage,
   queueBump,
+  rejectAdRecord,
+  reserveSms,
   reviveAd,
   markAdSold,
+  seenInboundProviderId,
 } from "@/lib/engine-store";
 import { listAdsByOwner } from "@/lib/ads";
 import {
@@ -24,6 +26,7 @@ import {
   ensureAccount,
   getCreditBalance,
   setSubscribed,
+  spendCredits,
 } from "@/lib/store";
 import { site } from "@/lib/config";
 import { getEngineSettings, getWordRules, matchWordRules } from "@/lib/settings";
@@ -42,6 +45,7 @@ export interface Reply {
 }
 
 const REDIRECT_MARKER = "automated system";
+const STOP_MARKER = "unsubscribed and won't get more";
 const HOUR_MS = 60 * 60 * 1000;
 
 function fmtDate(d: Date): string {
@@ -101,14 +105,17 @@ async function handleAdSubmission(from: string, body: string, media?: string[]):
     photoSrc && (photoSrc.startsWith("/") || /^https:\/\//i.test(photoSrc)),
   );
   const cost = hasPhoto ? settings.costPhoto : settings.costText;
-  const balance = await getCreditBalance(from);
   const canPass = account.freeAds > 0;
+  const balance = await getCreditBalance(from);
+  // Fast reject for the clearly-unfunded; the atomic charge below is the
+  // authority under concurrency.
   if (!canPass && balance < cost) {
     return {
       body: `That ad needs ${cost} credit${cost === 1 ? "" : "s"} and you have ${balance}. Buy credits at ThePlainExchange.com, or call ${site.smsNumber}. Text CREDITS to check your balance.`,
     };
   }
 
+  const kind = hasPhoto ? "picture" : "text";
   const id = await createAd({
     ownerPhone: from,
     body,
@@ -118,21 +125,24 @@ async function handleAdSubmission(from: string, body: string, media?: string[]):
     }),
   });
 
+  // Charge atomically. Free pass first (its decrement is race-safe); else an
+  // atomic credit debit. If both fail — the balance was spent by a concurrent
+  // AD NEW between the check and here — undo the ad instead of posting unpaid.
   let chargeNote: string;
   if (canPass && (await consumeFreeAd(from))) {
     await addLedgerEntry(from, {
       delta: 0,
       kind: "spend",
-      note: `Free ad used — ad #${id} (${hasPhoto ? "picture" : "text"})`,
+      note: `Free ad used — ad #${id} (${kind})`,
     });
-    chargeNote = `Used 1 free ad — ${account.freeAds - 1} left.`;
+    chargeNote = `Used 1 free ad — ${Math.max(0, account.freeAds - 1)} left.`;
+  } else if (await spendCredits(from, cost, `Ad #${id} (${kind})`)) {
+    chargeNote = `${cost} credit${cost === 1 ? "" : "s"} — ${Math.max(0, balance - cost)} left.`;
   } else {
-    await addLedgerEntry(from, {
-      delta: -cost,
-      kind: "spend",
-      note: `Ad #${id} (${hasPhoto ? "picture" : "text"})`,
-    });
-    chargeNote = `${cost} credit${cost === 1 ? "" : "s"} — ${balance - cost} left.`;
+    await rejectAdRecord(id, "Not enough credits at submission.", "benign");
+    return {
+      body: `That ad needs ${cost} credit${cost === 1 ? "" : "s"} and you don't have enough right now. Buy credits at ThePlainExchange.com, or call ${site.smsNumber}.`,
+    };
   }
 
   await notifyAdminNewAd({ id, from, hasPhoto, body });
@@ -173,16 +183,39 @@ async function handleOwnerCommand(
   if (ad.status === "pending") {
     return { body: `Ad #${id} is still waiting for review — it runs automatically once approved.` };
   }
+
+  const settings = await getEngineSettings();
+  // Charge the admin-set bump cost before re-broadcasting. At the default of 0
+  // bumps stay free; above 0 this stops unlimited free re-runs to the whole list.
+  if (settings.bumpCost > 0) {
+    const paid = await spendCredits(from, settings.bumpCost, `Bump — ad #${id}`);
+    if (!paid) {
+      return {
+        body: `A bump costs ${settings.bumpCost} credit${settings.bumpCost === 1 ? "" : "s"} and you don't have enough. Buy credits at ThePlainExchange.com.`,
+      };
+    }
+  }
+  const refundBump = async () => {
+    if (settings.bumpCost > 0) {
+      await addLedgerEntry(from, {
+        delta: settings.bumpCost,
+        kind: "refund",
+        note: `Bump not applied — ad #${id}`,
+      });
+    }
+  };
+
   if (ad.status === "expired") {
-    const settings = await getEngineSettings();
     await reviveAd(id, settings.expiryDays);
     await queueBump(id);
     return { body: `Ad #${id} is relisted and will run again in the next digest.` };
   }
   const queued = await queueBump(id);
-  return queued
-    ? { body: `Ad #${id} will run again in the next digest.` }
-    : { body: `You already have a bump scheduled for ad #${id}.` };
+  if (!queued) {
+    await refundBump();
+    return { body: `You already have a bump scheduled for ad #${id}.` };
+  }
+  return { body: `Ad #${id} will run again in the next digest.` };
 }
 
 async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>): Promise<Reply | null> {
@@ -207,7 +240,8 @@ async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>):
       };
     }
     case "stop": {
-      await ensureAccount(from);
+      // No ensureAccount here: a STOP from an unknown number shouldn't mint an
+      // account (+ starter free ads) — that was a cheap flood vector.
       await setSubscribed(from, false);
       return {
         body: `${site.name}: you're unsubscribed and won't get more digests. Reply START any time to come back.`,
@@ -236,14 +270,8 @@ async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>):
         return { body: `No ad found with number ${command.id}.` };
       }
       if (!ad.photo) return { body: `Ad #${command.id} has no picture.` };
-      // Pictures are MMS — the costliest reply — so they get their own cap.
-      const settings = await getEngineSettings();
-      const pics = await countRecentOutbound(from, HOUR_MS, true);
-      if (pics >= settings.smsPicsPerHour) {
-        return {
-          body: `You've reached the hourly picture limit. Text PIC ${command.id} again in an hour, or see the ad at ThePlainExchange.com.`,
-        };
-      }
+      // The per-number PIC/MMS cap is enforced atomically at send time
+      // (reserveSms with kind "pic"), so no separate check is needed here.
       return { body: `Photo for ad #${command.id} — ${deriveTitle(ad.body)}:`, media: [ad.photo.src] };
     }
     case "credits": {
@@ -297,7 +325,8 @@ async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>):
         body: `No card is saved for this number yet. Buy credits at ThePlainExchange.com, or call ${site.smsNumber} to set up payment by phone or mail.`,
       };
     case "unknown": {
-      await ensureAccount(from);
+      // No ensureAccount: gibberish from a spoofed number shouldn't mint an
+      // account. The redirect is still deduped to once per day.
       const recent = await countRecentOutboundContaining(from, REDIRECT_MARKER, 24 * 60 * 60 * 1000);
       if (recent > 0) return null; // logged, no reply — one redirect per day
       return {
@@ -308,43 +337,54 @@ async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>):
 }
 
 /** Entry point for the Telnyx webhook and the dev simulator. */
-export async function handleInbound(msg: InboundSms): Promise<Reply | null> {
+export async function handleInbound(msg: InboundSms, providerId?: string): Promise<Reply | null> {
+  // Inbound idempotency: Telnyx delivers at-least-once, so drop a message id
+  // we've already processed (otherwise a retry re-posts/re-charges an AD NEW).
+  if (providerId && (await seenInboundProviderId(providerId))) return null;
+
   await logMessage({
     direction: "inbound",
     channel: msg.media?.length ? "mms" : "sms",
     address: msg.from,
     body: msg.text,
     ...(msg.media?.length && { media: msg.media }),
+    ...(providerId && { providerId }),
   });
 
   const command = parseCommand(msg.text || "");
-
-  // Abuse guard: once a number — or the whole service — uses up its hourly
-  // reply budget, the engine goes silent instead of paying to answer. STOP is
-  // exempt (carriers require the confirmation), and the inbound message is
-  // already logged above either way, so the audit trail shows the attempts.
-  if (command.kind !== "stop") {
-    const settings = await getEngineSettings();
-    const [toNumber, global] = await Promise.all([
-      countRecentOutbound(msg.from, HOUR_MS),
-      countRecentOutbound(null, HOUR_MS),
-    ]);
-    if (toNumber >= settings.smsRepliesPerHour || global >= settings.smsGlobalPerHour) {
-      return null;
-    }
-  }
-
   const reply = await route(msg, command);
+  if (!reply) return reply;
 
-  if (reply) {
-    await sms.send(msg.from, reply.body, reply.media);
-    await logMessage({
-      direction: "outbound",
-      channel: reply.media?.length ? "mms" : "sms",
-      address: msg.from,
-      body: reply.body,
-      ...(reply.media?.length && { media: reply.media }),
-    });
+  // Decide whether we're allowed to spend money on this reply.
+  if (command.kind === "stop") {
+    // Carriers require the opt-out confirmation, but only once per number per
+    // day — a STOP loop must not be an unbounded outbound.
+    const recentStop = await countRecentOutboundContaining(msg.from, STOP_MARKER, 24 * HOUR_MS);
+    if (recentStop > 0) return null;
+  } else {
+    // Every other reply reserves a slot atomically (per-number, per-number PIC,
+    // and service-wide); once a cap is hit the engine goes silent. The reserve
+    // is race-safe, so a concurrent burst can't slip past the cap.
+    const settings = await getEngineSettings();
+    const kind = reply.media?.length ? "pic" : "reply";
+    const allowed = await reserveSms(
+      msg.from,
+      kind,
+      settings.smsRepliesPerHour,
+      settings.smsGlobalPerHour,
+      settings.smsPicsPerHour,
+      HOUR_MS,
+    );
+    if (!allowed) return null;
   }
+
+  await sms.send(msg.from, reply.body, reply.media);
+  await logMessage({
+    direction: "outbound",
+    channel: reply.media?.length ? "mms" : "sms",
+    address: msg.from,
+    body: reply.body,
+    ...(reply.media?.length && { media: reply.media }),
+  });
   return reply;
 }

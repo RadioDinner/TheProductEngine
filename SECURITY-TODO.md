@@ -23,12 +23,20 @@ UNSET in production. ⚠️ On-screen sign-in codes now stop in production — y
 already have an admin password, so this is fine; set `ENABLE_DEV_TOOLS=1`
 temporarily only if you must onboard someone before Telnyx is live.
 
-**STILL PENDING (dedicated builds):** digest fan-out timeout + ad packing +
-segment/Unicode cap + digest circuit breaker + subscriber pagination (one build,
-= the "combine ads" request); atomic credit-balance decrement + rate-limit
-reservation + bump charging + double-refund guard + Telnyx inbound idempotency +
-STOP dedup (one "money-race" build); photo re-hosting to Supabase Storage.
-**DECISION NEEDED:** contact-masking threat model.
+**FIXED — money-race build (commit pending, needs migration 0005):** atomic
+credit-balance decrement (`spend_credits` RPC + advisory lock); atomic rate-limit
+reservation (`reserve_sms` RPC + advisory lock, replaces the read-then-send
+check); bump charging (honors `bumpCost`, refunds a no-op bump); double-refund
+guard (`rejectAdRecord` returns whether it transitioned); Telnyx inbound
+idempotency (dedup on provider message id); STOP-reply dedup (once/day); no
+account minted by STOP/gibberish. Verified in dev: 8/8 scenarios.
+
+**DECISION RESOLVED:** contact masking stays web-on / SMS-off — already the
+current behavior, no change.
+
+**STILL PENDING (dedicated builds):** digest fan-out timeout + columnar outbox
+delivery + digest circuit breaker + subscriber pagination (the "combine ads"
+composer landed; delivery is next); photo re-hosting to Supabase Storage.
 
 ---
 

@@ -65,6 +65,8 @@ export interface MessageRecord {
   media?: string[];
   /** Rendered HTML (email, dev mode only — powers the /dev/email preview). */
   html?: string;
+  /** Provider message id (Telnyx) — inbound dedup key. */
+  providerId?: string;
   digestId?: number;
   createdAt: string;
 }
@@ -90,6 +92,7 @@ interface EngineShape {
   digests: DigestRecord[];
   bumps: BumpRecord[];
   messages: MessageRecord[];
+  reservations?: { address: string; kind: string; at: number }[];
 }
 
 const ENGINE_PATH = join(process.cwd(), ".data", "engine.json");
@@ -292,14 +295,15 @@ const file = {
     save(store);
   },
 
-  rejectAd(id: number, reason: string, kind: "benign" | "violation"): void {
+  rejectAd(id: number, reason: string, kind: "benign" | "violation"): boolean {
     const store = load();
     const ad = store.ads.find((a) => a.id === id);
-    if (!ad || ad.status !== "pending") return;
+    if (!ad || ad.status !== "pending") return false;
     ad.status = "rejected";
     ad.rejectedReason = reason;
     ad.rejectionKind = kind;
     save(store);
+    return true;
   },
 
   markSold(id: number): void {
@@ -428,6 +432,34 @@ const file = {
     save(store);
   },
 
+  seenInboundProviderId(providerId: string): boolean {
+    return load().messages.some((m) => m.providerId === providerId);
+  },
+
+  reserveSms(
+    address: string,
+    kind: "reply" | "pic",
+    perNumber: number,
+    global: number,
+    perNumberPic: number,
+    windowMs: number,
+  ): boolean {
+    const store = load();
+    const list = (store.reservations ??= []);
+    const since = Date.now() - windowMs;
+    const recent = list.filter((r) => r.at >= since);
+    if (recent.length >= global) return false;
+    const forNum = recent.filter((r) => r.address === address);
+    if (forNum.length >= perNumber) return false;
+    if (kind === "pic" && forNum.filter((r) => r.kind === "pic").length >= perNumberPic) {
+      return false;
+    }
+    list.push({ address, kind, at: Date.now() });
+    store.reservations = list.filter((r) => r.at >= Date.now() - 2 * 60 * 60 * 1000);
+    save(store);
+    return true;
+  },
+
   listMessages(address?: string, limit = 200): MessageRecord[] {
     const all = load().messages;
     const filtered = address ? all.filter((m) => m.address === address) : all;
@@ -494,7 +526,7 @@ export async function rejectAdRecord(
   id: number,
   reason: string,
   kind: "benign" | "violation",
-): Promise<void> {
+): Promise<boolean> {
   return supabaseConfigured ? remote.rejectAdRecord(id, reason, kind) : file.rejectAd(id, reason, kind);
 }
 
@@ -558,6 +590,31 @@ export async function digestsSentOnDay(dayKey: string): Promise<number> {
 
 export async function logMessage(rec: Omit<MessageRecord, "id" | "createdAt">): Promise<void> {
   return supabaseConfigured ? remote.logMessage(rec) : file.logMessage(rec);
+}
+
+/** Inbound dedup: true if a message with this Telnyx provider id already landed. */
+export async function seenInboundProviderId(providerId: string): Promise<boolean> {
+  return supabaseConfigured
+    ? remote.seenInboundProviderId(providerId)
+    : file.seenInboundProviderId(providerId);
+}
+
+/**
+ * Atomically reserve one outbound command-reply slot; returns false when a cap
+ * (per-number, per-number PIC, or service-wide) is already hit. Digests never
+ * reserve, so they stay exempt.
+ */
+export async function reserveSms(
+  address: string,
+  kind: "reply" | "pic",
+  perNumber: number,
+  global: number,
+  perNumberPic: number,
+  windowMs: number,
+): Promise<boolean> {
+  return supabaseConfigured
+    ? remote.reserveSms(address, kind, perNumber, global, perNumberPic, windowMs)
+    : file.reserveSms(address, kind, perNumber, global, perNumberPic, windowMs);
 }
 
 export async function listMessages(address?: string, limit = 200): Promise<MessageRecord[]> {

@@ -319,6 +319,21 @@ const file = {
     save(store);
   },
 
+  spendCredits(phone: string, amount: number, note: string): boolean {
+    const store = load();
+    const ledger = store.ledgers[phone] ?? [];
+    const balance = ledger.reduce((sum, e) => sum + e.delta, 0);
+    if (balance < amount) return false;
+    (store.ledgers[phone] ??= []).push({
+      at: new Date().toISOString(),
+      delta: -amount,
+      kind: "spend",
+      note,
+    });
+    save(store);
+    return true;
+  },
+
   hasLedgerRef(ref: string): boolean {
     return Object.values(load().ledgers).some((entries) =>
       entries.some((entry) => entry.ref === ref),
@@ -488,6 +503,17 @@ export async function addLedgerEntry(
 /** True when a ledger entry with this external ref already exists (webhook replay guard). */
 export async function hasLedgerRef(ref: string): Promise<boolean> {
   return supabaseConfigured ? remote.hasLedgerRef(ref) : file.hasLedgerRef(ref);
+}
+
+/** Atomically debit credits; false if the balance doesn't cover the amount. */
+export async function spendCredits(
+  phone: string,
+  amount: number,
+  note: string,
+): Promise<boolean> {
+  return supabaseConfigured
+    ? remote.spendCredits(phone, amount, note)
+    : file.spendCredits(phone, amount, note);
 }
 
 export async function setStripeCustomerId(phone: string, customerId: string): Promise<void> {

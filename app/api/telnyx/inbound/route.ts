@@ -70,8 +70,9 @@ export async function POST(req: NextRequest) {
     const media = Array.isArray(payload.media)
       ? (payload.media as TelnyxMedia[]).map((m) => m.url).filter((u): u is string => Boolean(u))
       : [];
+    const providerId = typeof payload.id === "string" ? payload.id : undefined;
     if (from) {
-      await handleInbound({ from, text, ...(media.length && { media }) });
+      await handleInbound({ from, text, ...(media.length && { media }) }, providerId);
     }
   }
   // Delivery-status events (message.sent / message.finalized) are accepted

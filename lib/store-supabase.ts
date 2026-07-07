@@ -309,6 +309,22 @@ export async function addLedgerEntry(
   if (error && error.code !== "23505") throw error;
 }
 
+/** Atomically debit credits if the balance covers it (migration 0005). */
+export async function spendCredits(
+  phone: string,
+  amount: number,
+  note: string,
+): Promise<boolean> {
+  const { data, error } = await db().rpc("spend_credits", {
+    p_phone: phone,
+    p_amount: amount,
+    p_kind: "spend",
+    p_note: note,
+  });
+  if (error) throw error;
+  return data === true;
+}
+
 export async function hasLedgerRef(ref: string): Promise<boolean> {
   const { count, error } = await db()
     .from("credit_ledger")
