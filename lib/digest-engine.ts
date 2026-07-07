@@ -19,6 +19,7 @@ import {
 } from "@/lib/engine-store";
 import { listSubscriberPhones } from "@/lib/store";
 import { sms } from "@/lib/sms";
+import { gsmSanitize, packMessages } from "@/lib/sms-segments";
 
 const SLOT_LABELS: Record<number, string> = {
   7: "morning",
@@ -64,6 +65,44 @@ export function composeDigest(
   ];
   if (firstOfDay) lines.push("Reply STOP to end");
   return lines.join("\n");
+}
+
+/**
+ * Max GSM-7 characters per digest message. Ads are packed whole into as few
+ * messages as possible under this ceiling — big enough to keep segment count
+ * near-minimal (packing waste is small), small enough that each message stays
+ * a clean, reliably-delivered SMS (never an MMS) on a flip phone. ~4 segments.
+ */
+export const DIGEST_MSG_MAX_GSM = 612;
+
+/**
+ * Compose a digest as a list of SMS-ready messages: ad text GSM-sanitized so a
+ * stray emoji can't flip the whole broadcast to costly UCS-2, ads kept whole,
+ * packed into the fewest messages under the single-SMS ceiling. This is what
+ * gets enqueued and delivered per subscriber.
+ */
+export function composeDigestMessages(
+  now: Date,
+  slotHour: number,
+  items: StoredAd[],
+  firstOfDay: boolean,
+): string[] {
+  const dateLabel = now.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "America/New_York",
+  });
+  const label = SLOT_LABELS[slotHour] ?? `${slotHour}:00`;
+  const header = gsmSanitize(`Plain Exchange ${dateLabel} ${label}:`);
+  const adLines = items.map((ad) =>
+    gsmSanitize(`#${ad.id} ${ad.body}${ad.photo ? ` Pic? Reply PIC ${ad.id}` : ""}`),
+  );
+  return packMessages({
+    header,
+    adLines,
+    footer: firstOfDay ? "Reply STOP to end" : undefined,
+    maxGsm: DIGEST_MSG_MAX_GSM,
+  });
 }
 
 export interface SlotResult {

@@ -302,3 +302,6 @@ I want to make sure the "digest engine" is setup to be successful. I want the di
 
 --- 2026-07-07 23:20 ---
 Go over the security to do and give me remediation items for each one
+
+--- 2026-07-07 23:45 ---
+I applied all the migrations. Lets tackle #1
