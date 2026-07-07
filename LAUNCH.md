@@ -5,10 +5,15 @@ items are blockers, section B is the launch-day smoke test, section C can
 follow after launch. (Cross-session state lives in HANDOFF.md; this file is
 the countdown.)
 
+**Status as of 2026-07-07 evening:** A1 ✅ (both hosts identical, supabase
+mode, sb_secret correct) · A3 ✅ (seed-production.sql run) · ADMIN_PHONES ✅ ·
+TCR_ACCEPTED ✅ (carrier acceptance pending). Remaining: the unchecked boxes
+below.
+
 ## A. Blockers — all green before telling anyone
 
 ### A1. One deployment, correctly configured
-- [ ] Open `/api/health` on **both** hosts:
+- [x] Open `/api/health` on **both** hosts:
       `https://www.theplainexchange.com/api/health` and
       `https://the-product-engine.vercel.app/api/health`.
       Both must show `mode: "supabase"`, `sb_secret (correct)`,
@@ -20,10 +25,10 @@ the countdown.)
 
 ### A2. Environment variables (the-product-engine, Production scope)
 Redeploy after any change — env edits never touch running deployments.
-- [ ] `SUPABASE_URL` — set
-- [ ] `SUPABASE_SERVICE_ROLE_KEY` — the `sb_secret_…` key (health confirms)
+- [x] `SUPABASE_URL` — set
+- [x] `SUPABASE_SERVICE_ROLE_KEY` — the `sb_secret_…` key (health confirms)
 - [ ] `SESSION_SECRET` — long random string (`openssl rand -hex 32`)
-- [ ] `ADMIN_PHONES` — `3306001834` (comma-separate future admins)
+- [x] `ADMIN_PHONES` — `3306001834` (comma-separate future admins)
 - [ ] `CRON_SECRET` — another random string (used in A5)
 - [ ] `SITE_URL` — `https://www.theplainexchange.com`
 - [ ] `TELNYX_API_KEY`, `TELNYX_FROM_NUMBER` (`+13309607170`),
@@ -33,11 +38,11 @@ Redeploy after any change — env edits never touch running deployments.
       credits never arrive)
 
 ### A3. Database seeded
-- [ ] Run `supabase/seed-production.sql` in the Supabase SQL editor
+- [x] Run `supabase/seed-production.sql` in the Supabase SQL editor
       (config, packs, word filter — no demo data; safe to re-run).
 
 ### A4. Telnyx
-- [ ] Campaign fully accepted (TCR_ACCEPTED ✓ 2026-07-07; wait for carrier
+- [x] Campaign fully accepted (TCR_ACCEPTED ✓ 2026-07-07; wait for carrier
       acceptance — typically hours to ~2 days after TCR).
 - [ ] Number **+1 330 960 7170** assigned to the campaign's messaging profile.
 - [ ] Messaging profile inbound webhook:

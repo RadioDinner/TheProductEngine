@@ -265,3 +265,6 @@ https://the-product-engine-bter58fd7-ilandedits-projects.vercel.app/api/health
 
 --- 2026-07-07 20:58 ---
 I have the ADMIN_PHONES set but where are the details for the rest of this "Finish the env vars: ADMIN_PHONES=3306001834, SESSION_SECRET, CRON_SECRET, SITE_URL=https://www.theplainexchange.com — then redeploy and confirm the Admin link appears for you."
+
+--- 2026-07-07 21:05 ---
+I ran the seed migration. Give me a checklist to launch day
