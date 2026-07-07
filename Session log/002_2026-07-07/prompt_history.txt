@@ -288,3 +288,6 @@ I swapped the dead webhook URL
 
 --- 2026-07-07 21:55 ---
 I want my entire system RIGOROUSLY TESTED for weak points. Think exploits, poorly thought out areas, where I might miscalculate costs, etc.
+
+--- 2026-07-07 22:20 ---
+give me a to-do list to fix anything that could pose a threat to security, leaking costs or failures on launch day
