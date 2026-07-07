@@ -271,3 +271,6 @@ I ran the seed migration. Give me a checklist to launch day
 
 --- 2026-07-07 21:15 ---
 I have session_secret, Cron_secret and site_url all saved.
+
+--- 2026-07-07 21:22 ---
+On the email bit, I have a private email subscription with namecheap. Will my support@theplainexchange.com still work if I setup with resend
