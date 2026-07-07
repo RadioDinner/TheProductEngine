@@ -134,3 +134,6 @@ what happens if I don't remove the API_KEY
 
 --- 2026-07-07 17:50 ---
 Yeah ok I'm leaving it. No one knows about the service yet
+
+--- 2026-07-07 17:54 ---
+Write a prompt that I can use to make a printable 8.5 x 11 in Claude Design. I want the printable to give all the information needed to signup and a brief description of how it works. Essentially an ad
