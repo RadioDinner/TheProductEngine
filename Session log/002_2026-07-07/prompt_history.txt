@@ -164,3 +164,6 @@ A server error occurred. Reload to try again.
 ERROR 4279478192
 
 this is what I get when I try to login
+
+--- 2026-07-07 19:00 ---
+You are wrong btw, these are NOT example ads I created. I deleted that old supabase project... Also, take Leroy P off the website in the "how-it-works" page.
