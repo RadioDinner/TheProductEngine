@@ -155,3 +155,12 @@ I want the logo simple, clean with no fine detail. Good without letter. I want i
 
 --- 2026-07-07 18:30 ---
 Why is it, that when I go to www.theplainexchange.com I see example ads, which I don't really want right now. And when I go to https://the-product-engine.vercel.app/ I don't see example ads. Also, the admin login is still not working. We're going to have to make the login page bullet proof. For example. Some people might put their phone number in like 330-562-5465 or 330 562 5465 or (330)562-5465 or 3305625465. I want every one of these to work, even if they would for some reason put the prefix in +1330-562-5465
+
+--- 2026-07-07 18:52 ---
+This page couldn't load
+
+A server error occurred. Reload to try again.
+
+ERROR 4279478192
+
+this is what I get when I try to login
