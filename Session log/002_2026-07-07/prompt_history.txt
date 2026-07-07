@@ -137,3 +137,6 @@ Yeah ok I'm leaving it. No one knows about the service yet
 
 --- 2026-07-07 17:54 ---
 Write a prompt that I can use to make a printable 8.5 x 11 in Claude Design. I want the printable to give all the information needed to signup and a brief description of how it works. Essentially an ad
+
+--- 2026-07-07 17:58 ---
+prompt was good, but I want it to be more eye catching. Emphasize the fact that it's TEXT BASED ADVERTISING. Have something to sell? Try it for FREE!
