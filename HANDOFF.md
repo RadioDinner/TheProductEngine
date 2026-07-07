@@ -70,6 +70,17 @@ scripted Playwright walks against `npx next start`:
   12 PIC/hour, 500 replies/hour service-wide; admin-tunable in Settings;
   digests exempt from the counts; STOP always answered. Run the config-only
   part of seed.sql (or let defaults apply) — new keys `sms_*_per_hour`.
+- **Two deployments discovered (2026-07-07 evening):** www.theplainexchange.com
+  serves a deployment whose /api/health shows `mode: fixtures`,
+  `SUPABASE_SERVICE_ROLE_KEY: missing`, `TELNYX_API_KEY: false`, but
+  `SITE_URL: https://theplainexchange.com` — i.e., NOT the same environment
+  as the-product-engine.vercel.app (which has Supabase + Telnyx vars).
+  Almost certainly a second Vercel project owns the domain. The "example
+  ads" on the domain are the app's built-in demo fixtures (fixtures mode),
+  and login there crashes on the read-only-FS write (same ENOENT class as
+  the morning). Plan given to user: consolidate onto the-product-engine,
+  move the domain, complete env (ADMIN_PHONES, SESSION_SECRET, CRON_SECRET,
+  SITE_URL, verified sb_secret key), run supabase/seed-production.sql.
 - **Production is in REAL-SMS mode** (user set all TELNYX_* env vars
   2026-07-07 and chose to keep TELNYX_API_KEY despite the campaign not
   being approved yet — "no one knows about the service"). Known consequences
