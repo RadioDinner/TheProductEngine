@@ -119,3 +119,6 @@ Also give me an Opt in message and an Opt out message as well as a Help message
 
 --- 2026-07-07 17:16 ---
 Give me 2 sample messages as well as links to the privacy policy, terms and conditions and an embedded link. Also, I need a webhook URL, probably to supabase, can you set that up
+
+--- 2026-07-07 17:24 ---
+1-330-960-7170 my number on Telynx. Setup the webhook URL

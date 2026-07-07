@@ -69,8 +69,8 @@ on conflict do nothing;
 -- ---------- config defaults (all admin-tunable) ----------
 
 insert into config (key, value) values
-  ('sms_number',              '"3305550100"'),
-  ('support_number',          '"3305550100"'),
+  ('sms_number',              '"3309607170"'),
+  ('support_number',          '"3309607170"'),
   ('digest_slots_sms',        '[7, 12, 16, 20]'),
   ('digest_slots_email',      '[7, 16]'),
   ('digest_ad_cap',           '10'),

@@ -5,9 +5,9 @@
 export const site = {
   name: "The Plain Exchange",
   region: "Holmes County, Ohio",
-  /** Placeholder until the Telnyx number is provisioned (555 = reserved fictional range). */
-  smsNumber: "(330) 555-0100",
-  smsNumberPlain: "3305550100",
+  /** The provisioned Telnyx number. */
+  smsNumber: "(330) 960-7170",
+  smsNumberPlain: "3309607170",
   tagline: "Buy and sell by text message",
   adsPerPage: 15,
 } as const;
