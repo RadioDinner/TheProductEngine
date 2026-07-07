@@ -41,11 +41,16 @@ export default async function EmailSignup({
             <label htmlFor="email">Email address</label>
             <input id="email" name="email" type="email" required placeholder="you@example.com" />
           </div>
-          {params.error && (
+          {params.error === "send" ? (
+            <p className="form-error" role="alert">
+              We couldn’t send the confirmation email just now. Wait a few minutes and try
+              again, or call {site.smsNumber} for help.
+            </p>
+          ) : params.error ? (
             <p className="form-error" role="alert">
               That doesn’t look like an email address — check it and try again.
             </p>
-          )}
+          ) : null}
           <button className="btn btn-block" type="submit">
             Send me the confirmation link
           </button>

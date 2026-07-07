@@ -17,7 +17,13 @@ export async function emailSignup(formData: FormData): Promise<void> {
     <p><a href="${link}" style="display:inline-block;background:#2d5570;color:#ffffff;padding:10px 22px;text-decoration:none;border-radius:2px;font-weight:600;">Confirm my email</a></p>
     <p style="font-size:13px;color:#5b6670;">If you didn't ask for this, ignore this message and nothing happens.</p>
   </div>`;
-  await email.send({ to: address, subject: `Confirm your email — ${site.name}`, html, text });
+  try {
+    await email.send({ to: address, subject: `Confirm your email — ${site.name}`, html, text });
+  } catch (e) {
+    // Provider down or domain not yet verified: plain words, not a crash page.
+    console.error("[email] confirmation send failed:", e);
+    redirect("/email?error=send");
+  }
   await logMessage({
     direction: "outbound",
     channel: "email",

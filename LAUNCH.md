@@ -45,7 +45,7 @@ Redeploy after any change — env edits never touch running deployments.
 - [x] Campaign fully accepted (TCR_ACCEPTED ✓ 2026-07-07; wait for carrier
       acceptance — typically hours to ~2 days after TCR).
 - [ ] Number **+1 330 960 7170** assigned to the campaign's messaging profile.
-- [ ] Messaging profile inbound webhook:
+- [x] Messaging profile inbound webhook:
       `https://www.theplainexchange.com/api/telnyx/inbound` (API v2),
       failover `https://the-product-engine.vercel.app/api/telnyx/inbound`.
 
@@ -71,8 +71,8 @@ won't send. Pick one:
       adjust them in admin).
 
 ### A7. Admin access
-- [ ] Sign in at `/login` with 330 600 1834 → "Admin" appears top-right.
-- [ ] `/admin/settings` loads and shows the seeded numbers (proves the
+- [x] Sign in at `/login` with 330 600 1834 → "Admin" appears top-right.
+- [x] `/admin/settings` loads and shows the seeded numbers (proves the
       config table round-trip).
 
 ## B. Launch-day smoke test (~15 minutes, from your own phone)
