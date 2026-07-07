@@ -140,3 +140,6 @@ Write a prompt that I can use to make a printable 8.5 x 11 in Claude Design. I w
 
 --- 2026-07-07 17:58 ---
 prompt was good, but I want it to be more eye catching. Emphasize the fact that it's TEXT BASED ADVERTISING. Have something to sell? Try it for FREE!
+
+--- 2026-07-07 18:03 ---
+Leave off the Tutorial. And don't say anything about Leroy P.
