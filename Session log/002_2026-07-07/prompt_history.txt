@@ -107,3 +107,6 @@ Webhook URLhttps://gzbpvbrvkbiwencxycgw.functions.supabase.co/incoming-sms
 Webhook failover URL
 
 The status of the campaign is that it failed TCR creation. I had tried registering this campaign before back in August of 2025. Should I just create a new campaign?
+
+--- 2026-07-07 16:55 ---
+I have a registered brand but it says unvetted. Do I need to do that before I create the campaign
