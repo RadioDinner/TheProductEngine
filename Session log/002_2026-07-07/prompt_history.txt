@@ -305,3 +305,6 @@ Go over the security to do and give me remediation items for each one
 
 --- 2026-07-07 23:45 ---
 I applied all the migrations. Lets tackle #1
+
+--- 2026-07-08 00:05 ---
+I just want to know what I should build next, I want to work on the security to do
