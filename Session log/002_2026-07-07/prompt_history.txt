@@ -146,3 +146,6 @@ Leave off the Tutorial. And don't say anything about Leroy P.
 
 --- 2026-07-07 18:08 ---
 Give me a prompt that I can stick into ChatGPT to generate a logo. I want it to have an Amish buggy on it. Mix it with newspaper themes. Keep it black and white, muted colors
+
+--- 2026-07-07 18:12 ---
+I want the logo simple, clean with no fine detail. Good without letter. I want it to convey simplicity, trust and safety. Like a buggy or  a handshake
