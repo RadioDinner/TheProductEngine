@@ -274,3 +274,6 @@ I have session_secret, Cron_secret and site_url all saved.
 
 --- 2026-07-07 21:22 ---
 On the email bit, I have a private email subscription with namecheap. Will my support@theplainexchange.com still work if I setup with resend
+
+--- 2026-07-07 21:30 ---
+[health reports for both hosts — identical: mode supabase, sb_secret correct, SESSION_SECRET true, ADMIN_PHONES true, CRON_SECRET true, SITE_URL "https://theplainexchange.com", TELNYX_API_KEY false, RESEND_API_KEY false, configTable ok rows 16, adsTable ok rows 0]
