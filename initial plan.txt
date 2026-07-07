@@ -1,0 +1,15 @@
+Ok, I am going to be kicking off a session for a new product/web business. Use these new session instructions for all sessions on this project. This project, TheProductEngine, is a code word for the actual project called The Plain Exchange.
+
+The Plain Exchange is an SMS based "Facebook marketplace" for Amish people and people without cell phones. I want people to be able to send pictures to a number like 330-952-2356 or something, whatever we register, with details for their "ad". It'll be queued up and sent out in a batch of ads. For example, Leroy wants to sell his horse cart. He takes a picture and sends it to the number with "/AD NEW Horse Cart for sale $1000 OBO contact Leroy P, 000-000-0000". My system would check his account (Leroy's mobile number) to see if he has ad credits. A picture ad credit would take X amount more than a text only ad. If he has credits, it will get added to the listing queue. The listing queue will send any NEW ads at 7am, 12 noon, 4pm and 8pm. Or some schedule that I set. Eventually I want to make so users can pick the 3 times a day they get their ads sent. 
+
+Then their ad is also posted to the website, ThePlainExchange.com where users can also log in using their mobile number as their username and they'll need to setup a password as well.
+
+People can subscribe to ads by texting the word "SUBSCRIBE" to the number. I'll host in Supabase, deploy the website via Vercel and use Telnyx for the SMS portion. 
+
+A few misc rules about the system. I don't want to send out a picture to every number every time we have a picture ad. If you want the picture for the ad, reply "/PIC ####" the pound signs are the ad numbers. So if the horse cart ad was ad number 1678. You'd reply "/PIC 1678" and it would reply with the image. 
+
+I want people to be able to buy credits online, on the website by signing in with their phone number and buying credits. This will take a payment system to be setup on the website. People can check how many credits they have by messaging the number the word "/CREDITS". That function will check what number the message came from, check their credits and reply with "You have X credits available"
+
+I want sellers to be able to "manage" their ads. If they sell something, I want them to be able to message the number the word "/SOLD XXXX". I also want buyers to be able to check the status of an ad. If they message "/STATUS XXXX" it'll reply "Available" or "Sold". 
+
+I want everyone that signs up to automatically have enough credits to post a picture ad or a handful of text based ads. 

@@ -1,0 +1,6 @@
+﻿1030.jpg <- https://commons.wikimedia.org/wiki/File:Boer_goat444.jpg
+1033.jpg <- https://commons.wikimedia.org/wiki/File:2015._M%C3%A1quina_de_coser_Singer._Sewing_machine._Galiza_MC1.jpg
+1035.jpg <- https://commons.wikimedia.org/wiki/File:Wood-Fired_Cast_Iron_Kitchen_Stove_at_Grey_Roots,_Owen_Sound,_Ontario_6913_(7496257830).jpg
+1037.jpg <- https://commons.wikimedia.org/wiki/File:Two-wheeled_horse-drawn_farm_cart_in_the_Skye_Museum_of_Island_Life.jpg
+1039.jpg <- https://commons.wikimedia.org/wiki/File:Hay_Bales_in_Barn_-_geograph.org.uk_-_4347032.jpg
+1040.jpg <- https://commons.wikimedia.org/wiki/File:SC_Rhode_Island_Reds_(22034443431).jpg

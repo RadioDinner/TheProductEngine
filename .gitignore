@@ -1,0 +1,24 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next
+/out
+next-env.d.ts
+
+# misc
+.DS_Store
+*.tsbuildinfo
+
+# env
+.env*
+!.env.example
+
+# local dev data (accounts, verification codes)
+/.data
+
+# agent tooling (reinstallable via `npx skills add` — see skills-lock.json)
+/.agents
+/.claude
+/.codex
+.impeccable/
