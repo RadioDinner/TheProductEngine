@@ -285,3 +285,6 @@ Ok I ran through resends instructions and added the RESEND_API_KEY to the env va
 error	"unauthorized"
 
 I swapped the dead webhook URL
+
+--- 2026-07-07 21:55 ---
+I want my entire system RIGOROUSLY TESTED for weak points. Think exploits, poorly thought out areas, where I might miscalculate costs, etc.
