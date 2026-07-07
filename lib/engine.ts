@@ -13,11 +13,11 @@ import {
   getPendingAds,
   logMessage,
   queueBump,
+  recordInboundOnce,
   rejectAdRecord,
   reserveSms,
   reviveAd,
   markAdSold,
-  seenInboundProviderId,
 } from "@/lib/engine-store";
 import { listAdsByOwner } from "@/lib/ads";
 import {
@@ -339,13 +339,24 @@ async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>):
   }
 }
 
+async function sendReply(to: string, reply: Reply): Promise<Reply> {
+  await sms.send(to, reply.body, reply.media);
+  await logMessage({
+    direction: "outbound",
+    channel: reply.media?.length ? "mms" : "sms",
+    address: to,
+    body: reply.body,
+    ...(reply.media?.length && { media: reply.media }),
+  });
+  return reply;
+}
+
 /** Entry point for the Telnyx webhook and the dev simulator. */
 export async function handleInbound(msg: InboundSms, providerId?: string): Promise<Reply | null> {
-  // Inbound idempotency: Telnyx delivers at-least-once, so drop a message id
-  // we've already processed (otherwise a retry re-posts/re-charges an AD NEW).
-  if (providerId && (await seenInboundProviderId(providerId))) return null;
-
-  await logMessage({
+  // Inbound idempotency, race-safe: record the message and bail if this
+  // provider id was already handled (a concurrent Telnyx retry loses the
+  // unique-index insert), so an AD NEW can't be double-posted or double-charged.
+  const fresh = await recordInboundOnce({
     direction: "inbound",
     channel: msg.media?.length ? "mms" : "sms",
     address: msg.from,
@@ -353,41 +364,36 @@ export async function handleInbound(msg: InboundSms, providerId?: string): Promi
     ...(msg.media?.length && { media: msg.media }),
     ...(providerId && { providerId }),
   });
+  if (!fresh) return null;
 
   const command = parseCommand(msg.text || "");
-  const reply = await route(msg, command);
-  if (!reply) return reply;
 
-  // Decide whether we're allowed to spend money on this reply.
+  // STOP always takes effect (unsubscribe); only the carrier confirmation is
+  // deduped to once per number per day, so a STOP loop isn't unbounded outbound.
   if (command.kind === "stop") {
-    // Carriers require the opt-out confirmation, but only once per number per
-    // day — a STOP loop must not be an unbounded outbound.
+    const reply = await route(msg, command);
+    if (!reply) return null;
     const recentStop = await countRecentOutboundContaining(msg.from, STOP_MARKER, 24 * HOUR_MS);
     if (recentStop > 0) return null;
-  } else {
-    // Every other reply reserves a slot atomically (per-number, per-number PIC,
-    // and service-wide); once a cap is hit the engine goes silent. The reserve
-    // is race-safe, so a concurrent burst can't slip past the cap.
-    const settings = await getEngineSettings();
-    const kind = reply.media?.length ? "pic" : "reply";
-    const allowed = await reserveSms(
-      msg.from,
-      kind,
-      settings.smsRepliesPerHour,
-      settings.smsGlobalPerHour,
-      settings.smsPicsPerHour,
-      HOUR_MS,
-    );
-    if (!allowed) return null;
+    return sendReply(msg.from, reply);
   }
 
-  await sms.send(msg.from, reply.body, reply.media);
-  await logMessage({
-    direction: "outbound",
-    channel: reply.media?.length ? "mms" : "sms",
-    address: msg.from,
-    body: reply.body,
-    ...(reply.media?.length && { media: reply.media }),
-  });
-  return reply;
+  // Reserve a send slot atomically BEFORE routing, so an over-cap command is
+  // dropped whole — never charged with its confirmation silently suppressed.
+  // Kind is known from the command (PIC replies are the costly MMS lane).
+  const settings = await getEngineSettings();
+  const kind = command.kind === "pic" ? "pic" : "reply";
+  const allowed = await reserveSms(
+    msg.from,
+    kind,
+    settings.smsRepliesPerHour,
+    settings.smsGlobalPerHour,
+    settings.smsPicsPerHour,
+    HOUR_MS,
+  );
+  if (!allowed) return null;
+
+  const reply = await route(msg, command);
+  if (!reply) return null;
+  return sendReply(msg.from, reply);
 }

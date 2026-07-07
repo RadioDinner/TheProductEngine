@@ -72,6 +72,16 @@ $$;
 -- concurrent AD NEW submissions can't both spend the same credit or drive the
 -- balance negative.
 
+-- ---------- inbound idempotency ----------
+-- A unique provider id makes inbound dedup race-safe: a concurrent Telnyx
+-- retry that slips past the app-level SELECT check fails the INSERT (23505),
+-- so an AD NEW can't be double-posted / double-charged. Partial (only rows
+-- that carry a provider id) so outbound / dev rows are unaffected.
+
+create unique index if not exists messages_provider_id_uniq
+  on messages (provider_id)
+  where provider_id is not null;
+
 create or replace function spend_credits(
   p_phone text,
   p_amount int,

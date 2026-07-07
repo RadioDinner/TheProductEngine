@@ -355,6 +355,30 @@ export async function seenInboundProviderId(providerId: string): Promise<boolean
   return (count ?? 0) > 0;
 }
 
+/**
+ * Record an inbound message, returning false if it's a duplicate provider id.
+ * The unique index (migration 0005) makes this race-safe: a concurrent retry
+ * loses the INSERT with 23505, so the caller drops it before re-processing.
+ */
+export async function recordInboundOnce(
+  rec: Omit<MessageRecord, "id" | "createdAt">,
+): Promise<boolean> {
+  const { error } = await db().from("messages").insert({
+    direction: rec.direction,
+    channel: rec.channel,
+    address: rec.address,
+    body: rec.body,
+    media: rec.media ?? null,
+    provider_id: rec.providerId ?? null,
+    digest_id: rec.digestId ?? null,
+  });
+  if (error) {
+    if (error.code === "23505") return false; // duplicate provider id — already handled
+    throw error;
+  }
+  return true;
+}
+
 /** Atomically reserve one command-reply slot; false if a cap is hit. */
 export async function reserveSms(
   address: string,

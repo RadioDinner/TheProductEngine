@@ -436,6 +436,16 @@ const file = {
     return load().messages.some((m) => m.providerId === providerId);
   },
 
+  recordInboundOnce(rec: Omit<MessageRecord, "id" | "createdAt">): boolean {
+    const store = load();
+    if (rec.providerId && store.messages.some((m) => m.providerId === rec.providerId)) {
+      return false;
+    }
+    store.messages.push({ id: store.nextId++, createdAt: new Date().toISOString(), ...rec });
+    save(store);
+    return true;
+  },
+
   reserveSms(
     address: string,
     kind: "reply" | "pic",
@@ -597,6 +607,17 @@ export async function seenInboundProviderId(providerId: string): Promise<boolean
   return supabaseConfigured
     ? remote.seenInboundProviderId(providerId)
     : file.seenInboundProviderId(providerId);
+}
+
+/**
+ * Log an inbound message, returning false if its provider id was already
+ * recorded — the race-safe dedup point (a concurrent Telnyx retry loses the
+ * unique-index insert). Non-provider (dev) messages always record.
+ */
+export async function recordInboundOnce(
+  rec: Omit<MessageRecord, "id" | "createdAt">,
+): Promise<boolean> {
+  return supabaseConfigured ? remote.recordInboundOnce(rec) : file.recordInboundOnce(rec);
 }
 
 /**
