@@ -121,13 +121,17 @@ export async function ensureAccount(phone: string): Promise<Account> {
 export async function consumeFreeAd(phone: string): Promise<boolean> {
   const user = await userByPhone(phone);
   if (!user || user.free_ads <= 0) return false;
-  const { error } = await db()
+  // Conditional decrement; the row count tells us whether WE won the race.
+  // A concurrent request that already spent the last pass leaves 0 rows
+  // matched — previously this returned true anyway, double-spending the pass.
+  const { data, error } = await db()
     .from("users")
     .update({ free_ads: user.free_ads - 1 })
     .eq("id", user.id)
-    .eq("free_ads", user.free_ads); // optimistic guard
+    .eq("free_ads", user.free_ads)
+    .select("id");
   if (error) throw error;
-  return true;
+  return (data?.length ?? 0) > 0;
 }
 
 export async function grantFreeAd(phone: string): Promise<void> {
@@ -299,7 +303,10 @@ export async function addLedgerEntry(
     note: entry.note,
     ref: entry.ref ?? null,
   });
-  if (error) throw error;
+  // A duplicate ref (unique index, migration 0003) means this grant was
+  // already recorded by a concurrent/replayed webhook — idempotent, not an
+  // error.
+  if (error && error.code !== "23505") throw error;
 }
 
 export async function hasLedgerRef(ref: string): Promise<boolean> {

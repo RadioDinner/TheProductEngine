@@ -46,6 +46,7 @@ interface CheckoutSessionPayload {
   payment_status?: string;
   payment_intent?: string | null;
   customer?: string | null;
+  amount_total?: number | null;
   metadata?: { phone?: string; pack?: string };
 }
 
@@ -74,6 +75,11 @@ export async function POST(req: NextRequest) {
       const ref = session.payment_intent ?? session.id ?? "";
       if (!phone || !pack || !ref) {
         console.error("[payments] completed session missing metadata:", session.id);
+      } else if (session.amount_total != null && session.amount_total < pack.priceCents) {
+        // Defense in depth: never grant a pack for less than its price.
+        console.error(
+          `[payments] amount ${session.amount_total} < pack ${pack.id} price ${pack.priceCents}; not granting`,
+        );
       } else {
         await ensureAccount(phone);
         if (!(await hasLedgerRef(ref))) {

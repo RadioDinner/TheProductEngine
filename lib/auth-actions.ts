@@ -22,7 +22,12 @@ import { site } from "@/lib/config";
 
 function safeNext(raw: FormDataEntryValue | null): string {
   const value = typeof raw === "string" ? raw : "";
-  return value.startsWith("/") && !value.startsWith("//") ? value : "/";
+  // Must be a same-site absolute path. Reject protocol-relative ("//host") and
+  // backslash tricks ("/\host") that browsers normalize to an off-site origin.
+  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
+    return "/";
+  }
+  return value;
 }
 
 function loginUrl(params: Record<string, string>): string {

@@ -6,6 +6,7 @@ import { readSession } from "@/lib/session";
 import { addLedgerEntry, setEmail, setEmailEdition, setSubscribed } from "@/lib/store";
 import { formatPrice, getPack } from "@/lib/config";
 import { createCheckoutSession, paymentsDevMode } from "@/lib/payments";
+import { devToolsEnabled } from "@/lib/env";
 
 async function requirePhone(): Promise<string> {
   const session = await readSession();
@@ -67,7 +68,9 @@ export async function startStripeCheckout(formData: FormData): Promise<void> {
 /** Dev-mode stand-in for the Stripe Checkout success webhook. */
 export async function simulatePurchase(formData: FormData): Promise<void> {
   const phone = await requirePhone();
-  if (!paymentsDevMode) redirect("/account");
+  // Only usable when payments are in dev mode AND dev tools are enabled, so a
+  // production deploy without Stripe keys can't be used to mint free credits.
+  if (!paymentsDevMode || !devToolsEnabled) redirect("/account");
   const pack = getPack(String(formData.get("pack") ?? ""));
   if (!pack) redirect("/account");
   await addLedgerEntry(phone, {

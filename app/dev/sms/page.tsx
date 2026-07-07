@@ -10,6 +10,7 @@ import {
 import { getPendingAds, listMessages } from "@/lib/engine-store";
 import { formatPhone, normalizePhone } from "@/lib/phone";
 import { smsDevEcho } from "@/lib/sms";
+import { devToolsEnabled } from "@/lib/env";
 import { site } from "@/lib/config";
 
 export const metadata: Metadata = {
@@ -30,7 +31,7 @@ export default async function SmsSimulator({
 }: {
   searchParams: Promise<{ from?: string; ran?: string }>;
 }) {
-  if (!smsDevEcho) notFound();
+  if (!smsDevEcho || !devToolsEnabled) notFound();
 
   const params = await searchParams;
   const from = params.from ? normalizePhone(params.from) : null;

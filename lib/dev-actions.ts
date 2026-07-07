@@ -6,10 +6,11 @@ import { runDueDigests } from "@/lib/digest-engine";
 import { approveAd, rejectAd } from "@/lib/moderation";
 import { normalizePhone } from "@/lib/phone";
 import { smsDevEcho } from "@/lib/sms";
+import { devToolsEnabled } from "@/lib/env";
 
-/** All simulator actions are dev-only; with a real SMS provider they vanish. */
+/** Simulator actions are dev-only and never available in a production build. */
 function guard(): void {
-  if (!smsDevEcho) redirect("/");
+  if (!smsDevEcho || !devToolsEnabled) redirect("/");
 }
 
 const SAMPLE_PHOTO = "/ads/1037.jpg";

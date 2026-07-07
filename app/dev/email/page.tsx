@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { listMessages } from "@/lib/engine-store";
 import { emailDevEcho } from "@/lib/email";
+import { devToolsEnabled } from "@/lib/env";
 import { site } from "@/lib/config";
 
 export const metadata: Metadata = {
@@ -15,7 +16,7 @@ export default async function EmailViewer({
 }: {
   searchParams: Promise<{ id?: string }>;
 }) {
-  if (!emailDevEcho) notFound();
+  if (!emailDevEcho || !devToolsEnabled) notFound();
 
   const params = await searchParams;
   const emails = (await listMessages(undefined, 500)).filter((m) => m.channel === "email").reverse();

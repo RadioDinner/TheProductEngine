@@ -82,11 +82,27 @@ export async function adminToggleWord(formData: FormData): Promise<void> {
   redirect("/admin/settings");
 }
 
+// Sane ceilings so one fat-fingered save can't create a runaway-cost digest
+// (thousands of ads / giant bodies) or neutralize the abuse circuit breaker.
+const SETTING_MAX: Record<string, number> = {
+  costText: 100,
+  costPhoto: 100,
+  bumpCost: 100,
+  digestCap: 15,
+  maxChars: 300,
+  expiryDays: 365,
+  smsRepliesPerHour: 200,
+  smsPicsPerHour: 100,
+  smsGlobalPerHour: 5000,
+};
+
 export async function adminSaveSettings(formData: FormData): Promise<void> {
   await requireAdmin();
   const num = (name: string) => {
     const value = Number(formData.get(name));
-    return Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
+    if (!Number.isFinite(value) || value < 0) return null;
+    const max = SETTING_MAX[name] ?? Number.MAX_SAFE_INTEGER;
+    return Math.min(Math.floor(value), max);
   };
   const parseSlots = (name: string) =>
     String(formData.get(name) ?? "")

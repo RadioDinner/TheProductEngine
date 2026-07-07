@@ -296,3 +296,9 @@ give me a to-do list to fix anything that could pose a threat to security, leaki
 Also, on the admin page, I want a comprehensive reporting tooling built into it. I want to see when people SUBSCRIBe, number of active text subscribers, email subscribers, and I want to see how many people visit the web page. I want to also get notified when people post an ad via text.
 
 [AskUserQuestion answers] Web visits: Built-in counter. Ad alerts: Email to you.
+
+--- 2026-07-07 23:00 ---
+I want to make sure the "digest engine" is setup to be successful. I want the digest system to start sending out ads 1 by 1 to all the subscribers. Lets say I have 1500 subscribers. I want all 1500 to get the first part of the digest before any get the second part. I also want to have some sort of a system combine ads if possible. I want to send as many ads as possible in a single message WITHOUT it becoming an MMS. [example: "AD 1027 - John Deere riding mower for sale (234)049-1040 AD 1028 Looking for golden retriever stud text 3255234567"] Build a system that smartly analyzes what messages can be combined and combines as many into as few SMS messages as possible. If there are 30 new ads in a digest, it could potentially be cut into what, 10 messages? reduce spend on credits
+
+--- 2026-07-07 23:20 ---
+Go over the security to do and give me remediation items for each one

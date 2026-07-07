@@ -46,12 +46,14 @@ export async function rejectAd(
   await rejectAdRecord(id, reason, kind);
 
   if (kind === "benign") {
-    // Full refund of whatever the submission charged (spec Q4/Q8).
+    // Full refund of whatever the submission charged (spec Q4/Q8). Match the
+    // ad id as a delimited token — a bare `includes("Ad #12")` also matches
+    // "Ad #125", so refund could resolve to the wrong (larger) charge.
     const ledger = await getLedger(ad.ownerPhone);
     const charge = ledger.find(
       (entry) =>
         entry.kind === "spend" &&
-        (entry.note.includes(`ad #${id}`) || entry.note.includes(`Ad #${id}`)),
+        (entry.note.includes(`Ad #${id} (`) || entry.note.includes(`ad #${id} (`)),
     );
     let refundNote = "charge";
     if (charge && charge.delta < 0) {

@@ -12,6 +12,7 @@ import { formatPhone, normalizePhone } from "@/lib/phone";
 import { readSession } from "@/lib/session";
 import { peekDevEcho } from "@/lib/store";
 import { smsDevEcho } from "@/lib/sms";
+import { devToolsEnabled } from "@/lib/env";
 import { site } from "@/lib/config";
 
 export const metadata: Metadata = {
@@ -38,7 +39,10 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const rawNext = params.next ?? "/";
-  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
+  const next =
+    rawNext.startsWith("/") && !rawNext.startsWith("//") && !rawNext.includes("\\")
+      ? rawNext
+      : "/";
 
   const session = await readSession();
   if (session) redirect(next === "/" ? "/account" : next);
@@ -47,7 +51,9 @@ export default async function LoginPage({
   const step = phone && params.step ? params.step : "phone";
   const error = params.error ? ERRORS[params.error] : null;
   const devEcho =
-    step === "code" && phone && smsDevEcho ? await peekDevEcho(phone) : null;
+    step === "code" && phone && smsDevEcho && devToolsEnabled
+      ? await peekDevEcho(phone)
+      : null;
 
   return (
     <div className="container auth">

@@ -7,13 +7,23 @@ import { createPublicKey, verify as edVerify } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { handleInbound } from "@/lib/engine";
 import { normalizePhone } from "@/lib/phone";
+import { isProduction } from "@/lib/env";
+
+const TELNYX_TOLERANCE_S = 300;
 
 function verifySignature(raw: string, req: NextRequest): boolean {
   const publicKeyB64 = process.env.TELNYX_PUBLIC_KEY;
-  if (!publicKeyB64) return true; // dev — no key provisioned yet
+  if (!publicKeyB64) {
+    // Fail CLOSED in production: without the key we can't authenticate the
+    // sender, and a forged `from` would let anyone act as any phone number.
+    return !isProduction;
+  }
   const signature = req.headers.get("telnyx-signature-ed25519");
   const timestamp = req.headers.get("telnyx-timestamp");
   if (!signature || !timestamp) return false;
+  // Reject stale/replayed webhooks.
+  const age = Math.abs(Date.now() / 1000 - Number(timestamp));
+  if (!Number.isFinite(age) || age > TELNYX_TOLERANCE_S) return false;
   try {
     // Wrap Telnyx's raw 32-byte Ed25519 key in an SPKI DER header.
     const spki = Buffer.concat([

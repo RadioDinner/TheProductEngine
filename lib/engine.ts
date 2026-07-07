@@ -94,7 +94,12 @@ async function handleAdSubmission(from: string, body: string, media?: string[]):
     };
   }
 
-  const hasPhoto = Boolean(media?.length);
+  // Only accept a site-relative path (dev fixtures) or an https URL as a photo
+  // source — never a data:/http:/other-scheme URL from a crafted inbound MMS.
+  const photoSrc = media?.[0];
+  const hasPhoto = Boolean(
+    photoSrc && (photoSrc.startsWith("/") || /^https:\/\//i.test(photoSrc)),
+  );
   const cost = hasPhoto ? settings.costPhoto : settings.costText;
   const balance = await getCreditBalance(from);
   const canPass = account.freeAds > 0;
@@ -109,7 +114,7 @@ async function handleAdSubmission(from: string, body: string, media?: string[]):
     body,
     flagged: rules.flagged,
     ...(hasPhoto && {
-      photo: { src: media![0], alt: deriveTitle(body), width: 800, height: 600 },
+      photo: { src: photoSrc!, alt: deriveTitle(body), width: 800, height: 600 },
     }),
   });
 
@@ -153,6 +158,11 @@ async function handleOwnerCommand(
   if (verb === "sold") {
     if (ad.status === "sold") return { body: `Ad #${id} is already marked sold.` };
     if (ad.status === "rejected") return { body: `Ad #${id} was not accepted, so there's nothing to mark sold.` };
+    // Only a live listing can be sold. Blocking `pending` closes a moderation
+    // bypass: SOLD on an unreviewed ad would publish it to the site as "sold".
+    if (ad.status === "pending") {
+      return { body: `Ad #${id} is still waiting for review — you can mark it sold once it's approved.` };
+    }
     await markAdSold(id);
     return { body: `Ad #${id} marked SOLD. Congratulations!` };
   }

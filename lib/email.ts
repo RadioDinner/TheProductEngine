@@ -4,6 +4,7 @@
  * the /dev/email viewer renders them.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { isProduction } from "@/lib/env";
 
 export interface EmailMessage {
   to: string;
@@ -54,10 +55,17 @@ export const email: EmailTransport = emailDevEcho ? devTransport : resendTranspo
 
 // ---------- stateless signed links (confirm + unsubscribe) ----------
 
-const SECRET = process.env.SESSION_SECRET ?? "dev-secret-not-for-production";
+function tokenSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (secret) return secret;
+  if (isProduction) {
+    throw new Error("SESSION_SECRET is required in production but is not set.");
+  }
+  return "dev-secret-not-for-production";
+}
 
 export function emailToken(purpose: "confirm" | "unsub", address: string): string {
-  return createHmac("sha256", SECRET)
+  return createHmac("sha256", tokenSecret())
     .update(`${purpose}:${address.toLowerCase()}`)
     .digest("hex")
     .slice(0, 32);
