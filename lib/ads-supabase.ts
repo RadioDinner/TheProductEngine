@@ -63,7 +63,10 @@ export async function listAds({ q, page = 1, perPage = 15 }: AdQuery = {}): Prom
     current * perPage - 1,
   );
   // PGRST103 = requested range beyond the result set; clamp to the last page.
-  if (error && error.code !== "PGRST103") throw error;
+  if (error && error.code !== "PGRST103") {
+    console.error("[ads-supabase] listAds failed:", error.code, error.message);
+    throw error;
+  }
   const total = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / perPage));
   if ((error || (data?.length ?? 0) === 0) && total > 0 && current > totalPages) {
@@ -87,7 +90,10 @@ export async function getAd(id: number): Promise<Ad | null> {
     .eq("id", id)
     .in("status", ["approved", "sold", "expired"])
     .maybeSingle();
-  if (error) throw error;
+  if (error) {
+    console.error("[ads-supabase] getAd failed:", error.code, error.message);
+    throw error;
+  }
   return data ? toAd(data as unknown as AdRowDb) : null;
 }
 

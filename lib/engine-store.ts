@@ -131,7 +131,17 @@ function load(): EngineShape {
     bumps: [],
     messages: [],
   };
-  save(fresh);
+  try {
+    save(fresh);
+  } catch (e) {
+    // Read-only filesystem (e.g. serverless without Supabase configured):
+    // serve the seed from memory so reads still work, and say so loudly.
+    console.error(
+      "[engine-store] file store cannot persist (read-only fs?) — running from memory. " +
+        "If this is a deployment, set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.",
+      e instanceof Error ? e.message : e,
+    );
+  }
   return fresh;
 }
 
