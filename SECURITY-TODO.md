@@ -8,6 +8,28 @@ The single root cause behind most CRITICALs: **security controls fail OPEN.**
 A protection is gated on whether a provider key exists, not on whether this is
 production — so one missing/forgotten env var silently disables it.
 
+## Status (2026-07-07, commit a5a92b9)
+
+**FIXED in code:** fail-closed secrets (SESSION_SECRET, Telnyx key, CRON_SECRET);
+dev tools gated behind `ENABLE_DEV_TOOLS` (on-screen codes / `/dev/*` /
+simulate-payment off in prod by default); Telnyx replay window; open-redirect;
+config clamps; SOLD-on-pending; refund delimited-match; free-ad double-spend;
+credit_ledger.ref unique index (needs migration 0003 run); Stripe amount check;
+inbound photo scheme validation; image host allowlist.
+
+**OPS to activate:** run migrations `0002_analytics.sql` + `0003_ledger_ref_unique.sql`;
+set `TELNYX_PUBLIC_KEY` before re-adding `TELNYX_API_KEY`; keep `ENABLE_DEV_TOOLS`
+UNSET in production. ⚠️ On-screen sign-in codes now stop in production — you
+already have an admin password, so this is fine; set `ENABLE_DEV_TOOLS=1`
+temporarily only if you must onboard someone before Telnyx is live.
+
+**STILL PENDING (dedicated builds):** digest fan-out timeout + ad packing +
+segment/Unicode cap + digest circuit breaker + subscriber pagination (one build,
+= the "combine ads" request); atomic credit-balance decrement + rate-limit
+reservation + bump charging + double-refund guard + Telnyx inbound idempotency +
+STOP dedup (one "money-race" build); photo re-hosting to Supabase Storage.
+**DECISION NEEDED:** contact-masking threat model.
+
 ---
 
 ## P0 — before the site is public / before re-adding TELNYX_API_KEY
