@@ -70,6 +70,13 @@ scripted Playwright walks against `npx next start`:
   12 PIC/hour, 500 replies/hour service-wide; admin-tunable in Settings;
   digests exempt from the counts; STOP always answered. Run the config-only
   part of seed.sql (or let defaults apply) — new keys `sms_*_per_hour`.
+- **Production is in REAL-SMS mode** (user set all TELNYX_* env vars
+  2026-07-07 and chose to keep TELNYX_API_KEY despite the campaign not
+  being approved yet — "no one knows about the service"). Known consequences
+  until 10DLC approval: sign-in-by-code errors (sends rejected), inbound
+  texts get no replies (webhook 500s → Telnyx retries → an AD NEW could
+  double-post/charge). All self-heals at campaign approval; nothing to
+  deploy. Number: (330) 960-7170. Verify post-approval by texting HELP.
 - After login works: run a full verification walk against the live site (the
   Supabase code path has never run against a real database).
 - Supabase: project exists, `supabase/migrations/0001_init.sql` applied by

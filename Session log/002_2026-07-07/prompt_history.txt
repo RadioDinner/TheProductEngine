@@ -131,3 +131,6 @@ I added all those environment variables
 
 --- 2026-07-07 17:45 ---
 what happens if I don't remove the API_KEY
+
+--- 2026-07-07 17:50 ---
+Yeah ok I'm leaving it. No one knows about the service yet
