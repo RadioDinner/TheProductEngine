@@ -3,7 +3,7 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-07-08 (session 002).
+**Last updated:** 2026-07-08 (session 003).
 
 ## What this project is
 
@@ -17,12 +17,13 @@ also an email edition. Strategy/design context: `PRODUCT.md` (who/why),
 `DESIGN.md` (visual system, "The Plain Ledger"), `initial plan.txt` (the
 original seed).
 
-## Current state (end of session 002 — 2026-07-08)
+## Current state (end of session 003 — 2026-07-08)
 
 **`LAUNCH.md` is the live go-live checklist; `SECURITY-TODO.md` is the audit
 + remediation status. Read those two first.** The whole v1 surface is built
-and dev-verified; what remains is ops (migrations/keys/DNS) + two non-blocking
-builds.
+and dev-verified, every code item on SECURITY-TODO is closed (session 003
+shipped the digest outbox build — see below); what remains is ops (migration
+0006/keys/DNS) + one non-blocking build (photo re-hosting).
 
 **Deployment (resolved).** One Vercel project, `the-product-engine`. The
 morning's `mkdir '/var/task/.data'` 500s and the "two deployments / example
@@ -40,15 +41,15 @@ keep SITE_URL matching), all TELNYX_* incl TELNYX_PUBLIC_KEY, RESEND_API_KEY.
 **Not yet set:** STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET, ADMIN_EMAIL
 (new-ad notifications). Admin account CLAIMED (password set for 3306001834).
 
-**Migrations:** 0001 (init), 0002 (analytics / page-view counter), 0003
-(credit_ledger.ref unique) applied by the user. `seed-production.sql` run
-(config rows = 16). **⚠️ `0005_abuse_hardening.sql` NOT yet applied** — it was
-written after the user's "applied all migrations" and is REQUIRED before prod
-serves real SMS traffic (creates `sms_reservation`, `reserve_sms`/
-`spend_credits` RPCs, and the `messages.provider_id` unique index; the atomic
-reserve/spend/dedup paths error without it). `0004_analytics.sql` = the visit
-counter table (part of the 0002/analytics work — confirm it ran; visits show 0
-until then).
+**Migrations:** 0001 (init), 0002 (analytics), 0003 (credit_ledger.ref
+unique), and 0005 (abuse hardening) all applied by the user (confirmed start
+of session 003: "ran all the migrations"). `seed-production.sql` run (config
+rows = 16). **⚠️ `0006_digest_outbox.sql` NOT yet applied** — written in
+session 003 and REQUIRED before the session-003 code deploys: every digest
+run now writes `digests.item_count` and delivers through the `digest_outbox`
+table + its RPCs (`claim_digest_outbox`, `outbox_segments_since`); the cron
+errors without it. It also inserts the `digest_daily_segment_budget` config
+row (17th row).
 
 **Telnyx 10DLC:** campaign **TCR_ACCEPTED (2026-07-08)** — brand + campaign
 recreated after the Aug-2025 failure (brand-level "does not qualify"; fixed by
@@ -101,29 +102,56 @@ the primary domain (apex redirects), align SITE_URL. Legal pages
   = emoji/Unicode containment (16 vs 22 seg) + no accidental MMS. NOT yet wired
   into the send path (that's the delivery rework below).
 
+## What shipped in session 003 (branch `claude/security-todos-noq7gf`)
+
+**The digest columnar-delivery build — the last big SECURITY-TODO item.**
+Migration `0006_digest_outbox.sql` (⚠️ run before deploying) + code:
+
+- **Outbox delivery:** composing a due slot enqueues one `digest_outbox` row
+  per (subscriber, message part); the cron drains bounded batches (50/claim,
+  8 concurrent sends) in columnar order — every subscriber gets part 1 before
+  anyone gets part 2 — with `maxDuration=60` and an internal ~45s budget, and
+  RESUMES next tick. Timeouts can no longer half-send a digest; enqueue and
+  claim are idempotent/race-safe (unique key + `FOR UPDATE SKIP LOCKED` RPC,
+  10-min stale-claim reclaim). Failed sends retry ×3 then park as `failed`.
+- **Packing composer wired in** (`composeDigestMessages` now feeds the real
+  send path): GSM-sanitized, whole ads packed under a 612-septet ceiling —
+  an emoji can't flip a broadcast to UCS-2 pricing.
+- **Digest circuit breaker:** `digestDailySegmentBudget` (new admin setting,
+  default 12,000 billed segments per rolling 24h, clamp 100k, 0 = pause).
+  On trip: sending halts, rows wait, admin emailed once (alert fires only on
+  the crossing run or a fresh enqueue — no 5-min spam). `/admin/help`
+  documents it.
+- **1000-row truncation fixes:** `listSubscriberPhones` / `listEmailRecipients`
+  / `getCreditBalance` paged (subscribers past 1000 get digests; balances no
+  longer summed from a 1000-row prefix).
+- **Email edition** rides the same outbox (per-recipient signed unsub links,
+  0 segments — exempt from the SMS budget).
+- **Small fixes:** `digestsSentOnDay` parity (SMS-with-items in both stores —
+  email/empty slots can't suppress the STOP footer); ad-id parser takes the
+  full digit run (`SOLD 12345678` no longer truncates to #123456).
+- **Verified:** 27/27 dev scenario checks (enqueue/drain, multi-part packing,
+  footer rules, resume, breaker trip + recovery, email path, idempotent
+  re-runs) + a breaker-trip alert walk. `tsc` + `next build` clean.
+
 ## Remaining work
 
-**Ops (before/at launch — see LAUNCH.md):** run migration 0005; set up the
+**Ops (before/at launch — see LAUNCH.md):** run migration **0006**; set up the
 cron pinger (Vercel Hobby crons are daily-only — external GET
 `/api/cron/digests` every 5 min with `Authorization: Bearer <CRON_SECRET>`);
-Stripe test purchase → live keys; set ADMIN_EMAIL; Resend domain verify + real
-CAN-SPAM mailing address in `lib/email-digest.ts` (`BUSINESS_ADDRESS`, still
-"PO Box 000"); make www primary; wait for carrier approval → text HELP as the
-go-signal; then the ~15-min smoke walk in LAUNCH.md §B.
+Stripe test purchase → live keys; set ADMIN_EMAIL (also receives the new
+digest-breaker alerts); Resend domain verify + real CAN-SPAM mailing address
+in `lib/email-digest.ts` (`BUSINESS_ADDRESS`, still "PO Box 000"); make www
+primary; wait for carrier approval → text HELP as the go-signal; then the
+~15-min smoke walk in LAUNCH.md §B.
 
-**Builds still pending (both non-security):**
-1. **Digest columnar delivery** (the "make it work at 1500" build): the
-   current send loop is a serial per-subscriber loop that times out past ~100
-   subs and drops the rest silently. Plan = an outbox table enqueued per
-   (part, subscriber), drained by the cron in bounded batches ordered by part
-   (columnar: all get part 1 before part 2), resumable, + a per-slot cost
-   circuit breaker + subscriber pagination (fixes the >1000 PostgREST silent
-   truncation). The packing composer is done and waiting to be wired in here.
-   **Cost/throughput reality to weigh first:** 1500 subs × ~7 seg × 4 slots ≈
-   ~$5k/mo, and you exceed T-Mobile's 2000/day unvetted cap well before 1500
-   subs → external vetting (~$40) becomes mandatory.
-2. **Photo re-hosting to Supabase Storage** on inbound MMS (reliability; the
-   image-host allowlist already lets Telnyx/Supabase photos render).
+**Build still pending (non-security):** **photo re-hosting to Supabase
+Storage** on inbound MMS (reliability; the image-host allowlist already lets
+Telnyx/Supabase photos render). Cost/throughput reality for scale, unchanged:
+1500 subs × ~7 seg × 4 slots ≈ ~$5k/mo, and T-Mobile's 2000/day unvetted cap
+arrives well before 1500 subs → external vetting (~$40) becomes mandatory;
+the segment budget (default 12k/24h) must be raised deliberately as the list
+grows.
 
 ## How the code is organized (the seams)
 

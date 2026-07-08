@@ -1,0 +1,2 @@
+--- 2026-07-08 ---
+Ok I ran all the migrations, I want to kick off a new session and work on the security to-do items

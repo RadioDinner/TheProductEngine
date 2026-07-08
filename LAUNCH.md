@@ -37,9 +37,14 @@ Redeploy after any change — env edits never touch running deployments.
       (test with test, live with live; mixing them = payments succeed but
       credits never arrive)
 
-### A3. Database seeded
+### A3. Database seeded + migrated
 - [x] Run `supabase/seed-production.sql` in the Supabase SQL editor
       (config, packs, word filter — no demo data; safe to re-run).
+- [ ] **Run `supabase/migrations/0006_digest_outbox.sql`** (SQL editor;
+      re-runnable). ⚠️ REQUIRED before the digest-outbox code build deploys:
+      every digest run now writes `digests.item_count` and drains the
+      `digest_outbox` table via its RPCs — without this migration the cron
+      errors and no digest sends. (Migrations 0001–0003 + 0005 already ran.)
 
 ### A4. Telnyx
 - [x] Campaign fully accepted (TCR_ACCEPTED ✓ 2026-07-07; wait for carrier
@@ -59,7 +64,10 @@ won't send. Pick one:
       `GET https://www.theplainexchange.com/api/cron/digests`
       every 5 minutes with header `Authorization: Bearer <CRON_SECRET>`.
 - [ ] Verify: hit the URL once with the header — expect
-      `{"ok":true,"sms":[…],"email":[…]}`, and 401 without it.
+      `{"ok":true,"sms":[…],"email":[…],"drain":{…}}`, and 401 without it.
+      (`drain` is the outbox delivery pass: `sent` / `failed` / `remaining` /
+      `halted` — `halted:true` means the daily digest segment budget in
+      `/admin/settings` stopped sending and queued rows are waiting.)
 
 ### A6. Stripe (live)
 - [ ] One test-mode purchase first (test keys, card `4242 4242 4242 4242`):
