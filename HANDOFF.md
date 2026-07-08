@@ -10,9 +10,10 @@ this every session. Per-session detail lives in `Session log/`.
 The Plain Exchange (repo codename **TheProductEngine**): an SMS-first
 classifieds marketplace for the Plain community and people without
 smartphones. Launch target: Holmes County, Ohio. Sellers text ads (with MMS
-photos) to a number; a human approves each ad; approved ads broadcast in up
-to 4 daily SMS digests and list on the website; buyers pull photos with
-`PIC ####`. Sellers fund it via ad credits; subscribers are free. There is
+photos) to a number; a human approves each ad; approved ads broadcast in the
+daily SMS digests (default 2/day, admin-set) and list on the website AFTER
+they've gone out in a digest; buyers pull photos with `PIC ####`. Sellers fund
+it via ad credits; subscribers are free. There is
 also an email edition. Strategy/design context: `PRODUCT.md` (who/why),
 `DESIGN.md` (visual system, "The Plain Ledger"), `initial plan.txt` (the
 original seed).

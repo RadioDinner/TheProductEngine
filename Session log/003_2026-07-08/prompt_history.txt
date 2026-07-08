@@ -22,3 +22,33 @@ Current status is Pending MNO Review
 
 --- 2026-07-08 ---
 I want them to call 234-301-0048 for support or to arrange for payment by phone or check or setup a saved card. I want to give a discount for saved cards to encourage them to do that . How many credits does a single SMS take on Telynx and how many does an MMS take? I ran the migrations. How do I reverse the simulated credit purchases
+
+--- 2026-07-08 ---
+10% discount for saved card credit purchases. 1 credit for an SMS ad, 5 credits for a picture ad
+
+--- 2026-07-08 ---
+When a new subscriber signs up, I want them to receive the ads from the last batch of ads. For instance if Allen was signed up and 3 ads are posted 1057, 1058 and 1059, he will have received them at the 7am digest time. If Brian signs up at 730, I want him to receive those ads even though they've already been sent at 7. New subscribers should get the most recent digest of ads immediately upon subscribing
+
+--- 2026-07-08 ---
+lets lower digest frequency too. Lets go to 2x a day for free subscribers. Eventually we'll add a tier for "first in line" that get ads a half hour earlier than the rest and 3x a day. Don't post to the website until the digest runs
+
+--- 2026-07-08 ---
+dont say anything about premium subscribers yet
+
+--- 2026-07-08 ---
+wait a minute. sending the digests less frequently wont change anything. [subscriber realized slots are cost-neutral; premium redesign: 1 hour earlier, not more frequent; keep premium quiet]
+
+--- 2026-07-08 ---
+Is it enough to charge people 5 dollars for an SMS ad, 10 dollars for an MMS?
+
+--- 2026-07-08 ---
+$15 for a picture?
+
+--- 2026-07-08 ---
+I don't want to cap the amount of ads that can run in a day. [advertisers grow sub-linearly with subscribers: 100 subs ~5 advertisers, 1000 subs ~30]
+
+--- 2026-07-08 ---
+the calculator doesn't take into effect the revenue from increased posting. If I increase cell B14, the revenue per month goes down? Why?
+
+--- 2026-07-08 ---
+write the handoff, wrap the session and commit it to main

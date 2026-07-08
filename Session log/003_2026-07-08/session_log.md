@@ -107,16 +107,54 @@ After "commit to main," work continued directly on `main`:
   gracefully if a read fails. Verified end-to-end (activity → admin login →
   every table incl. the EXCESSIVE flag).
 
+Branch note: `claude/security-todos-noq7gf` was **merged to `main`** early in
+the session ("commit it to main and continue committing to main"); everything
+after has been committed directly to `main`.
+
+## Product + pricing work (session tail)
+
+- **Support phone `(234) 301-0048`** (`d0f0b49`): new `site.supportPhone` for
+  "call for help / to arrange payment"; the SMS number stays for texting ads.
+- **Telnyx status** (`b6ca32c`): campaign moved to **Pending MNO Review** — last
+  gate before it goes active; nothing to do but wait.
+- **BUYCREDIT by text + 10% saved-card discount** (`923e0ce`): `BUYCREDIT
+  <pack>` quotes a discounted price and `YES` charges the saved card
+  off-session; idempotent via a deterministic ledger ref (no new table).
+  New `savedCardDiscountPercent` setting (default 10). Dev-simulated + gated;
+  the **live Stripe off-session path still needs a real test** once keys exist.
+- **New-subscriber catch-up** (`9f160a9`): SUBSCRIBE/START sends the most recent
+  digest's ads immediately (`sendRecentDigestTo`), once per real (re)subscribe.
+- **2×/day digest default + site-after-digest** (`b60bf9d`): `slots [7, 18]`;
+  the public site now shows an ad only once it has ridden a digest
+  (`broadcast_at`). ⚠️ Prod DB still seeded with 4 slots — set on
+  `/admin/settings`. ⚠️ Consequence: the site is empty until the cron composes
+  digests, so the cron pinger now populates the website too.
+- **Confirmed cost correction:** the user pointed out digest *frequency* is
+  cost-neutral (each ad broadcasts once/day regardless of slot count) — true.
+  The real cost driver is **ads × subscribers**, so per-ad economics go
+  negative past a break-even subscriber count (~850 at $5 text / $15 picture).
+  Delivered an Excel cost/pricing calculator (scratchpad, NOT committed — offer
+  to add under `docs/` if wanted). Ad pricing stays 1 credit text / 5 credit
+  picture for now.
+
+## Product decisions parked (NOT built, NOT in any committed file)
+
+- A future **premium tier** was discussed then redesigned to "digest ~1 hour
+  earlier" (not more frequent). Per the user, **nothing about premium
+  subscriptions is written anywhere in the repo** — keep it out of code, copy,
+  and docs until told otherwise.
+- Whether to reprice a **picture ad to 3 credits** (so $5/credit → $15) is
+  pending the user's word; default is unchanged (5 credits).
+
 ## Open questions / next step
 
-1. **Ops:** run migrations 0006 **and 0007** (both checkboxes in LAUNCH.md
-   §A3). Then the LAUNCH.md countdown as before (cron pinger, Stripe keys,
-   ADMIN_EMAIL — which now also receives breaker alerts).
-0. **Two deferred decisions** (SECURITY-TODO "Verification pass"): starter-grant
-   deferral and inbound-log rate-limit — answer these when you get a chance.
-2. **Last pending build:** photo re-hosting to Supabase Storage on inbound
-   MMS.
-3. **User input still needed:** real CAN-SPAM mailing address for
-   `lib/email-digest.ts` (`BUSINESS_ADDRESS`).
-4. This branch (`claude/security-todos-noq7gf`) is pushed but not merged —
-   review + merge to main when ready.
+1. **Ops:** run migrations **0006 + 0007** (LAUNCH §A3); set the digest slots to
+   `7, 18` on `/admin/settings` if 2×/day is wanted; then the LAUNCH countdown
+   (cron pinger — now also what fills the website — Stripe keys, ADMIN_EMAIL).
+2. **Wire email-in** (optional): Resend inbound address + `RESEND_WEBHOOK_SECRET`.
+3. **Two deferred security decisions** (SECURITY-TODO "Verification pass"):
+   starter-grant deferral and inbound-log rate-limit.
+4. **Last pending build:** photo re-hosting to Supabase Storage on inbound MMS.
+5. **User input still needed:** real CAN-SPAM mailing address in
+   `lib/email-digest.ts` (`BUSINESS_ADDRESS`); and the picture-ad reprice call.
+6. **Live Stripe test** of BUYCREDIT-by-text once Stripe keys are set.
