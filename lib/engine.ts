@@ -21,6 +21,7 @@ import {
   markAdSold,
 } from "@/lib/engine-store";
 import { listAdsByOwner } from "@/lib/ads";
+import { sendRecentDigestTo } from "@/lib/digest-engine";
 import {
   addLedgerEntry,
   consumeFreeAd,
@@ -348,6 +349,13 @@ async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>):
         return { body: `You're already subscribed. Ads come up to 4 times a day. Reply STOP to cancel, HELP for help.` };
       }
       await setSubscribed(from, true);
+      // Send the most recent digest right away so a new subscriber isn't
+      // waiting hours for the next slot. Best-effort — must never break signup.
+      try {
+        await sendRecentDigestTo(from);
+      } catch (e) {
+        console.error("[engine] catch-up digest failed:", e);
+      }
       return {
         body: `You're subscribed to ${site.name} — ${site.region} classifieds by text, up to 4 digests a day. Msg & data rates may apply. Reply STOP to cancel, HELP for help.`,
       };
@@ -361,8 +369,18 @@ async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>):
       };
     }
     case "start": {
-      await ensureAccount(from);
+      const account = await ensureAccount(from);
+      const wasSubscribed = Boolean(account.subscribedAt);
       await setSubscribed(from, true);
+      // Catch them up on the latest digest only if this actually re-subscribed
+      // them (not a repeat START from an already-subscribed number).
+      if (!wasSubscribed) {
+        try {
+          await sendRecentDigestTo(from);
+        } catch (e) {
+          console.error("[engine] catch-up digest failed:", e);
+        }
+      }
       return {
         body: `You're subscribed to ${site.name} — up to 4 digests a day. Msg & data rates may apply. Reply STOP to cancel, HELP for help.`,
       };

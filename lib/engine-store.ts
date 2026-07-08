@@ -470,6 +470,15 @@ const file = {
     return sent[0]?.sentAt ?? null;
   },
 
+  getRecentDigestAdIds(): number[] {
+    const sent = load()
+      .digests.filter(
+        (d) => d.channel === "sms" && d.sentAt && d.itemCount > 0 && d.items?.length,
+      )
+      .sort((a, b) => Date.parse(b.sentAt!) - Date.parse(a.sentAt!));
+    return sent[0]?.items ?? [];
+  },
+
   getSmsAdIdsSince(sinceIso: string | null): number[] {
     const cutoff = sinceIso ? Date.parse(sinceIso) : 0;
     const ids = load()
@@ -779,6 +788,11 @@ export async function getSmsAdIdsSince(sinceIso: string | null): Promise<number[
 
 export async function digestsSentOnDay(dayKey: string): Promise<number> {
   return supabaseConfigured ? remote.digestsSentOnDay(dayKey) : file.digestsSentOnDay(dayKey);
+}
+
+/** Ad ids carried by the most recent finalized, non-empty SMS digest slot. */
+export async function getRecentDigestAdIds(): Promise<number[]> {
+  return supabaseConfigured ? remote.getRecentDigestAdIds() : file.getRecentDigestAdIds();
 }
 
 /**

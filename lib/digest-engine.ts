@@ -19,6 +19,7 @@ import {
   getAdRecord,
   getNewDigestAds,
   getQueuedBumps,
+  getRecentDigestAdIds,
   logMessage,
   markOutboxFailed,
   markOutboxSent,
@@ -31,6 +32,7 @@ import {
 import { listSubscriberPhones } from "@/lib/store";
 import { sms } from "@/lib/sms";
 import { email } from "@/lib/email";
+import { site } from "@/lib/config";
 import { notifyAdminDigestHalted } from "@/lib/notify";
 import { gsmSanitize, packMessages, segmentation } from "@/lib/sms-segments";
 
@@ -103,6 +105,37 @@ export interface SlotResult {
   /** Outbox rows newly enqueued for this slot (recipients × parts). */
   queued?: number;
   skipped: boolean;
+}
+
+/** Catch-up messages for a brand-new subscriber: the most recent digest's ads. */
+export function composeCatchupMessages(items: StoredAd[]): string[] {
+  const header = gsmSanitize(`${site.name} — most recent ads:`);
+  const adLines = items.map((ad) =>
+    gsmSanitize(`#${ad.id} ${ad.body}${ad.photo ? ` Pic? Reply PIC ${ad.id}` : ""}`),
+  );
+  return packMessages({ header, adLines, maxGsm: DIGEST_MSG_MAX_GSM });
+}
+
+/**
+ * Send a just-subscribed number the ads from the most recent digest, so they
+ * aren't waiting hours for the next slot. Best-effort and separate from the
+ * broadcast outbox (it's one recipient); returns how many ads were sent.
+ */
+export async function sendRecentDigestTo(phone: string): Promise<number> {
+  const ids = await getRecentDigestAdIds();
+  if (!ids.length) return 0;
+  const ads: StoredAd[] = [];
+  for (const id of ids) {
+    const ad = await getAdRecord(id);
+    if (ad && ad.status === "approved") ads.push(ad); // still-available only
+  }
+  if (!ads.length) return 0;
+  ads.sort((a, b) => a.id - b.id);
+  for (const body of composeCatchupMessages(ads)) {
+    await sms.send(phone, body);
+    await logMessage({ direction: "outbound", channel: "sms", address: phone, body });
+  }
+  return ads.length;
 }
 
 export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {

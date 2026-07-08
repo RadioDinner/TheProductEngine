@@ -384,6 +384,33 @@ export async function finalizeDigest(
   if (error) throw error;
 }
 
+export async function getRecentDigestAdIds(): Promise<number[]> {
+  const { data: digest, error } = await db()
+    .from("digests")
+    .select("id")
+    .eq("channel", "sms")
+    .not("sent_at", "is", null)
+    .gt("item_count", 0)
+    .order("sent_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!digest) return [];
+  const digestId = digest.id as number;
+  const [{ data: items, error: itemsError }, { data: bumps, error: bumpsError }] =
+    await Promise.all([
+      db().from("digest_items").select("ad_id").eq("digest_id", digestId),
+      db().from("bumps").select("ad_id").eq("digest_id", digestId).eq("status", "sent"),
+    ]);
+  if (itemsError) throw itemsError;
+  if (bumpsError) throw bumpsError;
+  const ids = [
+    ...(items ?? []).map((r) => r.ad_id as number),
+    ...(bumps ?? []).map((r) => r.ad_id as number),
+  ];
+  return [...new Set(ids)];
+}
+
 export async function digestsSentOnDay(dayKey: string): Promise<number> {
   // SMS digests with items only (item_count, migration 0006) — matches the
   // file store, so an empty slot or the email edition can't suppress the
