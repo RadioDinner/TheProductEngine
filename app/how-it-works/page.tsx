@@ -84,7 +84,7 @@ export default function HowItWorks() {
         <span className="cmd">CREDITS</span> any time to see your balance. Buy credit packs on
         this website, or text <span className="cmd">BUYCREDIT 10</span> to buy with a card you’ve
         saved — you’ll be asked to reply YES to confirm before anything is charged. You can also
-        call <strong>{site.smsNumber}</strong> to set up payment by phone or mail.
+        call <strong>{site.supportPhone}</strong> to set up payment by phone or mail.
       </p>
 
       <h2>All the commands</h2>

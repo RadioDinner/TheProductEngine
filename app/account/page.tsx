@@ -110,7 +110,7 @@ export default async function AccountPage({
         {params.checkout === "error" && (
           <p className="notice" role="status">
             We couldn&rsquo;t start checkout just now. Wait a few minutes and try again, or
-            call {site.smsNumber} for help.
+            call {site.supportPhone} for help.
           </p>
         )}
         <dl className="account-facts">
@@ -136,7 +136,7 @@ export default async function AccountPage({
           ))}
         </ul>
         <p className="fine">
-          Prefer paper? Call {site.smsNumber} to arrange payment by phone or check. Buying by
+          Prefer paper? Call {site.supportPhone} to arrange payment by phone or check. Buying by
           text (BUYCREDIT) opens once you’ve saved a card here.
         </p>
         <h3 className="subsection-h">History</h3>

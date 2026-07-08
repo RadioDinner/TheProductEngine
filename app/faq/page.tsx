@@ -14,8 +14,8 @@ export default function Faq() {
       <p>
         The common questions, answered plainly. For the full walkthrough of every command,
         see <Link href="/how-it-works">how it works</Link> — and you can always text{" "}
-        <span className="cmd">HELP</span> to <strong>{site.smsNumber}</strong> or call that
-        same number.
+        <span className="cmd">HELP</span> to <strong>{site.smsNumber}</strong>, or call us at{" "}
+        <strong>{site.supportPhone}</strong>.
       </p>
 
       <h2>What is {site.name}?</h2>
@@ -103,7 +103,7 @@ export default function Faq() {
       <p>
         Buy a credit pack on this website — sign in, pick a pack, and pay by card on a
         secure checkout page. Prefer to handle it by phone or mail? Call{" "}
-        <strong>{site.smsNumber}</strong>{" "}and we&rsquo;ll set it up.
+        <strong>{site.supportPhone}</strong>{" "}and we&rsquo;ll set it up.
       </p>
 
       <h2>How do I stop the texts?</h2>
@@ -116,8 +116,8 @@ export default function Faq() {
 
       <h2>Something else?</h2>
       <p>
-        Call or text <strong>{site.smsNumber}</strong>. A person answers, and plain
-        questions get plain answers.
+        Call <strong>{site.supportPhone}</strong> or text <strong>{site.smsNumber}</strong>. A
+        person answers, and plain questions get plain answers.
       </p>
     </div>
   );

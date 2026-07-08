@@ -67,7 +67,7 @@ async function handleAdSubmission(from: string, body: string, media?: string[]):
   const account = await ensureAccount(from);
   if (account.postingBannedAt) {
     return {
-      body: `Your posting privileges are suspended. Contact us at ${site.smsNumber} or appeal at ThePlainExchange.com.`,
+      body: `Your posting privileges are suspended. Contact us at ${site.supportPhone} or appeal at ThePlainExchange.com.`,
     };
   }
   if (!body) {
@@ -111,7 +111,7 @@ async function handleAdSubmission(from: string, body: string, media?: string[]):
   // authority under concurrency.
   if (!canPass && balance < cost) {
     return {
-      body: `That ad needs ${cost} credit${cost === 1 ? "" : "s"} and you have ${balance}. Buy credits at ThePlainExchange.com, or call ${site.smsNumber}. Text CREDITS to check your balance.`,
+      body: `That ad needs ${cost} credit${cost === 1 ? "" : "s"} and you have ${balance}. Buy credits at ThePlainExchange.com, or call ${site.supportPhone}. Text CREDITS to check your balance.`,
     };
   }
 
@@ -141,7 +141,7 @@ async function handleAdSubmission(from: string, body: string, media?: string[]):
   } else {
     await rejectAdRecord(id, "Not enough credits at submission.", "benign");
     return {
-      body: `That ad needs ${cost} credit${cost === 1 ? "" : "s"} and you don't have enough right now. Buy credits at ThePlainExchange.com, or call ${site.smsNumber}.`,
+      body: `That ad needs ${cost} credit${cost === 1 ? "" : "s"} and you don't have enough right now. Buy credits at ThePlainExchange.com, or call ${site.supportPhone}.`,
     };
   }
 
@@ -262,7 +262,7 @@ async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>):
         body:
           `${site.name} commands: SUBSCRIBE for the ads. AD NEW your ad (photo welcome) to post. ` +
           `PIC 1234 for a picture. STATUS 1234 to check an ad. SOLD 1234 / BUMP 1234 / MYADS for your ads. ` +
-          `CREDITS for your balance. STOP to quit. More help: call ${site.smsNumber} or ThePlainExchange.com/how-it-works`,
+          `CREDITS for your balance. STOP to quit. More help: call ${site.supportPhone} or ThePlainExchange.com/how-it-works`,
       };
     case "ad":
       return handleAdSubmission(from, command.body, msg.media);
@@ -325,7 +325,7 @@ async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>):
     }
     case "buycredit":
       return {
-        body: `No card is saved for this number yet. Buy credits at ThePlainExchange.com, or call ${site.smsNumber} to set up payment by phone or mail.`,
+        body: `No card is saved for this number yet. Buy credits at ThePlainExchange.com, or call ${site.supportPhone} to set up payment by phone or mail.`,
       };
     case "unknown": {
       // No ensureAccount: gibberish from a spoofed number shouldn't mint an

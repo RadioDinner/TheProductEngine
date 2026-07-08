@@ -45,7 +45,7 @@ export default async function EmailSignup({
           {params.error === "send" ? (
             <p className="form-error" role="alert">
               We couldn’t send the confirmation email just now. Wait a few minutes and try
-              again, or call {site.smsNumber} for help.
+              again, or call {site.supportPhone} for help.
             </p>
           ) : params.error ? (
             <p className="form-error" role="alert">

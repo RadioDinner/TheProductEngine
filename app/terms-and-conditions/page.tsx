@@ -152,8 +152,9 @@ export default function TermsAndConditions() {
 
       <h2>Contact</h2>
       <p>
-        Call or text <strong>{site.smsNumber}</strong>, or write to us through the
-        website. See also the <Link href="/privacy">privacy policy</Link>.
+        Call <strong>{site.supportPhone}</strong> or text <strong>{site.smsNumber}</strong>, or
+        write to us through the website. See also the{" "}
+        <Link href="/privacy">privacy policy</Link>.
       </p>
     </div>
   );
