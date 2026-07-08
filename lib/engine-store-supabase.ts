@@ -28,13 +28,18 @@ interface AdRow {
   flagged: boolean;
   rejected_reason: string | null;
   rejection_kind: string | null;
-  broadcast_at: string | null;
+  broadcast_at?: string | null;
   users: { phone: string | null } | null;
   ad_photos: { src: string; alt: string | null; width: number | null; height: number | null }[];
 }
 
+// broadcast_at is deliberately NOT selected here. It's only needed by the
+// digest builder (getNewDigestAds filters on it), and keeping it out of the
+// shared reader means the admin queue and SMS ad-reads don't hard-depend on
+// migration 0007 — a code deploy that lands before the migration degrades to
+// "digests wait" (the cron fails loudly) instead of taking down /admin.
 const AD_SELECT =
-  "id, original_body, body, status, created_at, approved_at, expires_at, sold_at, flagged, rejected_reason, rejection_kind, broadcast_at, users!inner(phone), ad_photos(src, alt, width, height)";
+  "id, original_body, body, status, created_at, approved_at, expires_at, sold_at, flagged, rejected_reason, rejection_kind, users!inner(phone), ad_photos(src, alt, width, height)";
 
 /** PostgREST silently caps un-ranged selects at ~1000 rows — page past it. */
 const PAGE = 1000;
