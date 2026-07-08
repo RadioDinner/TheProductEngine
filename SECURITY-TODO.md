@@ -45,6 +45,41 @@ current behavior, no change.
 inbound MMS. Plus the user-input item: real CAN-SPAM mailing address in
 `lib/email-digest.ts`.
 
+## Verification pass + follow-up fixes (2026-07-08, session 003)
+
+A 7-agent adversarial re-audit checked every item above against the code on
+`main` (not the checkboxes). All P0/P2 items and the money-race items verified
+genuinely fixed in both stores. It also caught gaps behind items that were
+marked done, now fixed (commits on `main`):
+
+- **Digest ad starvation (Supabase):** new PAID ads could silently never
+  broadcast — `getNewDigestAds` scanned the cap×3 oldest approved ads, but
+  Supabase never expires approved ads so already-broadcast ones fill the
+  window. Fixed with an `ads.broadcast_at` column (**migration 0007**).
+- **Open-redirect** had a surviving tab-character bypass
+  (`/⇥/evil.com` → `//evil.com`); **SOLD/revive** lacked a store-level status
+  guard (engine-only); **photo ingest** validated scheme but not host (a
+  crafted `//evil.com` passed); more **unbounded reads** (`getPendingAds`,
+  `getSmsAdIdsSince`, `getLedger`) hit the 1000-row cap; two **dev-only
+  echoes** (email confirm link, plaintext OTP storage) were gated on a missing
+  provider key rather than `devToolsEnabled`. All fixed and dev-verified.
+
+**Two deferred — need a decision, not code (the one remaining `partial`):**
+
+- [ ] **[decision] Starter free ads are still granted on account creation**, so
+      a real number that only ever texts CREDITS/MYADS/SUBSCRIBE mints an
+      account + 3 free-ad passes (rate-limited + Telnyx-signature-gated, but
+      not "deferred to first real use" as the P1 item proposed). Deferring the
+      grant changes the welcome UX ("you have 3 free ads"). **Decide:** keep
+      grant-on-first-contact (simple, low real cost — the passes only convert
+      to value by posting, which needs a real number), or defer the grant to
+      the first `AD NEW`.
+- [ ] **[decision] Inbound message logging is not rate-limited** — every
+      signature-valid inbound writes an audit row before any cap. Recommend
+      **keeping** it: the audit log is the abuse-forensics record, rate-limiting
+      it creates blind spots, and it's already gated by the Telnyx signature +
+      per-message provider-id dedup. Flagged only so the call is explicit.
+
 ---
 
 ## P0 — before the site is public / before re-adding TELNYX_API_KEY

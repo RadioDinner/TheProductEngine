@@ -45,6 +45,10 @@ Redeploy after any change — env edits never touch running deployments.
       every digest run now writes `digests.item_count` and drains the
       `digest_outbox` table via its RPCs — without this migration the cron
       errors and no digest sends. (Migrations 0001–0003 + 0005 already ran.)
+- [ ] **Run `supabase/migrations/0007_ad_broadcast_at.sql`** (SQL editor;
+      re-runnable). ⚠️ REQUIRED alongside 0006: adds `ads.broadcast_at` (the
+      digest builder reads it to find never-broadcast ads). Without it the
+      ad reads throw. Backfills existing broadcast ads automatically.
 
 ### A4. Telnyx
 - [x] Campaign fully accepted (TCR_ACCEPTED ✓ 2026-07-07; wait for carrier

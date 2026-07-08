@@ -21,9 +21,11 @@ original seed).
 
 **`LAUNCH.md` is the live go-live checklist; `SECURITY-TODO.md` is the audit
 + remediation status. Read those two first.** The whole v1 surface is built
-and dev-verified, every code item on SECURITY-TODO is closed (session 003
-shipped the digest outbox build — see below); what remains is ops (migration
-0006/keys/DNS) + one non-blocking build (photo re-hosting).
+and dev-verified. Every code item on SECURITY-TODO is closed (session 003
+shipped the digest outbox build + a verification-pass round of fixes — see
+below); two items are deferred to a product decision. What remains is ops
+(migrations 0006 + 0007 / keys / DNS) + one non-blocking build (photo
+re-hosting).
 
 **Deployment (resolved).** One Vercel project, `the-product-engine`. The
 morning's `mkdir '/var/task/.data'` 500s and the "two deployments / example
@@ -44,12 +46,14 @@ keep SITE_URL matching), all TELNYX_* incl TELNYX_PUBLIC_KEY, RESEND_API_KEY.
 **Migrations:** 0001 (init), 0002 (analytics), 0003 (credit_ledger.ref
 unique), and 0005 (abuse hardening) all applied by the user (confirmed start
 of session 003: "ran all the migrations"). `seed-production.sql` run (config
-rows = 16). **⚠️ `0006_digest_outbox.sql` NOT yet applied** — written in
-session 003 and REQUIRED before the session-003 code deploys: every digest
-run now writes `digests.item_count` and delivers through the `digest_outbox`
-table + its RPCs (`claim_digest_outbox`, `outbox_segments_since`); the cron
-errors without it. It also inserts the `digest_daily_segment_budget` config
-row (17th row).
+rows = 16). **⚠️ `0006_digest_outbox.sql` AND `0007_ad_broadcast_at.sql` NOT
+yet applied** — both written in session 003 and REQUIRED before the
+session-003 code deploys. 0006: every digest run writes `digests.item_count`
+and delivers through the `digest_outbox` table + its RPCs
+(`claim_digest_outbox`, `outbox_segments_since`) and inserts the
+`digest_daily_segment_budget` config row (17th). 0007: adds `ads.broadcast_at`
+(the digest builder reads it to find never-broadcast ads; backfilled). The
+ad reads and the cron error until both are run.
 
 **Telnyx 10DLC:** campaign **TCR_ACCEPTED (2026-07-08)** — brand + campaign
 recreated after the Aug-2025 failure (brand-level "does not qualify"; fixed by
@@ -134,10 +138,28 @@ Migration `0006_digest_outbox.sql` (⚠️ run before deploying) + code:
   footer rules, resume, breaker trip + recovery, email path, idempotent
   re-runs) + a breaker-trip alert walk. `tsc` + `next build` clean.
 
+**Then a 7-agent adversarial re-audit** verified every SECURITY-TODO item
+against the code (not the checkboxes) and caught gaps behind items marked
+done — all fixed on `main` (commits `23446b2`, `f0cd97b`), 12/12 re-verified
+in dev:
+- **Digest ad starvation (Supabase):** new PAID ads could silently never
+  broadcast (`getNewDigestAds` scanned the cap×3 oldest approved ads and
+  Supabase never expires approved ads). Fixed with `ads.broadcast_at`
+  (**migration 0007**).
+- Open-redirect tab bypass (`/⇥/evil.com`); SOLD/revive store-level status
+  guards (were engine-only); photo ingest host allowlist (scheme-only before,
+  `//evil.com` passed); paged `getPendingAds`/`getSmsAdIdsSince`/`getLedger`
+  (1000-row cap); dev-only echoes (email confirm link, plaintext OTP storage)
+  now gated on `devToolsEnabled` not a missing key.
+- **Two items deferred to a decision** (see SECURITY-TODO "Verification pass"):
+  whether to defer the 3 starter free-ads from first contact to first post,
+  and whether to rate-limit inbound audit logging (recommend NOT). Everything
+  else on SECURITY-TODO is closed in code.
+
 ## Remaining work
 
-**Ops (before/at launch — see LAUNCH.md):** run migration **0006**; set up the
-cron pinger (Vercel Hobby crons are daily-only — external GET
+**Ops (before/at launch — see LAUNCH.md):** run migrations **0006 + 0007**;
+set up the cron pinger (Vercel Hobby crons are daily-only — external GET
 `/api/cron/digests` every 5 min with `Authorization: Bearer <CRON_SECRET>`);
 Stripe test purchase → live keys; set ADMIN_EMAIL (also receives the new
 digest-breaker alerts); Resend domain verify + real CAN-SPAM mailing address

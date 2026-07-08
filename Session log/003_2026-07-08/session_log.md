@@ -54,11 +54,38 @@ numbers, on enqueue-into-tripped-breaker. `tsc` + `next build` clean.
 Note for future walks: this environment needs
 `chromium.launch({ executablePath: "/opt/pw-browsers/chromium" })`.
 
+## Verification pass + round-2 fixes (after "commit to main")
+
+Merged session 003 to `main` (fast-forward, pushed), then ran a 7-agent
+adversarial workflow that re-checked every SECURITY-TODO item against the
+code on `main` rather than the checkboxes. It confirmed all P0/P2 + money-race
+items genuinely fixed in both stores, and caught real gaps behind items marked
+done. Fixed and committed to `main`:
+
+- `23446b2` — **digest ad starvation** (Supabase `getNewDigestAds` could
+  silently stop broadcasting new paid ads; **migration 0007** adds
+  `ads.broadcast_at`), **SOLD/revive store-level status guards**, and paging
+  for `getPendingAds`/`getSmsAdIdsSince`/`getLedger`.
+- `f0cd97b` — **photo ingest host allowlist** (`lib/media.ts`, rejects
+  `//evil.com` + off-site), **open-redirect tab-bypass** fix (`lib/safe-next.ts`,
+  shared by login page + auth actions), and **dev-echo gating** (email confirm
+  link + plaintext OTP storage now require `devToolsEnabled`).
+- 12/12 re-verified in a dev walk (tab-bypass, photo allowlist incl. subdomain
+  spoof, SOLD-on-pending refused / SOLD-on-approved works, BUMP-revive, digest
+  regression). `tsc` + `next build` clean.
+
+Two `partial` items were deferred to a decision rather than changed
+unilaterally (documented in SECURITY-TODO "Verification pass"): defer the 3
+starter free-ads to first post (product/UX call), and rate-limit inbound audit
+logging (recommend NOT — it's the forensics record).
+
 ## Open questions / next step
 
-1. **Ops:** run migration 0006 (now a checkbox in LAUNCH.md §A3). Then the
-   LAUNCH.md countdown as before (cron pinger, Stripe keys, ADMIN_EMAIL —
-   which now also receives breaker alerts).
+1. **Ops:** run migrations 0006 **and 0007** (both checkboxes in LAUNCH.md
+   §A3). Then the LAUNCH.md countdown as before (cron pinger, Stripe keys,
+   ADMIN_EMAIL — which now also receives breaker alerts).
+0. **Two deferred decisions** (SECURITY-TODO "Verification pass"): starter-grant
+   deferral and inbound-log rate-limit — answer these when you get a chance.
 2. **Last pending build:** photo re-hosting to Supabase Storage on inbound
    MMS.
 3. **User input still needed:** real CAN-SPAM mailing address for
