@@ -19,3 +19,6 @@ Now the www.theplainexchange.com/admin gives me this error This page couldn't lo
 
 --- 2026-07-08 ---
 Current status is Pending MNO Review
+
+--- 2026-07-08 ---
+I want them to call 234-301-0048 for support or to arrange for payment by phone or check or setup a saved card. I want to give a discount for saved cards to encourage them to do that . How many credits does a single SMS take on Telynx and how many does an MMS take? I ran the migrations. How do I reverse the simulated credit purchases
