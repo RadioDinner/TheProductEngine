@@ -109,6 +109,52 @@ export default async function AdminHelp() {
         confirmation).
       </p>
 
+      <h2 className="section-h">Emergency controls (Settings → System controls)</h2>
+      <p>
+        Three switches on the Settings page for when something goes wrong. They take effect
+        immediately — the engine reads them live.
+      </p>
+      <ul>
+        <li>
+          <strong>Partial pause</strong> stops the expensive bulk sends — the digests and the
+          new-subscriber catch-up — but still answers commands, sends picture (PIC) texts,
+          sign-in codes, and STOP confirmations. Use it when the digest bill is the problem but
+          you want the service usable.
+        </li>
+        <li>
+          <strong>Full pause</strong> stops <em>every</em> outbound text and email to
+          subscribers and users: digests, replies, pictures, sign-in codes, confirmations. You
+          still receive and log incoming texts, alert emails still reach you, and you sign into
+          this admin area with your password (not a texted code). It&rsquo;s the absolute
+          spend-stop. Queued digests aren&rsquo;t lost — they wait and resume, under the segment
+          budget, when you set it back to Normal.
+        </li>
+        <li>
+          <strong>Under-attack mode</strong> is for a spam flood or a bad actor: it stops
+          replying to unknown/gibberish texts, skips new-subscriber catch-up, automatically
+          tightens the per-number and service-wide reply caps, and throttles all outbound to the
+          per-minute ceiling on Settings. Pair it with the blocklist below.
+        </li>
+      </ul>
+      <p>
+        <strong>Blocklist.</strong> A blocked number is dropped the instant it texts — no reply,
+        no account, no charge — and never receives a digest (the incoming text is still recorded
+        for your records). Block the worst offenders with one click from{" "}
+        <span className="cmd">Insights</span> (they&rsquo;re ranked by volume there), or add a
+        number by hand on Settings.
+      </p>
+
+      <h2 className="section-h">What ads may contain</h2>
+      <p>
+        Two rules are enforced the moment an ad is texted in, before you ever see it. Emoji and
+        other picture-symbols are <strong>stripped out</strong> — they flip a whole SMS digest
+        to a pricier encoding and read badly on flip phones (the exact text the sender typed is
+        still kept in the message log). And any ad containing a <strong>web link</strong> is
+        <strong> flagged</strong> in the review queue so you notice it: for now the service is a
+        walled garden and links are edited out or the ad rejected. (A future
+        &ldquo;verified advertiser&rdquo; tier could be allowed to post links.)
+      </p>
+
       <h2 className="section-h">Why credits are a ledger</h2>
       <p>
         Credit balances aren&rsquo;t a single number that gets edited. Every grant, purchase,

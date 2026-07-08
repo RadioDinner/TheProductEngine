@@ -49,6 +49,13 @@ Redeploy after any change — env edits never touch running deployments.
       re-runnable). ⚠️ REQUIRED alongside 0006: adds `ads.broadcast_at` (the
       digest builder reads it to find never-broadcast ads). Without it the
       ad reads throw. Backfills existing broadcast ads automatically.
+- [ ] **Run `supabase/migrations/0008_blocklist_and_controls.sql`** (SQL
+      editor; re-runnable). Adds the `blocked_numbers` table (UNDER ATTACK
+      blocklist) and seeds the config rows for the operator kill switches
+      (`pause_mode`, `under_attack`, `outbound_throttle_per_min`). Without it,
+      `/admin/insights` and `/admin/settings` throw when they read the
+      blocklist. (Session 004: PAUSE switch, UNDER ATTACK mode, blocklist,
+      emoji-strip + link-flag on ad ingest.)
 
 ### A4. Telnyx
 - [x] Campaign fully accepted (TCR_ACCEPTED ✓ 2026-07-07; wait for carrier

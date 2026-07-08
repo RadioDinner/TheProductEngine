@@ -3,7 +3,7 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-07-08 (session 003).
+**Last updated:** 2026-07-08 (session 004).
 
 ## What this project is
 
@@ -112,6 +112,41 @@ the primary domain (apex redirects), align SITE_URL. Legal pages
   = emoji/Unicode containment (16 vs 22 seg) + no accidental MMS. NOT yet wired
   into the send path (that's the delivery rework below).
 
+## What shipped in session 004 (branch `claude/app-audit-three-rounds-ypaa3e`)
+
+Round-4 audit kickoff (security → function → profitability). **A Round-1
+security audit ran as an adversarial multi-agent workflow** (10 attack
+surfaces → per-finding refutation → coverage-gap pass); findings folded in
+separately. Alongside it, the user requested threat-vector-reduction controls,
+now built + dev-verified (14/14 scripted engine checks) + `tsc`/`next build`
+clean:
+
+- **Content filter at ad ingest** (`lib/content-filter.ts`): emoji/pictographic
+  chars stripped from the stored+broadcast body (raw kept in the audit log);
+  URLs/bare domains **flagged for manual review** (not stripped/auto-rejected)
+  with a badge in the review queue. `mayPostLinks()` is the seam for a future
+  verified-advertiser tier. Detector avoids false-flagging phones/prices.
+- **PAUSE switch, two levels** (`lib/settings` `pauseMode`, `/admin/settings`
+  System controls): `bulk` (PARTIAL — digests + catch-up off; replies, PIC,
+  sign-in codes, STOP confirms on) and `all` (FULL — every subscriber/user
+  outbound off; inbound still logged; operator alerts still send; admin signs
+  in by password). Queued digests wait + resume on Resume.
+- **UNDER ATTACK mode** (`underAttack`): suppress unknown/gibberish replies +
+  skip catch-up, auto-tighten SMS caps (`effectiveSmsCaps`), global per-minute
+  outbound throttle (`outboundThrottlePerMin`); the digest drain also caps
+  sends/run.
+- **Blocklist** (`lib/blocklist.ts`, **migration 0008**): blocked inbound
+  logged for forensics then dropped before any account/reply/charge; excluded
+  from digest recipients + all outbound. One-click block from `/admin/insights`
+  (ranked worst senders), manage on `/admin/settings`.
+- **The single outbound choke point** (`lib/outbound.ts` `dispatchSms` /
+  `dispatchEmail`): all 10 non-digest send sites routed through it; the digest
+  drain enforces pause/throttle at batch level so paused rows stay queued
+  (never failed). Operator alert emails are class `operator` — never blocked.
+
+**⚠️ Migration 0008 must be run** (blocked_numbers + control config rows) or
+`/admin/insights` + `/admin/settings` throw on the blocklist read.
+
 ## What shipped in session 003 (branch `claude/security-todos-noq7gf`)
 
 **The digest columnar-delivery build — the last big SECURITY-TODO item.**
@@ -164,7 +199,7 @@ in dev:
 
 ## Remaining work
 
-**Ops (before/at launch — see LAUNCH.md):** run migrations **0006 + 0007**;
+**Ops (before/at launch — see LAUNCH.md):** run migrations **0006 + 0007 + 0008**;
 set up the cron pinger (Vercel Hobby crons are daily-only — external GET
 `/api/cron/digests` every 5 min with `Authorization: Bearer <CRON_SECRET>`);
 Stripe test purchase → live keys; set ADMIN_EMAIL (also receives the new
