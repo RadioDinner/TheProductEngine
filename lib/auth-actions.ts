@@ -10,7 +10,8 @@ import {
   verifyCode,
   verifyPassword,
 } from "@/lib/store";
-import { sms, smsDevEcho } from "@/lib/sms";
+import { smsDevEcho } from "@/lib/sms";
+import { dispatchSms } from "@/lib/outbound";
 import {
   createSession,
   createTicket,
@@ -41,15 +42,24 @@ async function issueCode(phone: string, next: string): Promise<never> {
   if (!result.ok) {
     redirect(loginUrl({ step: "code", phone, next, error: "rate" }));
   }
+  // Sign-in code is a "transactional" send: it survives a PARTIAL pause but is
+  // suppressed by a FULL pause (in that emergency, admins use their password).
+  // A throw (provider down) or a non-send (paused/throttled) both fall to the
+  // same plain "couldn't text you" screen rather than a crash. redirect() must
+  // stay OUT of the try — it signals by throwing.
+  let codeSent = false;
   try {
-    await sms.send(
-      phone,
-      `${site.name}: your sign-in code is ${result.code}. It expires in 5 minutes.`,
-    );
+    codeSent = (
+      await dispatchSms(
+        phone,
+        `${site.name}: your sign-in code is ${result.code}. It expires in 5 minutes.`,
+        { cls: "transactional" },
+      )
+    ).sent;
   } catch (e) {
-    // Provider down or number not yet approved to send: tell the person
-    // plainly instead of crashing to an error page.
     console.error("[auth] sign-in code send failed:", e);
+  }
+  if (!codeSent) {
     redirect(loginUrl({ phone, next, error: "sms" }));
   }
   redirect(loginUrl({ step: "code", phone, next }));

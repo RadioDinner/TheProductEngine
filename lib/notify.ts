@@ -4,7 +4,8 @@
  * Best-effort: a send failure is logged and swallowed — it must never break
  * ad posting.
  */
-import { email, siteUrl } from "@/lib/email";
+import { siteUrl } from "@/lib/email";
+import { dispatchEmail } from "@/lib/outbound";
 import { site } from "@/lib/config";
 import { formatPhone } from "@/lib/phone";
 
@@ -36,7 +37,9 @@ export async function notifyAdminNewAd(args: {
     <p><a href="${reviewUrl}" style="color:#2d5570;font-weight:600;">Open the review queue</a></p>
   </div>`;
   try {
-    await email.send({ to, subject, html, text });
+    // "operator": alerts to the business always send — never blocked by a pause,
+    // the blocklist, or the throttle (you especially want them during an incident).
+    await dispatchEmail({ to, subject, html, text }, { cls: "operator" });
   } catch (e) {
     console.error("[notify] admin new-ad email failed:", e);
   }
@@ -78,7 +81,7 @@ export async function notifyAdminDigestHalted(args: {
     <p><a href="${settingsUrl}" style="color:#2d5570;font-weight:600;">Open settings</a></p>
   </div>`;
   try {
-    await email.send({ to, subject, html, text });
+    await dispatchEmail({ to, subject, html, text }, { cls: "operator" });
   } catch (e) {
     console.error("[notify] digest-halt email failed:", e);
   }

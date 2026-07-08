@@ -14,7 +14,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { subscribeEmailOnly } from "@/lib/store";
 import { logMessage } from "@/lib/engine-store";
-import { email, siteUrl, unsubscribeUrl } from "@/lib/email";
+import { siteUrl, unsubscribeUrl } from "@/lib/email";
+import { dispatchEmail } from "@/lib/outbound";
 import { isProduction } from "@/lib/env";
 import { site } from "@/lib/config";
 
@@ -142,7 +143,7 @@ export async function POST(req: NextRequest) {
   if (isNew) {
     const { subject, html, text } = welcomeEmail(sender);
     try {
-      await email.send({ to: sender, subject, html, text });
+      await dispatchEmail({ to: sender, subject, html, text }, { cls: "transactional" });
       await logMessage({ direction: "outbound", channel: "email", address: sender, body: `${subject}\n\n${text}`, html });
     } catch (e) {
       // Already subscribed; a failed welcome must not fail the webhook (Resend

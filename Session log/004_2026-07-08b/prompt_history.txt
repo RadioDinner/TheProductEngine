@@ -6,3 +6,13 @@ Threat model (harden hardest against): Denial-of-wallet / spam floods; Credit / 
 Top priority when goals trade off: Trust & privacy
 Fix vs report: Find -> fix -> verify (ship-ready)
 Profit goal: Sustainable break-even income long term. I'm willing to burn cash to get it there, IF burning cash is the route to get there.
+
+--- 2026-07-08 17:43 ---
+a few things I'm thinking of in terms of security and reducing the threat vector. I don't want people to be able to send emojis of any kind. Always remove them from the messages, especially when they put them in the ads they want to have run. I don't want people to be able to send links, for now. Eventually I will have Verified Advertisers that could potentially run links but they'd have to be verified. For now, walled garden, none. 
+
+Also, I want a "PAUSE SWITCH" built into the digest system. If costs would suddenly skyrocket and I see that one day will start racking up hundreds of dollars, I want a way to pause everything except for inbound SMS/MMS. Unless I could somehow pause that too. I also want a "UNDER ATTACK" toggle/mode. If some prankster or bad actor starts spamming my network, I want to be able to rapidly identify the bad actor numbers and block them, and potentially add a delay in my send messages or something to reduce my spend
+
+--- 2026-07-08 17:50 (AskUserQuestion answers) ---
+Links: Flag for manual review (detect -> flag in admin queue; admin edits or rejects)
+PAUSE switch: BOTH -- a complete kill switch (all outbound off) AND a partial kill switch (bulk off, transactional on)
+UNDER ATTACK levers: ALL FOUR -- Suppress non-subscriber replies; Auto-tighten rate caps; Throttle outbound per-minute; Auto-flag worst numbers (one-click block)

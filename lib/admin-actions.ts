@@ -10,6 +10,7 @@ import {
   saveEngineSettings,
   toggleWordRule,
 } from "@/lib/settings";
+import { blockNumber, unblockNumber } from "@/lib/blocklist";
 import { normalizePhone } from "@/lib/phone";
 
 export async function adminApprove(formData: FormData): Promise<void> {
@@ -97,6 +98,7 @@ const SETTING_MAX: Record<string, number> = {
   digestDailySegmentBudget: 100000,
   picAbusePerDay: 1000,
   savedCardDiscountPercent: 100,
+  outboundThrottlePerMin: 10000,
 };
 
 export async function adminSaveSettings(formData: FormData): Promise<void> {
@@ -127,6 +129,7 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
     "digestDailySegmentBudget",
     "picAbusePerDay",
     "savedCardDiscountPercent",
+    "outboundThrottlePerMin",
   ]) {
     const value = num(key);
     if (value !== null) update[key] = value;
@@ -137,4 +140,42 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
   if (emailSlots.length) update.emailSlots = [...new Set(emailSlots)].sort((a, b) => a - b);
   await saveEngineSettings(update);
   redirect("/admin/settings?saved=1");
+}
+
+// ---------- operator kill switches (PAUSE + UNDER ATTACK) ----------
+
+/** Set the master outbound pause: "off" | "bulk" (partial) | "all" (full). */
+export async function adminSetPause(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const mode = String(formData.get("mode"));
+  if (mode === "off" || mode === "bulk" || mode === "all") {
+    await saveEngineSettings({ pauseMode: mode });
+  }
+  redirect("/admin/settings?saved=pause");
+}
+
+/** Toggle UNDER ATTACK mode (suppress + auto-tighten caps + throttle). */
+export async function adminSetUnderAttack(formData: FormData): Promise<void> {
+  await requireAdmin();
+  await saveEngineSettings({ underAttack: String(formData.get("on")) === "yes" });
+  redirect("/admin/settings?saved=attack");
+}
+
+/** Block a number (one-click from Insights, or by hand on Settings). */
+export async function adminBlockNumber(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+  const phone = normalizePhone(String(formData.get("phone") ?? ""));
+  const reason = String(formData.get("reason") ?? "").trim() || "Blocked from admin";
+  // Whitelisted return targets — never trust a redirect string from the form.
+  const back = String(formData.get("back")) === "/admin/insights" ? "/admin/insights" : "/admin/settings";
+  if (phone) await blockNumber(phone, reason, admin);
+  redirect(back);
+}
+
+/** Remove a number from the blocklist. */
+export async function adminUnblockNumber(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const phone = normalizePhone(String(formData.get("phone") ?? ""));
+  if (phone) await unblockNumber(phone);
+  redirect("/admin/settings?saved=unblock");
 }

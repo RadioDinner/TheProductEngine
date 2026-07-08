@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getInsights, type Insights } from "@/lib/insights";
+import { listBlocked } from "@/lib/blocklist";
+import { adminBlockNumber } from "@/lib/admin-actions";
 import { formatPhone } from "@/lib/phone";
 import { site } from "@/lib/config";
 
@@ -45,12 +47,36 @@ export default async function AdminInsights({
     console.error("[insights] failed to load:", e);
   }
 
+  let blocked = new Set<string>();
+  try {
+    blocked = new Set((await listBlocked()).map((b) => b.phone));
+  } catch (e) {
+    console.error("[insights] blocklist load failed:", e);
+  }
+
   const stat = (label: string, value: number | string) => (
     <div>
       <dt>{label}</dt>
       <dd>{value}</dd>
     </div>
   );
+
+  // One-click block for a phone-number address (emails can't be blocked).
+  const blockCell = (address: string) =>
+    /^\d{10}$/.test(address) ? (
+      blocked.has(address) ? (
+        <span className="status-muted">Blocked</span>
+      ) : (
+        <form action={adminBlockNumber} className="inline-form">
+          <input type="hidden" name="phone" value={address} />
+          <input type="hidden" name="reason" value="Blocked from Insights" />
+          <input type="hidden" name="back" value="/admin/insights" />
+          <button className="btn btn-sm btn-secondary" type="submit">
+            Block
+          </button>
+        </form>
+      )
+    ) : null;
 
   return (
     <>
@@ -133,6 +159,7 @@ export default async function AdminInsights({
                     <th>Number</th>
                     <th>Texts</th>
                     <th>Picture requests</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -141,6 +168,7 @@ export default async function AdminInsights({
                       <td>{who(s.address)}</td>
                       <td>{s.messages}</td>
                       <td>{s.pics}</td>
+                      <td>{blockCell(s.address)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -175,7 +203,9 @@ export default async function AdminInsights({
                       <td>{p.pics1h}</td>
                       <td>{p.pics24h}</td>
                       <td>{p.pics7d}</td>
-                      <td>{p.flagged && <span className="ad-sold">Excessive</span>}</td>
+                      <td>
+                        {p.flagged && <span className="ad-sold">Excessive</span>} {blockCell(p.address)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

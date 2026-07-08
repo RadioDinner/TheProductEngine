@@ -18,11 +18,13 @@ import {
   recordOffense,
 } from "@/lib/store";
 import { getEngineSettings } from "@/lib/settings";
-import { sms } from "@/lib/sms";
+import { dispatchSms } from "@/lib/outbound";
 
 async function notify(phone: string, body: string): Promise<void> {
-  await sms.send(phone, body);
-  await logMessage({ direction: "outbound", channel: "sms", address: phone, body });
+  // "reply" class: a FULL pause suppresses these seller notices, a PARTIAL
+  // pause lets them through; blocklist/throttle apply. Only log what went out.
+  const { sent } = await dispatchSms(phone, body, { cls: "reply" });
+  if (sent) await logMessage({ direction: "outbound", channel: "sms", address: phone, body });
 }
 
 export async function approveAd(id: number, editedBody?: string): Promise<void> {

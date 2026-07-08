@@ -30,6 +30,12 @@ export interface EngineSettings {
   picAbusePerDay: number;
   /** Percent off a credit pack bought by text with a saved card (BUYCREDIT). */
   savedCardDiscountPercent: number;
+  /** Master outbound kill switch: "off" | "bulk" (partial) | "all" (full). */
+  pauseMode: "off" | "bulk" | "all";
+  /** UNDER ATTACK mode: suppress+tighten+throttle outbound while true. */
+  underAttack: boolean;
+  /** Global outbound sends/minute ceiling, enforced only while underAttack. */
+  outboundThrottlePerMin: number;
 }
 
 export interface WordRule {
@@ -53,6 +59,9 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   digestDailySegmentBudget: "digest_daily_segment_budget",
   picAbusePerDay: "pic_abuse_per_day",
   savedCardDiscountPercent: "saved_card_discount_percent",
+  pauseMode: "pause_mode",
+  underAttack: "under_attack",
+  outboundThrottlePerMin: "outbound_throttle_per_min",
 };
 
 // ---------- file implementation ----------
@@ -99,6 +108,9 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     digestDailySegmentBudget: engineDefaults.digestDailySegmentBudget,
     picAbusePerDay: engineDefaults.picAbusePerDay,
     savedCardDiscountPercent: engineDefaults.savedCardDiscountPercent,
+    pauseMode: engineDefaults.pauseMode,
+    underAttack: engineDefaults.underAttack,
+    outboundThrottlePerMin: engineDefaults.outboundThrottlePerMin,
   };
   if (!supabaseConfigured) {
     return { ...defaults, ...load().values };
@@ -195,6 +207,31 @@ export async function toggleWordRule(word: string): Promise<void> {
     .update({ auto_reject: !rule.autoReject })
     .eq("word", word);
   if (error) throw error;
+}
+
+/**
+ * The SMS reply caps the engine should enforce right now. Normally the
+ * admin-set values; while UNDER ATTACK, auto-tightened to conservative floors
+ * (config attack* defaults) without the admin editing anything — never LOOSER
+ * than the configured value.
+ */
+export function effectiveSmsCaps(settings: EngineSettings): {
+  repliesPerHour: number;
+  picsPerHour: number;
+  globalPerHour: number;
+} {
+  if (!settings.underAttack) {
+    return {
+      repliesPerHour: settings.smsRepliesPerHour,
+      picsPerHour: settings.smsPicsPerHour,
+      globalPerHour: settings.smsGlobalPerHour,
+    };
+  }
+  return {
+    repliesPerHour: Math.min(settings.smsRepliesPerHour, engineDefaults.attackRepliesPerHour),
+    picsPerHour: Math.min(settings.smsPicsPerHour, engineDefaults.attackPicsPerHour),
+    globalPerHour: Math.min(settings.smsGlobalPerHour, engineDefaults.attackGlobalPerHour),
+  };
 }
 
 /** Match ad text against the word rules. */

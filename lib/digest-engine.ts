@@ -34,6 +34,8 @@ import { sms } from "@/lib/sms";
 import { email } from "@/lib/email";
 import { site } from "@/lib/config";
 import { notifyAdminDigestHalted } from "@/lib/notify";
+import { pauseBlocks } from "@/lib/outbound";
+import { listBlocked } from "@/lib/blocklist";
 import { gsmSanitize, packMessages, segmentation } from "@/lib/sms-segments";
 
 const SLOT_LABELS: Record<number, string> = {
@@ -122,6 +124,10 @@ export function composeCatchupMessages(items: StoredAd[]): string[] {
  * broadcast outbox (it's one recipient); returns how many ads were sent.
  */
 export async function sendRecentDigestTo(phone: string): Promise<number> {
+  // Catch-up is a bulk send: skip it under any pause, and while UNDER ATTACK
+  // (so a spoofed-number subscribe flood can't each pull a burst of SMS).
+  const settings = await getEngineSettings();
+  if (pauseBlocks("bulk", settings.pauseMode) || settings.underAttack) return 0;
   const ids = await getRecentDigestAdIds();
   if (!ids.length) return 0;
   const ads: StoredAd[] = [];
@@ -180,7 +186,10 @@ export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {
     const messages = composeDigestMessages(now, slot, items, firstOfDay);
     const parts = messages.length;
     const partSegments = messages.map((m) => segmentation(m).segments);
-    const subscribers = await listSubscriberPhones();
+    // Blocked numbers get no broadcast (the drain sends via the raw transport,
+    // so filtering here is the blocklist's enforcement point for digests).
+    const blocked = new Set((await listBlocked()).map((b) => b.phone));
+    const subscribers = (await listSubscriberPhones()).filter((p) => !blocked.has(p));
 
     const rows: OutboxInsert[] = [];
     for (const phone of subscribers) {
@@ -252,6 +261,15 @@ export async function drainDigestOutbox(
   const startedAt = Date.now();
   const settings = await getEngineSettings();
   const budget = settings.digestDailySegmentBudget;
+  // Operator kill switch: a PARTIAL or FULL pause both stop bulk (digest)
+  // sending. Rows stay queued and resume when the pause is lifted.
+  const paused = pauseBlocks("bulk", settings.pauseMode);
+  // UNDER ATTACK throttle: cap how many rows a single run may send, so the
+  // broadcast trickles out (≈ cap per cron tick) instead of firing at once.
+  const runCap =
+    settings.underAttack && settings.outboundThrottlePerMin > 0
+      ? settings.outboundThrottlePerMin
+      : Infinity;
   const windowStart = new Date(startedAt - 24 * 60 * 60 * 1000).toISOString();
   let spent = await digestSegmentsSentSince(windowStart);
 
@@ -259,9 +277,19 @@ export async function drainDigestOutbox(
   let failed = 0;
   let segmentsSent = 0;
   let halted = false;
+  let budgetHalt = false; // only a budget halt alerts; pause/throttle are deliberate
 
   outer: while (Date.now() - startedAt < timeBudgetMs) {
+    if (paused) {
+      halted = true;
+      break;
+    }
     if (spent >= budget) {
+      halted = true;
+      budgetHalt = true;
+      break;
+    }
+    if (sent >= runCap) {
       halted = true;
       break;
     }
@@ -269,8 +297,9 @@ export async function drainDigestOutbox(
     if (!batch.length) break;
 
     for (let i = 0; i < batch.length; i += SEND_CONCURRENCY) {
-      if (spent >= budget || Date.now() - startedAt >= timeBudgetMs) {
-        halted = spent >= budget;
+      if (spent >= budget || sent >= runCap || Date.now() - startedAt >= timeBudgetMs) {
+        halted = spent >= budget || sent >= runCap;
+        budgetHalt = budgetHalt || spent >= budget;
         // Give untouched claimed rows straight back to the queue instead of
         // waiting out the stale-claim reclaim window.
         await requeueOutbox(batch.slice(i).map((r) => r.id));
@@ -307,7 +336,9 @@ export async function drainDigestOutbox(
   }
 
   const remaining = await queuedOutboxCount();
-  if (halted && remaining > 0 && (segmentsSent > 0 || opts.newlyEnqueued)) {
+  // Only a BUDGET halt emails the operator — a deliberate pause or the
+  // under-attack throttle shouldn't page them about their own switch.
+  if (budgetHalt && remaining > 0 && (segmentsSent > 0 || opts.newlyEnqueued)) {
     await notifyAdminDigestHalted({ spent, budget, remaining });
   }
   return { sent, failed, segmentsSent, remaining, halted };

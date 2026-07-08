@@ -1,11 +1,18 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   adminAddWord,
+  adminBlockNumber,
   adminRemoveWord,
   adminSaveSettings,
+  adminSetPause,
+  adminSetUnderAttack,
   adminToggleWord,
+  adminUnblockNumber,
 } from "@/lib/admin-actions";
 import { getEngineSettings, getWordRules } from "@/lib/settings";
+import { listBlocked } from "@/lib/blocklist";
+import { formatPhone } from "@/lib/phone";
 import { site } from "@/lib/config";
 
 export const metadata: Metadata = {
@@ -49,6 +56,11 @@ const FIELDS: { key: string; label: string; hint?: string }[] = [
     label: "Saved-card discount (%)",
     hint: "percent off a credit pack bought by text (BUYCREDIT) with a saved card; 0 = no discount",
   },
+  {
+    key: "outboundThrottlePerMin",
+    label: "Under-attack outbound throttle (per minute)",
+    hint: "global sends/minute ceiling, enforced ONLY while UNDER ATTACK mode is on (excess defers to the next tick)",
+  },
 ];
 
 export default async function AdminSettings({
@@ -59,6 +71,7 @@ export default async function AdminSettings({
   const params = await searchParams;
   const settings = await getEngineSettings();
   const words = await getWordRules();
+  const blocked = await listBlocked();
   const values = settings as unknown as Record<string, number>;
 
   return (
@@ -69,6 +82,74 @@ export default async function AdminSettings({
           Settings saved — the engine uses them immediately.
         </p>
       )}
+
+      <section className="controls-panel">
+        <h2 className="section-h">System controls</h2>
+        <p className="fine">
+          Emergency kill switches. They take effect immediately — the engine reads them live.
+        </p>
+        <p>
+          Outbound:{" "}
+          <strong>
+            {settings.pauseMode === "all"
+              ? "FULL PAUSE — all outbound stopped"
+              : settings.pauseMode === "bulk"
+                ? "PARTIAL PAUSE — digests off, replies + sign-in on"
+                : "Normal"}
+          </strong>
+          {settings.underAttack && <span className="ad-sold"> · UNDER ATTACK</span>}
+        </p>
+        <div className="sim-actions">
+          <form action={adminSetPause} className="inline-form">
+            <input type="hidden" name="mode" value="off" />
+            <button className="btn btn-sm" type="submit" disabled={settings.pauseMode === "off"}>
+              Resume normal
+            </button>
+          </form>
+          <form action={adminSetPause} className="inline-form">
+            <input type="hidden" name="mode" value="bulk" />
+            <button
+              className="btn btn-sm btn-secondary"
+              type="submit"
+              disabled={settings.pauseMode === "bulk"}
+            >
+              Partial pause (digests off)
+            </button>
+          </form>
+          <form action={adminSetPause} className="inline-form">
+            <input type="hidden" name="mode" value="all" />
+            <button
+              className="btn btn-sm btn-secondary"
+              type="submit"
+              disabled={settings.pauseMode === "all"}
+            >
+              FULL pause (all outbound off)
+            </button>
+          </form>
+        </div>
+        <p className="fine">
+          Partial pause stops digests + new-subscriber catch-up but still sends command replies,
+          picture (PIC) texts, sign-in codes and STOP confirmations. FULL pause stops every
+          subscriber- and user-facing SMS and email (you still sign into admin with your
+          password; alerts to you still arrive). Queued digests wait and resume when you set it
+          back to Normal.
+        </p>
+        <div className="sim-actions">
+          <form action={adminSetUnderAttack} className="inline-form">
+            <input type="hidden" name="on" value={settings.underAttack ? "no" : "yes"} />
+            <button className="btn btn-sm btn-secondary" type="submit">
+              {settings.underAttack ? "Exit UNDER ATTACK mode" : "Enter UNDER ATTACK mode"}
+            </button>
+          </form>
+        </div>
+        <p className="fine">
+          UNDER ATTACK: stop replying to unknown/gibberish texts, skip new-subscriber catch-up,
+          auto-tighten the per-number and service-wide SMS caps, and throttle outbound to the
+          per-minute ceiling below. Pair it with the blocklist to kill bad actors — block them
+          fast from <Link href="/admin/insights">Insights</Link>.
+        </p>
+      </section>
+
       <form action={adminSaveSettings}>
         {FIELDS.map((f) => (
           <div className="field" key={f.key}>
@@ -141,6 +222,40 @@ export default async function AdminSettings({
           </label>
           <button className="btn btn-sm" type="submit">
             Add
+          </button>
+        </div>
+      </form>
+
+      <h2 className="section-h">Blocked numbers</h2>
+      <p className="fine">
+        A blocked number is dropped the instant it texts — no reply, no account, no charge — and
+        never receives a digest. Block bad actors with one click from{" "}
+        <Link href="/admin/insights">Insights</Link>, or add one by hand here.
+      </p>
+      <ul className="myads">
+        {blocked.map((b) => (
+          <li key={b.phone} className="myad-row">
+            <div className="sim-actions">
+              <span className="pack-name">{formatPhone(b.phone)}</span>
+              <span className="status-muted">{b.reason}</span>
+              <form action={adminUnblockNumber} className="inline-form">
+                <input type="hidden" name="phone" value={b.phone} />
+                <button className="btn btn-sm btn-secondary" type="submit">
+                  Unblock
+                </button>
+              </form>
+            </div>
+          </li>
+        ))}
+        {blocked.length === 0 && <li className="status-muted">No numbers blocked.</li>}
+      </ul>
+      <form action={adminBlockNumber} className="review-form">
+        <input type="hidden" name="back" value="/admin/settings" />
+        <div className="inline-fields">
+          <input name="phone" type="tel" placeholder="Number to block…" required />
+          <input name="reason" type="text" placeholder="Reason (optional)" />
+          <button className="btn btn-sm" type="submit">
+            Block
           </button>
         </div>
       </form>

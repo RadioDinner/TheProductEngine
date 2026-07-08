@@ -33,12 +33,14 @@ import {
   spendCredits,
 } from "@/lib/store";
 import { discountedCents, formatPrice, packs, site } from "@/lib/config";
-import { getEngineSettings, getWordRules, matchWordRules } from "@/lib/settings";
+import { getEngineSettings, getWordRules, matchWordRules, effectiveSmsCaps } from "@/lib/settings";
+import type { EngineSettings } from "@/lib/settings";
 import { stripEmoji, hasLink, mayPostLinks } from "@/lib/content-filter";
 import { isAllowedPhotoSrc } from "@/lib/media";
 import { chargeSavedCard, paymentsDevMode } from "@/lib/payments";
 import { devToolsEnabled } from "@/lib/env";
-import { sms } from "@/lib/sms";
+import { dispatchSms } from "@/lib/outbound";
+import { isBlockedNumber } from "@/lib/blocklist";
 import { notifyAdminNewAd } from "@/lib/notify";
 
 export interface InboundSms {
@@ -343,7 +345,11 @@ async function handleConfirmPurchase(from: string): Promise<Reply> {
   };
 }
 
-async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>): Promise<Reply | null> {
+async function route(
+  msg: InboundSms,
+  command: ReturnType<typeof parseCommand>,
+  settings: EngineSettings,
+): Promise<Reply | null> {
   const from = msg.from;
 
   // A bare photo with no usable text (spec Q13).
@@ -362,10 +368,14 @@ async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>):
       await setSubscribed(from, true);
       // Send the most recent digest right away so a new subscriber isn't
       // waiting hours for the next slot. Best-effort — must never break signup.
-      try {
-        await sendRecentDigestTo(from);
-      } catch (e) {
-        console.error("[engine] catch-up digest failed:", e);
+      // Skipped while UNDER ATTACK (a spoofed-number flood shouldn't each pull a
+      // burst of catch-up SMS).
+      if (!settings.underAttack) {
+        try {
+          await sendRecentDigestTo(from);
+        } catch (e) {
+          console.error("[engine] catch-up digest failed:", e);
+        }
       }
       return {
         body: `You're subscribed to ${site.name} — ${site.region} classifieds by text, up to 4 digests a day. Msg & data rates may apply. Reply STOP to cancel, HELP for help.`,
@@ -384,8 +394,9 @@ async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>):
       const wasSubscribed = Boolean(account.subscribedAt);
       await setSubscribed(from, true);
       // Catch them up on the latest digest only if this actually re-subscribed
-      // them (not a repeat START from an already-subscribed number).
-      if (!wasSubscribed) {
+      // them (not a repeat START from an already-subscribed number), and not
+      // while UNDER ATTACK.
+      if (!wasSubscribed && !settings.underAttack) {
         try {
           await sendRecentDigestTo(from);
         } catch (e) {
@@ -468,7 +479,9 @@ async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>):
       return handleConfirmPurchase(from);
     case "unknown": {
       // No ensureAccount: gibberish from a spoofed number shouldn't mint an
-      // account. The redirect is still deduped to once per day.
+      // account. While UNDER ATTACK we don't even send the one-per-day redirect
+      // — no spend on unknown/gibberish traffic at all.
+      if (settings.underAttack) return null;
       const recent = await countRecentOutboundContaining(from, REDIRECT_MARKER, 24 * 60 * 60 * 1000);
       if (recent > 0) return null; // logged, no reply — one redirect per day
       return {
@@ -478,15 +491,21 @@ async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>):
   }
 }
 
-async function sendReply(to: string, reply: Reply): Promise<Reply> {
-  await sms.send(to, reply.body, reply.media);
-  await logMessage({
-    direction: "outbound",
-    channel: reply.media?.length ? "mms" : "sms",
-    address: to,
-    body: reply.body,
-    ...(reply.media?.length && { media: reply.media }),
-  });
+async function sendReply(to: string, reply: Reply, settings?: EngineSettings): Promise<Reply> {
+  // Through the outbound guard: a FULL pause suppresses all replies, a PARTIAL
+  // pause lets them through, the blocklist drops blocked numbers, and the
+  // under-attack throttle can defer. Only log what actually went out.
+  const cls = reply.media?.length ? "pic" : "reply";
+  const { sent } = await dispatchSms(to, reply.body, { cls, media: reply.media, settings });
+  if (sent) {
+    await logMessage({
+      direction: "outbound",
+      channel: reply.media?.length ? "mms" : "sms",
+      address: to,
+      body: reply.body,
+      ...(reply.media?.length && { media: reply.media }),
+    });
+  }
   return reply;
 }
 
@@ -505,34 +524,42 @@ export async function handleInbound(msg: InboundSms, providerId?: string): Promi
   });
   if (!fresh) return null;
 
-  const command = parseCommand(msg.text || "");
+  // UNDER ATTACK blocklist: the inbound was logged above (forensics), but a
+  // blocked number gets no account, no reply, and no charge — dropped here
+  // before anything else runs.
+  if (await isBlockedNumber(msg.from)) return null;
 
-  // STOP always takes effect (unsubscribe); only the carrier confirmation is
-  // deduped to once per number per day, so a STOP loop isn't unbounded outbound.
+  const command = parseCommand(msg.text || "");
+  const settings = await getEngineSettings();
+
+  // STOP always takes effect (unsubscribe — honored even under attack); only
+  // the carrier confirmation is deduped to once per number per day, so a STOP
+  // loop isn't unbounded outbound.
   if (command.kind === "stop") {
-    const reply = await route(msg, command);
+    const reply = await route(msg, command, settings);
     if (!reply) return null;
     const recentStop = await countRecentOutboundContaining(msg.from, STOP_MARKER, 24 * HOUR_MS);
     if (recentStop > 0) return null;
-    return sendReply(msg.from, reply);
+    return sendReply(msg.from, reply, settings);
   }
 
   // Reserve a send slot atomically BEFORE routing, so an over-cap command is
   // dropped whole — never charged with its confirmation silently suppressed.
   // Kind is known from the command (PIC replies are the costly MMS lane).
-  const settings = await getEngineSettings();
+  // Caps auto-tighten while UNDER ATTACK.
   const kind = command.kind === "pic" ? "pic" : "reply";
+  const caps = effectiveSmsCaps(settings);
   const allowed = await reserveSms(
     msg.from,
     kind,
-    settings.smsRepliesPerHour,
-    settings.smsGlobalPerHour,
-    settings.smsPicsPerHour,
+    caps.repliesPerHour,
+    caps.globalPerHour,
+    caps.picsPerHour,
     HOUR_MS,
   );
   if (!allowed) return null;
 
-  const reply = await route(msg, command);
+  const reply = await route(msg, command, settings);
   if (!reply) return null;
-  return sendReply(msg.from, reply);
+  return sendReply(msg.from, reply, settings);
 }

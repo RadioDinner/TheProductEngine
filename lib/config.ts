@@ -84,6 +84,38 @@ export const engineDefaults = {
    * (BUYCREDIT) — the incentive to keep a card on file. 0 = no discount.
    */
   savedCardDiscountPercent: 10,
+  /**
+   * Master outbound kill switch (operator-flipped at /admin/settings):
+   *   "off"  — normal operation.
+   *   "bulk" — PARTIAL pause: digests + new-subscriber catch-up stop; command
+   *            replies, PIC MMS, sign-in codes and STOP confirmations still go.
+   *   "all"  — FULL pause: every subscriber/user-facing SMS+email stops
+   *            (digests, replies, PIC, sign-in codes, confirmations). Inbound is
+   *            still received and logged; operator alert emails still reach you;
+   *            you sign into admin with your password. Absolute spend stop.
+   * Queued digest rows wait (they're never dropped) and resume — under the
+   * segment budget — when you set this back to "off".
+   */
+  pauseMode: "off",
+  /**
+   * UNDER ATTACK mode (operator-flipped). While on: replies to unknown/gibberish
+   * and new-subscriber catch-up are suppressed, the per-number and service-wide
+   * SMS caps are auto-tightened, and outbound is throttled to
+   * outboundThrottlePerMin. Pair it with the blocklist to kill bad actors fast.
+   */
+  underAttack: false,
+  /**
+   * Global outbound sends-per-minute ceiling enforced ONLY while underAttack is
+   * on. Excess defers to the next cron tick (digests) or is dropped (replies),
+   * smoothing burst spend. Ignored when underAttack is off.
+   */
+  outboundThrottlePerMin: 60,
+  /** Auto-tightened per-number command-reply cap/hour while underAttack. */
+  attackRepliesPerHour: 5,
+  /** Auto-tightened per-number PIC cap/hour while underAttack. */
+  attackPicsPerHour: 2,
+  /** Auto-tightened service-wide command-reply cap/hour while underAttack. */
+  attackGlobalPerHour: 120,
   /** Starter word-filter list (flag-for-review). */
   filterWords: ["gun", "firearm", "rifle", "whiskey", "tobacco"],
 } as const;

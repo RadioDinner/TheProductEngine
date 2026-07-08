@@ -1,7 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { confirmUrl, email, emailDevEcho } from "@/lib/email";
+import { confirmUrl, emailDevEcho } from "@/lib/email";
+import { dispatchEmail } from "@/lib/outbound";
 import { logMessage } from "@/lib/engine-store";
 import { devToolsEnabled } from "@/lib/env";
 import { site } from "@/lib/config";
@@ -18,11 +19,21 @@ export async function emailSignup(formData: FormData): Promise<void> {
     <p><a href="${link}" style="display:inline-block;background:#2d5570;color:#ffffff;padding:10px 22px;text-decoration:none;border-radius:2px;font-weight:600;">Confirm my email</a></p>
     <p style="font-size:13px;color:#5b6670;">If you didn't ask for this, ignore this message and nothing happens.</p>
   </div>`;
+  // "transactional": through a FULL pause this is suppressed; a PARTIAL pause
+  // lets it through. A throw (provider down) or a non-send both land on the
+  // same plain error screen. redirect() stays out of the try.
+  let confirmSent = false;
   try {
-    await email.send({ to: address, subject: `Confirm your email — ${site.name}`, html, text });
+    confirmSent = (
+      await dispatchEmail(
+        { to: address, subject: `Confirm your email — ${site.name}`, html, text },
+        { cls: "transactional" },
+      )
+    ).sent;
   } catch (e) {
-    // Provider down or domain not yet verified: plain words, not a crash page.
     console.error("[email] confirmation send failed:", e);
+  }
+  if (!confirmSent) {
     redirect("/email?error=send");
   }
   await logMessage({
