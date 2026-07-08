@@ -30,6 +30,7 @@ import {
 } from "@/lib/store";
 import { site } from "@/lib/config";
 import { getEngineSettings, getWordRules, matchWordRules } from "@/lib/settings";
+import { isAllowedPhotoSrc } from "@/lib/media";
 import { sms } from "@/lib/sms";
 import { notifyAdminNewAd } from "@/lib/notify";
 
@@ -98,12 +99,11 @@ async function handleAdSubmission(from: string, body: string, media?: string[]):
     };
   }
 
-  // Only accept a site-relative path (dev fixtures) or an https URL as a photo
-  // source — never a data:/http:/other-scheme URL from a crafted inbound MMS.
+  // Accept a photo source only from an allowlisted host (site-relative path or
+  // an https Supabase/Telnyx URL) — never a data:/http:/off-site/protocol-
+  // relative URL from a crafted inbound MMS.
   const photoSrc = media?.[0];
-  const hasPhoto = Boolean(
-    photoSrc && (photoSrc.startsWith("/") || /^https:\/\//i.test(photoSrc)),
-  );
+  const hasPhoto = isAllowedPhotoSrc(photoSrc);
   const cost = hasPhoto ? settings.costPhoto : settings.costText;
   const canPass = account.freeAds > 0;
   const balance = await getCreditBalance(from);

@@ -13,6 +13,7 @@ import { readSession } from "@/lib/session";
 import { peekDevEcho } from "@/lib/store";
 import { smsDevEcho } from "@/lib/sms";
 import { devToolsEnabled } from "@/lib/env";
+import { safeNextPath } from "@/lib/safe-next";
 import { site } from "@/lib/config";
 
 export const metadata: Metadata = {
@@ -38,11 +39,7 @@ export default async function LoginPage({
   searchParams: Promise<{ step?: string; phone?: string; next?: string; error?: string }>;
 }) {
   const params = await searchParams;
-  const rawNext = params.next ?? "/";
-  const next =
-    rawNext.startsWith("/") && !rawNext.startsWith("//") && !rawNext.includes("\\")
-      ? rawNext
-      : "/";
+  const next = safeNextPath(params.next ?? "/");
 
   const session = await readSession();
   if (session) redirect(next === "/" ? "/account" : next);

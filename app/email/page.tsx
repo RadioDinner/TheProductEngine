@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { emailSignup } from "@/lib/email-actions";
+import { devToolsEnabled } from "@/lib/env";
 import { site } from "@/lib/config";
 
 export const metadata: Metadata = {
@@ -28,7 +29,7 @@ export default async function EmailSignup({
             Check your email — we sent a confirmation link. Click it and the ads start
             coming.
           </p>
-          {params.dev && (
+          {params.dev && devToolsEnabled && (
             <p className="dev-notice">
               <strong>Development mode</strong> — no email service is connected yet, so here's
               your confirmation link: <a href={params.dev}>confirm this email</a>

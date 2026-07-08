@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { confirmUrl, email, emailDevEcho } from "@/lib/email";
 import { logMessage } from "@/lib/engine-store";
+import { devToolsEnabled } from "@/lib/env";
 import { site } from "@/lib/config";
 
 export async function emailSignup(formData: FormData): Promise<void> {
@@ -31,6 +32,9 @@ export async function emailSignup(formData: FormData): Promise<void> {
     body: `Confirm your email — ${site.name}\n\n${text}`,
     html,
   });
-  // Dev mode surfaces the confirm link on screen, like the SMS code echo.
-  redirect(emailDevEcho ? `/email?sent=1&dev=${encodeURIComponent(link)}` : "/email?sent=1");
+  // Dev tools surface the confirm link on screen, like the SMS code echo —
+  // gated on devToolsEnabled (not just a missing provider key) so a prod
+  // deploy without Resend can't let anyone confirm an address they don't own.
+  const showLink = emailDevEcho && devToolsEnabled;
+  redirect(showLink ? `/email?sent=1&dev=${encodeURIComponent(link)}` : "/email?sent=1");
 }

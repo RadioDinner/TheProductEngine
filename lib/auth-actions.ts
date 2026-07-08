@@ -19,16 +19,10 @@ import {
   readTicket,
 } from "@/lib/session";
 import { site } from "@/lib/config";
+import { devToolsEnabled } from "@/lib/env";
+import { safeNextPath } from "@/lib/safe-next";
 
-function safeNext(raw: FormDataEntryValue | null): string {
-  const value = typeof raw === "string" ? raw : "";
-  // Must be a same-site absolute path. Reject protocol-relative ("//host") and
-  // backslash tricks ("/\host") that browsers normalize to an off-site origin.
-  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
-    return "/";
-  }
-  return value;
-}
+const safeNext = (raw: FormDataEntryValue | null) => safeNextPath(raw);
 
 function loginUrl(params: Record<string, string>): string {
   const qs = new URLSearchParams(params).toString();
@@ -41,7 +35,9 @@ function landing(next: string): string {
 }
 
 async function issueCode(phone: string, next: string): Promise<never> {
-  const result = await createCode(phone, smsDevEcho);
+  // Only persist the plaintext OTP for on-screen echo when dev tools are on —
+  // never store it in a production DB just because Telnyx isn't wired yet.
+  const result = await createCode(phone, smsDevEcho && devToolsEnabled);
   if (!result.ok) {
     redirect(loginUrl({ step: "code", phone, next, error: "rate" }));
   }
