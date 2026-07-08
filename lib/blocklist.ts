@@ -47,13 +47,22 @@ export async function isBlockedNumber(phone: string): Promise<boolean> {
   if (!supabaseConfigured) {
     return load().numbers.some((n) => n.phone === phone);
   }
-  const { data, error } = await db()
-    .from("blocked_numbers")
-    .select("phone")
-    .eq("phone", phone)
-    .maybeSingle();
-  if (error) throw error;
-  return Boolean(data);
+  try {
+    const { data, error } = await db()
+      .from("blocked_numbers")
+      .select("phone")
+      .eq("phone", phone)
+      .maybeSingle();
+    if (error) throw error;
+    return Boolean(data);
+  } catch (e) {
+    // Fail OPEN: this runs on EVERY inbound and outbound send, so a missing
+    // blocked_numbers table (migration 0008 not applied) or a transient DB
+    // error must never take down the message path — the blocklist is an added
+    // protection, not a gate the whole system depends on.
+    console.error("[blocklist] isBlockedNumber failed (treating as not-blocked):", e instanceof Error ? e.message : e);
+    return false;
+  }
 }
 
 export async function blockNumber(phone: string, reason: string, by?: string): Promise<void> {
@@ -94,16 +103,23 @@ export async function listBlocked(): Promise<BlockedNumber[]> {
   if (!supabaseConfigured) {
     return [...load().numbers].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }
-  const { data, error } = await db()
-    .from("blocked_numbers")
-    .select("phone, reason, created_by, created_at")
-    .order("created_at", { ascending: false })
-    .limit(500);
-  if (error) throw error;
-  return (data ?? []).map((r) => ({
-    phone: r.phone as string,
-    reason: (r.reason as string) ?? "",
-    createdAt: (r.created_at as string) ?? new Date(0).toISOString(),
-    ...(r.created_by ? { createdBy: r.created_by as string } : {}),
-  }));
+  try {
+    const { data, error } = await db()
+      .from("blocked_numbers")
+      .select("phone, reason, created_by, created_at")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) throw error;
+    return (data ?? []).map((r) => ({
+      phone: r.phone as string,
+      reason: (r.reason as string) ?? "",
+      createdAt: (r.created_at as string) ?? new Date(0).toISOString(),
+      ...(r.created_by ? { createdBy: r.created_by as string } : {}),
+    }));
+  } catch (e) {
+    // Empty (not an error) if the table isn't there yet — the digest drain and
+    // admin pages must keep working before migration 0008 is applied.
+    console.error("[blocklist] listBlocked failed (treating as empty):", e instanceof Error ? e.message : e);
+    return [];
+  }
 }

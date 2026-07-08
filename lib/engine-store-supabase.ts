@@ -657,18 +657,26 @@ export async function cancelQueuedOutboxFor(address: string): Promise<number> {
   // Drop any pending delivery for this address (opt-out / block / unsub). Mark
   // 'failed' (not 'sent') so it leaves the queue without counting toward the
   // billed-segment budget. Returns how many rows were dropped.
-  const { data, error } = await db()
-    .from("digest_outbox")
-    .update({
-      status: "failed",
-      last_error: "canceled: recipient opted out or was blocked",
-      claimed_at: null,
-    })
-    .eq("address", address)
-    .in("status", ["queued", "sending"])
-    .select("id");
-  if (error) throw error;
-  return (data ?? []).length;
+  try {
+    const { data, error } = await db()
+      .from("digest_outbox")
+      .update({
+        status: "failed",
+        last_error: "canceled: recipient opted out or was blocked",
+        claimed_at: null,
+      })
+      .eq("address", address)
+      .in("status", ["queued", "sending"])
+      .select("id");
+    if (error) throw error;
+    return (data ?? []).length;
+  } catch (e) {
+    // This runs inside the STOP path (every unsubscribe) — a missing
+    // digest_outbox table (migration 0006 not applied) or transient error must
+    // not fail the opt-out itself (setSubscribed already committed).
+    console.error("[outbox] cancelQueuedOutboxFor failed:", e instanceof Error ? e.message : e);
+    return 0;
+  }
 }
 
 export async function digestSegmentsSentSince(sinceIso: string): Promise<number> {
