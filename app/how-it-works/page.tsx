@@ -35,8 +35,11 @@ export default function HowItWorks() {
       <p>
         Text <span className="cmd">SUBSCRIBE</span> to <strong>{site.smsNumber}</strong>.
         You’ll get new ads bundled into short digests, up to four times a day — morning, noon,
-        afternoon, and evening. It’s free. Reply <span className="cmd">STOP</span> any time to
-        quit, or <span className="cmd">HELP</span> for help.
+        afternoon, and evening. It’s free, though message and data rates may apply from your
+        phone company. Reply <span className="cmd">STOP</span> any time to quit, or{" "}
+        <span className="cmd">HELP</span> for help. See the{" "}
+        <Link href="/sms">text message program terms</Link> and{" "}
+        <Link href="/privacy">privacy policy</Link>.
       </p>
       <p>
         When an ad has a picture, the digest says so. Reply{" "}

@@ -89,13 +89,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               {site.name} — classifieds by text message for {site.region}.
             </p>
             <p>
-              Text <strong>HELP</strong> to <strong>{site.smsNumber}</strong> for help · Reply{" "}
-              <strong>STOP</strong> to any digest to cancel ·{" "}
+              Text <strong>SUBSCRIBE</strong> to <strong>{site.smsNumber}</strong> for the ads —
+              up to 4 digests a day, msg &amp; data rates may apply. Text <strong>HELP</strong>{" "}
+              for help, <strong>STOP</strong> to cancel ·{" "}
               <Link href="/email">Get the ads by email</Link> ·{" "}
               <Link href="/how-it-works">How it works</Link> ·{" "}
               <Link href="/faq">Questions</Link>
             </p>
             <p>
+              <Link href="/sms">Text message program</Link> ·{" "}
               <Link href="/privacy">Privacy policy</Link> ·{" "}
               <Link href="/terms-and-conditions">Terms and conditions</Link>
             </p>

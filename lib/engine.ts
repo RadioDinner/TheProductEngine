@@ -410,9 +410,10 @@ async function route(
     case "help":
       return {
         body:
-          `${site.name} commands: SUBSCRIBE for the ads. AD NEW your ad (photo welcome) to post. ` +
-          `PIC 1234 for a picture. STATUS 1234 to check an ad. SOLD 1234 / BUMP 1234 / MYADS for your ads. ` +
-          `CREDITS for your balance. STOP to quit. More help: call ${site.supportPhone} or ThePlainExchange.com/how-it-works`,
+          `${site.name} classifieds by text. Up to 4 digests/day. Msg&data rates may apply. ` +
+          `Cmds: SUBSCRIBE for ads. AD NEW your ad to post. PIC 1234 for a picture. ` +
+          `SOLD/BUMP/STATUS/MYADS/CREDITS. Reply STOP to cancel. ` +
+          `Help: call ${site.supportPhone} or ThePlainExchange.com/sms`,
       };
     case "ad":
       return handleAdSubmission(from, command.body, msg.media);
