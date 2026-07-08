@@ -58,6 +58,19 @@ const REDIRECT_MARKER = "automated system";
 const STOP_MARKER = "unsubscribed and won't get more";
 const HOUR_MS = 60 * 60 * 1000;
 
+/**
+ * The opt-in confirmation sent when a consumer texts the opt-in keyword
+ * (SUBSCRIBE / START). It must MATCH the "Opt-in message" registered on the
+ * 10DLC campaign and carry every element a carrier verifies for a Marketing
+ * use case: brand, explicit marketing disclosure, message frequency, "message
+ * and data rates may apply," STOP + HELP, and the no-third-party-sharing clause.
+ */
+const OPT_IN_CONFIRMATION =
+  `${site.name}: you're opted in to receive marketing texts — our local ` +
+  `classified-ad digests. Msg freq varies, up to 4/day. Msg & data rates may apply. ` +
+  `Reply STOP to cancel, HELP for help. We won't sell or share your mobile info ` +
+  `with third parties for marketing.`;
+
 function fmtDate(d: Date): string {
   return d.toLocaleDateString("en-US", {
     month: "short",
@@ -377,9 +390,7 @@ async function route(
           console.error("[engine] catch-up digest failed:", e);
         }
       }
-      return {
-        body: `You're subscribed to ${site.name} — ${site.region} classifieds by text, up to 4 digests a day. Msg & data rates may apply. Reply STOP to cancel, HELP for help.`,
-      };
+      return { body: OPT_IN_CONFIRMATION };
     }
     case "stop": {
       // No ensureAccount here: a STOP from an unknown number shouldn't mint an
@@ -403,9 +414,7 @@ async function route(
           console.error("[engine] catch-up digest failed:", e);
         }
       }
-      return {
-        body: `You're subscribed to ${site.name} — up to 4 digests a day. Msg & data rates may apply. Reply STOP to cancel, HELP for help.`,
-      };
+      return { body: OPT_IN_CONFIRMATION };
     }
     case "help":
       return {

@@ -40,8 +40,10 @@ export default function SmsProgram() {
       <figure className="sms-example">
         <figcaption>Confirmation you receive after texting SUBSCRIBE:</figcaption>
         <p>
-          You&rsquo;re subscribed to {site.name} — {site.region} classifieds by text, up to 4
-          digests a day. Msg &amp; data rates may apply. Reply STOP to cancel, HELP for help.
+          {site.name}: you&rsquo;re opted in to receive marketing texts — our local
+          classified-ad digests. Msg freq varies, up to 4/day. Msg &amp; data rates may apply.
+          Reply STOP to cancel, HELP for help. We won&rsquo;t sell or share your mobile info with
+          third parties for marketing.
         </p>
       </figure>
 
