@@ -1,4 +1,56 @@
-# Session 002 — 2026-07-07
+# Session 002 — 2026-07-07 / 08
+
+A long session: deploy triage → launch prep → a full security audit → two
+hardening builds → the SMS ad-packing composer. Everything merged to `main`
+(head `f7015d8`). `LAUNCH.md` = go-live checklist; `SECURITY-TODO.md` = audit
++ remediation status; `HANDOFF.md` = live cross-session state.
+
+## What shipped (late session — reporting, security, money hardening)
+
+- **Admin Reports** (`/admin/reports`): active SMS/email subscriber counts,
+  new-subs 7d, ads posted, recent-subscriber list, and a **cookieless,
+  server-side page-view counter** (`lib/analytics.ts` + migration
+  `0002_analytics.sql`; counts no-JS visitors). **New-ad email alerts** to
+  `ADMIN_EMAIL` (`lib/notify.ts`) — best-effort, never blocks posting.
+  Verified in dev (2 subs → count 2, ad post → alert fired).
+- **Admin `/admin/help`**: plain-language "why it's built this way" doc, live
+  tunable numbers pulled from settings.
+- **4-agent security audit** (cost, auth, webhooks/money, engine logic) →
+  `SECURITY-TODO.md` (prioritized, code-vs-ops tagged). Root finding:
+  controls **failed open** (gated on a provider key, not on prod).
+- **Security hardening** (P0/P1.5/P2): `lib/env.ts` — dev tools
+  (on-screen codes, `/dev/*`, simulate-payment) gated behind
+  `ENABLE_DEV_TOOLS`, OFF in prod by default; SESSION_SECRET/Telnyx/CRON
+  fail CLOSED in prod; Telnyx replay window; open-redirect fix; admin config
+  clamps; SOLD-on-pending blocked; refund delimited-match; Stripe amount
+  check; `next.config` image host allowlist; migration `0003` ref-unique +
+  idempotent grant; `consumeFreeAd` row-count guard. Verified: prod build
+  404s /dev, 401s cron; escape hatch works.
+- **Abuse & money-race hardening** (migration `0005_abuse_hardening.sql`):
+  atomic `reserve_sms` + `spend_credits` RPCs (pg advisory locks) replace the
+  read-then-send / read-then-spend races; **bump charging** honors `bumpCost`
+  (default 0 = free) with no-op refund; **double-refund guard**
+  (`rejectAdRecord` → boolean); **race-safe inbound dedup** (unique
+  `messages.provider_id` + `recordInboundOnce`); reservation moved BEFORE
+  route so an over-cap command is dropped whole (never charged silently);
+  STOP always unsubscribes with a once-a-day confirmation; STOP/gibberish no
+  longer mint accounts. **Adversarially reviewed by 2 parallel agents; both
+  confirmed bugs fixed** (`b7a3347` expired-bump double-charge; `43d7512`
+  race-safe dedup + reserve-before-route). Dev-verified across 11 scenarios.
+- **SMS ad-packing composer** (`lib/sms-segments.ts`,
+  `composeDigestMessages`): GSM-7 sanitize + pack whole ads into fewest
+  single-SMS messages. **Cost reality (important):** the current
+  one-concatenated-message digest is ALREADY near-minimal on billed
+  *segments* — packing is ~neutral, NOT a saving. Real wins = Unicode
+  containment (16 vs 22 seg when an ad has an emoji) + never accidentally
+  MMS. NOT wired into the send path yet (that's the digest-delivery rework).
+- **Real number** (330) 960-7170 replaced the 555 placeholder everywhere.
+- **LAUNCH.md** added (go-live checklist), **robots.txt/sitemap.xml** added.
+
+Key commits (newest first): `43d7512` dedup+reserve-before-route ·
+`b7a3347` bump fix · `7df8b8c` abuse/money-race · `a5a92b9` security
+hardening · `6f77c41` reports/visits/alerts · `6324fac` order page ·
+`ebb117e` Stripe · `531c3fb` legal pages.
 
 ## What shipped (evening)
 
@@ -76,32 +128,40 @@ the runtime, and Vercel's lambda filesystem is read-only. Mid-session the user
 reported the site loads — a redeploy after the env-var fix picked them up.
 (Env edits never apply to an existing deployment; they need a new deploy.)
 
-## Open questions / next step
+## Resolved this session
 
-- **Admin login on production** — exact symptom not yet pinned down (error
-  page vs 404 vs code not accepted). Triage order:
-  1. `GET /api/health` — check `ADMIN_PHONES: true`, key kind, DB round-trip.
-  2. If signed in but `/admin` 404s → ADMIN_PHONES missing/mismatched (the
-     normalizePhone fix on this branch removes the +1 formatting trap; it's
-     not deployed until merged to main).
-  3. Production DB has no accounts — first login walks phone → 6-digit code →
-     set-password. With no TELNYX_API_KEY the code is echoed on-screen.
-  4. If a server error page appears after entering the phone: check whether
-     TELNYX_API_KEY is set to a junk/placeholder value (real-send path would
-     throw).
-- **Domain**: point theplainexchange.com (Namecheap) at the Vercel project
-  (A @ → 76.76.21.21, CNAME www → cname.vercel-dns.com, or move nameservers
-  to Vercel DNS), set primary domain, update `SITE_URL`, redeploy. Autodeploy
-  to the domain is automatic once the domain is attached — main already
-  deploys to production on every push.
-- Still unknown whether `seed.sql` ran (config/packs/word-filter); a
-  config-only production seed remains to be offered (see HANDOFF).
+- **Deploy + "example ads" + admin login** — all one bug: the Supabase key
+  env var was typo'd `SUPBABASE_…`. Fixed → both hosts identical
+  (`mode: supabase`, `sb_secret`, config rows 16). Admin claimed a password
+  and confirmed `/admin`. Env vars, ADMIN_PHONES, SESSION_SECRET, CRON_SECRET,
+  SITE_URL, all TELNYX_* + RESEND all set.
+- **Telnyx** — campaign recreated → **TCR_ACCEPTED (2026-07-08)**; awaiting
+  carrier acceptance. Dead Supabase webhook URL swapped.
+
+## Next step (session 003)
+
+1. **Run migration `0005_abuse_hardening.sql`** — REQUIRED before prod serves
+   real SMS (the atomic reserve/spend/dedup paths error without it).
+2. Ops from `LAUNCH.md`: cron pinger, Stripe test→live keys, ADMIN_EMAIL,
+   Resend domain verify + real CAN-SPAM address, make www primary, then the
+   launch-day HELP smoke walk once carriers approve.
+3. **Digest columnar delivery** build (the packing composer is done, waiting
+   to be wired into an outbox-based, resumable, columnar send + circuit
+   breaker + subscriber pagination). Weigh the ~$5k/mo + mandatory-vetting
+   cost reality at 1500 subs first.
+4. Photo re-hosting to Supabase Storage.
 
 ## Prevalent notes
 
-- This sandbox cannot reach *.vercel.app (egress proxy 403), so live checks
-  of /api/health must be done by the user.
-- The Supabase dashboard's recurring `42P01 relation
-  "supabase_migrations.schema_migrations" does not exist` log line is benign:
-  the dashboard probes for CLI migration history, and this project applies
-  migrations by hand in the SQL editor.
+- This sandbox cannot reach *.vercel.app (egress proxy 403) or the live
+  Supabase — live `/api/health`, real-DB, and prod-RPC checks must be done by
+  the user. Dev verification uses the file store (`npx tsx` scripts / dev
+  simulator); prod-only RPCs (0005) are typecheck- + logic-reviewed only.
+- Migrations are pasted by hand into the Supabase SQL editor (ascending
+  0001→0005); the dashboard's recurring `42P01 schema_migrations` log line is
+  benign (CLI-history probe).
+- The JSX space-swallowing compiler bug recurred 3×; fix with explicit
+  `{" "}` and sweep rendered HTML for `</span>[A-Za-z]` / `<!-- -->[a-z]`.
+- Dev tools now require `ENABLE_DEV_TOOLS=1` (even for local `next start`,
+  which sets NODE_ENV=production); set it when testing the simulator/on-screen
+  codes locally.

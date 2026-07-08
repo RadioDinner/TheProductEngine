@@ -3,7 +3,7 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-07-07 (session 002).
+**Last updated:** 2026-07-08 (session 002).
 
 ## What this project is
 
@@ -17,87 +17,113 @@ also an email edition. Strategy/design context: `PRODUCT.md` (who/why),
 `DESIGN.md` (visual system, "The Plain Ledger"), `initial plan.txt` (the
 original seed).
 
-## Current state (end of session 001)
+## Current state (end of session 002 — 2026-07-08)
 
-**Built and locally verified — every v1 surface works end-to-end** via
-scripted Playwright walks against `npx next start`:
+**`LAUNCH.md` is the live go-live checklist; `SECURITY-TODO.md` is the audit
++ remediation status. Read those two first.** The whole v1 surface is built
+and dev-verified; what remains is ops (migrations/keys/DNS) + two non-blocking
+builds.
 
-- Public site (browse/search/detail, masked contact, printable how-it-works)
-- Auth (phone → SMS code → password), HMAC cookie sessions
-- Account area (append-only credit ledger, packs w/ simulated checkout,
-  My Ads, email + subscription settings)
-- SMS engine (all commands), digest broadcaster (idempotent ET slots),
-  moderation (refund/strike/ban), Telnyx webhook w/ dormant Ed25519 verify
-- Admin portal (`/admin`, gated by `ADMIN_PHONES` env)
-- Email edition (confirmed opt-in, union-of-SMS digests, CAN-SPAM)
+**Deployment (resolved).** One Vercel project, `the-product-engine`. The
+morning's `mkdir '/var/task/.data'` 500s and the "two deployments / example
+ads" mystery were both **one bug: the Supabase key env var was typo'd
+`SUPBABASE_…`.** Fixed → `/api/health` on both `www.theplainexchange.com` and
+`the-product-engine.vercel.app` now read identically: `mode: supabase`,
+`sb_secret (correct)`, `configTable.ok rows 16`, and all secrets `true`. The
+app's built-in demo fixtures were the "example ads" (fixtures mode); gone now
+that Supabase is connected.
 
-**Deployment: site loads; admin login is the open issue.**
+**Env vars set in prod:** SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (sb_secret),
+SESSION_SECRET, ADMIN_PHONES (3306001834), CRON_SECRET, SITE_URL
+(`https://theplainexchange.com` — apex; make www primary in Vercel Domains and
+keep SITE_URL matching), all TELNYX_* incl TELNYX_PUBLIC_KEY, RESEND_API_KEY.
+**Not yet set:** STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET, ADMIN_EMAIL
+(new-ad notifications). Admin account CLAIMED (password set for 3306001834).
 
-- Vercel: https://the-product-engine.vercel.app — **homepage loads as of
-  2026-07-07 (session 002).** The earlier `mkdir '/var/task/.data'` 500s were
-  the file-store fallback running on Vercel's read-only lambda FS (Supabase
-  env vars not reaching the runtime); a redeploy after the env fix resolved
-  it. Remember: env-var edits only apply to *new* deployments.
-- **OPEN: admin sign-in on production "doesn't work" (symptom not yet
-  pinned).** Triage: `GET /api/health` (mode, env presence, key kind, DB
-  round-trip) → then note the prod DB has no accounts, so first login is
-  phone → on-screen code (no TELNYX_API_KEY) → set-password; `/admin`
-  deliberately 404s for signed-in non-admins. Session 002 fixed an
-  `ADMIN_PHONES` trap on branch `claude/vercel-mkdir-enoent-2ephir`:
-  `isAdminPhone` now normalizes entries (a `+1`/`1` prefix used to defeat the
-  match) — not live until merged to main.
-- Domain: theplainexchange.com bought at Namecheap; plan is A `@` →
-  76.76.21.21 + CNAME `www` → cname.vercel-dns.com (or Vercel nameservers),
-  add both hosts in Vercel → Settings → Domains, then set `SITE_URL` and
-  redeploy. Pushes to `main` already auto-deploy to production, and the
-  domain simply aliases the latest production deployment.
-- `/privacy` + `/terms-and-conditions` exist (session 002, this branch),
-  written to satisfy TCR/CTIA campaign vetting (opt-in/out, frequency,
-  msg&data rates, no-sharing-mobile-info clause). They must be live on the
-  domain before resubmitting the Telnyx campaign — the campaign's compliance
-  links point at them.
-- Telnyx 10DLC status (2026-07-07): the Aug-2025 campaign FAILED TCR creation
-  with "Brand does not qualify for submitted campaign use-case" — a
-  brand-level problem (likely Sole Prop / unverified brand + Marketing use
-  case), not campaign content. Plan: register/fix the brand as a Standard
-  EIN brand (PRIVATE_PROFIT, legal name exactly per IRS CP-575), wait for
-  IDENTITY VERIFIED, then create a NEW campaign — the old one is stale
-  anyway (webhook points at a dead Supabase edge function
-  `gzbpvbrvkbiwencxycgw…/incoming-sms`; commands reference LIST instead of
-  AD NEW; only START as opt-in keyword, needs SUBSCRIBE too). New webhook:
-  `https://www.theplainexchange.com/api/telnyx/inbound`.
-- SMS abuse guards shipped (session 002): per-number 20 replies/hour,
-  12 PIC/hour, 500 replies/hour service-wide; admin-tunable in Settings;
-  digests exempt from the counts; STOP always answered. Run the config-only
-  part of seed.sql (or let defaults apply) — new keys `sms_*_per_hour`.
-- **Two deployments discovered (2026-07-07 evening):** www.theplainexchange.com
-  serves a deployment whose /api/health shows `mode: fixtures`,
-  `SUPABASE_SERVICE_ROLE_KEY: missing`, `TELNYX_API_KEY: false`, but
-  `SITE_URL: https://theplainexchange.com` — i.e., NOT the same environment
-  as the-product-engine.vercel.app (which has Supabase + Telnyx vars).
-  Almost certainly a second Vercel project owns the domain. The "example
-  ads" on the domain are the app's built-in demo fixtures (fixtures mode),
-  and login there crashes on the read-only-FS write (same ENOENT class as
-  the morning). Plan given to user: consolidate onto the-product-engine,
-  move the domain, complete env (ADMIN_PHONES, SESSION_SECRET, CRON_SECRET,
-  SITE_URL, verified sb_secret key), run supabase/seed-production.sql.
-  **Partial resolution:** user then found the Supabase key env var was
-  typo'd (`SUPBABASE…`) — which explains the "missing" key. Re-verify
-  `/api/health` on BOTH hosts after the fix; if TELNYX vars still differ
-  between hosts, the second-project theory stands.
-- **Production is in REAL-SMS mode** (user set all TELNYX_* env vars
-  2026-07-07 and chose to keep TELNYX_API_KEY despite the campaign not
-  being approved yet — "no one knows about the service"). Known consequences
-  until 10DLC approval: sign-in-by-code errors (sends rejected), inbound
-  texts get no replies (webhook 500s → Telnyx retries → an AD NEW could
-  double-post/charge). All self-heals at campaign approval; nothing to
-  deploy. Number: (330) 960-7170. Verify post-approval by texting HELP.
-- After login works: run a full verification walk against the live site (the
-  Supabase code path has never run against a real database).
-- Supabase: project exists, `supabase/migrations/0001_init.sql` applied by
-  the user. **Unknown whether `seed.sql` was run — ask.** For production,
-  offer a config-only seed: `seed.sql` mixes config/packs/word-filter
-  (wanted) with 21 demo ads on 555 numbers (test-only).
+**Migrations:** 0001 (init), 0002 (analytics / page-view counter), 0003
+(credit_ledger.ref unique) applied by the user. `seed-production.sql` run
+(config rows = 16). **⚠️ `0005_abuse_hardening.sql` NOT yet applied** — it was
+written after the user's "applied all migrations" and is REQUIRED before prod
+serves real SMS traffic (creates `sms_reservation`, `reserve_sms`/
+`spend_credits` RPCs, and the `messages.provider_id` unique index; the atomic
+reserve/spend/dedup paths error without it). `0004_analytics.sql` = the visit
+counter table (part of the 0002/analytics work — confirm it ran; visits show 0
+until then).
+
+**Telnyx 10DLC:** campaign **TCR_ACCEPTED (2026-07-08)** — brand + campaign
+recreated after the Aug-2025 failure (brand-level "does not qualify"; fixed by
+Standard EIN brand). Awaiting carrier acceptance (hrs–2 days). Number
+**(330) 960-7170** (real number now everywhere; replaced the 555 placeholder).
+User reports the dead Supabase webhook URL swapped → should be
+`https://www.theplainexchange.com/api/telnyx/inbound` (v2), failover the
+vercel.app one. **Production is in REAL-SMS mode** (TELNYX_API_KEY set); once
+carriers approve, sign-in codes + inbound replies go live — verify by texting
+HELP. Until then, on-screen sign-in codes are OFF in prod (dev tools gated
+behind `ENABLE_DEV_TOOLS`, see security build below), so use the password.
+
+**Domain:** theplainexchange.com at Namecheap, attached to Vercel. Make www
+the primary domain (apex redirects), align SITE_URL. Legal pages
+(`/privacy`, `/terms-and-conditions`) + `/faq` live for TCR compliance links.
+
+## What shipped in session 002 (all merged to main)
+
+- **Deploy + admin fixes:** CLAUDE.md wired so `new_session_instructions.md`
+  loads every session; `isAdminPhone` normalizes ADMIN_PHONES.
+- **Legal/help pages:** `/privacy`, `/terms-and-conditions`, `/faq`, and an
+  admin `/admin/help` (why-it's-built-this-way doc, live tunable numbers).
+- **Stripe payments (real):** hosted Checkout (`/account/checkout` →
+  `startStripeCheckout`), signature-verified webhook `/api/stripe/webhook`
+  (idempotent on `credit_ledger.ref`, amount check), order-complete page
+  `/account/checkout/success`. Raw-fetch, no SDK. Saves card off-session +
+  `stripe_customer_id` for future /BUYCREDIT.
+- **Admin Reports** (`/admin/reports`): SMS/email subscriber counts, new-subs,
+  ads posted, recent subscribers, + a cookieless server-side **visit counter**
+  (`lib/analytics.ts`, migration 0002). **New-ad email alerts** to ADMIN_EMAIL
+  (`lib/notify.ts`).
+- **Security hardening** (SECURITY-TODO P0/P1.5/P2): fail-CLOSED secrets
+  (SESSION_SECRET/Telnyx/CRON in prod); dev tools (on-screen codes, /dev/*,
+  simulate-payment) gated behind `ENABLE_DEV_TOOLS` (`lib/env.ts`); Telnyx
+  replay window; open-redirect fix; config clamps; SOLD-on-pending blocked;
+  refund delimited-match; Stripe amount check; image host allowlist
+  (`next.config.ts`).
+- **Abuse & money-race hardening** (migration 0005): atomic `reserve_sms` +
+  `spend_credits` RPCs (advisory locks) replace read-then-send/read-then-spend
+  races; bump charging honors `bumpCost`; double-refund guard
+  (`rejectAdRecord` returns whether it transitioned); race-safe inbound dedup
+  (unique `provider_id` + `recordInboundOnce`); reservation moved BEFORE route
+  (over-cap command dropped whole, never charged silently); STOP always
+  unsubscribes, confirmation deduped; no account minted by STOP/gibberish.
+  **Adversarially reviewed by parallel agents; 2 confirmed bugs found + fixed.**
+- **SMS ad-packing composer** (`lib/sms-segments.ts`, `composeDigestMessages`):
+  GSM-7 sanitize + pack whole ads into fewest single-SMS messages. **Cost
+  reality learned:** the current one-concatenated-message digest is already
+  near-minimal on billed *segments*; packing is ~segment-neutral. Real savings
+  = emoji/Unicode containment (16 vs 22 seg) + no accidental MMS. NOT yet wired
+  into the send path (that's the delivery rework below).
+
+## Remaining work
+
+**Ops (before/at launch — see LAUNCH.md):** run migration 0005; set up the
+cron pinger (Vercel Hobby crons are daily-only — external GET
+`/api/cron/digests` every 5 min with `Authorization: Bearer <CRON_SECRET>`);
+Stripe test purchase → live keys; set ADMIN_EMAIL; Resend domain verify + real
+CAN-SPAM mailing address in `lib/email-digest.ts` (`BUSINESS_ADDRESS`, still
+"PO Box 000"); make www primary; wait for carrier approval → text HELP as the
+go-signal; then the ~15-min smoke walk in LAUNCH.md §B.
+
+**Builds still pending (both non-security):**
+1. **Digest columnar delivery** (the "make it work at 1500" build): the
+   current send loop is a serial per-subscriber loop that times out past ~100
+   subs and drops the rest silently. Plan = an outbox table enqueued per
+   (part, subscriber), drained by the cron in bounded batches ordered by part
+   (columnar: all get part 1 before part 2), resumable, + a per-slot cost
+   circuit breaker + subscriber pagination (fixes the >1000 PostgREST silent
+   truncation). The packing composer is done and waiting to be wired in here.
+   **Cost/throughput reality to weigh first:** 1500 subs × ~7 seg × 4 slots ≈
+   ~$5k/mo, and you exceed T-Mobile's 2000/day unvetted cap well before 1500
+   subs → external vetting (~$40) becomes mandatory.
+2. **Photo re-hosting to Supabase Storage** on inbound MMS (reliability; the
+   image-host allowlist already lets Telnyx/Supabase photos render).
 
 ## How the code is organized (the seams)
 
@@ -131,7 +157,9 @@ configured (which disables all of it automatically).
 - One credit = one broadcast in the next digest; ad lists on site 30 days
   (config). Text ad 1 credit, picture 5, starter grant 3 ads flat — all
   admin-config. `/PIC` pulls free. Digests: 4 ET slots, skip empty, cap 10
-  FIFO; bumps free (config 0), unlimited, one queued per ad, after new ads.
+  FIFO; bumps free at the default `bumpCost` 0 but the engine now CHARGES
+  `bumpCost` when an admin sets it > 0 (session 002); one queued per ad,
+  after new ads.
 - Manual review of every ad; admin can edit text; word filter flags (or
   auto-rejects per word). Benign rejection = full refund; violation = charge
   kept + strike; 3 strikes = posting-only ban (reversible in admin).
@@ -156,30 +184,15 @@ Reset state with `Remove-Item .data -Recurse`. Gotchas learned the hard way:
 - `textContent("body")` includes RSC bootstrap `<script>` payloads (stale
   page text); use `innerText`.
 
-## Provisioning checklist (the remaining work, in order)
+## Provisioning checklist
 
-1. **Fix the Vercel deploy** (see Current state) + set all env vars from
-   `.env.example`; note Vercel **Hobby crons are daily-only** — the 5-minute
-   digest cron needs Pro or an external pinger sending
-   `Authorization: Bearer <CRON_SECRET>`.
-2. **Production seed** (config/packs/word-filter without demo ads).
-3. **Telnyx**: account, 330 number, 10DLC Standard brand under the user's
-   existing EIN — **no LLC required** (verified vs TCR/Telnyx/Twilio docs,
-   2026-07-06); legal name must exactly match the IRS CP-575 letter; sole-
-   prop-with-EIN registers as PRIVATE_PROFIT. Unvetted T-Mobile cap 2,000
-   msgs/day (~1,500–2,000 subscribers of headroom); $41.50 vetting raises it.
-   Then point the messaging profile webhook at `/api/telnyx/inbound` and set
-   `TELNYX_*` env vars.
-4. **Stripe**: code is DONE (session 002). Remaining is account-side only:
-   create the Stripe account, copy the secret key → `STRIPE_SECRET_KEY`, add
-   a webhook endpoint for `checkout.session.completed` at
-   `https://www.theplainexchange.com/api/stripe/webhook` and copy its
-   signing secret → `STRIPE_WEBHOOK_SECRET`, redeploy. Test in Stripe test
-   mode (card 4242…) before swapping in live keys. Cards are saved
-   off-session and `users.stripe_customer_id` is populated — the actual
-   `/BUYCREDIT` off-session charge in the SMS engine is still future work.
-5. **Resend + domain**; replace the placeholder PO Box in
-   `lib/email-digest.ts` (`BUSINESS_ADDRESS`) with the real CAN-SPAM address.
+**Superseded by `LAUNCH.md`** — the ordered, checkbox go-live list (env,
+migrations, cron, Stripe, Telnyx, the launch-day SMS smoke walk). Keep that
+file as the single source of truth; don't maintain a second list here.
+Reference notes that still matter: Vercel **Hobby crons are daily-only** (use
+an external pinger); Telnyx unvetted T-Mobile cap ~2,000 msgs/day, ~$41.50
+external vetting raises it; sole-prop-with-EIN registers PRIVATE_PROFIT, legal
+name exactly per IRS CP-575, no LLC required.
 
 ## Repo & etiquette notes
 
