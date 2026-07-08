@@ -22,3 +22,9 @@ How do I reverse the simulated credit purchases?
 
 --- 2026-07-08 19:20 ---
 Failed MNO review!!!!! Description: Unable to verify, needs compliant and accurate CTA information. Update with specific path for mobile opt-in, HELP instructions, STOP instructions, message frequency disclosure, "message and data rates may apply" disclosure and link to the message program privacy policy, or language referring to the privacy policy. (806)
+
+--- 2026-07-08 20:38 ---
+based on our earlier conversation, what should my Campaign description be? I also need an "Opt in workflow description (Message Flow/Call to Action)"
+
+--- 2026-07-08 20:38 ---
+commit everything to main then
