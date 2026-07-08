@@ -11,6 +11,7 @@ import {
   toggleWordRule,
 } from "@/lib/settings";
 import { blockNumber, unblockNumber } from "@/lib/blocklist";
+import { cancelQueuedOutboxFor } from "@/lib/engine-store";
 import { normalizePhone } from "@/lib/phone";
 
 export async function adminApprove(formData: FormData): Promise<void> {
@@ -168,7 +169,12 @@ export async function adminBlockNumber(formData: FormData): Promise<void> {
   const reason = String(formData.get("reason") ?? "").trim() || "Blocked from admin";
   // Whitelisted return targets — never trust a redirect string from the form.
   const back = String(formData.get("back")) === "/admin/insights" ? "/admin/insights" : "/admin/settings";
-  if (phone) await blockNumber(phone, reason, admin);
+  if (phone) {
+    await blockNumber(phone, reason, admin);
+    // Drop any digest already queued for this number so the block takes effect
+    // immediately, even for a broadcast composed before the block.
+    await cancelQueuedOutboxFor(phone);
+  }
   redirect(back);
 }
 

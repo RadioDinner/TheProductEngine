@@ -12,6 +12,8 @@ import {
 } from "@/lib/store";
 import { smsDevEcho } from "@/lib/sms";
 import { dispatchSms } from "@/lib/outbound";
+import { reserveSms } from "@/lib/engine-store";
+import { getEngineSettings, effectiveSmsCaps } from "@/lib/settings";
 import {
   createSession,
   createTicket,
@@ -42,6 +44,20 @@ async function issueCode(phone: string, next: string): Promise<never> {
   if (!result.ok) {
     redirect(loginUrl({ step: "code", phone, next, error: "rate" }));
   }
+  // Count the login-code SMS against the SAME service-wide breaker as every
+  // other outbound reply. /login is unauthenticated, so without this an outsider
+  // scripting submitPhone/requestCode across enumerated numbers could pump
+  // unbounded SMS to arbitrary phones — denial-of-wallet AND mass unsolicited
+  // codes that risk 10DLC campaign suspension. createCode already caps 3/number/
+  // hour; this adds the global ceiling the login path otherwise bypassed.
+  const settings = await getEngineSettings();
+  const caps = effectiveSmsCaps(settings);
+  const HOUR = 60 * 60 * 1000;
+  if (
+    !(await reserveSms(phone, "reply", caps.repliesPerHour, caps.globalPerHour, caps.picsPerHour, HOUR))
+  ) {
+    redirect(loginUrl({ phone, next, error: "sms" }));
+  }
   // Sign-in code is a "transactional" send: it survives a PARTIAL pause but is
   // suppressed by a FULL pause (in that emergency, admins use their password).
   // A throw (provider down) or a non-send (paused/throttled) both fall to the
@@ -53,7 +69,7 @@ async function issueCode(phone: string, next: string): Promise<never> {
       await dispatchSms(
         phone,
         `${site.name}: your sign-in code is ${result.code}. It expires in 5 minutes.`,
-        { cls: "transactional" },
+        { cls: "transactional", settings },
       )
     ).sent;
   } catch (e) {

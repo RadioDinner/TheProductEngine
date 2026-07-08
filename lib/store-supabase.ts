@@ -173,7 +173,9 @@ export async function subscribeEmailOnly(email: string): Promise<boolean> {
   const { data: existing, error: findError } = await db()
     .from("users")
     .select("id, email_subscribed_at")
-    .ilike("email", email)
+    // eq, not ilike: emails are stored lowercased, and ilike would treat % / _
+    // in a crafted address as wildcards (matching unrelated subscribers).
+    .eq("email", email)
     .maybeSingle();
   if (findError) throw findError;
   if (existing) {
@@ -200,7 +202,8 @@ export async function unsubscribeEmail(email: string): Promise<void> {
   const { error } = await db()
     .from("users")
     .update({ email_subscribed_at: null })
-    .ilike("email", email);
+    // eq, not ilike: a crafted address with % / _ must not unsubscribe others.
+    .eq("email", email);
   if (error) throw error;
 }
 

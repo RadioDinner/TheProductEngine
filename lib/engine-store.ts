@@ -589,6 +589,24 @@ const file = {
     save(store);
   },
 
+  cancelQueuedOutboxFor(address: string): number {
+    const store = load();
+    let removed = 0;
+    for (const row of store.outbox ?? []) {
+      if (row.address === address && (row.status === "queued" || row.status === "sending")) {
+        // Terminal, not delivered — drop it from the queue so a post-compose
+        // STOP/block/unsub is honored before the row ever sends. 'failed' keeps
+        // it out of the segment-budget tally (only 'sent' rows count).
+        row.status = "failed";
+        row.lastError = "canceled: recipient opted out or was blocked";
+        delete row.claimedAt;
+        removed++;
+      }
+    }
+    if (removed) save(store);
+    return removed;
+  },
+
   digestSegmentsSentSince(sinceIso: string): number {
     const since = Date.parse(sinceIso);
     return (load().outbox ?? [])
@@ -835,6 +853,18 @@ export async function markOutboxFailed(
 /** Return claimed-but-unattempted rows to the queue (early halt) — attempts untouched. */
 export async function requeueOutbox(ids: number[]): Promise<void> {
   return supabaseConfigured ? remote.requeueOutbox(ids) : file.requeueOutbox(ids);
+}
+
+/**
+ * Cancel every still-pending (queued or claimed) digest delivery for an
+ * address — called when the recipient opts out (STOP), is blocked, or
+ * unsubscribes from email, so a digest composed BEFORE that event doesn't still
+ * send afterward. Returns how many rows were dropped.
+ */
+export async function cancelQueuedOutboxFor(address: string): Promise<number> {
+  return supabaseConfigured
+    ? remote.cancelQueuedOutboxFor(address)
+    : file.cancelQueuedOutboxFor(address);
 }
 
 /** Billed SMS segments delivered since a moment — the digest budget window. */

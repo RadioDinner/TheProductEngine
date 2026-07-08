@@ -7,6 +7,7 @@
 import { parseCommand } from "@/lib/commands";
 import { deriveTitle, adExpiresAt, type Ad } from "@/lib/ads";
 import {
+  cancelQueuedOutboxFor,
   countRecentOutboundContaining,
   createAd,
   getAdRecord,
@@ -396,6 +397,9 @@ async function route(
       // No ensureAccount here: a STOP from an unknown number shouldn't mint an
       // account (+ starter free ads) — that was a cheap flood vector.
       await setSubscribed(from, false);
+      // Honor the opt-out immediately: drop any digest rows already queued for
+      // this number so a broadcast composed before the STOP can't still send.
+      await cancelQueuedOutboxFor(from);
       return {
         body: `${site.name}: you're unsubscribed and won't get more digests. Reply START any time to come back.`,
       };

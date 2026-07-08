@@ -653,6 +653,24 @@ export async function requeueOutbox(ids: number[]): Promise<void> {
   if (error) throw error;
 }
 
+export async function cancelQueuedOutboxFor(address: string): Promise<number> {
+  // Drop any pending delivery for this address (opt-out / block / unsub). Mark
+  // 'failed' (not 'sent') so it leaves the queue without counting toward the
+  // billed-segment budget. Returns how many rows were dropped.
+  const { data, error } = await db()
+    .from("digest_outbox")
+    .update({
+      status: "failed",
+      last_error: "canceled: recipient opted out or was blocked",
+      claimed_at: null,
+    })
+    .eq("address", address)
+    .in("status", ["queued", "sending"])
+    .select("id");
+  if (error) throw error;
+  return (data ?? []).length;
+}
+
 export async function digestSegmentsSentSince(sinceIso: string): Promise<number> {
   const { data, error } = await db().rpc("outbox_segments_since", { p_since: sinceIso });
   if (error) throw error;

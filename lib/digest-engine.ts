@@ -260,6 +260,11 @@ export async function drainDigestOutbox(
   const timeBudgetMs = opts.timeBudgetMs ?? 40_000;
   const startedAt = Date.now();
   const settings = await getEngineSettings();
+  // Enforce the blocklist at SEND time too (not just at compose): a number
+  // blocked after a slot composed must not receive its already-queued rows.
+  // STOP/block also purge queued rows at the moment of the event; this set
+  // catches anything in-flight. Loaded once per run — cheap.
+  const blockedSet = new Set((await listBlocked()).map((b) => b.phone));
   const budget = settings.digestDailySegmentBudget;
   // Operator kill switch: a PARTIAL or FULL pause both stop bulk (digest)
   // sending. Rows stay queued and resume when the pause is lifted.
@@ -308,6 +313,12 @@ export async function drainDigestOutbox(
       const chunk = batch.slice(i, i + SEND_CONCURRENCY);
       await Promise.all(
         chunk.map(async (row) => {
+          if (row.channel === "sms" && blockedSet.has(row.address)) {
+            // Blocked after this digest composed — drop without sending.
+            await markOutboxFailed(row.id, "skipped: recipient blocked", 1);
+            failed++;
+            return;
+          }
           try {
             await sendOutboxRow(row);
             await markOutboxSent(row.id);
