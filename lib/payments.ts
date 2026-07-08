@@ -57,6 +57,84 @@ export async function createCheckoutSession(args: {
   return session.url;
 }
 
+export interface ChargeResult {
+  ok: boolean;
+  paymentIntentId?: string;
+  last4?: string;
+  reason?: string;
+}
+
+/** The customer's first saved card (id + last4), or null if none is on file. */
+async function firstSavedCard(
+  customerId: string,
+): Promise<{ id: string; last4?: string } | null> {
+  const response = await fetch(
+    `https://api.stripe.com/v1/customers/${encodeURIComponent(customerId)}/payment_methods?type=card&limit=1`,
+    { headers: { Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}` } },
+  );
+  if (!response.ok) {
+    throw new Error(`Stripe payment-method fetch failed (${response.status}): ${await response.text()}`);
+  }
+  const data = (await response.json()) as {
+    data?: { id: string; card?: { last4?: string } }[];
+  };
+  const pm = data.data?.[0];
+  return pm ? { id: pm.id, last4: pm.card?.last4 } : null;
+}
+
+/**
+ * Charge a customer's saved card off-session for a credit pack (the BUYCREDIT
+ * text flow). `ref` is used as both the Stripe idempotency key and the ledger
+ * ref, so a retried confirmation never double-charges or double-grants. A
+ * declined or authentication-required card returns ok:false — we can't do 3-D
+ * Secure over SMS, so the reply steers them to the website.
+ */
+export async function chargeSavedCard(args: {
+  customerId: string;
+  amountCents: number;
+  ref: string;
+  phone: string;
+  packId: string;
+  credits: number;
+}): Promise<ChargeResult> {
+  if (!process.env.STRIPE_SECRET_KEY) return { ok: false, reason: "payments not configured" };
+  const card = await firstSavedCard(args.customerId);
+  if (!card) return { ok: false, reason: "no saved card" };
+  const params = new URLSearchParams({
+    amount: String(args.amountCents),
+    currency: "usd",
+    customer: args.customerId,
+    payment_method: card.id,
+    off_session: "true",
+    confirm: "true",
+    description: `${args.credits} ad credits — ${site.name}`,
+    "metadata[phone]": args.phone,
+    "metadata[pack]": args.packId,
+    "metadata[ref]": args.ref,
+  });
+  const response = await fetch("https://api.stripe.com/v1/payment_intents", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Idempotency-Key": args.ref,
+    },
+    body: params,
+  });
+  const body = (await response.json()) as {
+    id?: string;
+    status?: string;
+    error?: { message?: string; code?: string };
+  };
+  if (!response.ok || body.error) {
+    return { ok: false, reason: body.error?.message ?? `charge failed (${response.status})` };
+  }
+  if (body.status === "succeeded") {
+    return { ok: true, paymentIntentId: body.id, last4: card.last4 };
+  }
+  return { ok: false, reason: `payment ${body.status ?? "not completed"}` };
+}
+
 export interface CompletedCheckout {
   paymentStatus: string;
   phone: string | null;

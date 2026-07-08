@@ -96,6 +96,7 @@ const SETTING_MAX: Record<string, number> = {
   smsGlobalPerHour: 5000,
   digestDailySegmentBudget: 100000,
   picAbusePerDay: 1000,
+  savedCardDiscountPercent: 100,
 };
 
 export async function adminSaveSettings(formData: FormData): Promise<void> {
@@ -125,6 +126,7 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
     "smsGlobalPerHour",
     "digestDailySegmentBudget",
     "picAbusePerDay",
+    "savedCardDiscountPercent",
   ]) {
     const value = num(key);
     if (value !== null) update[key] = value;

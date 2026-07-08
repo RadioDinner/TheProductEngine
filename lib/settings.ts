@@ -28,6 +28,8 @@ export interface EngineSettings {
   digestDailySegmentBudget: number;
   /** Insights: flag numbers requesting more than this many PICs per 24h. */
   picAbusePerDay: number;
+  /** Percent off a credit pack bought by text with a saved card (BUYCREDIT). */
+  savedCardDiscountPercent: number;
 }
 
 export interface WordRule {
@@ -50,6 +52,7 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   smsGlobalPerHour: "sms_global_per_hour",
   digestDailySegmentBudget: "digest_daily_segment_budget",
   picAbusePerDay: "pic_abuse_per_day",
+  savedCardDiscountPercent: "saved_card_discount_percent",
 };
 
 // ---------- file implementation ----------
@@ -95,6 +98,7 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     smsGlobalPerHour: engineDefaults.smsGlobalPerHour,
     digestDailySegmentBudget: engineDefaults.digestDailySegmentBudget,
     picAbusePerDay: engineDefaults.picAbusePerDay,
+    savedCardDiscountPercent: engineDefaults.savedCardDiscountPercent,
   };
   if (!supabaseConfigured) {
     return { ...defaults, ...load().values };

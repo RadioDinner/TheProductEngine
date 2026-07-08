@@ -16,6 +16,7 @@ export type Command =
   | { kind: "myads" }
   | { kind: "bump"; id: number | null }
   | { kind: "buycredit"; amount: number | null }
+  | { kind: "confirm" }
   | { kind: "unknown"; text: string };
 
 function adNumber(arg: string): number | null {
@@ -73,6 +74,10 @@ export function parseCommand(raw: string): Command {
       const match = rest.match(/\d{1,3}/);
       return { kind: "buycredit", amount: match ? Number(match[0]) : null };
     }
+    case "yes":
+    case "y":
+    case "confirm":
+      return { kind: "confirm" };
     default:
       return { kind: "unknown", text };
   }

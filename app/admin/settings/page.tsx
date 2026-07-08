@@ -44,6 +44,11 @@ const FIELDS: { key: string; label: string; hint?: string }[] = [
     label: "Flag excessive picture requests (per day)",
     hint: "on Insights, flag any number asking for more than this many pictures in 24h (0 turns the flag off)",
   },
+  {
+    key: "savedCardDiscountPercent",
+    label: "Saved-card discount (%)",
+    hint: "percent off a credit pack bought by text (BUYCREDIT) with a saved card; 0 = no discount",
+  },
 ];
 
 export default async function AdminSettings({

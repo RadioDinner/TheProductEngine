@@ -36,6 +36,12 @@ export function formatPrice(cents: number): string {
   return cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`;
 }
 
+/** Apply the saved-card discount to a price, rounded to whole cents. */
+export function discountedCents(priceCents: number, discountPercent: number): number {
+  const pct = Math.max(0, Math.min(100, discountPercent));
+  return Math.round((priceCents * (100 - pct)) / 100);
+}
+
 /**
  * Engine defaults — the values used until an admin saves overrides via the
  * settings store (lib/settings.ts). Mirrors supabase/seed.sql.
@@ -70,6 +76,11 @@ export const engineDefaults = {
    * threshold — the actual send cap is smsPicsPerHour. 0 disables the flag.
    */
   picAbusePerDay: 15,
+  /**
+   * Percent off a credit pack when it's bought with a saved card by text
+   * (BUYCREDIT) — the incentive to keep a card on file. 0 = no discount.
+   */
+  savedCardDiscountPercent: 10,
   /** Starter word-filter list (flag-for-review). */
   filterWords: ["gun", "firearm", "rifle", "whiskey", "tobacco"],
 } as const;

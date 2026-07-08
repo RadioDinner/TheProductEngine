@@ -11,6 +11,7 @@ import {
   createAd,
   getAdRecord,
   getPendingAds,
+  listMessages,
   logMessage,
   queueBump,
   recordInboundOnce,
@@ -24,13 +25,17 @@ import {
   addLedgerEntry,
   consumeFreeAd,
   ensureAccount,
+  getAccount,
   getCreditBalance,
+  hasLedgerRef,
   setSubscribed,
   spendCredits,
 } from "@/lib/store";
-import { site } from "@/lib/config";
+import { discountedCents, formatPrice, packs, site } from "@/lib/config";
 import { getEngineSettings, getWordRules, matchWordRules } from "@/lib/settings";
 import { isAllowedPhotoSrc } from "@/lib/media";
+import { chargeSavedCard, paymentsDevMode } from "@/lib/payments";
+import { devToolsEnabled } from "@/lib/env";
 import { sms } from "@/lib/sms";
 import { notifyAdminNewAd } from "@/lib/notify";
 
@@ -221,6 +226,111 @@ async function handleOwnerCommand(
   return { body: `Ad #${id} will run again in the next digest.` };
 }
 
+/** The credit pack whose size matches a requested credit count, if any. */
+function packByCredits(credits: number | null): (typeof packs)[number] | null {
+  if (!credits) return null;
+  return packs.find((p) => p.credits === credits) ?? null;
+}
+
+const BUYCREDIT_WINDOW_MS = 15 * 60 * 1000;
+
+/** BUYCREDIT <n>: quote a saved-card purchase and ask for a YES to confirm. */
+async function handleBuyCredit(from: string, amount: number | null): Promise<Reply> {
+  const account = await ensureAccount(from);
+  if (!account.stripeCustomerId) {
+    return {
+      body: `No card is saved for this number yet. Buy credits at ThePlainExchange.com, or call ${site.supportPhone} to set up payment by phone, check, or a saved card.`,
+    };
+  }
+  const pack = packByCredits(amount);
+  if (!pack) {
+    const sizes = packs.map((p) => p.credits).join(", ");
+    return {
+      body: `Text BUYCREDIT and a pack size (${sizes}) — for example BUYCREDIT ${packs[0]?.credits ?? 10}.`,
+    };
+  }
+  const settings = await getEngineSettings();
+  const price = discountedCents(pack.priceCents, settings.savedCardDiscountPercent);
+  const discount =
+    settings.savedCardDiscountPercent > 0
+      ? ` (${settings.savedCardDiscountPercent}% saved-card discount)`
+      : "";
+  return {
+    body: `Buy ${pack.credits} credits for ${formatPrice(price)}${discount} on your saved card? Reply YES within 15 minutes to confirm. Reply anything else to cancel.`,
+  };
+}
+
+/** YES: confirm the most recent BUYCREDIT quote and charge the saved card. */
+async function handleConfirmPurchase(from: string): Promise<Reply> {
+  const account = await getAccount(from);
+  const cancel = {
+    body: `Nothing to confirm. Text BUYCREDIT ${packs[0]?.credits ?? 10} to buy credits with your saved card.`,
+  };
+  if (!account?.stripeCustomerId) return cancel;
+
+  // Find the newest still-valid BUYCREDIT quote in the audit log (no extra
+  // state needed): the message this YES is confirming.
+  const recent = await listMessages(from, 50);
+  const cutoff = Date.now() - BUYCREDIT_WINDOW_MS;
+  let buy: { pack: (typeof packs)[number]; msgId: number } | null = null;
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const m = recent[i];
+    if (m.direction !== "inbound") continue;
+    if (Date.parse(m.createdAt) < cutoff) break;
+    const cmd = parseCommand(m.body || "");
+    if (cmd.kind === "buycredit") {
+      const pack = packByCredits(cmd.amount);
+      if (pack) buy = { pack, msgId: m.id };
+      break; // the most recent BUYCREDIT wins, valid pack or not
+    }
+  }
+  if (!buy) return cancel;
+
+  const settings = await getEngineSettings();
+  const price = discountedCents(buy.pack.priceCents, settings.savedCardDiscountPercent);
+  // Deterministic ref (the quote message) → idempotent charge AND grant.
+  const ref = `buycredit:${from}:${buy.msgId}`;
+  if (await hasLedgerRef(ref)) {
+    return {
+      body: `Those ${buy.pack.credits} credits were already added — you have ${await getCreditBalance(from)}.`,
+    };
+  }
+
+  let result: { ok: boolean; last4?: string; reason?: string };
+  if (!paymentsDevMode) {
+    result = await chargeSavedCard({
+      customerId: account.stripeCustomerId,
+      amountCents: price,
+      ref,
+      phone: from,
+      packId: buy.pack.id,
+      credits: buy.pack.credits,
+    });
+  } else if (devToolsEnabled) {
+    result = { ok: true, last4: "0000" }; // dev simulation (never in a real prod deploy)
+  } else {
+    return {
+      body: `Buying by text isn't available right now. Buy credits at ThePlainExchange.com or call ${site.supportPhone}.`,
+    };
+  }
+
+  if (!result.ok) {
+    return {
+      body: `We couldn't charge your saved card${result.reason ? ` (${result.reason})` : ""}. Buy at ThePlainExchange.com or call ${site.supportPhone}.`,
+    };
+  }
+  await addLedgerEntry(from, {
+    delta: buy.pack.credits,
+    kind: "purchase",
+    note: `Purchased ${buy.pack.credits} credits (${formatPrice(price)}) — saved card`,
+    ref,
+  });
+  const last4 = result.last4 ? ` to your card ending ${result.last4}` : "";
+  return {
+    body: `Charged ${formatPrice(price)}${last4}. ${buy.pack.credits} credits added — you have ${await getCreditBalance(from)}.`,
+  };
+}
+
 async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>): Promise<Reply | null> {
   const from = msg.from;
 
@@ -324,9 +434,9 @@ async function route(msg: InboundSms, command: ReturnType<typeof parseCommand>):
       return { body: `Your ads: ${lines.join(" · ")}` };
     }
     case "buycredit":
-      return {
-        body: `No card is saved for this number yet. Buy credits at ThePlainExchange.com, or call ${site.supportPhone} to set up payment by phone or mail.`,
-      };
+      return handleBuyCredit(from, command.amount);
+    case "confirm":
+      return handleConfirmPurchase(from);
     case "unknown": {
       // No ensureAccount: gibberish from a spoofed number shouldn't mint an
       // account. The redirect is still deduped to once per day.
