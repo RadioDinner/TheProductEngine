@@ -16,3 +16,6 @@ Also, I want a "PAUSE SWITCH" built into the digest system. If costs would sudde
 Links: Flag for manual review (detect -> flag in admin queue; admin edits or rejects)
 PAUSE switch: BOTH -- a complete kill switch (all outbound off) AND a partial kill switch (bulk off, transactional on)
 UNDER ATTACK levers: ALL FOUR -- Suppress non-subscriber replies; Auto-tighten rate caps; Throttle outbound per-minute; Auto-flag worst numbers (one-click block)
+
+--- 2026-07-08 18:48 ---
+How do I reverse the simulated credit purchases?
