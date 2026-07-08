@@ -11,7 +11,7 @@
 insert into config (key, value) values
   ('sms_number',              '"3309607170"'),
   ('support_number',          '"3309607170"'),
-  ('digest_slots_sms',        '[7, 12, 16, 20]'),
+  ('digest_slots_sms',        '[7, 18]'),
   ('digest_slots_email',      '[7, 16]'),
   ('digest_ad_cap',           '10'),
   ('credit_cost_text',        '1'),

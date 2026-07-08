@@ -239,7 +239,8 @@ export async function fileListAds({ q, page = 1, perPage = 15 }: AdQuery = {}): 
   const store = load();
   sweep(store);
   let ads = store.ads
-    .filter((ad) => ad.status === "approved" || ad.status === "sold")
+    // Only ads that have gone out in a digest are shown on the public site.
+    .filter((ad) => (ad.status === "approved" || ad.status === "sold") && ad.broadcastAt)
     .sort(
       (a, b) =>
         Date.parse(b.approvedAt ?? b.createdAt) - Date.parse(a.approvedAt ?? a.createdAt) ||
@@ -264,7 +265,10 @@ export async function fileGetAd(id: number): Promise<Ad | null> {
   const store = load();
   sweep(store);
   const ad = store.ads.find(
-    (a) => a.id === id && (a.status === "approved" || a.status === "sold" || a.status === "expired"),
+    (a) =>
+      a.id === id &&
+      Boolean(a.broadcastAt) &&
+      (a.status === "approved" || a.status === "sold" || a.status === "expired"),
   );
   return ad ? toSiteAd(ad) : null;
 }

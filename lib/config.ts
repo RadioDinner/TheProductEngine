@@ -51,8 +51,11 @@ export const engineDefaults = {
   costPhoto: 5,
   bumpCost: 0,
   digestCap: 10,
-  /** SMS digest slots, hours in America/New_York. */
-  slots: [7, 12, 16, 20],
+  /**
+   * SMS digest slots, hours in America/New_York — 2/day (morning + evening).
+   * Admin-editable at /admin/settings.
+   */
+  slots: [7, 18],
   /** Email edition slots, hours in America/New_York. */
   emailSlots: [7, 16],
   maxChars: 250,

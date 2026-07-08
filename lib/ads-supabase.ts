@@ -51,6 +51,8 @@ export async function listAds({ q, page = 1, perPage = 15 }: AdQuery = {}): Prom
       .from("ads")
       .select(SELECT, { count: "exact" })
       .in("status", ["approved", "sold"])
+      // Only ads that have actually gone out in a digest appear on the site.
+      .not("broadcast_at", "is", null)
       .order("approved_at", { ascending: false })
       .order("id", { ascending: false });
     if (q?.trim()) query = query.ilike("body", `%${q.trim()}%`);
@@ -89,6 +91,8 @@ export async function getAd(id: number): Promise<Ad | null> {
     .select(SELECT)
     .eq("id", id)
     .in("status", ["approved", "sold", "expired"])
+    // Hidden from the public site until it has ridden a digest.
+    .not("broadcast_at", "is", null)
     .maybeSingle();
   if (error) {
     console.error("[ads-supabase] getAd failed:", error.code, error.message);
