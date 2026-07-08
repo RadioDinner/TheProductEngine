@@ -19,3 +19,6 @@ UNDER ATTACK levers: ALL FOUR -- Suppress non-subscriber replies; Auto-tighten r
 
 --- 2026-07-08 18:48 ---
 How do I reverse the simulated credit purchases?
+
+--- 2026-07-08 19:20 ---
+Failed MNO review!!!!! Description: Unable to verify, needs compliant and accurate CTA information. Update with specific path for mobile opt-in, HELP instructions, STOP instructions, message frequency disclosure, "message and data rates may apply" disclosure and link to the message program privacy policy, or language referring to the privacy policy. (806)
