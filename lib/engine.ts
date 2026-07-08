@@ -66,7 +66,7 @@ const HOUR_MS = 60 * 60 * 1000;
  * and data rates may apply," STOP + HELP, and the no-third-party-sharing clause.
  */
 const OPT_IN_CONFIRMATION =
-  `${site.name}: you're opted in to receive marketing texts — our local ` +
+  `${site.name}: you're opted in to receive marketing texts - our local ` +
   `classified-ad digests. Msg freq varies, up to 4/day. Msg & data rates may apply. ` +
   `Reply STOP to cancel, HELP for help. We won't sell or share your mobile info ` +
   `with third parties for marketing.`;
