@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { handleInbound } from "@/lib/engine";
-import { runDueDigests } from "@/lib/digest-engine";
+import { drainDigestOutbox, runDueDigests } from "@/lib/digest-engine";
 import { approveAd, rejectAd } from "@/lib/moderation";
 import { normalizePhone } from "@/lib/phone";
 import { smsDevEcho } from "@/lib/sms";
@@ -53,9 +53,15 @@ export async function simRejectViolation(formData: FormData): Promise<void> {
 export async function simRunDigests(formData: FormData): Promise<void> {
   guard();
   const results = await runDueDigests();
-  const ran = results
-    .map((r) => `${r.slotKey.split("#")[1]}h:${r.skipped ? "empty" : `${r.items} ads to ${r.recipients}`}`)
-    .join(", ");
+  // Composing only enqueues now — drain so the simulator shows delivery too.
+  const drain = await drainDigestOutbox({ timeBudgetMs: 15_000 });
+  const ran = [
+    ...results.map(
+      (r) => `${r.slotKey.split("#")[1]}h:${r.skipped ? "empty" : `${r.items} ads to ${r.recipients}`}`,
+    ),
+    ...(drain.sent || drain.remaining ? [`delivered ${drain.sent}, ${drain.remaining} left`] : []),
+    ...(drain.halted ? ["BUDGET HALT"] : []),
+  ].join(", ");
   const from = normalizePhone(String(formData.get("from") ?? ""));
   const params = new URLSearchParams();
   if (from) params.set("from", from);

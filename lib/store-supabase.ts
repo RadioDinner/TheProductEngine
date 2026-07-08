@@ -189,14 +189,28 @@ export async function unsubscribeEmail(email: string): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * PostgREST caps un-ranged selects at ~1000 rows — silently. Every full-list
+ * read (subscribers, email recipients, a busy ledger) must page, or people
+ * past row 1000 just never get digests.
+ */
+const PAGE = 1000;
+
 export async function listEmailRecipients(): Promise<string[]> {
-  const { data, error } = await db()
-    .from("users")
-    .select("email")
-    .not("email", "is", null)
-    .not("email_subscribed_at", "is", null);
-  if (error) throw error;
-  return [...new Set((data ?? []).map((row) => (row.email as string).toLowerCase()))];
+  const emails = new Set<string>();
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db()
+      .from("users")
+      .select("email")
+      .not("email", "is", null)
+      .not("email_subscribed_at", "is", null)
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    for (const row of data ?? []) emails.add((row.email as string).toLowerCase());
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  return [...emails];
 }
 
 export async function setPostingBanned(phone: string, banned: boolean): Promise<void> {
@@ -234,13 +248,20 @@ export async function searchAccounts(q: string, limit = 25): Promise<Account[]> 
 }
 
 export async function listSubscriberPhones(): Promise<string[]> {
-  const { data, error } = await db()
-    .from("users")
-    .select("phone")
-    .not("subscribed_at", "is", null)
-    .not("phone", "is", null);
-  if (error) throw error;
-  return (data ?? []).map((row) => row.phone as string);
+  const phones: string[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db()
+      .from("users")
+      .select("phone")
+      .not("subscribed_at", "is", null)
+      .not("phone", "is", null)
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    phones.push(...(data ?? []).map((row) => row.phone as string));
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  return phones;
 }
 
 /** Returns false when the email is already on another account. */
@@ -282,12 +303,21 @@ export async function getLedger(phone: string): Promise<LedgerEntry[]> {
 export async function getCreditBalance(phone: string): Promise<number> {
   const user = await userByPhone(phone);
   if (!user) return 0;
-  const { data, error } = await db()
-    .from("credit_ledger")
-    .select("delta")
-    .eq("user_id", user.id);
-  if (error) throw error;
-  return (data ?? []).reduce((sum, row) => sum + (row.delta as number), 0);
+  // Paged: a busy account past 1000 ledger rows would otherwise be summed
+  // from a silent 1000-row prefix — a wrong balance, not an error.
+  let balance = 0;
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db()
+      .from("credit_ledger")
+      .select("delta")
+      .eq("user_id", user.id)
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    balance += (data ?? []).reduce((sum, row) => sum + (row.delta as number), 0);
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  return balance;
 }
 
 export async function addLedgerEntry(

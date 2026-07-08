@@ -1,18 +1,21 @@
 /**
- * The email edition: at each email slot, send everything the SMS digests
+ * The email edition: at each email slot, compose everything the SMS digests
  * carried since the last email — minus ads no longer available — with
- * pictures inline. Same idempotency guarantees as the SMS broadcaster.
+ * pictures inline, and enqueue one outbox row per recipient. Delivery rides
+ * the same drained outbox as the SMS digests (bounded batches, resumable),
+ * with the same idempotency guarantees.
  */
-import { email, siteUrl, unsubscribeUrl } from "@/lib/email";
+import { siteUrl, unsubscribeUrl } from "@/lib/email";
 import { etParts, type SlotResult } from "@/lib/digest-engine";
 import { deriveTitle, deriveRest } from "@/lib/ads";
 import {
   createDigestIfAbsent,
+  enqueueDigestOutbox,
   finalizeDigest,
   getAdRecord,
   getLastEmailDigestAt,
   getSmsAdIdsSince,
-  logMessage,
+  type OutboxInsert,
   type StoredAd,
 } from "@/lib/engine-store";
 import { listEmailRecipients } from "@/lib/store";
@@ -78,8 +81,9 @@ export async function runDueEmailDigests(now = new Date()): Promise<SlotResult[]
   for (const slot of settings.emailSlots) {
     if (hour < slot) continue;
     const slotKey = `${day}#email#${slot}`;
-    const { id: digestId, created } = await createDigestIfAbsent(slotKey, slot, "email");
-    if (!created) continue;
+    const { id: digestId, finalized } = await createDigestIfAbsent(slotKey, slot, "email");
+    // Not finalized = a previous run died mid-enqueue; redo it (outbox dedups).
+    if (finalized) continue;
 
     const watermark = await getLastEmailDigestAt(digestId);
     const carriedIds = await getSmsAdIdsSince(watermark);
@@ -104,22 +108,29 @@ export async function runDueEmailDigests(now = new Date()): Promise<SlotResult[]
     });
     const subject = `${site.name} — ${ads.length} new ad${ads.length === 1 ? "" : "s"}, ${dateLabel}`;
     const recipients = await listEmailRecipients();
-    for (const to of recipients) {
-      const unsub = unsubscribeUrl(to);
-      const html = composeEmailHtml(ads, dateLabel, unsub);
-      const text = composeEmailText(ads, dateLabel, unsub);
-      await email.send({ to, subject, html, text });
-      await logMessage({
-        direction: "outbound",
-        channel: "email",
-        address: to,
-        body: `${subject}\n\n${text}`,
-        html,
+    const rows: OutboxInsert[] = recipients.map((to) => {
+      const unsub = unsubscribeUrl(to); // personalized (signed) per recipient
+      return {
         digestId,
-      });
-    }
+        channel: "email" as const,
+        address: to,
+        part: 1,
+        parts: 1,
+        subject,
+        body: composeEmailText(ads, dateLabel, unsub),
+        html: composeEmailHtml(ads, dateLabel, unsub),
+        segments: 0, // email costs no SMS segments — exempt from the budget
+      };
+    });
+    const queued = await enqueueDigestOutbox(rows);
     await finalizeDigest(digestId, [], [], ads.length);
-    results.push({ slotKey, items: ads.length, recipients: recipients.length, skipped: false });
+    results.push({
+      slotKey,
+      items: ads.length,
+      recipients: recipients.length,
+      queued,
+      skipped: false,
+    });
   }
 
   return results;

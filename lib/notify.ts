@@ -41,3 +41,45 @@ export async function notifyAdminNewAd(args: {
     console.error("[notify] admin new-ad email failed:", e);
   }
 }
+
+/**
+ * The digest circuit breaker tripped: the rolling-24h billed-segment budget
+ * is spent and deliveries are waiting. Sent once per trip (the drain only
+ * alerts on the crossing run / a fresh enqueue), so the 5-minute cron can't
+ * flood the inbox. Also logged, so it's visible even without ADMIN_EMAIL.
+ */
+export async function notifyAdminDigestHalted(args: {
+  spent: number;
+  budget: number;
+  remaining: number;
+}): Promise<void> {
+  console.error(
+    `[digest] BUDGET HALT: ${args.spent} segments sent in the last 24h ` +
+      `(budget ${args.budget}); ${args.remaining} deliveries waiting.`,
+  );
+  const to = process.env.ADMIN_EMAIL;
+  if (!to) return;
+  const settingsUrl = `${siteUrl}/admin/settings`;
+  const subject = `Digest sending paused — segment budget reached — ${site.name}`;
+  const text = [
+    `Digest delivery halted: ${args.spent} SMS segments were sent in the last 24 hours,`,
+    `which meets the daily budget of ${args.budget}.`,
+    ``,
+    `${args.remaining} queued deliveries are waiting and will resume automatically`,
+    `once the 24-hour window frees up room — or immediately if you raise the`,
+    `"Daily digest segment budget" in settings.`,
+    ``,
+    `Settings: ${settingsUrl}`,
+  ].join("\n");
+  const html = `<div style="max-width:600px;font-family:'Segoe UI',Arial,sans-serif;color:#20262b;">
+    <p style="font-size:16px;"><strong>Digest sending is paused.</strong></p>
+    <p style="font-size:14px;">${args.spent} SMS segments went out in the last 24 hours, meeting the daily budget of ${args.budget}. ${args.remaining} queued deliveries are waiting.</p>
+    <p style="font-size:14px;">They resume automatically as the 24-hour window frees room — or immediately if you raise the budget.</p>
+    <p><a href="${settingsUrl}" style="color:#2d5570;font-weight:600;">Open settings</a></p>
+  </div>`;
+  try {
+    await email.send({ to, subject, html, text });
+  } catch (e) {
+    console.error("[notify] digest-halt email failed:", e);
+  }
+}

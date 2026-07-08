@@ -54,6 +54,13 @@ export const engineDefaults = {
   smsPicsPerHour: 12,
   /** All command replies service-wide per hour — the cost circuit breaker. */
   smsGlobalPerHour: 500,
+  /**
+   * Digest circuit breaker: billed SMS segments the digest broadcaster may
+   * send in any rolling 24h window. When it's met, queued deliveries wait
+   * and the admin is alerted. 12,000 ≈ 4 slots × ~430 subscribers × 7
+   * segments — raise it deliberately as the list grows. 0 pauses digests.
+   */
+  digestDailySegmentBudget: 12000,
   /** Starter word-filter list (flag-for-review). */
   filterWords: ["gun", "firearm", "rifle", "whiskey", "tobacco"],
 } as const;

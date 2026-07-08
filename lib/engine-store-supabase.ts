@@ -10,6 +10,8 @@ import type {
   CreateAdOptions,
   MessageRecord,
   NewAdInput,
+  OutboxInsert,
+  OutboxRow,
   StoredAd,
   StoredAdStatus,
 } from "@/lib/engine-store";
@@ -226,7 +228,7 @@ export async function createDigestIfAbsent(
   slotKey: string,
   slotHour: number,
   channel: "sms" | "email" = "sms",
-): Promise<{ id: number; created: boolean }> {
+): Promise<{ id: number; created: boolean; finalized: boolean }> {
   void slotHour;
   // slotKey ends "#HH" (ET) → canonical scheduled_for used purely as identity.
   const parts = slotKey.split("#");
@@ -240,16 +242,22 @@ export async function createDigestIfAbsent(
     if (error.code === "23505") {
       const { data: existing, error: selectError } = await db()
         .from("digests")
-        .select("id")
+        .select("id, sent_at")
         .eq("channel", channel)
         .eq("scheduled_for", scheduledFor)
         .single();
       if (selectError) throw selectError;
-      return { id: existing.id as number, created: false };
+      // finalized=false means a previous run died between compose and
+      // finalize — the caller re-runs the (idempotent) enqueue to recover.
+      return {
+        id: existing.id as number,
+        created: false,
+        finalized: existing.sent_at != null,
+      };
     }
     throw error;
   }
-  return { id: data.id as number, created: true };
+  return { id: data.id as number, created: true, finalized: false };
 }
 
 export async function getLastEmailDigestAt(excludeId: number): Promise<string | null> {
@@ -313,21 +321,25 @@ export async function finalizeDigest(
       if (error) throw error;
     }
   }
-  void itemCount;
   const { error } = await db()
     .from("digests")
-    .update({ sent_at: new Date().toISOString() })
+    .update({ sent_at: new Date().toISOString(), item_count: itemCount })
     .eq("id", digestId);
   if (error) throw error;
 }
 
 export async function digestsSentOnDay(dayKey: string): Promise<number> {
+  // SMS digests with items only (item_count, migration 0006) — matches the
+  // file store, so an empty slot or the email edition can't suppress the
+  // Reply-STOP footer on the day's first real SMS digest.
   const { count, error } = await db()
     .from("digests")
     .select("id", { count: "exact", head: true })
+    .eq("channel", "sms")
     .gte("scheduled_for", `${dayKey}T00:00:00Z`)
     .lte("scheduled_for", `${dayKey}T23:59:59Z`)
-    .not("sent_at", "is", null);
+    .not("sent_at", "is", null)
+    .gt("item_count", 0);
   if (error) throw error;
   return count ?? 0;
 }
@@ -434,6 +446,141 @@ export async function countRecentOutboundContaining(
     .eq("address", address)
     .gte("created_at", since)
     .ilike("body", `%${needle}%`);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+// ---------- digest outbox (migration 0006) ----------
+
+interface OutboxRowDb {
+  id: number;
+  digest_id: number;
+  channel: string;
+  address: string;
+  part: number;
+  parts: number;
+  subject: string | null;
+  body: string;
+  html: string | null;
+  segments: number;
+  status: string;
+  attempts: number;
+  last_error: string | null;
+  claimed_at: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
+function toOutboxRow(row: OutboxRowDb): OutboxRow {
+  return {
+    id: row.id,
+    digestId: row.digest_id,
+    channel: row.channel as OutboxRow["channel"],
+    address: row.address,
+    part: row.part,
+    parts: row.parts,
+    subject: row.subject ?? undefined,
+    body: row.body,
+    html: row.html ?? undefined,
+    segments: row.segments,
+    status: row.status as OutboxRow["status"],
+    attempts: row.attempts,
+    lastError: row.last_error ?? undefined,
+    claimedAt: row.claimed_at ?? undefined,
+    sentAt: row.sent_at ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+export async function enqueueDigestOutbox(rows: OutboxInsert[]): Promise<number> {
+  let added = 0;
+  // Chunked so a big list (1500 subscribers × parts) stays well under
+  // request-size limits; ignoreDuplicates makes a resumed enqueue a no-op
+  // for rows that already made it in.
+  for (let i = 0; i < rows.length; i += 500) {
+    const chunk = rows.slice(i, i + 500).map((r) => ({
+      digest_id: r.digestId,
+      channel: r.channel,
+      address: r.address,
+      part: r.part,
+      parts: r.parts,
+      subject: r.subject ?? null,
+      body: r.body,
+      html: r.html ?? null,
+      segments: r.segments,
+    }));
+    const { data, error } = await db()
+      .from("digest_outbox")
+      .upsert(chunk, { onConflict: "digest_id,address,part", ignoreDuplicates: true })
+      .select("id");
+    if (error) throw error;
+    added += data?.length ?? 0;
+  }
+  return added;
+}
+
+export async function claimDigestOutbox(limit: number): Promise<OutboxRow[]> {
+  const { data, error } = await db().rpc("claim_digest_outbox", { p_limit: limit });
+  if (error) throw error;
+  // UPDATE ... RETURNING does not guarantee order — restore columnar order.
+  return ((data ?? []) as OutboxRowDb[])
+    .map(toOutboxRow)
+    .sort((a, b) => a.part - b.part || a.id - b.id);
+}
+
+export async function markOutboxSent(id: number): Promise<void> {
+  const { error } = await db()
+    .from("digest_outbox")
+    .update({ status: "sent", sent_at: new Date().toISOString(), last_error: null })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function markOutboxFailed(
+  id: number,
+  errorText: string,
+  maxAttempts: number,
+): Promise<void> {
+  const { data, error } = await db()
+    .from("digest_outbox")
+    .select("attempts")
+    .eq("id", id)
+    .single();
+  if (error) throw error;
+  const attempts = ((data?.attempts as number) ?? 0) + 1;
+  const { error: updateError } = await db()
+    .from("digest_outbox")
+    .update({
+      attempts,
+      status: attempts >= maxAttempts ? "failed" : "queued",
+      last_error: errorText.slice(0, 500),
+      claimed_at: null,
+    })
+    .eq("id", id);
+  if (updateError) throw updateError;
+}
+
+export async function requeueOutbox(ids: number[]): Promise<void> {
+  if (!ids.length) return;
+  const { error } = await db()
+    .from("digest_outbox")
+    .update({ status: "queued", claimed_at: null })
+    .in("id", ids)
+    .eq("status", "sending");
+  if (error) throw error;
+}
+
+export async function digestSegmentsSentSince(sinceIso: string): Promise<number> {
+  const { data, error } = await db().rpc("outbox_segments_since", { p_since: sinceIso });
+  if (error) throw error;
+  return (data as number | null) ?? 0;
+}
+
+export async function queuedOutboxCount(): Promise<number> {
+  const { count, error } = await db()
+    .from("digest_outbox")
+    .select("id", { count: "exact", head: true })
+    .in("status", ["queued", "sending"]);
   if (error) throw error;
   return count ?? 0;
 }

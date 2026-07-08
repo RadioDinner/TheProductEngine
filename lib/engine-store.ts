@@ -78,6 +78,40 @@ export interface NewAdInput {
   photo?: StoredAd["photo"];
 }
 
+/**
+ * One queued delivery: a single message part for a single recipient of a
+ * digest. Enqueued when the digest is composed, drained in bounded batches
+ * by the cron — ordered by part so every subscriber gets part 1 before
+ * anyone gets part 2, and resumable when a run times out mid-list.
+ */
+export interface OutboxRow {
+  id: number;
+  digestId: number;
+  channel: "sms" | "email";
+  address: string; // phone number or email address
+  part: number; // 1-based within the digest
+  parts: number;
+  subject?: string; // email only
+  body: string; // SMS text / email plain text
+  html?: string; // email only
+  /** Billed SMS segments for this part (0 for email) — budget accounting. */
+  segments: number;
+  status: "queued" | "sending" | "sent" | "failed";
+  attempts: number;
+  lastError?: string;
+  claimedAt?: string;
+  sentAt?: string;
+  createdAt: string;
+}
+
+export type OutboxInsert = Omit<
+  OutboxRow,
+  "id" | "status" | "attempts" | "lastError" | "claimedAt" | "sentAt" | "createdAt"
+>;
+
+/** A claimed row older than this is presumed orphaned by a dead run. */
+const OUTBOX_RECLAIM_MS = 10 * 60 * 1000;
+
 export interface CreateAdOptions {
   status?: "pending" | "rejected";
   rejectedReason?: string;
@@ -93,6 +127,7 @@ interface EngineShape {
   bumps: BumpRecord[];
   messages: MessageRecord[];
   reservations?: { address: string; kind: string; at: number }[];
+  outbox?: OutboxRow[];
 }
 
 const ENGINE_PATH = join(process.cwd(), ".data", "engine.json");
@@ -360,10 +395,10 @@ const file = {
     slotKey: string,
     slotHour: number,
     channel: "sms" | "email",
-  ): { id: number; created: boolean } {
+  ): { id: number; created: boolean; finalized: boolean } {
     const store = load();
     const existing = store.digests.find((d) => d.slotKey === slotKey);
-    if (existing) return { id: existing.id, created: false };
+    if (existing) return { id: existing.id, created: false, finalized: !!existing.sentAt };
     const digest: DigestRecord = {
       id: store.nextId++,
       channel,
@@ -374,7 +409,7 @@ const file = {
     };
     store.digests.push(digest);
     save(store);
-    return { id: digest.id, created: true };
+    return { id: digest.id, created: true, finalized: false };
   },
 
   finalizeDigest(
@@ -422,14 +457,111 @@ const file = {
   },
 
   digestsSentOnDay(dayKey: string): number {
-    return load().digests.filter((d) => d.slotKey.startsWith(`${dayKey}#`) && d.sentAt && d.itemCount > 0)
-      .length;
+    // SMS digests with items only — the email edition must not suppress the
+    // Reply-STOP footer on the day's first real SMS digest.
+    return load().digests.filter(
+      (d) =>
+        d.channel === "sms" &&
+        d.slotKey.startsWith(`${dayKey}#`) &&
+        d.sentAt &&
+        d.itemCount > 0,
+    ).length;
   },
 
   logMessage(rec: Omit<MessageRecord, "id" | "createdAt">): void {
     const store = load();
     store.messages.push({ id: store.nextId++, createdAt: new Date().toISOString(), ...rec });
     save(store);
+  },
+
+  enqueueDigestOutbox(rows: OutboxInsert[]): number {
+    const store = load();
+    const outbox = (store.outbox ??= []);
+    const seen = new Set(outbox.map((r) => `${r.digestId}#${r.address}#${r.part}`));
+    let added = 0;
+    for (const row of rows) {
+      const key = `${row.digestId}#${row.address}#${row.part}`;
+      if (seen.has(key)) continue; // idempotent: a resumed enqueue skips existing rows
+      seen.add(key);
+      outbox.push({
+        ...row,
+        id: store.nextId++,
+        status: "queued",
+        attempts: 0,
+        createdAt: new Date().toISOString(),
+      });
+      added++;
+    }
+    if (added) save(store);
+    return added;
+  },
+
+  claimDigestOutbox(limit: number): OutboxRow[] {
+    const store = load();
+    const outbox = store.outbox ?? [];
+    const staleBefore = Date.now() - OUTBOX_RECLAIM_MS;
+    const claimable = outbox
+      .filter(
+        (r) =>
+          r.status === "queued" ||
+          (r.status === "sending" && Date.parse(r.claimedAt ?? r.createdAt) < staleBefore),
+      )
+      .sort((a, b) => a.part - b.part || a.id - b.id)
+      .slice(0, limit);
+    if (!claimable.length) return [];
+    const now = new Date().toISOString();
+    for (const row of claimable) {
+      row.status = "sending";
+      row.claimedAt = now;
+    }
+    save(store);
+    return claimable.map((r) => ({ ...r }));
+  },
+
+  markOutboxSent(id: number): void {
+    const store = load();
+    const row = store.outbox?.find((r) => r.id === id);
+    if (!row) return;
+    row.status = "sent";
+    row.sentAt = new Date().toISOString();
+    delete row.lastError;
+    save(store);
+  },
+
+  markOutboxFailed(id: number, error: string, maxAttempts: number): void {
+    const store = load();
+    const row = store.outbox?.find((r) => r.id === id);
+    if (!row) return;
+    row.attempts += 1;
+    row.status = row.attempts >= maxAttempts ? "failed" : "queued";
+    row.lastError = error.slice(0, 500);
+    delete row.claimedAt;
+    save(store);
+  },
+
+  requeueOutbox(ids: number[]): void {
+    if (!ids.length) return;
+    const store = load();
+    const wanted = new Set(ids);
+    for (const row of store.outbox ?? []) {
+      if (wanted.has(row.id) && row.status === "sending") {
+        row.status = "queued";
+        delete row.claimedAt;
+      }
+    }
+    save(store);
+  },
+
+  digestSegmentsSentSince(sinceIso: string): number {
+    const since = Date.parse(sinceIso);
+    return (load().outbox ?? [])
+      .filter((r) => r.status === "sent" && r.sentAt && Date.parse(r.sentAt) >= since)
+      .reduce((sum, r) => sum + r.segments, 0);
+  },
+
+  queuedOutboxCount(): number {
+    return (load().outbox ?? []).filter((r) => r.status === "queued" || r.status === "sending")
+      .length;
   },
 
   seenInboundProviderId(providerId: string): boolean {
@@ -564,7 +696,7 @@ export async function createDigestIfAbsent(
   slotKey: string,
   slotHour: number,
   channel: "sms" | "email" = "sms",
-): Promise<{ id: number; created: boolean }> {
+): Promise<{ id: number; created: boolean; finalized: boolean }> {
   return supabaseConfigured
     ? remote.createDigestIfAbsent(slotKey, slotHour, channel)
     : file.createDigestIfAbsent(slotKey, slotHour, channel);
@@ -596,6 +728,56 @@ export async function getSmsAdIdsSince(sinceIso: string | null): Promise<number[
 
 export async function digestsSentOnDay(dayKey: string): Promise<number> {
   return supabaseConfigured ? remote.digestsSentOnDay(dayKey) : file.digestsSentOnDay(dayKey);
+}
+
+/**
+ * Queue digest deliveries (one row per recipient per message part). Idempotent
+ * on (digestId, address, part) so a crashed enqueue can simply re-run. Returns
+ * how many rows were newly added.
+ */
+export async function enqueueDigestOutbox(rows: OutboxInsert[]): Promise<number> {
+  return supabaseConfigured ? remote.enqueueDigestOutbox(rows) : file.enqueueDigestOutbox(rows);
+}
+
+/**
+ * Atomically claim the next batch of queued deliveries, columnar order (all
+ * part 1s first, FIFO within a part). Rows claimed by a run that died are
+ * reclaimed after 10 minutes.
+ */
+export async function claimDigestOutbox(limit: number): Promise<OutboxRow[]> {
+  return supabaseConfigured ? remote.claimDigestOutbox(limit) : file.claimDigestOutbox(limit);
+}
+
+export async function markOutboxSent(id: number): Promise<void> {
+  return supabaseConfigured ? remote.markOutboxSent(id) : file.markOutboxSent(id);
+}
+
+/** Failure re-queues the row for the next run until maxAttempts, then parks it as failed. */
+export async function markOutboxFailed(
+  id: number,
+  error: string,
+  maxAttempts: number,
+): Promise<void> {
+  return supabaseConfigured
+    ? remote.markOutboxFailed(id, error, maxAttempts)
+    : file.markOutboxFailed(id, error, maxAttempts);
+}
+
+/** Return claimed-but-unattempted rows to the queue (early halt) — attempts untouched. */
+export async function requeueOutbox(ids: number[]): Promise<void> {
+  return supabaseConfigured ? remote.requeueOutbox(ids) : file.requeueOutbox(ids);
+}
+
+/** Billed SMS segments delivered since a moment — the digest budget window. */
+export async function digestSegmentsSentSince(sinceIso: string): Promise<number> {
+  return supabaseConfigured
+    ? remote.digestSegmentsSentSince(sinceIso)
+    : file.digestSegmentsSentSince(sinceIso);
+}
+
+/** Deliveries still waiting (queued or mid-send) — for cron results/reports. */
+export async function queuedOutboxCount(): Promise<number> {
+  return supabaseConfigured ? remote.queuedOutboxCount() : file.queuedOutboxCount();
 }
 
 export async function logMessage(rec: Omit<MessageRecord, "id" | "createdAt">): Promise<void> {

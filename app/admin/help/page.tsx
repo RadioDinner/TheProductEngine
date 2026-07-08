@@ -93,11 +93,20 @@ export default async function AdminHelp() {
           circuit breaker for the worst case — many numbers attacking at once. It bounds the
           most the service can spend on replies in any hour.
         </li>
+        <li>
+          <strong>{s.digestDailySegmentBudget} digest segments per rolling 24 hours.</strong>{" "}
+          Digests are billed per SMS <em>segment</em> (a chunk of roughly 153 characters), and
+          a broadcast is segments × subscribers — the biggest bill in the system. When the
+          budget is met, digest sending pauses, the queue waits, and you get an email; it
+          resumes on its own as the 24-hour window frees room, or immediately if you raise
+          the number. Setting it to 0 pauses digest sending entirely.
+        </li>
       </ul>
       <p className="fine">
         Two deliberate exceptions: <strong>digest broadcasts never count</strong> toward
-        these limits (a big mailing can&rsquo;t trip the breaker), and <strong>STOP is
-        always answered</strong> (phone carriers require the unsubscribe confirmation).
+        the three reply limits (they have their own segment budget above), and{" "}
+        <strong>STOP is always answered</strong> (phone carriers require the unsubscribe
+        confirmation).
       </p>
 
       <h2 className="section-h">Why credits are a ledger</h2>

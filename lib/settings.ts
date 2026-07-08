@@ -24,6 +24,8 @@ export interface EngineSettings {
   smsRepliesPerHour: number;
   smsPicsPerHour: number;
   smsGlobalPerHour: number;
+  /** Digest breaker: billed segments per rolling 24h; 0 pauses digests. */
+  digestDailySegmentBudget: number;
 }
 
 export interface WordRule {
@@ -44,6 +46,7 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   smsRepliesPerHour: "sms_replies_per_hour",
   smsPicsPerHour: "sms_pics_per_hour",
   smsGlobalPerHour: "sms_global_per_hour",
+  digestDailySegmentBudget: "digest_daily_segment_budget",
 };
 
 // ---------- file implementation ----------
@@ -87,6 +90,7 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     smsRepliesPerHour: engineDefaults.smsRepliesPerHour,
     smsPicsPerHour: engineDefaults.smsPicsPerHour,
     smsGlobalPerHour: engineDefaults.smsGlobalPerHour,
+    digestDailySegmentBudget: engineDefaults.digestDailySegmentBudget,
   };
   if (!supabaseConfigured) {
     return { ...defaults, ...load().values };

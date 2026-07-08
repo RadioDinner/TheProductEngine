@@ -1,25 +1,38 @@
 /**
  * The digest broadcaster. Called by /api/cron/digests every few minutes;
  * finds ET slots that are due today and haven't run, assembles the digest
- * (new ads first, FIFO, capped; queued bumps fill what's left), and sends
- * one concatenated message per subscriber. Idempotency comes from the
- * one-digest-per-slot rule (unique constraint in the schema; slotKey in the
- * file store).
+ * (new ads first, FIFO, capped; queued bumps fill what's left), and ENQUEUES
+ * one outbox row per (subscriber, message part). Delivery happens in
+ * drainDigestOutbox: bounded batches in columnar order (every subscriber
+ * gets part 1 before anyone gets part 2), resumable across cron runs, under
+ * a rolling-24h billed-segment budget. Idempotency comes from the
+ * one-digest-per-slot rule plus the outbox unique key.
  */
 import { getEngineSettings } from "@/lib/settings";
 import {
+  claimDigestOutbox,
   createDigestIfAbsent,
+  digestSegmentsSentSince,
   digestsSentOnDay,
+  enqueueDigestOutbox,
   finalizeDigest,
   getAdRecord,
   getNewDigestAds,
   getQueuedBumps,
   logMessage,
+  markOutboxFailed,
+  markOutboxSent,
+  queuedOutboxCount,
+  requeueOutbox,
+  type OutboxInsert,
+  type OutboxRow,
   type StoredAd,
 } from "@/lib/engine-store";
 import { listSubscriberPhones } from "@/lib/store";
 import { sms } from "@/lib/sms";
-import { gsmSanitize, packMessages } from "@/lib/sms-segments";
+import { email } from "@/lib/email";
+import { notifyAdminDigestHalted } from "@/lib/notify";
+import { gsmSanitize, packMessages, segmentation } from "@/lib/sms-segments";
 
 const SLOT_LABELS: Record<number, string> = {
   7: "morning",
@@ -43,28 +56,6 @@ export function etParts(date: Date): { day: string; hour: number } {
     day: `${get("year")}-${get("month")}-${get("day")}`,
     hour: Number(get("hour")) % 24,
   };
-}
-
-export function composeDigest(
-  now: Date,
-  slotHour: number,
-  items: StoredAd[],
-  firstOfDay: boolean,
-): string {
-  const dateLabel = now.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "America/New_York",
-  });
-  const label = SLOT_LABELS[slotHour] ?? `${slotHour}:00`;
-  const lines = [
-    `Plain Exchange, ${dateLabel} ${label}:`,
-    ...items.map(
-      (ad) => `#${ad.id} ${ad.body}${ad.photo ? ` Pic? Reply PIC ${ad.id}` : ""}`,
-    ),
-  ];
-  if (firstOfDay) lines.push("Reply STOP to end");
-  return lines.join("\n");
 }
 
 /**
@@ -109,6 +100,8 @@ export interface SlotResult {
   slotKey: string;
   items: number;
   recipients: number;
+  /** Outbox rows newly enqueued for this slot (recipients × parts). */
+  queued?: number;
   skipped: boolean;
 }
 
@@ -120,8 +113,11 @@ export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {
   for (const slot of settings.slots) {
     if (hour < slot) continue;
     const slotKey = `${day}#${slot}`;
-    const { id: digestId, created } = await createDigestIfAbsent(slotKey, slot);
-    if (!created) continue; // slot already handled — idempotent
+    const { id: digestId, finalized } = await createDigestIfAbsent(slotKey, slot);
+    // finalized = slot fully composed+enqueued already. A digest row that
+    // exists but never finalized means a previous run died mid-enqueue —
+    // fall through and redo it (the outbox unique key dedups the rows).
+    if (finalized) continue;
 
     // New ads first (FIFO by approval), bumps fill the remaining capacity.
     const newAds = await getNewDigestAds(settings.digestCap);
@@ -148,18 +144,26 @@ export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {
     }
 
     const firstOfDay = (await digestsSentOnDay(day)) === 0;
-    const body = composeDigest(now, slot, items, firstOfDay);
+    const messages = composeDigestMessages(now, slot, items, firstOfDay);
+    const parts = messages.length;
+    const partSegments = messages.map((m) => segmentation(m).segments);
     const subscribers = await listSubscriberPhones();
+
+    const rows: OutboxInsert[] = [];
     for (const phone of subscribers) {
-      await sms.send(phone, body);
-      await logMessage({
-        direction: "outbound",
-        channel: "sms",
-        address: phone,
-        body,
-        digestId,
-      });
+      for (let i = 0; i < parts; i++) {
+        rows.push({
+          digestId,
+          channel: "sms",
+          address: phone,
+          part: i + 1,
+          parts,
+          body: messages[i],
+          segments: partSegments[i],
+        });
+      }
     }
+    const queued = await enqueueDigestOutbox(rows);
     await finalizeDigest(
       digestId,
       newAds.map((a) => a.id),
@@ -167,8 +171,124 @@ export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {
       items.length,
       items.map((a) => a.id),
     );
-    results.push({ slotKey, items: items.length, recipients: subscribers.length, skipped: false });
+    results.push({
+      slotKey,
+      items: items.length,
+      recipients: subscribers.length,
+      queued,
+      skipped: false,
+    });
   }
 
   return results;
+}
+
+// ---------- delivery: draining the outbox ----------
+
+/** Rows claimed per round trip — small enough to keep progress granular. */
+const DRAIN_BATCH = 50;
+/** Concurrent provider sends inside a batch (bounded, not per-subscriber serial). */
+const SEND_CONCURRENCY = 8;
+/** A row that fails this many sends is parked as 'failed' (visible, not retried). */
+const MAX_SEND_ATTEMPTS = 3;
+
+export interface DrainResult {
+  sent: number;
+  failed: number;
+  /** Billed SMS segments delivered by THIS run. */
+  segmentsSent: number;
+  /** Deliveries still queued when the run stopped (drained next cron tick). */
+  remaining: number;
+  /** True when the rolling-24h segment budget stopped the run. */
+  halted: boolean;
+}
+
+/**
+ * Send queued digest deliveries in columnar order until the outbox is empty,
+ * the time budget runs out (the cron picks the rest up next tick), or the
+ * rolling-24h billed-segment budget (`digestDailySegmentBudget`, admin-set)
+ * is exhausted — the cost circuit breaker digests never had. A budget halt
+ * with work still queued alerts the admin (only on the run that crossed the
+ * line or enqueued into a tripped breaker, so the 5-minute cron doesn't
+ * re-alert forever).
+ */
+export async function drainDigestOutbox(
+  opts: { timeBudgetMs?: number; newlyEnqueued?: boolean } = {},
+): Promise<DrainResult> {
+  const timeBudgetMs = opts.timeBudgetMs ?? 40_000;
+  const startedAt = Date.now();
+  const settings = await getEngineSettings();
+  const budget = settings.digestDailySegmentBudget;
+  const windowStart = new Date(startedAt - 24 * 60 * 60 * 1000).toISOString();
+  let spent = await digestSegmentsSentSince(windowStart);
+
+  let sent = 0;
+  let failed = 0;
+  let segmentsSent = 0;
+  let halted = false;
+
+  outer: while (Date.now() - startedAt < timeBudgetMs) {
+    if (spent >= budget) {
+      halted = true;
+      break;
+    }
+    const batch = await claimDigestOutbox(DRAIN_BATCH);
+    if (!batch.length) break;
+
+    for (let i = 0; i < batch.length; i += SEND_CONCURRENCY) {
+      if (spent >= budget || Date.now() - startedAt >= timeBudgetMs) {
+        halted = spent >= budget;
+        // Give untouched claimed rows straight back to the queue instead of
+        // waiting out the stale-claim reclaim window.
+        await requeueOutbox(batch.slice(i).map((r) => r.id));
+        break outer;
+      }
+      const chunk = batch.slice(i, i + SEND_CONCURRENCY);
+      await Promise.all(
+        chunk.map(async (row) => {
+          try {
+            await sendOutboxRow(row);
+            await markOutboxSent(row.id);
+            await logMessage({
+              direction: "outbound",
+              channel: row.channel,
+              address: row.address,
+              body: row.subject ? `${row.subject}\n\n${row.body}` : row.body,
+              ...(row.html && { html: row.html }),
+              digestId: row.digestId,
+            });
+            sent++;
+            spent += row.segments;
+            segmentsSent += row.segments;
+          } catch (e) {
+            failed++;
+            await markOutboxFailed(
+              row.id,
+              e instanceof Error ? e.message : String(e),
+              MAX_SEND_ATTEMPTS,
+            );
+          }
+        }),
+      );
+    }
+  }
+
+  const remaining = await queuedOutboxCount();
+  if (halted && remaining > 0 && (segmentsSent > 0 || opts.newlyEnqueued)) {
+    await notifyAdminDigestHalted({ spent, budget, remaining });
+  }
+  return { sent, failed, segmentsSent, remaining, halted };
+}
+
+async function sendOutboxRow(row: OutboxRow): Promise<void> {
+  if (row.channel === "email") {
+    await email.send({
+      to: row.address,
+      subject: row.subject ?? "The Plain Exchange",
+      html: row.html ?? "",
+      text: row.body,
+    });
+    return;
+  }
+  await sms.send(row.address, row.body);
 }

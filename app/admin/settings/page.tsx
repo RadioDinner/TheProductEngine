@@ -34,6 +34,11 @@ const FIELDS: { key: string; label: string; hint?: string }[] = [
     label: "Command replies service-wide per hour",
     hint: "circuit breaker — digests are never counted",
   },
+  {
+    key: "digestDailySegmentBudget",
+    label: "Daily digest segment budget",
+    hint: "billed SMS segments per rolling 24 hours before digest sending pauses (0 pauses digests)",
+  },
 ];
 
 export default async function AdminSettings({

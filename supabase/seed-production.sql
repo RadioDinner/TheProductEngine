@@ -24,7 +24,8 @@ insert into config (key, value) values
   ('offense_ban_threshold',   '3'),
   ('sms_replies_per_hour',    '20'),
   ('sms_pics_per_hour',       '12'),
-  ('sms_global_per_hour',     '500')
+  ('sms_global_per_hour',     '500'),
+  ('digest_daily_segment_budget', '12000')
 on conflict (key) do nothing;
 
 -- ---------- credit packs ----------
