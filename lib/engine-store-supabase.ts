@@ -300,12 +300,16 @@ export async function getSmsAdIdsSince(sinceIso: string | null): Promise<number[
   // gap can carry more than 1000 rows — truncating there would drop ads from
   // the email edition. New-ad items live in digest_items; bumps link through
   // bumps.digest_id.
+  // Order by ad_id so page boundaries are stable across queries: without a
+  // deterministic sort, PostgREST can return rows in a different order per
+  // page and a distinct ad id could fall through the crack between pages.
   for (let offset = 0; ; offset += PAGE) {
     const { data, error } = await db()
       .from("digest_items")
       .select("ad_id, digests!inner(channel, sent_at)")
       .eq("digests.channel", "sms")
       .gt("digests.sent_at", since)
+      .order("ad_id", { ascending: true })
       .range(offset, offset + PAGE - 1);
     if (error) throw error;
     for (const r of data ?? []) ids.add(r.ad_id as number);
@@ -318,6 +322,7 @@ export async function getSmsAdIdsSince(sinceIso: string | null): Promise<number[
       .eq("status", "sent")
       .eq("digests.channel", "sms")
       .gt("digests.sent_at", since)
+      .order("ad_id", { ascending: true })
       .range(offset, offset + PAGE - 1);
     if (error) throw error;
     for (const r of data ?? []) ids.add(r.ad_id as number);
@@ -339,7 +344,12 @@ export async function finalizeDigest(
       ...adIds.map((adId, i) => ({ digest_id: digestId, ad_id: adId, kind: "new", position: i })),
     ];
     if (items.length) {
-      const { error } = await db().from("digest_items").insert(items);
+      // Idempotent on (digest_id, ad_id): if finalize partially failed and the
+      // slot re-runs, re-inserting the same items must be a no-op, not a PK
+      // violation that would wedge the slot un-finalized forever.
+      const { error } = await db()
+        .from("digest_items")
+        .upsert(items, { onConflict: "digest_id,ad_id", ignoreDuplicates: true });
       if (error) throw error;
       // Mark these ads broadcast so getNewDigestAds never re-queues them
       // (migration 0007). Guard on is-null so a bump re-broadcast can't
