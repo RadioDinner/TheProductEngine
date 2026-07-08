@@ -3,3 +3,16 @@ Ok I ran all the migrations, I want to kick off a new session and work on the se
 
 --- 2026-07-08 ---
 commit it to main and continue committing to main. Are the security to-dos complete?
+
+--- 2026-07-08 ---
+I want email users to be able to subscribe by sending an email to "subcribe@theplainexchange.com"
+
+--- 2026-07-08 (AskUserQuestion answers) ---
+Inbound provider: Resend Inbound
+Opt-in style: Subscribe directly + welcome
+
+--- 2026-07-08 ---
+Are ads sufficiently tracked? I want to see how often ads are bumped as well as who my top advertisers are and who is sending the most messages. Also, on the analytics/usage stats I want to see who is the most engaged, and the highest users. I want to see as much data as possible so that I can make good business decisions. For example, if someone is asking for pictures all the time, to the point that it is excessive like 3 pics every hour or something, doesn't have to be that exactly, but something like it. I want to konw about it
+
+--- 2026-07-08 ---
+Now the www.theplainexchange.com/admin gives me this error This page couldn't load. A server error occurred. Reload to try again. ERROR 726844421@E394
