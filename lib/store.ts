@@ -189,22 +189,26 @@ const file = {
     save(store);
   },
 
-  subscribeEmailOnly(email: string): void {
+  /** Returns true if this call newly activated the subscription (was off before). */
+  subscribeEmailOnly(email: string): boolean {
     const store = load();
     const key = email.toLowerCase();
+    const now = new Date().toISOString();
     // A phone member with this email gets their account flag instead.
     const member = Object.values(store.accounts).find(
       (a) => a.email?.toLowerCase() === key,
     );
+    let wasActive: boolean;
     if (member) {
-      member.emailSubscribedAt = new Date().toISOString();
+      wasActive = Boolean(member.emailSubscribedAt);
+      member.emailSubscribedAt = now;
     } else {
-      (store.emailSubscribers ??= {})[key] = {
-        email,
-        subscribedAt: new Date().toISOString(),
-      };
+      const subs = (store.emailSubscribers ??= {});
+      wasActive = Boolean(subs[key]);
+      subs[key] = { email, subscribedAt: now };
     }
     save(store);
+    return !wasActive;
   },
 
   unsubscribeEmail(email: string): void {
@@ -433,8 +437,12 @@ export async function setEmailEdition(phone: string, on: boolean): Promise<void>
   return supabaseConfigured ? remote.setEmailEdition(phone, on) : file.setEmailEdition(phone, on);
 }
 
-/** Confirmed email-only signup (or flags a member whose email matches). */
-export async function subscribeEmailOnly(email: string): Promise<void> {
+/**
+ * Confirmed email-only signup (or flags a member whose email matches).
+ * Returns true when this call newly activated the subscription (it was off
+ * before) — the inbound-email handler uses that to welcome only new sign-ups.
+ */
+export async function subscribeEmailOnly(email: string): Promise<boolean> {
   return supabaseConfigured ? remote.subscribeEmailOnly(email) : file.subscribeEmailOnly(email);
 }
 

@@ -166,19 +166,33 @@ export async function setEmailEdition(phone: string, on: boolean): Promise<void>
   if (error) throw error;
 }
 
-export async function subscribeEmailOnly(email: string): Promise<void> {
+/** Returns true if this call newly activated the subscription (was off before). */
+export async function subscribeEmailOnly(email: string): Promise<boolean> {
   const now = new Date().toISOString();
-  const { data, error } = await db()
+  const { data: existing, error: findError } = await db()
     .from("users")
-    .update({ email_subscribed_at: now })
+    .select("id, email_subscribed_at")
     .ilike("email", email)
-    .select("id");
-  if (error) throw error;
-  if (data?.length) return; // matched an existing member
+    .maybeSingle();
+  if (findError) throw findError;
+  if (existing) {
+    const wasActive = existing.email_subscribed_at != null;
+    const { error } = await db()
+      .from("users")
+      .update({ email_subscribed_at: now })
+      .eq("id", existing.id as string);
+    if (error) throw error;
+    return !wasActive;
+  }
   const { error: insertError } = await db()
     .from("users")
     .insert({ email, email_subscribed_at: now });
-  if (insertError && insertError.code !== "23505") throw insertError;
+  if (insertError) {
+    // A concurrent insert of the same email (unique) — already a member now.
+    if (insertError.code === "23505") return false;
+    throw insertError;
+  }
+  return true;
 }
 
 export async function unsubscribeEmail(email: string): Promise<void> {
