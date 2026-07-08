@@ -1,10 +1,14 @@
 /**
- * Deployment diagnostics: which data-layer mode is active, which env vars
- * are present (booleans and key *kinds* only — never values), and a live
- * database round-trip. Safe to leave in place.
+ * Deployment diagnostics. The DETAILED report (which env vars are present, the
+ * Supabase key *kind*, live table row counts, DB error strings) is operator-
+ * only: it requires `Authorization: Bearer <CRON_SECRET>`, because that posture
+ * is useful reconnaissance to an attacker. Unauthenticated callers get liveness
+ * only. In dev (no NODE_ENV=production) the full report is open for convenience.
  */
-import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
+import { NextResponse, type NextRequest } from "next/server";
 import { db, supabaseConfigured } from "@/lib/db";
+import { isProduction } from "@/lib/env";
 
 function keyKind(key: string | undefined): string {
   if (!key) return "missing";
@@ -14,7 +18,22 @@ function keyKind(key: string | undefined): string {
   return "unrecognized format";
 }
 
-export async function GET() {
+/** Operator check: the detailed report needs the CRON_SECRET bearer (open in dev). */
+function authorized(req: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return !isProduction;
+  const expected = Buffer.from(`Bearer ${secret}`);
+  const actual = Buffer.from(req.headers.get("authorization") ?? "");
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+export async function GET(req: NextRequest) {
+  const mode = supabaseConfigured ? "supabase" : "fixtures/file store";
+  if (!authorized(req)) {
+    // Liveness only — no env posture, key kinds, row counts, or DB errors.
+    return NextResponse.json({ ok: true, mode });
+  }
+
   const report: Record<string, unknown> = {
     mode: supabaseConfigured
       ? "supabase"

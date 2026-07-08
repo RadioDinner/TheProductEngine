@@ -7,14 +7,15 @@
  * RESEND_WEBHOOK_SECRET (the endpoint's `whsec_…` signing secret). Resend signs
  * with Svix headers (svix-id / svix-timestamp / svix-signature); we verify them
  * and fail CLOSED in production if the secret is missing, so nobody can forge a
- * subscribe event. Per the product decision, a valid inbound message subscribes
- * the sender directly and sends a welcome with a one-click unsubscribe link.
+ * subscribe event. The webhook is authenticated, but the email's From header is
+ * trivially spoofable — so a valid inbound message does NOT enroll the sender.
+ * It sends a confirm link (double opt-in); the subscription only happens when
+ * the real inbox owner clicks it. Symmetric with the web form.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { subscribeEmailOnly } from "@/lib/store";
 import { logMessage } from "@/lib/engine-store";
-import { siteUrl, unsubscribeUrl } from "@/lib/email";
+import { confirmUrl, siteUrl } from "@/lib/email";
 import { dispatchEmail } from "@/lib/outbound";
 import { isProduction } from "@/lib/env";
 import { site } from "@/lib/config";
@@ -69,24 +70,22 @@ function addressList(value: unknown): string[] {
   return out;
 }
 
-function welcomeEmail(to: string): { subject: string; html: string; text: string } {
-  const unsub = unsubscribeUrl(to);
-  const subject = `You're subscribed — ${site.name}`;
+function confirmEmail(to: string): { subject: string; html: string; text: string } {
+  const link = confirmUrl(to);
+  const subject = `Confirm your email — ${site.name}`;
   const text = [
-    `You're subscribed to ${site.name} — ${site.region} classifieds by email.`,
+    `You (or someone using this address) asked to get ${site.name}'s ads by email.`,
     ``,
-    `The ads come to this address with each email edition, pictures included.`,
-    `Browse anytime at ${siteUrl}.`,
+    `Confirm to start the email editions: ${link}`,
     ``,
-    `Prefer text messages? Text SUBSCRIBE to ${site.smsNumber}.`,
+    `If you didn't ask for this, ignore this message — you won't be subscribed.`,
     ``,
-    `To stop the emails, unsubscribe here: ${unsub}`,
+    `Prefer text messages? Text SUBSCRIBE to ${site.smsNumber}. Browse anytime at ${siteUrl}.`,
   ].join("\n");
   const html = `<div style="margin:0 auto;max-width:600px;padding:16px;font-family:'Segoe UI',Arial,sans-serif;color:#20262b;">
-    <p style="font-size:18px;font-weight:600;">You're subscribed to ${site.name}.</p>
-    <p style="font-size:15px;line-height:1.5;">The classified ads for ${site.region} will come to this address with each email edition, pictures included. Browse anytime at <a href="${siteUrl}" style="color:#2d5570;">the website</a>.</p>
-    <p style="font-size:14px;color:#5b6670;">Prefer text messages? Text <strong>SUBSCRIBE</strong> to ${site.smsNumber}.</p>
-    <p style="font-size:12px;color:#5b6670;">Didn't sign up, or want to stop? <a href="${unsub}" style="color:#2d5570;">Unsubscribe with one click</a>.</p>
+    <p style="font-size:16px;">You (or someone using this address) asked to get <strong>${site.name}</strong>'s ads by email.</p>
+    <p><a href="${link}" style="display:inline-block;background:#2d5570;color:#ffffff;padding:10px 22px;text-decoration:none;border-radius:2px;font-weight:600;">Confirm my email</a></p>
+    <p style="font-size:13px;color:#5b6670;">If you didn't ask for this, ignore this message — you won't be subscribed.</p>
   </div>`;
   return { subject, html, text };
 }
@@ -139,17 +138,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  const isNew = await subscribeEmailOnly(sender);
-  if (isNew) {
-    const { subject, html, text } = welcomeEmail(sender);
-    try {
-      await dispatchEmail({ to: sender, subject, html, text }, { cls: "transactional" });
-      await logMessage({ direction: "outbound", channel: "email", address: sender, body: `${subject}\n\n${text}`, html });
-    } catch (e) {
-      // Already subscribed; a failed welcome must not fail the webhook (Resend
-      // would retry and, since they're now subscribed, skip the welcome anyway).
-      console.error("[email:inbound] welcome send failed:", e);
-    }
+  // Double opt-in: do NOT enroll on receipt (the From is spoofable). Send a
+  // confirm link; the subscribe happens only when the real owner clicks it.
+  const { subject, html, text } = confirmEmail(sender);
+  try {
+    await dispatchEmail({ to: sender, subject, html, text }, { cls: "transactional" });
+    await logMessage({ direction: "outbound", channel: "email", address: sender, body: `${subject}\n\n${text}`, html });
+  } catch (e) {
+    // A failed confirm send must not fail the webhook (Resend would just retry).
+    console.error("[email:inbound] confirm send failed:", e);
   }
-  return NextResponse.json({ ok: true, subscribed: sender, welcomed: isNew });
+  return NextResponse.json({ ok: true, confirmationSent: sender });
 }

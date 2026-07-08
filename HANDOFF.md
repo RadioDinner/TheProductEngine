@@ -144,8 +144,20 @@ clean:
   drain enforces pause/throttle at batch level so paused rows stay queued
   (never failed). Operator alert emails are class `operator` — never blocked.
 
-**⚠️ Migration 0008 must be run** (blocked_numbers + control config rows) or
-`/admin/insights` + `/admin/settings` throw on the blocklist read.
+**Security round-1 fixes (all on `main`, dev-verified, code-review batch):**
+A 65-agent adversarial audit found 17 confirmed holes (4 P1, 4 P2, 9 P3);
+fixed in three batches — (1) **consent enforced at send time** (STOP/block/unsub
+purge queued digest rows via `cancelQueuedOutboxFor`; drain re-checks the
+blocklist), **login-OTP routed through the global SMS breaker** (unauth `/login`
+could pump unbounded SMS → 10DLC-suspension risk), email `eq` not `ilike`;
+(2) **catch-up cost breaker + STOP/START dedup**, ad-title phone-PII masking;
+(3) **OTP verify made atomic** (`verify_login_code` RPC — **migration 0009**),
+**`/api/health` detail gated behind CRON_SECRET**, **email-in is now double
+opt-in** (spoofable From no longer enrolls anyone; confirm/unsubscribe are POST
+buttons, not GET side-effects). Blocklist/outbox reads fail safe if their table
+is missing. **Deferred (need your call / low sev):** #9 login account-existence
+oracle (inherent to password-vs-OTP UX). **Migrations 0006/0007/0008 applied
+2026-07-08; ⚠️ migration 0009 still to run** (OTP verify errors until it is).
 
 ## What shipped in session 003 (branch `claude/security-todos-noq7gf`)
 

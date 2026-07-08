@@ -13,11 +13,13 @@ below.
 ## A. Blockers — all green before telling anyone
 
 ### A1. One deployment, correctly configured
-- [x] Open `/api/health` on **both** hosts:
-      `https://www.theplainexchange.com/api/health` and
-      `https://the-product-engine.vercel.app/api/health`.
-      Both must show `mode: "supabase"`, `sb_secret (correct)`,
-      `configTable.ok: true`, and identical env booleans.
+- [x] Check `/api/health` on **both** hosts. The detailed report is now
+      operator-only — pass the CRON_SECRET bearer:
+      `curl -H "Authorization: Bearer $CRON_SECRET" https://www.theplainexchange.com/api/health`
+      (and the `the-product-engine.vercel.app` host). Both must show
+      `mode: "supabase"`, `sb_secret (correct)`, `configTable.ok: true`, and
+      identical env booleans. Without the bearer the endpoint returns only
+      `{"ok":true,"mode":"supabase"}` (that's the disclosure fix, not a bug).
 - [ ] If they differ, a second Vercel project still owns the domain: remove
       the domain there (Settings → Domains), add it to **the-product-engine**,
       make `www.theplainexchange.com` primary (apex redirects), delete the
@@ -40,22 +42,15 @@ Redeploy after any change — env edits never touch running deployments.
 ### A3. Database seeded + migrated
 - [x] Run `supabase/seed-production.sql` in the Supabase SQL editor
       (config, packs, word filter — no demo data; safe to re-run).
-- [ ] **Run `supabase/migrations/0006_digest_outbox.sql`** (SQL editor;
-      re-runnable). ⚠️ REQUIRED before the digest-outbox code build deploys:
-      every digest run now writes `digests.item_count` and drains the
-      `digest_outbox` table via its RPCs — without this migration the cron
-      errors and no digest sends. (Migrations 0001–0003 + 0005 already ran.)
-- [ ] **Run `supabase/migrations/0007_ad_broadcast_at.sql`** (SQL editor;
-      re-runnable). ⚠️ REQUIRED alongside 0006: adds `ads.broadcast_at` (the
-      digest builder reads it to find never-broadcast ads). Without it the
-      ad reads throw. Backfills existing broadcast ads automatically.
-- [ ] **Run `supabase/migrations/0008_blocklist_and_controls.sql`** (SQL
-      editor; re-runnable). Adds the `blocked_numbers` table (UNDER ATTACK
-      blocklist) and seeds the config rows for the operator kill switches
-      (`pause_mode`, `under_attack`, `outbound_throttle_per_min`). Without it,
-      `/admin/insights` and `/admin/settings` throw when they read the
-      blocklist. (Session 004: PAUSE switch, UNDER ATTACK mode, blocklist,
-      emoji-strip + link-flag on ad ingest.)
+- [x] **`0006_digest_outbox.sql`**, **`0007_ad_broadcast_at.sql`**,
+      **`0008_blocklist_and_controls.sql`** — all run 2026-07-08 (session 004).
+      (0006 = outbox delivery; 0007 = `ads.broadcast_at`; 0008 = blocklist +
+      operator-control config rows.)
+- [ ] **Run `supabase/migrations/0009_verify_login_code.sql`** (SQL editor;
+      re-runnable). Adds the `verify_login_code` RPC that checks-and-burns a
+      login code under a row lock (fixes the OTP attempt-cap race →
+      brute-force/takeover). Until it's applied, sign-in code verification
+      errors (the app calls the RPC). Run before this deploy reaches prod.
 
 ### A4. Telnyx
 - [x] Campaign fully accepted (TCR_ACCEPTED ✓ 2026-07-07; wait for carrier

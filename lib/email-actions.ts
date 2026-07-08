@@ -1,9 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { confirmUrl, emailDevEcho } from "@/lib/email";
+import { confirmUrl, emailDevEcho, verifyEmailToken } from "@/lib/email";
 import { dispatchEmail } from "@/lib/outbound";
-import { logMessage } from "@/lib/engine-store";
+import { cancelQueuedOutboxFor, logMessage } from "@/lib/engine-store";
+import { subscribeEmailOnly, unsubscribeEmail } from "@/lib/store";
 import { devToolsEnabled } from "@/lib/env";
 import { site } from "@/lib/config";
 
@@ -48,4 +49,33 @@ export async function emailSignup(formData: FormData): Promise<void> {
   // deploy without Resend can't let anyone confirm an address they don't own.
   const showLink = emailDevEcho && devToolsEnabled;
   redirect(showLink ? `/email?sent=1&dev=${encodeURIComponent(link)}` : "/email?sent=1");
+}
+
+/**
+ * Confirm an email subscription — the POST target of the button on
+ * /email/confirm. Doing the subscribe here (not on the page GET) means an email
+ * link scanner / prefetcher that fetches the link can't silently confirm an
+ * address the recipient never chose. The token is re-verified.
+ */
+export async function confirmEmailAction(formData: FormData): Promise<void> {
+  const address = String(formData.get("e") ?? "").trim().toLowerCase();
+  const token = String(formData.get("t") ?? "");
+  if (address && token && verifyEmailToken("confirm", address, token)) {
+    await subscribeEmailOnly(address);
+    redirect("/email/confirm?ok=1");
+  }
+  redirect("/email/confirm?ok=0");
+}
+
+/** Unsubscribe — the POST target of the button on /email/unsubscribe. */
+export async function unsubscribeEmailAction(formData: FormData): Promise<void> {
+  const address = String(formData.get("e") ?? "").trim().toLowerCase();
+  const token = String(formData.get("t") ?? "");
+  if (address && token && verifyEmailToken("unsub", address, token)) {
+    await unsubscribeEmail(address);
+    // Honor the opt-out immediately for any already-queued email edition too.
+    await cancelQueuedOutboxFor(address);
+    redirect("/email/unsubscribe?ok=1");
+  }
+  redirect("/email/unsubscribe?ok=0");
 }

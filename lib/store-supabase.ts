@@ -468,33 +468,14 @@ export async function peekDevEcho(phone: string): Promise<string | null> {
 }
 
 export async function verifyCode(phone: string, code: string): Promise<VerifyCodeResult> {
-  const { data, error } = await db()
-    .from("verification_codes")
-    .select("code_hash, expires_at, attempts")
-    .eq("phone", phone)
-    .maybeSingle();
+  // Atomic check-and-burn under a row lock (migration 0009). The old
+  // read-then-write was a TOCTOU: concurrent wrong-code guesses all read
+  // attempts < max and proceeded, amplifying brute-force of the 6-digit code.
+  const { data, error } = await db().rpc("verify_login_code", {
+    p_phone: phone,
+    p_code_hash: hashCode(code),
+    p_max_attempts: CODE_MAX_ATTEMPTS,
+  });
   if (error) throw error;
-  if (!data) return "none";
-
-  const remove = () => db().from("verification_codes").delete().eq("phone", phone);
-
-  if (new Date(data.expires_at as string).getTime() < Date.now()) {
-    await remove();
-    return "expired";
-  }
-  if ((data.attempts as number) >= CODE_MAX_ATTEMPTS) {
-    await remove();
-    return "attempts";
-  }
-  const attempts = (data.attempts as number) + 1;
-  if (hashCode(code) !== data.code_hash) {
-    const { error: updateError } = await db()
-      .from("verification_codes")
-      .update({ attempts })
-      .eq("phone", phone);
-    if (updateError) throw updateError;
-    return attempts >= CODE_MAX_ATTEMPTS ? "attempts" : "wrong";
-  }
-  await remove();
-  return "ok";
+  return (data as VerifyCodeResult) ?? "none";
 }
