@@ -197,6 +197,16 @@ primary; wait for carrier approval → text HELP as the go-signal; then the
 - **New-subscriber catch-up:** SUBSCRIBE/START sends the most recent digest's
   ads immediately (`sendRecentDigestTo`), best-effort, once per real
   (re)subscribe.
+- **Digest default set to 2×/day** (`slots [7, 18]`). Note: slot count is a
+  subscriber-frequency choice, NOT a cost lever — each ad broadcasts once/day
+  regardless of slot count, so 2× and 4× cost about the same (more slots only
+  repeat the short header). Prod DB still has the 4-slot value; change on
+  `/admin/settings` if you want 2×.
+- **Site shows ads only after they've run:** the public homepage + ad detail
+  now require `broadcast_at` (an ad appears on the website only once it has
+  gone out in a digest). ⚠️ Consequence: the public site is empty until the
+  digest cron actually composes digests — so the external cron pinger
+  (LAUNCH §A5) is now also what populates the website, not just SMS.
 - **Ops artifact (not in repo):** a cost/pricing calculator xlsx was delivered
   to the user (break-even ≈ $1.65/credit at 150 subs / $0.008 SMS / $0.035 MMS;
   digest broadcast cost dominates and scales with free subscribers). Offer to
