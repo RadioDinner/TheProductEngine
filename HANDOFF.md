@@ -112,14 +112,42 @@ the primary domain (apex redirects), align SITE_URL. Legal pages
   = emoji/Unicode containment (16 vs 22 seg) + no accidental MMS. NOT yet wired
   into the send path (that's the delivery rework below).
 
-## What shipped in session 004 (branch `claude/app-audit-three-rounds-ypaa3e`)
+## What shipped in session 004 (branch `claude/app-audit-three-rounds-ypaa3e`, all on `main`)
 
-Round-4 audit kickoff (security → function → profitability). **A Round-1
-security audit ran as an adversarial multi-agent workflow** (10 attack
-surfaces → per-finding refutation → coverage-gap pass); findings folded in
-separately. Alongside it, the user requested threat-vector-reduction controls,
-now built + dev-verified (14/14 scripted engine checks) + `tsc`/`next build`
-clean:
+A three-round audit (security → function → profitability). **Round 1 (security)
+COMPLETE; Round 2 (function) IN PROGRESS; Round 3 (profitability) NOT STARTED.**
+Session state at wrap:
+
+- **10DLC MNO 806 fix (carrier rejection):** the campaign failed MNO review for
+  an unverifiable opt-in CTA. Fixed: a canonical `/sms` "Text message program"
+  page carrying all six required disclosures + homepage/how-it-works/footer
+  disclosures + a marketing-disclosing opt-in confirmation (`OPT_IN_CONFIRMATION`
+  in engine.ts, kept GSM-7). Full campaign-field copy (Description, Message
+  Flow/CTA, opt-in/HELP/STOP messages) delivered in chat — Template #4 (keyword
+  opt-in). **User ran the migrations + resubmitted the campaign 2026-07-08.**
+  ⚠️ OPEN: registered HELP message had support # (330) 203-1031 but the app sends
+  `site.supportPhone` (234) 301-0048 — must match; confirm which is real.
+- **Operator controls** (migration 0008): two-level PAUSE (`bulk`/`all`), UNDER
+  ATTACK mode (suppress-unknown + auto-tighten caps + per-minute throttle),
+  number blocklist (one-click from `/admin/insights`). Single outbound choke
+  point `lib/outbound.ts`.
+- **Content filter** (`lib/content-filter.ts`): emoji stripped + links flagged
+  for review at ad ingest.
+- **Round 1 security: 16 of 17 confirmed findings fixed** (see next block).
+- **Unit test suite added** (`npm test`, 69 checks green): segments/commands/
+  dst/phone — the cost/launch/ownership-critical pure logic. `etParts` extracted
+  to pure `lib/et.ts` so the DST test guards the real code.
+- **Round 2 (function) audit LAUNCHED but not completed this session** — the
+  adversarial workflow (11 correctness dimensions) was running in the background
+  at wrap. Re-run it next session:
+  `Workflow({scriptPath: ".../workflows/scripts/function-audit-r2-wf_8923b4d2-8d7.js"})`
+  (script also under the session dir). A manual pass already cleared 4 pure
+  areas (69/69) — those are now the committed test suite.
+- **Round 3 (profitability): not started.** Break-even ≈ $1.65/credit @ 150 subs
+  (from session 003's xlsx); the new test suite verifies the segment cost math
+  the model rests on.
+
+The operator-controls detail below (dev-verified 14/14 + `tsc`/`next build`):
 
 - **Content filter at ad ingest** (`lib/content-filter.ts`): emoji/pictographic
   chars stripped from the stored+broadcast body (raw kept in the audit log);
