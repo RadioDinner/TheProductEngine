@@ -311,3 +311,6 @@ I just want to know what I should build next, I want to work on the security to 
 
 --- 2026-07-08 00:15 ---
 build it
+
+--- 2026-07-08 01:10 ---
+commit everything to mian
