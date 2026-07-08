@@ -28,13 +28,16 @@ interface AdRow {
   flagged: boolean;
   rejected_reason: string | null;
   rejection_kind: string | null;
+  broadcast_at: string | null;
   users: { phone: string | null } | null;
   ad_photos: { src: string; alt: string | null; width: number | null; height: number | null }[];
-  digest_items?: { digest_id: number }[];
 }
 
 const AD_SELECT =
-  "id, original_body, body, status, created_at, approved_at, expires_at, sold_at, flagged, rejected_reason, rejection_kind, users!inner(phone), ad_photos(src, alt, width, height)";
+  "id, original_body, body, status, created_at, approved_at, expires_at, sold_at, flagged, rejected_reason, rejection_kind, broadcast_at, users!inner(phone), ad_photos(src, alt, width, height)";
+
+/** PostgREST silently caps un-ranged selects at ~1000 rows — page past it. */
+const PAGE = 1000;
 
 function toStored(row: AdRow): StoredAd {
   const photo = row.ad_photos?.[0];
@@ -48,7 +51,7 @@ function toStored(row: AdRow): StoredAd {
     approvedAt: row.approved_at ?? undefined,
     expiresAt: row.expires_at ?? undefined,
     soldAt: row.sold_at ?? undefined,
-    broadcastAt: row.digest_items?.length ? row.created_at : undefined,
+    broadcastAt: row.broadcast_at ?? undefined,
     flagged: row.flagged,
     rejectedReason: row.rejected_reason ?? undefined,
     rejectionKind: (row.rejection_kind as StoredAd["rejectionKind"]) ?? undefined,
@@ -109,14 +112,22 @@ export async function getAdRecord(id: number): Promise<StoredAd | null> {
 }
 
 export async function getPendingAds(): Promise<StoredAd[]> {
-  const { data, error } = await db()
-    .from("ads")
-    .select(AD_SELECT)
-    .eq("status", "pending")
-    .order("flagged", { ascending: false })
-    .order("id", { ascending: true });
-  if (error) throw error;
-  return ((data ?? []) as unknown as AdRow[]).map(toStored);
+  // Paged: a backlog over 1000 must not silently hide the newest
+  // charged-but-unreviewed ads from the moderation queue.
+  const rows: AdRow[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db()
+      .from("ads")
+      .select(AD_SELECT)
+      .eq("status", "pending")
+      .order("flagged", { ascending: false })
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    rows.push(...((data ?? []) as unknown as AdRow[]));
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  return rows.map(toStored);
 }
 
 export async function getAllAds(
@@ -167,20 +178,27 @@ export async function rejectAdRecord(
 }
 
 export async function markAdSold(id: number): Promise<void> {
+  // Defense in depth: only a live listing can be sold, so SOLD can never
+  // publish a pending/unreviewed (or resurrect a rejected) ad even if a
+  // future caller skips the engine's status check.
   const { error } = await db()
     .from("ads")
     .update({ status: "sold", sold_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .in("status", ["approved", "expired"]);
   if (error) throw error;
 }
 
 export async function reviveAd(id: number, ttlDays = AD_TTL_DAYS): Promise<void> {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + ttlDays);
+  // Only an expired ad is revived (the bump-an-expired-ad path); the status
+  // guard keeps a stray call from reactivating a pending/rejected/sold ad.
   const { error } = await db()
     .from("ads")
     .update({ status: "approved", expires_at: expiresAt.toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("status", "expired");
   if (error) throw error;
 }
 
@@ -210,18 +228,19 @@ export async function getQueuedBumps(): Promise<BumpRecord[]> {
 }
 
 export async function getNewDigestAds(cap: number): Promise<StoredAd[]> {
-  // Approved ads that have never appeared in a digest as a "new" item.
+  // Approved ads that have never ridden their included broadcast. Keyed on the
+  // broadcast_at column (migration 0007) so the queue is an O(cap) indexed
+  // read — the old "cap*3 oldest, filter client-side" scan silently starved
+  // new paid ads once already-broadcast approved ads outnumbered the window.
   const { data, error } = await db()
     .from("ads")
-    .select(`${AD_SELECT}, digest_items(digest_id)`)
+    .select(AD_SELECT)
     .eq("status", "approved")
+    .is("broadcast_at", null)
     .order("approved_at", { ascending: true })
-    .limit(cap * 3);
+    .limit(cap);
   if (error) throw error;
-  return ((data ?? []) as unknown as AdRow[])
-    .filter((row) => !(row.digest_items?.length))
-    .slice(0, cap)
-    .map(toStored);
+  return ((data ?? []) as unknown as AdRow[]).map(toStored);
 }
 
 export async function createDigestIfAbsent(
@@ -276,25 +295,35 @@ export async function getLastEmailDigestAt(excludeId: number): Promise<string | 
 
 export async function getSmsAdIdsSince(sinceIso: string | null): Promise<number[]> {
   const since = sinceIso ?? "1970-01-01T00:00:00Z";
-  // New-ad items live in digest_items; bumps link through bumps.digest_id.
-  const { data: items, error: itemsError } = await db()
-    .from("digest_items")
-    .select("ad_id, digests!inner(channel, sent_at)")
-    .eq("digests.channel", "sms")
-    .gt("digests.sent_at", since);
-  if (itemsError) throw itemsError;
-  const { data: bumps, error: bumpsError } = await db()
-    .from("bumps")
-    .select("ad_id, digests!inner(channel, sent_at)")
-    .eq("status", "sent")
-    .eq("digests.channel", "sms")
-    .gt("digests.sent_at", since);
-  if (bumpsError) throw bumpsError;
-  const ids = [
-    ...(items ?? []).map((r) => r.ad_id as number),
-    ...(bumps ?? []).map((r) => r.ad_id as number),
-  ];
-  return [...new Set(ids)];
+  const ids = new Set<number>();
+  // Paged: the first-ever email digest (null watermark) or a long email-off
+  // gap can carry more than 1000 rows — truncating there would drop ads from
+  // the email edition. New-ad items live in digest_items; bumps link through
+  // bumps.digest_id.
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db()
+      .from("digest_items")
+      .select("ad_id, digests!inner(channel, sent_at)")
+      .eq("digests.channel", "sms")
+      .gt("digests.sent_at", since)
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    for (const r of data ?? []) ids.add(r.ad_id as number);
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db()
+      .from("bumps")
+      .select("ad_id, digests!inner(channel, sent_at)")
+      .eq("status", "sent")
+      .eq("digests.channel", "sms")
+      .gt("digests.sent_at", since)
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    for (const r of data ?? []) ids.add(r.ad_id as number);
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  return [...ids];
 }
 
 export async function finalizeDigest(
@@ -312,6 +341,15 @@ export async function finalizeDigest(
     if (items.length) {
       const { error } = await db().from("digest_items").insert(items);
       if (error) throw error;
+      // Mark these ads broadcast so getNewDigestAds never re-queues them
+      // (migration 0007). Guard on is-null so a bump re-broadcast can't
+      // reset the original broadcast time.
+      const { error: broadcastError } = await db()
+        .from("ads")
+        .update({ broadcast_at: new Date().toISOString() })
+        .in("id", adIds)
+        .is("broadcast_at", null);
+      if (broadcastError) throw broadcastError;
     }
     if (bumpIds.length) {
       const { error } = await db()

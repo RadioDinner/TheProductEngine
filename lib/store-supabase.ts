@@ -285,19 +285,31 @@ export async function setSubscribed(phone: string, subscribed: boolean): Promise
 export async function getLedger(phone: string): Promise<LedgerEntry[]> {
   const user = await userByPhone(phone);
   if (!user) return [];
-  const { data, error } = await db()
-    .from("credit_ledger")
-    .select("created_at, delta, kind, note")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false });
-  if (error) throw error;
-  return (data ?? []).map((row) => ({
-    at: row.created_at as string,
-    delta: row.delta as number,
-    kind: row.kind as LedgerEntry["kind"],
-    note: row.note as string,
-  }));
+  // Paged: a busy account past 1000 rows would otherwise return only the
+  // newest 1000. This feeds the benign-rejection refund match (lib/moderation),
+  // so a truncated history could silently downgrade a credit refund to a
+  // free-ad grant when the original charge scrolled off.
+  const entries: LedgerEntry[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db()
+      .from("credit_ledger")
+      .select("created_at, delta, kind, note")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      entries.push({
+        at: row.created_at as string,
+        delta: row.delta as number,
+        kind: row.kind as LedgerEntry["kind"],
+        note: row.note as string,
+      });
+    }
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  return entries;
 }
 
 export async function getCreditBalance(phone: string): Promise<number> {

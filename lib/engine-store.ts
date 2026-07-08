@@ -344,7 +344,9 @@ const file = {
   markSold(id: number): void {
     const store = load();
     const ad = store.ads.find((a) => a.id === id);
-    if (!ad) return;
+    // Only a live listing can be sold — defense in depth, so SOLD can't
+    // publish a pending/unreviewed (or resurrect a rejected) ad.
+    if (!ad || (ad.status !== "approved" && ad.status !== "expired")) return;
     ad.status = "sold";
     ad.soldAt = new Date().toISOString();
     save(store);
@@ -353,7 +355,8 @@ const file = {
   reviveAd(id: number, ttlDays = AD_TTL_DAYS): void {
     const store = load();
     const ad = store.ads.find((a) => a.id === id);
-    if (!ad) return;
+    // Revival is the bump-an-expired-ad path only.
+    if (!ad || ad.status !== "expired") return;
     ad.status = "approved";
     const exp = new Date();
     exp.setDate(exp.getDate() + ttlDays);
