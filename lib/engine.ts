@@ -34,6 +34,7 @@ import {
 } from "@/lib/store";
 import { discountedCents, formatPrice, packs, site } from "@/lib/config";
 import { getEngineSettings, getWordRules, matchWordRules } from "@/lib/settings";
+import { stripEmoji, hasLink, mayPostLinks } from "@/lib/content-filter";
 import { isAllowedPhotoSrc } from "@/lib/media";
 import { chargeSavedCard, paymentsDevMode } from "@/lib/payments";
 import { devToolsEnabled } from "@/lib/env";
@@ -69,13 +70,18 @@ function statusWord(ad: Ad): string {
   return "Available";
 }
 
-async function handleAdSubmission(from: string, body: string, media?: string[]): Promise<Reply> {
+async function handleAdSubmission(from: string, rawBody: string, media?: string[]): Promise<Reply> {
   const account = await ensureAccount(from);
   if (account.postingBannedAt) {
     return {
       body: `Your posting privileges are suspended. Contact us at ${site.supportPhone} or appeal at ThePlainExchange.com.`,
     };
   }
+  // Strip emoji before anything else: they never appear in a stored or
+  // broadcast ad (an emoji flips a whole SMS digest to costly UCS-2 and reads
+  // badly on a flip phone). The raw text the sender typed still lives in the
+  // message audit log. An ad that was ONLY emoji is now empty → same guidance.
+  const body = stripEmoji(rawBody);
   if (!body) {
     return {
       body: `To post an ad, text AD NEW and your ad — for example: AD NEW Horse cart for sale, $1,000 OBO. Call 330-555-0142.`,
@@ -121,11 +127,16 @@ async function handleAdSubmission(from: string, body: string, media?: string[]):
     };
   }
 
+  // Links are walled-garden-blocked for now: don't strip or auto-reject, just
+  // FLAG so a human reviews (edits the link out, or rejects). A future
+  // verified-advertiser tier flips mayPostLinks() without touching this path.
+  const containsLink = !mayPostLinks() && hasLink(body);
+
   const kind = hasPhoto ? "picture" : "text";
   const id = await createAd({
     ownerPhone: from,
     body,
-    flagged: rules.flagged,
+    flagged: rules.flagged || containsLink,
     ...(hasPhoto && {
       photo: { src: photoSrc!, alt: deriveTitle(body), width: 800, height: 600 },
     }),

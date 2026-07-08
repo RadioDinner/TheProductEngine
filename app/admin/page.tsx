@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { adminApprove, adminReject } from "@/lib/admin-actions";
 import { getPendingAds } from "@/lib/engine-store";
+import { findLinks } from "@/lib/content-filter";
 import { formatPhone } from "@/lib/phone";
 import { site } from "@/lib/config";
 
@@ -27,13 +28,21 @@ export default async function AdminReview() {
       <h1>Review queue</h1>
       {pending.length === 0 && <p>Nothing waiting for review.</p>}
       <ul className="sim-pending">
-        {pending.map((ad) => (
+        {pending.map((ad) => {
+          const links = findLinks(ad.body);
+          return (
           <li key={ad.id} className="myad-row">
             <p className="myad-title">
               #{ad.id} from {formatPhone(ad.ownerPhone)}
               {ad.flagged && <span className="ad-sold"> Flagged</span>}
+              {links.length > 0 && <span className="ad-sold"> 🔗 Link</span>}
               <span className="status-muted"> · {submitted(ad.createdAt)}</span>
             </p>
+            {links.length > 0 && (
+              <p className="myad-dates">
+                Contains a link ({links.join(", ")}) — edit it out before approving, or reject.
+              </p>
+            )}
             {ad.photo && (
               <Image
                 className="ad-thumb"
@@ -74,7 +83,8 @@ export default async function AdminReview() {
               </div>
             </form>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </>
   );
