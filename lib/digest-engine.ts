@@ -8,9 +8,10 @@
  * a rolling-24h billed-segment budget. Idempotency comes from the
  * one-digest-per-slot rule plus the outbox unique key.
  */
-import { getEngineSettings } from "@/lib/settings";
+import { getEngineSettings, effectiveSmsCaps } from "@/lib/settings";
 import {
   claimDigestOutbox,
+  countRecentOutboundContaining,
   createDigestIfAbsent,
   digestSegmentsSentSince,
   digestsSentOnDay,
@@ -25,6 +26,7 @@ import {
   markOutboxSent,
   queuedOutboxCount,
   requeueOutbox,
+  reserveSms,
   type OutboxInsert,
   type OutboxRow,
   type StoredAd,
@@ -123,11 +125,20 @@ export function composeCatchupMessages(items: StoredAd[]): string[] {
  * aren't waiting hours for the next slot. Best-effort and separate from the
  * broadcast outbox (it's one recipient); returns how many ads were sent.
  */
+/** Header marker used to dedup catch-up sends (see composeCatchupMessages). */
+const CATCHUP_MARKER = "most recent ads:";
+
 export async function sendRecentDigestTo(phone: string): Promise<number> {
   // Catch-up is a bulk send: skip it under any pause, and while UNDER ATTACK
   // (so a spoofed-number subscribe flood can't each pull a burst of SMS).
   const settings = await getEngineSettings();
   if (pauseBlocks("bulk", settings.pauseMode) || settings.underAttack) return 0;
+  // At most one catch-up per number per day: a STOP/START (or STOP/SUBSCRIBE)
+  // loop must not re-trigger repeated catch-up bursts — this lane otherwise
+  // bypasses both SMS cost breakers.
+  if ((await countRecentOutboundContaining(phone, CATCHUP_MARKER, 24 * 60 * 60 * 1000)) > 0) {
+    return 0;
+  }
   const ids = await getRecentDigestAdIds();
   if (!ids.length) return 0;
   const ads: StoredAd[] = [];
@@ -136,6 +147,14 @@ export async function sendRecentDigestTo(phone: string): Promise<number> {
     if (ad && ad.status === "approved") ads.push(ad); // still-available only
   }
   if (!ads.length) return 0;
+  // Count catch-up against the service-wide SMS breaker (it otherwise bypassed
+  // both the reply cap and the digest segment budget).
+  const caps = effectiveSmsCaps(settings);
+  if (
+    !(await reserveSms(phone, "reply", caps.repliesPerHour, caps.globalPerHour, caps.picsPerHour, 60 * 60 * 1000))
+  ) {
+    return 0;
+  }
   ads.sort((a, b) => a.id - b.id);
   for (const body of composeCatchupMessages(ads)) {
     await sms.send(phone, body);

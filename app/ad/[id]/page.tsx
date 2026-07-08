@@ -32,7 +32,9 @@ export async function generateMetadata({
   if (!ad || ad.status === "expired") {
     return { title: `Listing not available — ${site.name}` };
   }
-  const title = `${deriveTitle(ad.body)} — ${site.name}`;
+  // Metadata is public/crawlable — always mask a phone number in the title too
+  // (the description already masks).
+  const title = `${maskPhonesPlain(deriveTitle(ad.body))} — ${site.name}`;
   const description = maskPhonesPlain(ad.body);
   return {
     title,
@@ -82,7 +84,10 @@ export default async function AdPage({ params }: { params: Promise<{ id: string 
 
   const session = await readSession();
   const sold = ad.status === "sold";
-  const title = deriveTitle(ad.body);
+  // Mask a phone number in the heading for signed-out visitors (the body below
+  // is already masked via MaskedText).
+  const rawTitle = deriveTitle(ad.body);
+  const title = session ? rawTitle : maskPhonesPlain(rawTitle);
   const rest = deriveRest(ad.body);
 
   return (

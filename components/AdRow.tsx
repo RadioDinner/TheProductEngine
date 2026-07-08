@@ -1,10 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { type Ad, derivePrice, deriveRest, deriveTitle } from "@/lib/ads";
-import { MaskedText } from "@/components/MaskedText";
+import { MaskedText, maskPhonesPlain } from "@/components/MaskedText";
 
 export function AdRow({ ad, revealed }: { ad: Ad; revealed?: boolean }) {
-  const title = deriveTitle(ad.body);
+  // The title is the ad's lead clause, which can contain a phone number — mask
+  // it for signed-out visitors just like the body, so PII doesn't leak in the
+  // heading / aria-label.
+  const rawTitle = deriveTitle(ad.body);
+  const title = revealed ? rawTitle : maskPhonesPlain(rawTitle);
   const price = derivePrice(ad.body);
   const sold = ad.status === "sold";
   // When the excerpt opens with the exact price already shown in the price
