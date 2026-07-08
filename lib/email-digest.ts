@@ -6,7 +6,8 @@
  * with the same idempotency guarantees.
  */
 import { siteUrl, unsubscribeUrl } from "@/lib/email";
-import { etParts, type SlotResult } from "@/lib/digest-engine";
+import { type SlotResult } from "@/lib/digest-engine";
+import { etParts } from "@/lib/et";
 import { deriveTitle, deriveRest } from "@/lib/ads";
 import {
   createDigestIfAbsent,

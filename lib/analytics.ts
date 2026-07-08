@@ -5,7 +5,7 @@
  * migration 0002); a no-op with zero counts when Supabase isn't configured.
  */
 import { db, supabaseConfigured } from "@/lib/db";
-import { etParts } from "@/lib/digest-engine";
+import { etParts } from "@/lib/et";
 
 export interface VisitStats {
   today: number;

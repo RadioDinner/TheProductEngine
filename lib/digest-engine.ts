@@ -38,6 +38,7 @@ import { site } from "@/lib/config";
 import { notifyAdminDigestHalted } from "@/lib/notify";
 import { pauseBlocks } from "@/lib/outbound";
 import { listBlocked } from "@/lib/blocklist";
+import { etParts } from "@/lib/et";
 import { gsmSanitize, packMessages, segmentation } from "@/lib/sms-segments";
 
 const SLOT_LABELS: Record<number, string> = {
@@ -46,23 +47,6 @@ const SLOT_LABELS: Record<number, string> = {
   16: "afternoon",
   20: "evening",
 };
-
-/** ET calendar date (YYYY-MM-DD) and hour for a moment in time. */
-export function etParts(date: Date): { day: string; hour: number } {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  return {
-    day: `${get("year")}-${get("month")}-${get("day")}`,
-    hour: Number(get("hour")) % 24,
-  };
-}
 
 /**
  * Max GSM-7 characters per digest message. Ads are packed whole into as few
