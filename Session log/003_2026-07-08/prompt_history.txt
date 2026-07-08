@@ -16,3 +16,6 @@ Are ads sufficiently tracked? I want to see how often ads are bumped as well as 
 
 --- 2026-07-08 ---
 Now the www.theplainexchange.com/admin gives me this error This page couldn't load. A server error occurred. Reload to try again. ERROR 726844421@E394
+
+--- 2026-07-08 ---
+Current status is Pending MNO Review

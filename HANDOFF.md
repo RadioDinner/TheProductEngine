@@ -55,9 +55,14 @@ and delivers through the `digest_outbox` table + its RPCs
 (the digest builder reads it to find never-broadcast ads; backfilled). The
 ad reads and the cron error until both are run.
 
-**Telnyx 10DLC:** campaign **TCR_ACCEPTED (2026-07-08)** — brand + campaign
-recreated after the Aug-2025 failure (brand-level "does not qualify"; fixed by
-Standard EIN brand). Awaiting carrier acceptance (hrs–2 days). Number
+**Telnyx 10DLC:** campaign **Pending MNO Review (as of 2026-07-08)** — TCR
+accepted it and the carriers (T-Mobile/AT&T/Verizon) are now reviewing. This is
+the last gate before the campaign goes active; typically hours to a few
+business days, T-Mobile usually the slowest. Nothing to do but wait unless an
+MNO returns a rejection with feedback. Real A2P sending stays blocked until all
+MNOs approve → then text HELP as the go-signal. (Brand + campaign were
+recreated after the Aug-2025 failure — brand-level "does not qualify," fixed by
+a Standard EIN brand.) Number
 **(330) 960-7170** (real number now everywhere; replaced the 555 placeholder).
 User reports the dead Supabase webhook URL swapped → should be
 `https://www.theplainexchange.com/api/telnyx/inbound` (v2), failover the
