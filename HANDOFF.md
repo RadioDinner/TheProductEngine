@@ -186,6 +186,21 @@ primary; wait for carrier approval → text HELP as the go-signal; then the
   reader (only the digest builder needs it). **Rule going forward: run additive
   migrations before/with merging schema-dependent code — prod auto-deploys
   `main`.**
+- **Support phone `(234) 301-0048`** (`site.supportPhone`): the "call for
+  help / to arrange payment" number, distinct from the SMS number people text.
+- **BUYCREDIT by text + saved-card discount:** `BUYCREDIT <pack>` quotes a
+  discounted price (new `savedCardDiscountPercent` setting, default 10%) and a
+  `YES` charges the saved card off-session (`payments.chargeSavedCard`).
+  Idempotent via a deterministic ledger ref (no new table); dev-simulated,
+  gated on ENABLE_DEV_TOOLS. **The live off-session Stripe path needs a real
+  test once Stripe keys are set.**
+- **New-subscriber catch-up:** SUBSCRIBE/START sends the most recent digest's
+  ads immediately (`sendRecentDigestTo`), best-effort, once per real
+  (re)subscribe.
+- **Ops artifact (not in repo):** a cost/pricing calculator xlsx was delivered
+  to the user (break-even ≈ $1.65/credit at 150 subs / $0.008 SMS / $0.035 MMS;
+  digest broadcast cost dominates and scales with free subscribers). Offer to
+  commit it under `docs/` if they want it versioned.
 
 **Build still pending (non-security):** **photo re-hosting to Supabase
 Storage** on inbound MMS (reliability; the image-host allowlist already lets
