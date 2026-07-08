@@ -19,8 +19,13 @@ export type Command =
   | { kind: "unknown"; text: string };
 
 function adNumber(arg: string): number | null {
-  const match = arg.match(/\d{3,6}/);
-  return match ? Number(match[0]) : null;
+  // Full digit run, not a 6-digit prefix: "SOLD 12345678" must not silently
+  // become ad #123456 (a phone number in the text becomes a not-found id,
+  // caught by the ownership check, instead of a wrong-ad match).
+  const match = arg.match(/\d{3,}/);
+  if (!match) return null;
+  const id = Number(match[0]);
+  return Number.isSafeInteger(id) ? id : null;
 }
 
 export function parseCommand(raw: string): Command {
