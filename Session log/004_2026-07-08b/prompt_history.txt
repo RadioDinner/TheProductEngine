@@ -1,0 +1,8 @@
+--- 2026-07-08 17:30 ---
+I want to kick off another round of testing. I want every single potential hole scanned and analyzed. I want the app/system to be comprehensively audited for security, function and profitability. We'll do security round one, function round 2, and profitability round 3. Ask me questions to prompt thought on different aspect of each round. I want this thing to ship as close to bulletproof as possible
+
+--- 2026-07-08 17:35 (AskUserQuestion answers) ---
+Threat model (harden hardest against): Denial-of-wallet / spam floods; Credit / account theft (ATO); Content / moderation bypass; Insider / key compromise (ALL FOUR)
+Top priority when goals trade off: Trust & privacy
+Fix vs report: Find -> fix -> verify (ship-ready)
+Profit goal: Sustainable break-even income long term. I'm willing to burn cash to get it there, IF burning cash is the route to get there.
