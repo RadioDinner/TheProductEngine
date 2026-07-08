@@ -8,6 +8,9 @@ import { AD_TTL_DAYS } from "@/lib/ads";
 import type {
   BumpRecord,
   CreateAdOptions,
+  InsightAd,
+  InsightBump,
+  InsightMessage,
   MessageRecord,
   NewAdInput,
   OutboxInsert,
@@ -636,6 +639,82 @@ export async function queuedOutboxCount(): Promise<number> {
     .in("status", ["queued", "sending"]);
   if (error) throw error;
   return count ?? 0;
+}
+
+// --- admin insights readers (paged; aggregation happens in lib/insights.ts) ---
+
+export async function listInboundSince(sinceIso: string): Promise<InsightMessage[]> {
+  const rows: InsightMessage[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db()
+      .from("messages")
+      .select("address, body, channel, created_at")
+      .eq("direction", "inbound")
+      .gte("created_at", sinceIso)
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    for (const r of data ?? []) {
+      rows.push({
+        address: r.address as string,
+        body: (r.body as string | null) ?? "",
+        channel: r.channel as InsightMessage["channel"],
+        createdAt: r.created_at as string,
+      });
+    }
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  return rows;
+}
+
+export async function listBumpsSince(sinceIso: string | null): Promise<InsightBump[]> {
+  const rows: InsightBump[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    let query = db()
+      .from("bumps")
+      .select("ad_id, requested_at, status")
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (sinceIso) query = query.gte("requested_at", sinceIso);
+    const { data, error } = await query;
+    if (error) throw error;
+    for (const r of data ?? []) {
+      rows.push({
+        adId: r.ad_id as number,
+        requestedAt: r.requested_at as string,
+        status: r.status as string,
+      });
+    }
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  return rows;
+}
+
+export async function listAdsLite(): Promise<InsightAd[]> {
+  const rows: InsightAd[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db()
+      .from("ads")
+      .select("id, status, created_at, approved_at, sold_at, users!inner(phone)")
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    for (const r of data ?? []) {
+      // PostgREST returns a to-one embed as an object; supabase-js types it as
+      // an array, so cast through unknown like the AdRow reads above.
+      const owner = (r.users as unknown as { phone: string | null } | null)?.phone ?? "";
+      rows.push({
+        id: r.id as number,
+        ownerPhone: owner,
+        status: r.status as InsightAd["status"],
+        createdAt: r.created_at as string,
+        approvedAt: (r.approved_at as string | null) ?? undefined,
+        soldAt: (r.sold_at as string | null) ?? undefined,
+      });
+    }
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  return rows;
 }
 
 /** Command replies only — digest broadcasts (digest_id set) and email don't count. */

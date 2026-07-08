@@ -109,6 +109,27 @@ export type OutboxInsert = Omit<
   "id" | "status" | "attempts" | "lastError" | "claimedAt" | "sentAt" | "createdAt"
 >;
 
+// --- lightweight rows for the admin insights aggregations (lib/insights.ts) ---
+export interface InsightMessage {
+  address: string;
+  body: string;
+  channel: "sms" | "mms" | "email";
+  createdAt: string;
+}
+export interface InsightBump {
+  adId: number;
+  requestedAt: string;
+  status: string;
+}
+export interface InsightAd {
+  id: number;
+  ownerPhone: string;
+  status: StoredAdStatus;
+  createdAt: string;
+  approvedAt?: string;
+  soldAt?: string;
+}
+
 /** A claimed row older than this is presumed orphaned by a dead run. */
 const OUTBOX_RECLAIM_MS = 10 * 60 * 1000;
 
@@ -567,6 +588,33 @@ const file = {
       .length;
   },
 
+  listInboundSince(sinceIso: string): InsightMessage[] {
+    const since = Date.parse(sinceIso);
+    return load()
+      .messages.filter((m) => m.direction === "inbound" && Date.parse(m.createdAt) >= since)
+      .map((m) => ({ address: m.address, body: m.body, channel: m.channel, createdAt: m.createdAt }));
+  },
+
+  listBumpsSince(sinceIso: string | null): InsightBump[] {
+    const since = sinceIso ? Date.parse(sinceIso) : 0;
+    return load()
+      .bumps.filter((b) => Date.parse(b.requestedAt) >= since)
+      .map((b) => ({ adId: b.adId, requestedAt: b.requestedAt, status: b.status }));
+  },
+
+  listAdsLite(): InsightAd[] {
+    const store = load();
+    sweep(store);
+    return store.ads.map((a) => ({
+      id: a.id,
+      ownerPhone: a.ownerPhone,
+      status: a.status,
+      createdAt: a.createdAt,
+      approvedAt: a.approvedAt,
+      soldAt: a.soldAt,
+    }));
+  },
+
   seenInboundProviderId(providerId: string): boolean {
     return load().messages.some((m) => m.providerId === providerId);
   },
@@ -781,6 +829,21 @@ export async function digestSegmentsSentSince(sinceIso: string): Promise<number>
 /** Deliveries still waiting (queued or mid-send) — for cron results/reports. */
 export async function queuedOutboxCount(): Promise<number> {
   return supabaseConfigured ? remote.queuedOutboxCount() : file.queuedOutboxCount();
+}
+
+/** Inbound messages since a moment — powers the admin insights aggregations. */
+export async function listInboundSince(sinceIso: string): Promise<InsightMessage[]> {
+  return supabaseConfigured ? remote.listInboundSince(sinceIso) : file.listInboundSince(sinceIso);
+}
+
+/** Bump requests since a moment (null = all-time) — for bump-frequency insights. */
+export async function listBumpsSince(sinceIso: string | null): Promise<InsightBump[]> {
+  return supabaseConfigured ? remote.listBumpsSince(sinceIso) : file.listBumpsSince(sinceIso);
+}
+
+/** Minimal ad rows (id, owner, status, dates) for advertiser/funnel insights. */
+export async function listAdsLite(): Promise<InsightAd[]> {
+  return supabaseConfigured ? remote.listAdsLite() : file.listAdsLite();
 }
 
 export async function logMessage(rec: Omit<MessageRecord, "id" | "createdAt">): Promise<void> {

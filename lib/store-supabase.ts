@@ -14,6 +14,7 @@ import {
   type Account,
   type CreateCodeResult,
   type LedgerEntry,
+  type LedgerSince,
   type VerifyCodeResult,
 } from "@/lib/store";
 
@@ -379,6 +380,31 @@ export async function spendCredits(
   });
   if (error) throw error;
   return data === true;
+}
+
+export async function listLedgerSince(sinceIso: string): Promise<LedgerSince[]> {
+  const rows: LedgerSince[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db()
+      .from("credit_ledger")
+      .select("delta, kind, created_at, users!inner(phone)")
+      .gte("created_at", sinceIso)
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    for (const r of data ?? []) {
+      // to-one embed comes back as an object at runtime; cast through unknown.
+      const phone = (r.users as unknown as { phone: string | null } | null)?.phone ?? "";
+      rows.push({
+        phone,
+        delta: r.delta as number,
+        kind: r.kind as LedgerSince["kind"],
+        at: r.created_at as string,
+      });
+    }
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  return rows;
 }
 
 export async function hasLedgerRef(ref: string): Promise<boolean> {

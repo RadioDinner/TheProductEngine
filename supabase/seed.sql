@@ -85,7 +85,8 @@ insert into config (key, value) values
   ('sms_replies_per_hour',    '20'),
   ('sms_pics_per_hour',       '12'),
   ('sms_global_per_hour',     '500'),
-  ('digest_daily_segment_budget', '12000')
+  ('digest_daily_segment_budget', '12000'),
+  ('pic_abuse_per_day',        '15')
 on conflict (key) do nothing;
 
 -- ---------- credit packs ----------

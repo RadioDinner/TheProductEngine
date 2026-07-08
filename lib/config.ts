@@ -61,6 +61,12 @@ export const engineDefaults = {
    * segments — raise it deliberately as the list grows. 0 pauses digests.
    */
   digestDailySegmentBudget: 12000,
+  /**
+   * Insights: flag a number that requests more than this many pictures (PIC)
+   * in a rolling 24h as "excessive" on the admin dashboard. Purely a reporting
+   * threshold — the actual send cap is smsPicsPerHour. 0 disables the flag.
+   */
+  picAbusePerDay: 15,
   /** Starter word-filter list (flag-for-review). */
   filterWords: ["gun", "firearm", "rifle", "whiskey", "tobacco"],
 } as const;

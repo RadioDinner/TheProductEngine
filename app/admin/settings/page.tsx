@@ -39,6 +39,11 @@ const FIELDS: { key: string; label: string; hint?: string }[] = [
     label: "Daily digest segment budget",
     hint: "billed SMS segments per rolling 24 hours before digest sending pauses (0 pauses digests)",
   },
+  {
+    key: "picAbusePerDay",
+    label: "Flag excessive picture requests (per day)",
+    hint: "on Insights, flag any number asking for more than this many pictures in 24h (0 turns the flag off)",
+  },
 ];
 
 export default async function AdminSettings({

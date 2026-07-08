@@ -58,6 +58,14 @@ export interface LedgerEntry {
 export type CreateCodeResult = { ok: true; devEcho?: string } | { ok: false; error: "rate" };
 export type VerifyCodeResult = "ok" | "wrong" | "expired" | "attempts" | "none";
 
+/** A ledger entry with its owner's phone — for the admin spend/revenue insights. */
+export interface LedgerSince {
+  phone: string;
+  delta: number;
+  kind: LedgerKind;
+  at: string;
+}
+
 export const STARTER_FREE_ADS = 3;
 export const CODE_TTL_MS = 5 * 60 * 1000;
 export const CODE_MAX_ATTEMPTS = 5;
@@ -317,6 +325,17 @@ const file = {
     return (load().ledgers[phone] ?? []).reduce((sum, entry) => sum + entry.delta, 0);
   },
 
+  listLedgerSince(sinceIso: string): LedgerSince[] {
+    const since = Date.parse(sinceIso);
+    const out: LedgerSince[] = [];
+    for (const [phone, entries] of Object.entries(load().ledgers)) {
+      for (const e of entries) {
+        if (Date.parse(e.at) >= since) out.push({ phone, delta: e.delta, kind: e.kind, at: e.at });
+      }
+    }
+    return out;
+  },
+
   addLedgerEntry(phone: string, entry: Omit<LedgerEntry, "at">): void {
     const store = load();
     (store.ledgers[phone] ??= []).push({ at: new Date().toISOString(), ...entry });
@@ -493,6 +512,11 @@ export async function setSubscribed(phone: string, subscribed: boolean): Promise
 
 export async function getLedger(phone: string): Promise<LedgerEntry[]> {
   return supabaseConfigured ? remote.getLedger(phone) : file.getLedger(phone);
+}
+
+/** All ledger entries since a moment, tagged with owner phone — spend/revenue insights. */
+export async function listLedgerSince(sinceIso: string): Promise<LedgerSince[]> {
+  return supabaseConfigured ? remote.listLedgerSince(sinceIso) : file.listLedgerSince(sinceIso);
 }
 
 export async function getCreditBalance(phone: string): Promise<number> {

@@ -781,6 +781,38 @@ a.btn-sm:hover {
   font-weight: 600;
 }
 
+/* ---------- Data tables (admin insights) ---------- */
+
+.table-scroll {
+  margin: var(--space-sm) 0 var(--space-lg);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+
+.data-table th {
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.data-table td:not(:first-child),
+.data-table th:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Admin portal ---------- */
 
 .admin {
