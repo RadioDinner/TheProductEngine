@@ -167,6 +167,21 @@ in `lib/email-digest.ts` (`BUSINESS_ADDRESS`, still "PO Box 000"); make www
 primary; wait for carrier approval → text HELP as the go-signal; then the
 ~15-min smoke walk in LAUNCH.md §B.
 
+**Also shipped later in session 003 (on `main`):**
+- **Email-in subscribe:** `subscribe@theplainexchange.com` → `/api/email/inbound`
+  (Resend Inbound, Svix-verified, `RESEND_WEBHOOK_SECRET`, fail-closed) →
+  direct-subscribe + welcome. Ops: add the inbound address in Resend + set the
+  secret.
+- **Admin insights** (`/admin/insights`): top advertisers, who-texts-most,
+  excessive-PIC flags (`picAbusePerDay` setting, default 15/day), engagement
+  leaderboard, ad funnel, most-bumped ads; 7/30/90-day window.
+- **⚠️ Prod incident + hardening:** a `main` auto-deploy landed the broadcast_at
+  code before migrations 0006/0007 ran → shared `AD_SELECT` hit a missing
+  column → `/admin` 500'd. Fixed by not selecting broadcast_at in the shared
+  reader (only the digest builder needs it). **Rule going forward: run additive
+  migrations before/with merging schema-dependent code — prod auto-deploys
+  `main`.**
+
 **Build still pending (non-security):** **photo re-hosting to Supabase
 Storage** on inbound MMS (reliability; the image-host allowlist already lets
 Telnyx/Supabase photos render). Cost/throughput reality for scale, unchanged:

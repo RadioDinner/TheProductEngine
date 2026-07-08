@@ -79,6 +79,34 @@ unilaterally (documented in SECURITY-TODO "Verification pass"): defer the 3
 starter free-ads to first post (product/UX call), and rate-limit inbound audit
 logging (recommend NOT — it's the forensics record).
 
+## Follow-on features + a production incident (later in session 003)
+
+After "commit to main," work continued directly on `main`:
+
+- **Email-in subscribe** (`4843cd0`): emailing `subscribe@theplainexchange.com`
+  now subscribes the sender and sends a welcome (one-click unsubscribe). New
+  `/api/email/inbound` webhook — Resend Inbound, Svix-signature-verified,
+  fail-closed in prod (`RESEND_WEBHOOK_SECRET`). User chose direct-subscribe
+  over double-opt-in. 15/15 tests. **Ops:** add the inbound address in Resend,
+  point its webhook here, set the secret.
+- **Digest self-review fixes** (`4630f1a`): `getSmsAdIdsSince` paging needed a
+  stable ORDER BY; `finalizeDigest` digest_items insert made idempotent
+  (upsert) so a re-run after a partial failure converges.
+- **PRODUCTION INCIDENT — `/admin` 500** (`cf46e29`): prod auto-deploys `main`,
+  and the deploy landed the broadcast_at code before migrations 0006/0007 were
+  run, so the shared `AD_SELECT` selected a missing column and every ad read
+  (admin queue, SMS) 500'd. Fix: dropped `broadcast_at` from the shared reader
+  (only the digest builder needs it), so a migration-lag deploy now degrades to
+  "digests wait" instead of taking down /admin. **Lesson: run additive
+  migrations before/with merging schema-dependent code, since prod auto-deploys
+  main.** The user still must run 0006+0007 to restore digests.
+- **Admin insights dashboard** (`5c724cb`): `/admin/insights` — top advertisers,
+  who-texts-most, excessive-PIC flags (new `picAbusePerDay` setting, default
+  15/day), engagement leaderboard, ad funnel, most-bumped ads. Selectable
+  window (7/30/90d). Pure aggregation over paged reads, both stores. Degrades
+  gracefully if a read fails. Verified end-to-end (activity → admin login →
+  every table incl. the EXCESSIVE flag).
+
 ## Open questions / next step
 
 1. **Ops:** run migrations 0006 **and 0007** (both checkboxes in LAUNCH.md

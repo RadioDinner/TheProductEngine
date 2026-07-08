@@ -114,6 +114,11 @@ won't send. Pick one:
       (SPF/DKIM in Resend), and replace the placeholder mailing address in
       `lib/email-digest.ts` (`BUSINESS_ADDRESS`, currently "PO Box 000") —
       CAN-SPAM requires a real one. Email stays dormant until the key is set.
+- [ ] **Email-in subscribe** (optional): to let people subscribe by emailing
+      `subscribe@theplainexchange.com`, add that Inbound address in Resend
+      (its MX setup), point its webhook at `/api/email/inbound`, and set
+      `RESEND_WEBHOOK_SECRET` (the endpoint's `whsec_…`). Without the secret the
+      route fails closed in prod. Optionally set `EMAIL_INBOUND_ADDRESS`.
 - [ ] **Logo** → site header + real `favicon.ico` (clears the /favicon 404s
       in the logs).
 - [ ] **External vetting** (~$40) when subscribers × digests approach
