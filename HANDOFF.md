@@ -3,7 +3,33 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-07-08 (session 004).
+**Last updated:** 2026-07-09 (session 005).
+
+## What shipped in session 005 (branch `claude/audit-continuation-qb7i83`)
+
+Continued + finished the three-round audit. **Round 2 (function) COMPLETE, Round
+3 (profitability) COMPLETE.** Plus the deferred starter-grant decision.
+
+- **Starter free-ad grant deferred to first `AD NEW`** (user decision; **migration
+  0010** — ⚠️ apply before merge to main; the code selects `starter_granted_at`).
+  Accounts mint with 0 passes; `grantStarterAdsIfFirst` grants once on first post.
+  A number that only subscribes/checks balance mints no passes. Dev-verified.
+- **R2 correctness — 13 distinct bugs fixed** (65 raw findings → deduped),
+  `npm test` now 79/79. Production-critical: (1) Supabase `listMessages` returned
+  the OLDEST N → BUYCREDIT/YES purchase dead for any seller with >50 messages;
+  (2) Supabase never expired ads → live-on-site-forever; added `expireDueAds()`
+  in the digest cron. Plus: command parsing (`STOP.`/`YES.`/`/ help`), packMessages
+  ceiling, settings blank→0 + midnight-slot, digest double-send on bookkeeping
+  error, email exempt from the SMS budget, blocklist 500-cap, set-password ticket
+  path, admin ad-# search, email body dup, expiry-date display. See
+  `Session log/005_*/session_log.md` for the full list.
+- **R3 profitability — `docs/profitability.md`** (code-grounded model). Bottom
+  line: profitable to ~150 free subs at current pricing, then underwater as the
+  free list grows. Inventories code-fixable leaks (free bumps/revive, uncapped
+  PIC MMS, budget-invisible catch-up) + pricing levers + a staged scaling
+  playbook. **Safety-valve code changes + pricing model await a user decision.**
+- All session-005 work is on `claude/audit-continuation-qb7i83` (NOT yet merged
+  to main). ⚠️ **Migration 0010 must run before this branch reaches prod.**
 
 ## What this project is
 
