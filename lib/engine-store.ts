@@ -228,6 +228,7 @@ function toSiteAd(ad: StoredAd): Ad {
     body: ad.body,
     status: (ad.status === "approved" ? "available" : ad.status) as AdStatus,
     approvedAt: new Date(ad.approvedAt ?? ad.createdAt),
+    ...(ad.expiresAt && { expiresAt: new Date(ad.expiresAt) }),
     ownerPhone: ad.ownerPhone,
     ...(ad.photo && { photo: ad.photo }),
   };

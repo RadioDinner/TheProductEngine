@@ -27,6 +27,16 @@ export function run(t) {
   t.eq("gibberish -> unknown", parseCommand("asdf qwer").kind, "unknown");
   t.eq("empty -> unknown", parseCommand("").kind, "unknown");
   t.eq("whitespace only -> unknown", parseCommand("   ").kind, "unknown");
+  // Trailing punctuation on a single-word keyword still routes (compliance: STOP.)
+  t.eq("STOP. -> stop", parseCommand("STOP.").kind, "stop");
+  t.eq("Stop! -> stop", parseCommand("Stop!").kind, "stop");
+  t.eq("YES. -> confirm", parseCommand("YES.").kind, "confirm");
+  t.eq("SUBSCRIBE, -> subscribe", parseCommand("SUBSCRIBE,").kind, "subscribe");
+  t.eq("credits! (no arg) -> credits", parseCommand("credits!").kind, "credits");
+  t.eq("SOLD. 1042 keeps id", parseCommand("SOLD. 1042").id, 1042);
+  // Slash followed by a space still routes to the keyword.
+  t.eq("/ help (slash+space) -> help", parseCommand("/ help").kind, "help");
+  t.eq("all-punctuation token -> unknown", parseCommand("...").kind, "unknown");
   // Known quirk (harmless — no pack is 100, so it's rejected downstream):
   t.eq("buycredit 1000 parses first 3 digits = 100", parseCommand("buycredit 1000").amount, 100);
 }

@@ -31,4 +31,15 @@ export function run(t) {
 
   t.eq("totalSegments sums parts", totalSegments(["a".repeat(160), "b".repeat(161)]), 3);
   t.eq("gsmSanitize keeps ascii, maps curly quotes", gsmSanitize("it’s “ok”"), "it's \"ok\"");
+
+  // Regression: groups AFTER the first carry no header, so the old
+  // `cur.length > headerLines.length` test misfired and force-appended a 2nd ad
+  // past the ceiling. Each ad here fits alone but no two fit together at max 20.
+  const p4 = packMessages({
+    header: "HDR",
+    adLines: ["1111111111", "2222222222", "3333333333"],
+    maxGsm: 20,
+  });
+  t.eq("later groups respect the segment ceiling (count)", p4.length, 3);
+  t.eq("no packed message exceeds the ceiling", p4.every((m) => septets(m) <= 20), true);
 }

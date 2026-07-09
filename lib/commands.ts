@@ -30,10 +30,17 @@ function adNumber(arg: string): number | null {
 }
 
 export function parseCommand(raw: string): Command {
-  const text = raw.trim().replace(/^\/+/, "");
+  // Re-trim after stripping a leading slash so "/ help" (slash then space)
+  // doesn't leave a leading space that swallows the keyword.
+  const text = raw.trim().replace(/^\/+/, "").trim();
   const lower = text.toLowerCase();
-  const [word = ""] = lower.split(/\s+/, 1);
-  const rest = text.slice(word.length).trim();
+  // First whitespace-delimited token; strip trailing punctuation so "STOP.",
+  // "YES!", "SUBSCRIBE," still route (people and carriers add punctuation to a
+  // keyword). `rest` is sliced from the ORIGINAL token so args survive
+  // ("SOLD. 1234" -> id 1234). Trailing digits are kept (no keyword ends in one).
+  const [rawWord = ""] = lower.split(/\s+/, 1);
+  const word = rawWord.replace(/[^a-z0-9]+$/g, "");
+  const rest = text.slice(rawWord.length).trim();
 
   switch (word) {
     case "subscribe":

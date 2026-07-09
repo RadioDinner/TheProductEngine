@@ -48,16 +48,17 @@ export async function getReportSummary(): Promise<ReportSummary> {
     const phones = await listSubscriberPhones();
     const emails = await listEmailRecipients();
     const ads = await getAllAds(undefined, undefined, 1000);
-    const recent = (await searchAccounts("", 500))
+    const subscribed = (await searchAccounts("", 500))
       .filter((a: Account) => a.subscribedAt)
-      .sort((a, b) => Date.parse(b.subscribedAt!) - Date.parse(a.subscribedAt!))
-      .slice(0, 10)
-      .map((a) => ({ phone: a.phone, at: a.subscribedAt! }));
+      .sort((a, b) => Date.parse(b.subscribedAt!) - Date.parse(a.subscribedAt!));
+    // recent = the newest 10 for display; the 7-day COUNT must come from the
+    // full list, not this slice (it was capped at 10 and diverged from Supabase).
+    const recent = subscribed.slice(0, 10).map((a) => ({ phone: a.phone, at: a.subscribedAt! }));
     const since = Date.parse(sevenDaysAgo());
     return {
       smsSubscribers: phones.length,
       emailSubscribers: emails.length,
-      newSubscribers7d: recent.filter((r) => Date.parse(r.at) >= since).length,
+      newSubscribers7d: subscribed.filter((a) => Date.parse(a.subscribedAt!) >= since).length,
       adsTotal: ads.length,
       ads7d: ads.filter((a) => Date.parse(a.createdAt) >= since).length,
       adsPending: ads.filter((a) => a.status === "pending").length,

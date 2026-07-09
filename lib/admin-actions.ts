@@ -105,7 +105,15 @@ const SETTING_MAX: Record<string, number> = {
 export async function adminSaveSettings(formData: FormData): Promise<void> {
   await requireAdmin();
   const num = (name: string) => {
-    const value = Number(formData.get(name));
+    const raw = formData.get(name);
+    // A blank or absent field means "leave this setting unchanged" — NOT zero.
+    // Number("") and Number(null) are both 0, which used to silently save 0 and
+    // disable core features (digestCap 0 = no ads, budget 0 = digests paused,
+    // maxChars 0 = every ad too long). An explicit "0" the admin types is kept.
+    if (raw === null) return null;
+    const str = String(raw).trim();
+    if (str === "") return null;
+    const value = Number(str);
     if (!Number.isFinite(value) || value < 0) return null;
     const max = SETTING_MAX[name] ?? Number.MAX_SAFE_INTEGER;
     return Math.min(Math.floor(value), max);
@@ -113,7 +121,11 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
   const parseSlots = (name: string) =>
     String(formData.get(name) ?? "")
       .split(",")
-      .map((s) => Number(s.trim()))
+      .map((s) => s.trim())
+      // Drop empty tokens BEFORE Number(): a trailing/double comma ("7,18,")
+      // otherwise became Number("") = 0 = an unintended midnight (hour 0) slot.
+      .filter((s) => s !== "")
+      .map(Number)
       .filter((n) => Number.isInteger(n) && n >= 0 && n <= 23);
 
   const update: Record<string, number | number[]> = {};

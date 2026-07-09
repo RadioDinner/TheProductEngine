@@ -145,7 +145,18 @@ export async function getAllAds(
 ): Promise<StoredAd[]> {
   let query = db().from("ads").select(AD_SELECT).order("created_at", { ascending: false }).limit(limit);
   if (status) query = query.eq("status", status);
-  if (q?.trim()) query = query.ilike("body", `%${q.trim()}%`);
+  if (q?.trim()) {
+    const needle = q.trim();
+    const asId = Number(needle);
+    // Match the ad NUMBER too (file-store parity): admins search "1042" to find
+    // ad #1042. Only take the id branch for a pure-integer needle, so the value
+    // interpolated into the .or() filter is digits-only (no PostgREST injection).
+    if (Number.isSafeInteger(asId) && asId > 0 && String(asId) === needle) {
+      query = query.or(`body.ilike.%${needle}%,id.eq.${asId}`);
+    } else {
+      query = query.ilike("body", `%${needle}%`);
+    }
+  }
   const { data, error } = await query;
   if (error) throw error;
   return ((data ?? []) as unknown as AdRow[]).map(toStored);

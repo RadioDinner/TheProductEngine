@@ -23,6 +23,8 @@ export interface Ad {
   status: AdStatus;
   /** When the ad was approved and broadcast (digest slot times). */
   approvedAt: Date;
+  /** Real listing expiry, stamped at approval from the configurable expiryDays. */
+  expiresAt?: Date | null;
   /** The seller's phone (their SMS identity), 10 digits. */
   ownerPhone: string;
   photo?: { src: string; alt: string; width: number; height: number };
@@ -32,6 +34,11 @@ export interface Ad {
 export const AD_TTL_DAYS = 30;
 
 export function adExpiresAt(ad: Ad): Date {
+  // Prefer the ad's real stored expiry (approval time + the configured
+  // expiryDays); fall back to approvedAt + default TTL only for ads that
+  // predate the stored value, so the seller-facing date is never wrong when
+  // an admin changes expiryDays from the 30-day default.
+  if (ad.expiresAt) return new Date(ad.expiresAt);
   const d = new Date(ad.approvedAt);
   d.setDate(d.getDate() + AD_TTL_DAYS);
   return d;

@@ -277,7 +277,12 @@ export async function searchAccounts(q: string, limit = 25): Promise<Account[]> 
   const needle = q.trim();
   if (needle) {
     const digits = needle.replace(/\D/g, "");
-    query = digits
+    // A PURELY numeric query (phone, with optional spaces/dashes) searches by
+    // phone; anything with a letter searches by email. The old test — "any
+    // digit -> phone only" — sent alphanumeric queries like "john5" to phone
+    // and never matched the email the admin was looking for.
+    const numericOnly = digits.length > 0 && digits === needle.replace(/[\s()+-]/g, "");
+    query = numericOnly
       ? query.ilike("phone", `%${digits}%`)
       : query.ilike("email", `%${needle}%`);
   }

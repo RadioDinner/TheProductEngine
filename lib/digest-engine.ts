@@ -286,15 +286,16 @@ export async function drainDigestOutbox(
   let segmentsSent = 0;
   let halted = false;
   let budgetHalt = false; // only a budget halt alerts; pause/throttle are deliberate
+  // SMS rows skipped because the segment budget is spent. They're left CLAIMED
+  // (not requeued yet) so the next claim skips past them to the email rows
+  // behind, then released back to the queue at the end of the run. The digest
+  // segment budget caps SMS COST only; the email edition is 0-segment and
+  // documented exempt, so it keeps flowing even while SMS is budget-halted.
+  const deferredSms: number[] = [];
 
   outer: while (Date.now() - startedAt < timeBudgetMs) {
     if (paused) {
       halted = true;
-      break;
-    }
-    if (spent >= budget) {
-      halted = true;
-      budgetHalt = true;
       break;
     }
     if (sent >= runCap) {
@@ -305,9 +306,8 @@ export async function drainDigestOutbox(
     if (!batch.length) break;
 
     for (let i = 0; i < batch.length; i += SEND_CONCURRENCY) {
-      if (spent >= budget || sent >= runCap || Date.now() - startedAt >= timeBudgetMs) {
-        halted = spent >= budget || sent >= runCap;
-        budgetHalt = budgetHalt || spent >= budget;
+      if (sent >= runCap || Date.now() - startedAt >= timeBudgetMs) {
+        halted = sent >= runCap;
         // Give untouched claimed rows straight back to the queue instead of
         // waiting out the stale-claim reclaim window.
         await requeueOutbox(batch.slice(i).map((r) => r.id));
@@ -316,14 +316,40 @@ export async function drainDigestOutbox(
       const chunk = batch.slice(i, i + SEND_CONCURRENCY);
       await Promise.all(
         chunk.map(async (row) => {
+          // SMS over the segment budget: leave it claimed (skipped this run) so
+          // the claim reaches the exempt email rows behind it; released at the
+          // end. Email rows (segments 0) always pass.
+          if (row.channel === "sms" && spent >= budget) {
+            deferredSms.push(row.id);
+            budgetHalt = true;
+            return;
+          }
           if (row.channel === "sms" && blockedSet.has(row.address)) {
             // Blocked after this digest composed — drop without sending.
             await markOutboxFailed(row.id, "skipped: recipient blocked", 1);
             failed++;
             return;
           }
+          // ONLY a send failure may mark the row failed (→ retry). Once the
+          // provider has accepted the message, a bookkeeping error (markSent /
+          // logMessage) must NOT flip it to failed, or the retry re-sends the
+          // SMS — a double broadcast at double cost, and the segment budget
+          // undercounts. Count the spend the moment the send succeeds.
           try {
             await sendOutboxRow(row);
+          } catch (e) {
+            failed++;
+            await markOutboxFailed(
+              row.id,
+              e instanceof Error ? e.message : String(e),
+              MAX_SEND_ATTEMPTS,
+            );
+            return;
+          }
+          sent++;
+          spent += row.segments;
+          segmentsSent += row.segments;
+          try {
             await markOutboxSent(row.id);
             await logMessage({
               direction: "outbound",
@@ -333,20 +359,26 @@ export async function drainDigestOutbox(
               ...(row.html && { html: row.html }),
               digestId: row.digestId,
             });
-            sent++;
-            spent += row.segments;
-            segmentsSent += row.segments;
           } catch (e) {
-            failed++;
-            await markOutboxFailed(
+            // Already delivered — never re-drive the provider from here. Worst
+            // case the row re-claims after the stale window; that's the rare,
+            // bounded exception, not an immediate double-send on every DB blip.
+            console.error(
+              "[digest] post-send bookkeeping failed for outbox row",
               row.id,
-              e instanceof Error ? e.message : String(e),
-              MAX_SEND_ATTEMPTS,
+              e instanceof Error ? e.message : e,
             );
           }
         }),
       );
     }
+  }
+
+  // Release the budget-deferred SMS rows back to 'queued' for the next window
+  // (they were held claimed only to let the drain reach the email rows behind).
+  if (deferredSms.length) {
+    await requeueOutbox(deferredSms);
+    halted = true;
   }
 
   const remaining = await queuedOutboxCount();

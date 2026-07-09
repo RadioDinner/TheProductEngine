@@ -104,18 +104,30 @@ export async function listBlocked(): Promise<BlockedNumber[]> {
     return [...load().numbers].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }
   try {
-    const { data, error } = await db()
-      .from("blocked_numbers")
-      .select("phone, reason, created_by, created_at")
-      .order("created_at", { ascending: false })
-      .limit(500);
-    if (error) throw error;
-    return (data ?? []).map((r) => ({
-      phone: r.phone as string,
-      reason: (r.reason as string) ?? "",
-      createdAt: (r.created_at as string) ?? new Date(0).toISOString(),
-      ...(r.created_by ? { createdBy: r.created_by as string } : {}),
-    }));
+    // Page through ALL rows: the digest broadcaster builds its block-set from
+    // this list, so a 500-row cap meant blocked numbers past 500 kept receiving
+    // broadcasts. PostgREST caps a single response at ~1000, so loop.
+    const PAGE = 1000;
+    const out: BlockedNumber[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await db()
+        .from("blocked_numbers")
+        .select("phone, reason, created_by, created_at")
+        .order("created_at", { ascending: false })
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      const rows = data ?? [];
+      out.push(
+        ...rows.map((r) => ({
+          phone: r.phone as string,
+          reason: (r.reason as string) ?? "",
+          createdAt: (r.created_at as string) ?? new Date(0).toISOString(),
+          ...(r.created_by ? { createdBy: r.created_by as string } : {}),
+        })),
+      );
+      if (rows.length < PAGE) break;
+    }
+    return out;
   } catch (e) {
     // Empty (not an error) if the table isn't there yet — the digest drain and
     // admin pages must keep working before migration 0008 is applied.

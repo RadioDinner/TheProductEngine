@@ -88,20 +88,25 @@ export function packMessages(params: {
   const headerLines = params.header ? [params.header] : [];
   const groups: string[][] = [];
   let cur = [...headerLines];
-  const hasAd = () => cur.length > headerLines.length;
+  // Whether the CURRENT group already holds an ad. A boolean, not
+  // `cur.length > headerLines.length`: groups after the first carry no header,
+  // so that comparison misfired and force-appended a 2nd ad past the ceiling.
+  let curHasAd = false;
 
   for (const line of params.adLines) {
     const candidate = [...cur, line].join(sep);
-    if (!hasAd() || fitsOneSegment(candidate, max)) {
-      // Place the first ad even if header+ad overflows one segment; otherwise
-      // only add while it still fits.
+    if (!curHasAd || fitsOneSegment(candidate, max)) {
+      // Place the first ad of a group even if header+ad overflows one segment;
+      // after that, only add another ad while the group still fits one segment.
       cur.push(line);
+      curHasAd = true;
     } else {
       groups.push(cur);
       cur = [line];
+      curHasAd = true;
     }
   }
-  if (hasAd()) groups.push(cur);
+  if (curHasAd) groups.push(cur);
 
   const messages = groups.map((g) => g.join(sep));
 

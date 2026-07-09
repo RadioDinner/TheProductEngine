@@ -68,9 +68,11 @@ export const engineDefaults = {
   smsGlobalPerHour: 500,
   /**
    * Digest circuit breaker: billed SMS segments the digest broadcaster may
-   * send in any rolling 24h window. When it's met, queued deliveries wait
+   * send in any rolling 24h window. When it's met, queued SMS deliveries wait
    * and the admin is alerted. 12,000 ≈ 4 slots × ~430 subscribers × 7
-   * segments — raise it deliberately as the list grows. 0 pauses digests.
+   * segments — raise it deliberately as the list grows. 0 pauses SMS digests.
+   * This is an SMS COST cap only — the 0-segment email edition is exempt and
+   * keeps flowing; use pauseMode to stop every channel.
    */
   digestDailySegmentBudget: 12000,
   /**

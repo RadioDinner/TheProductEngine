@@ -36,11 +36,15 @@ export function composeEmailHtml(ads: StoredAd[], dateLabel: string, unsubHref: 
       const photo = ad.photo
         ? `<img src="${siteUrl}${ad.photo.src}" alt="${esc(ad.photo.alt)}" width="280" style="max-width:100%;height:auto;border:1px solid #ddd;margin:8px 0 0;" />`
         : "";
+      // The title already shows the lead clause (the whole body for a
+      // single-clause ad); only render the excerpt when there's a real
+      // remainder, else "|| ad.body" reprinted the full body twice.
+      const rest = deriveRest(ad.body);
       return `<div style="padding:14px 0;border-bottom:1px solid #ddd;">
         <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:20px;font-weight:600;color:#20262b;">
           <a href="${siteUrl}/ad/${ad.id}" style="color:#20262b;text-decoration:none;">${esc(deriveTitle(ad.body))}</a>
         </p>
-        <p style="margin:4px 0 0;font-size:16px;color:#20262b;line-height:1.5;">${esc(deriveRest(ad.body) || ad.body)}</p>
+        ${rest ? `<p style="margin:4px 0 0;font-size:16px;color:#20262b;line-height:1.5;">${esc(rest)}</p>` : ""}
         ${photo}
         <p style="margin:6px 0 0;font-size:13px;color:#5b6670;">Ad #${ad.id} · <a href="${siteUrl}/ad/${ad.id}" style="color:#2d5570;">view on the website</a></p>
       </div>`;

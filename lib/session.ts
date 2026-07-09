@@ -98,5 +98,8 @@ export async function readTicket(): Promise<string | null> {
 
 export async function destroyTicket(): Promise<void> {
   const jar = await cookies();
-  jar.delete(TICKET_COOKIE);
+  // Must delete at the SAME path the ticket was set with ("/login"); a bare
+  // delete targets path "/" and leaves the cookie intact, so the one-time
+  // set-password proof stayed reusable for its full TTL.
+  jar.delete({ name: TICKET_COOKIE, path: "/login" });
 }

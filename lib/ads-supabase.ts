@@ -19,12 +19,13 @@ interface AdRowDb {
   body: string;
   status: string;
   approved_at: string;
+  expires_at: string | null;
   users: { phone: string | null } | null;
   ad_photos: PhotoRow[];
 }
 
 const SELECT =
-  "id, body, status, approved_at, users!inner(phone), ad_photos(src, width, height, alt, position)";
+  "id, body, status, approved_at, expires_at, users!inner(phone), ad_photos(src, width, height, alt, position)";
 
 function toAd(row: AdRowDb): Ad {
   const photo = [...(row.ad_photos ?? [])].sort((a, b) => a.position - b.position)[0];
@@ -33,6 +34,7 @@ function toAd(row: AdRowDb): Ad {
     body: row.body,
     status: (row.status === "approved" ? "available" : row.status) as AdStatus,
     approvedAt: new Date(row.approved_at),
+    ...(row.expires_at && { expiresAt: new Date(row.expires_at) }),
     ownerPhone: row.users?.phone ?? "",
     ...(photo && {
       photo: {
