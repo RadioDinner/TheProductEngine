@@ -64,21 +64,20 @@ marked done, now fixed (commits on `main`):
   echoes** (email confirm link, plaintext OTP storage) were gated on a missing
   provider key rather than `devToolsEnabled`. All fixed and dev-verified.
 
-**Two deferred — need a decision, not code (the one remaining `partial`):**
+**Two deferred — DECIDED 2026-07-09 (session 005):**
 
-- [ ] **[decision] Starter free ads are still granted on account creation**, so
-      a real number that only ever texts CREDITS/MYADS/SUBSCRIBE mints an
-      account + 3 free-ad passes (rate-limited + Telnyx-signature-gated, but
-      not "deferred to first real use" as the P1 item proposed). Deferring the
-      grant changes the welcome UX ("you have 3 free ads"). **Decide:** keep
-      grant-on-first-contact (simple, low real cost — the passes only convert
-      to value by posting, which needs a real number), or defer the grant to
-      the first `AD NEW`.
-- [ ] **[decision] Inbound message logging is not rate-limited** — every
-      signature-valid inbound writes an audit row before any cap. Recommend
-      **keeping** it: the audit log is the abuse-forensics record, rate-limiting
-      it creates blind spots, and it's already gated by the Telnyx signature +
-      per-message provider-id dedup. Flagged only so the call is explicit.
+- [x] **[decision→code] Defer the starter free-ad grant to the first `AD NEW`.**
+      RESOLVED: user chose to defer. Accounts are now created with ZERO passes
+      (no "Welcome" ledger row at creation); the 3-ad grant is applied lazily on
+      the seller's first real post via `grantStarterAdsIfFirst` (idempotent,
+      guarded by the new `users.starter_granted_at` — **migration 0010**), so a
+      number that only ever texts SUBSCRIBE/CREDITS/MYADS mints no passes. The
+      race is closed by a conditional update on `starter_granted_at IS NULL`.
+      Site copy ("your first 3 ads are free") updated. Dev-verified end to end.
+- [x] **[decision] Keep inbound message logging un-rate-limited.** RESOLVED:
+      user chose to keep it (matches the recommendation) — the audit log is the
+      abuse-forensics record; it stays gated by the Telnyx signature + the
+      per-message provider-id dedup. No code change.
 
 ---
 

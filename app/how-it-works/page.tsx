@@ -70,8 +70,8 @@ export default function HowItWorks() {
       <p>
         Every ad is read and approved by a person before it runs. Once approved, your ad goes
         out in the next digest and is listed on this website for 30 days. You’ll get a text
-        with your ad’s number when it’s in. New members start with{" "}
-        <strong>3 free ads</strong> — picture or plain.
+        with your ad’s number when it’s in. Your{" "}
+        <strong>first 3 ads are free</strong> — picture or plain.
       </p>
 
       <h2>Manage your ad</h2>

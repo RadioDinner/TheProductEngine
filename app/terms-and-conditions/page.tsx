@@ -85,8 +85,8 @@ export default function TermsAndConditions() {
       <h2>Credits and payments</h2>
       <p>
         Posting an ad uses credits (a picture ad uses more than a plain one — current
-        prices are shown when you post and by texting <strong>CREDITS</strong>). New
-        members start with free ads. Credit packs are sold on this website and, with a
+        prices are shown when you post and by texting <strong>CREDITS</strong>). Your
+        first few ads are free. Credit packs are sold on this website and, with a
         saved card, by texting <strong>BUYCREDIT</strong> — you will always be asked to
         confirm before anything is charged. Payments are processed by Stripe.
       </p>

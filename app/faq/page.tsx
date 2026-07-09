@@ -36,7 +36,7 @@ export default function Faq() {
       <p>
         Getting the ads is free. Browsing the website is free. Posting an ad uses ad
         credits — a plain ad costs 1 credit, a picture ad costs 5 — and{" "}
-        <strong>new members start with 3 free ads</strong>, picture or plain. Credit packs
+        <strong>your first 3 ads are free</strong>, picture or plain. Credit packs
         are sold on this website under <Link href="/account">your account</Link>.
       </p>
 

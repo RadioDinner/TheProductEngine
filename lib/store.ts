@@ -31,6 +31,13 @@ export interface Account {
   stripeCustomerId?: string | null;
   /** Starter-grant ad passes: consumed before credits, either ad type. */
   freeAds: number;
+  /**
+   * When the one-time starter free-ad grant was applied — set on the seller's
+   * FIRST `AD NEW`, not on account creation. Null = not yet granted (a number
+   * that only ever subscribes/checks balance never mints free-ad passes). Once
+   * set, the grant never re-fires (even after the passes are used up).
+   */
+  starterGrantedAt?: string | null;
   offenseCount?: number;
   postingBannedAt?: string | null;
 }
@@ -130,7 +137,7 @@ const file = {
   getAccount(phone: string): Account | null {
     const account = load().accounts[phone];
     if (!account) return null;
-    account.freeAds ??= STARTER_FREE_ADS;
+    account.freeAds ??= 0;
     return account;
   },
 
@@ -138,17 +145,19 @@ const file = {
     const store = load();
     let account = store.accounts[phone];
     if (!account) {
-      account = { phone, createdAt: new Date().toISOString(), freeAds: STARTER_FREE_ADS };
+      // No starter grant here — a bare first contact mints an account but ZERO
+      // free-ad passes. The grant is applied lazily on the first AD NEW
+      // (grantStarterAdsIfFirst), so numbers that never post cost nothing.
+      account = {
+        phone,
+        createdAt: new Date().toISOString(),
+        freeAds: 0,
+        starterGrantedAt: null,
+      };
       store.accounts[phone] = account;
-      (store.ledgers[phone] ??= []).push({
-        at: account.createdAt,
-        delta: 0,
-        kind: "grant",
-        note: `Welcome — ${STARTER_FREE_ADS} free ads, picture or plain`,
-      });
       save(store);
     }
-    account.freeAds ??= STARTER_FREE_ADS;
+    account.freeAds ??= 0;
     return account;
   },
 
@@ -156,11 +165,37 @@ const file = {
     const store = load();
     const account = store.accounts[phone];
     if (!account) return false;
-    account.freeAds ??= STARTER_FREE_ADS;
+    account.freeAds ??= 0;
     if (account.freeAds <= 0) return false;
     account.freeAds -= 1;
     save(store);
     return true;
+  },
+
+  /**
+   * Apply the one-time starter free-ad grant if it hasn't been given yet, and
+   * return the (updated) account. Idempotent: the second call is a no-op even
+   * after the passes are spent, so first-post-only — never on account creation
+   * and never again. Writes the "Welcome" ledger note at grant time.
+   */
+  grantStarterAdsIfFirst(phone: string): Account {
+    const store = load();
+    const account = store.accounts[phone];
+    if (!account) throw new Error(`grantStarterAdsIfFirst: no account for ${phone}`);
+    account.freeAds ??= 0;
+    if (!account.starterGrantedAt) {
+      const at = new Date().toISOString();
+      account.freeAds += STARTER_FREE_ADS;
+      account.starterGrantedAt = at;
+      (store.ledgers[phone] ??= []).push({
+        at,
+        delta: 0,
+        kind: "grant",
+        note: `Welcome — ${STARTER_FREE_ADS} free ads, picture or plain`,
+      });
+      save(store);
+    }
+    return account;
   },
 
   grantFreeAd(phone: string): void {
@@ -267,25 +302,22 @@ const file = {
       })
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
       .slice(0, limit)
-      .map((a) => ({ ...a, freeAds: a.freeAds ?? STARTER_FREE_ADS }));
+      .map((a) => ({ ...a, freeAds: a.freeAds ?? 0 }));
   },
 
   upsertAccountPassword(phone: string, passwordHash: string): Account {
     const store = load();
     let account = store.accounts[phone];
     if (!account) {
+      // Claiming an account (setting a password) does not grant free ads — like
+      // every other creation path, the starter grant waits for the first AD NEW.
       account = {
         phone,
         createdAt: new Date().toISOString(),
-        freeAds: STARTER_FREE_ADS,
+        freeAds: 0,
+        starterGrantedAt: null,
       };
       store.accounts[phone] = account;
-      (store.ledgers[phone] ??= []).push({
-        at: account.createdAt,
-        delta: 0,
-        kind: "grant",
-        note: `Welcome — ${STARTER_FREE_ADS} free ads, picture or plain`,
-      });
     }
     account.passwordHash = passwordHash;
     save(store);
@@ -435,6 +467,17 @@ export async function ensureAccount(phone: string): Promise<Account> {
 /** Spend one starter pass if any remain. */
 export async function consumeFreeAd(phone: string): Promise<boolean> {
   return supabaseConfigured ? remote.consumeFreeAd(phone) : file.consumeFreeAd(phone);
+}
+
+/**
+ * Apply the one-time starter free-ad grant on the seller's first AD NEW (not on
+ * account creation). Idempotent — returns the account with the grant applied,
+ * or unchanged if it was already granted. Call it in the AD-NEW path only.
+ */
+export async function grantStarterAdsIfFirst(phone: string): Promise<Account> {
+  return supabaseConfigured
+    ? remote.grantStarterAdsIfFirst(phone)
+    : file.grantStarterAdsIfFirst(phone);
 }
 
 /** Return a starter pass (benign rejection refund). */

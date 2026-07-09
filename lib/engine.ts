@@ -29,6 +29,7 @@ import {
   ensureAccount,
   getAccount,
   getCreditBalance,
+  grantStarterAdsIfFirst,
   hasLedgerRef,
   setSubscribed,
   spendCredits,
@@ -133,7 +134,12 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   const photoSrc = media?.[0];
   const hasPhoto = isAllowedPhotoSrc(photoSrc);
   const cost = hasPhoto ? settings.costPhoto : settings.costText;
-  const canPass = account.freeAds > 0;
+  // Apply the one-time starter free-ad grant now — on the seller's FIRST real
+  // AD NEW (past the empty/too-long/auto-reject gates), not on account creation.
+  // A number that only ever subscribes or checks its balance never mints passes.
+  // Idempotent: once granted it never re-fires, even after the passes run out.
+  const posting = await grantStarterAdsIfFirst(from);
+  const canPass = posting.freeAds > 0;
   const balance = await getCreditBalance(from);
   // Fast reject for the clearly-unfunded; the atomic charge below is the
   // authority under concurrency.
@@ -168,7 +174,7 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
       kind: "spend",
       note: `Free ad used — ad #${id} (${kind})`,
     });
-    chargeNote = `Used 1 free ad — ${Math.max(0, account.freeAds - 1)} left.`;
+    chargeNote = `Used 1 free ad — ${Math.max(0, posting.freeAds - 1)} left.`;
   } else if (await spendCredits(from, cost, `Ad #${id} (${kind})`)) {
     chargeNote = `${cost} credit${cost === 1 ? "" : "s"} — ${Math.max(0, balance - cost)} left.`;
   } else {

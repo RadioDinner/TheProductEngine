@@ -27,13 +27,14 @@ interface UserRow {
   subscribed_at: string | null;
   email_subscribed_at: string | null;
   free_ads: number;
+  starter_granted_at: string | null;
   offense_count: number;
   posting_banned_at: string | null;
   stripe_customer_id: string | null;
 }
 
 const USER_SELECT =
-  "id, phone, email, password_hash, created_at, subscribed_at, email_subscribed_at, free_ads, offense_count, posting_banned_at, stripe_customer_id";
+  "id, phone, email, password_hash, created_at, subscribed_at, email_subscribed_at, free_ads, starter_granted_at, offense_count, posting_banned_at, stripe_customer_id";
 
 function toAccount(row: UserRow): Account {
   return {
@@ -44,6 +45,7 @@ function toAccount(row: UserRow): Account {
     subscribedAt: row.subscribed_at,
     emailSubscribedAt: row.email_subscribed_at,
     freeAds: row.free_ads,
+    starterGrantedAt: row.starter_granted_at,
     offenseCount: row.offense_count,
     postingBannedAt: row.posting_banned_at,
     stripeCustomerId: row.stripe_customer_id,
@@ -82,41 +84,30 @@ export async function upsertAccountPassword(
     if (error) throw error;
     return toAccount({ ...existing, password_hash: passwordHash });
   }
+  // Claiming an account (setting a password) grants NO free ads — the starter
+  // grant is deferred to the first AD NEW like every other creation path.
   const { data, error } = await db()
     .from("users")
-    .insert({ phone, password_hash: passwordHash })
+    .insert({ phone, password_hash: passwordHash, free_ads: 0 })
     .select(USER_SELECT)
     .single();
   if (error) throw error;
-  const row = data as UserRow;
-  const { error: ledgerError } = await db().from("credit_ledger").insert({
-    user_id: row.id,
-    delta: 0,
-    kind: "grant",
-    note: `Welcome — ${STARTER_FREE_ADS} free ads, picture or plain`,
-  });
-  if (ledgerError) throw ledgerError;
-  return toAccount(row);
+  return toAccount(data as UserRow);
 }
 
 export async function ensureAccount(phone: string): Promise<Account> {
   const existing = await userByPhone(phone);
   if (existing) return toAccount(existing);
+  // First contact mints the account with ZERO free-ad passes and no welcome
+  // ledger entry; the starter grant fires lazily on the first AD NEW
+  // (grantStarterAdsIfFirst), so a number that never posts costs nothing.
   const { data, error } = await db()
     .from("users")
-    .insert({ phone })
+    .insert({ phone, free_ads: 0 })
     .select(USER_SELECT)
     .single();
   if (error) throw error;
-  const row = data as UserRow;
-  const { error: ledgerError } = await db().from("credit_ledger").insert({
-    user_id: row.id,
-    delta: 0,
-    kind: "grant",
-    note: `Welcome — ${STARTER_FREE_ADS} free ads, picture or plain`,
-  });
-  if (ledgerError) throw ledgerError;
-  return toAccount(row);
+  return toAccount(data as UserRow);
 }
 
 export async function consumeFreeAd(phone: string): Promise<boolean> {
@@ -133,6 +124,36 @@ export async function consumeFreeAd(phone: string): Promise<boolean> {
     .select("id");
   if (error) throw error;
   return (data?.length ?? 0) > 0;
+}
+
+export async function grantStarterAdsIfFirst(phone: string): Promise<Account> {
+  const user = await userByPhone(phone);
+  if (!user) throw new Error(`grantStarterAdsIfFirst: no account for ${phone}`);
+  if (user.starter_granted_at) return toAccount(user);
+  const at = new Date().toISOString();
+  // Conditional update guarded on starter_granted_at IS NULL: only the caller
+  // that flips it from NULL wins the grant, so a concurrent double AD NEW can't
+  // grant the passes twice (the loser matches 0 rows).
+  const { data, error } = await db()
+    .from("users")
+    .update({ free_ads: user.free_ads + STARTER_FREE_ADS, starter_granted_at: at })
+    .eq("id", user.id)
+    .is("starter_granted_at", null)
+    .select(USER_SELECT);
+  if (error) throw error;
+  if ((data?.length ?? 0) > 0) {
+    const { error: ledgerError } = await db().from("credit_ledger").insert({
+      user_id: user.id,
+      delta: 0,
+      kind: "grant",
+      note: `Welcome — ${STARTER_FREE_ADS} free ads, picture or plain`,
+    });
+    if (ledgerError) throw ledgerError;
+    return toAccount(data![0] as UserRow);
+  }
+  // Lost the race — a concurrent AD NEW granted first; return the fresh state.
+  const fresh = await userByPhone(phone);
+  return toAccount((fresh ?? user) as UserRow);
 }
 
 export async function grantFreeAd(phone: string): Promise<void> {

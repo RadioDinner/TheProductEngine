@@ -5,6 +5,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: `${base}/`, changeFrequency: "hourly" as const },
     { url: `${base}/how-it-works`, changeFrequency: "monthly" as const },
+    { url: `${base}/sms`, changeFrequency: "monthly" as const },
     { url: `${base}/faq`, changeFrequency: "monthly" as const },
     { url: `${base}/email`, changeFrequency: "monthly" as const },
     { url: `${base}/privacy`, changeFrequency: "yearly" as const },
