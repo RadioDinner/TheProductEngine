@@ -56,14 +56,22 @@ and delivers through the `digest_outbox` table + its RPCs
 (the digest builder reads it to find never-broadcast ads; backfilled). The
 ad reads and the cron error until both are run.
 
-**Telnyx 10DLC:** campaign **Pending MNO Review (as of 2026-07-08)** — TCR
-accepted it and the carriers (T-Mobile/AT&T/Verizon) are now reviewing. This is
-the last gate before the campaign goes active; typically hours to a few
-business days, T-Mobile usually the slowest. Nothing to do but wait unless an
-MNO returns a rejection with feedback. Real A2P sending stays blocked until all
-MNOs approve → then text HELP as the go-signal. (Brand + campaign were
-recreated after the Aug-2025 failure — brand-level "does not qualify," fixed by
-a Standard EIN brand.) Number
+**Telnyx 10DLC:** campaign **resubmitted 2026-07-08, now Pending Telnyx Review**
+(Campaign ID `4b30019f-3dbf-6353-9dbf-2586aedd7f66`, TCR `CTSE7B5`, Marketing use
+case). The prior **806** rejection ("needs compliant/accurate CTA info: opt-in
+path, HELP, STOP, frequency, msg&data-rates disclosure, privacy link") was the
+thing the session-004 `/sms` CTA build addressed — it is a HISTORICAL failure
+reason shown on the record, not a new one. **Verified 2026-07-09 (session 005):
+the CTA surface is fully compliant** — `/sms` (the submitted opt-in URL) carries
+all six required elements, and the homepage subscribe-strip + footer repeat the
+opt-in path / "up to 4/day, varies" / "msg & data rates may apply" / HELP / STOP
+/ `/sms` link. Registration path: Telnyx review → TCR → MNO (carrier) review, then
+active; typically hours to a few business days, T-Mobile slowest. Real A2P sending
+stays blocked until approved → then text HELP as the go-signal. (Brand + campaign
+were recreated after the Aug-2025 failure — brand-level "does not qualify," fixed
+by a Standard EIN brand.) **HELP-number is NOT a mismatch** (session-004 note was
+wrong): the registered HELP message lists (234) 301-0048, which is exactly what
+the app sends via `site.supportPhone`. Number
 **(330) 960-7170** (real number now everywhere; replaced the 555 placeholder).
 User reports the dead Supabase webhook URL swapped → should be
 `https://www.theplainexchange.com/api/telnyx/inbound` (v2), failover the
@@ -184,8 +192,8 @@ could pump unbounded SMS → 10DLC-suspension risk), email `eq` not `ilike`;
 opt-in** (spoofable From no longer enrolls anyone; confirm/unsubscribe are POST
 buttons, not GET side-effects). Blocklist/outbox reads fail safe if their table
 is missing. **Deferred (need your call / low sev):** #9 login account-existence
-oracle (inherent to password-vs-OTP UX). **Migrations 0006/0007/0008 applied
-2026-07-08; ⚠️ migration 0009 still to run** (OTP verify errors until it is).
+oracle (inherent to password-vs-OTP UX). **Migrations 0006/0007/0008/0009 ALL
+applied** (user confirmed 2026-07-08/09 — all migrations run; OTP verify is live).
 
 ## What shipped in session 003 (branch `claude/security-todos-noq7gf`)
 
@@ -239,7 +247,8 @@ in dev:
 
 ## Remaining work
 
-**Ops (before/at launch — see LAUNCH.md):** run migrations **0006 + 0007 + 0008**;
+**Ops (before/at launch — see LAUNCH.md):** ~~run migrations~~ **all migrations
+0006–0009 applied 2026-07-08/09**;
 set up the cron pinger (Vercel Hobby crons are daily-only — external GET
 `/api/cron/digests` every 5 min with `Authorization: Bearer <CRON_SECRET>`);
 Stripe test purchase → live keys; set ADMIN_EMAIL (also receives the new
