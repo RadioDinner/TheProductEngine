@@ -26,3 +26,6 @@ merge everything.
 
 --- 2026-07-09 ---
 I ran 0010
+
+--- 2026-07-09 ---
+write the handoff, commit it to main and wrap the session
