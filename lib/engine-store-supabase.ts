@@ -251,6 +251,22 @@ export async function getNewDigestAds(cap: number): Promise<StoredAd[]> {
   return ((data ?? []) as unknown as AdRow[]).map(toStored);
 }
 
+export async function expireDueAds(): Promise<number> {
+  // Production parity with the file store's lazy sweep (engine-store.ts:213):
+  // flip approved ads past their expiry window to 'expired'. Without this the
+  // Supabase store never expires anything, so the public site lists ads forever
+  // and the SOLD/BUMP-revive branches (which need the 'expired' state) are dead.
+  const { data, error } = await db()
+    .from("ads")
+    .update({ status: "expired" })
+    .eq("status", "approved")
+    .not("expires_at", "is", null)
+    .lt("expires_at", new Date().toISOString())
+    .select("id");
+  if (error) throw error;
+  return data?.length ?? 0;
+}
+
 export async function createDigestIfAbsent(
   slotKey: string,
   slotHour: number,
@@ -496,24 +512,31 @@ export async function reserveSms(
 }
 
 export async function listMessages(address?: string, limit = 200): Promise<MessageRecord[]> {
+  // The NEWEST `limit` messages, returned oldest-first — parity with the file
+  // store's `slice(-limit)`. Ascending+limit returned the OLDEST N instead, so
+  // callers that scan from the end for recent activity (handleConfirmPurchase's
+  // BUYCREDIT/YES lookup) missed the just-sent quote once a busy account had
+  // more than `limit` messages. Fetch descending, then reverse to chronological.
   let query = db()
     .from("messages")
     .select("id, direction, channel, address, body, media, digest_id, created_at")
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(limit);
   if (address) query = query.eq("address", address);
   const { data, error } = await query;
   if (error) throw error;
-  return (data ?? []).map((row) => ({
-    id: row.id as number,
-    direction: row.direction as MessageRecord["direction"],
-    channel: row.channel as MessageRecord["channel"],
-    address: row.address as string,
-    body: (row.body as string | null) ?? "",
-    media: (row.media as string[] | null) ?? undefined,
-    digestId: (row.digest_id as number | null) ?? undefined,
-    createdAt: row.created_at as string,
-  }));
+  return (data ?? [])
+    .reverse()
+    .map((row) => ({
+      id: row.id as number,
+      direction: row.direction as MessageRecord["direction"],
+      channel: row.channel as MessageRecord["channel"],
+      address: row.address as string,
+      body: (row.body as string | null) ?? "",
+      media: (row.media as string[] | null) ?? undefined,
+      digestId: (row.digest_id as number | null) ?? undefined,
+      createdAt: row.created_at as string,
+    }));
 }
 
 export async function countRecentOutboundContaining(

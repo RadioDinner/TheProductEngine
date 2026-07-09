@@ -419,6 +419,13 @@ const file = {
       .slice(0, cap);
   },
 
+  expireDueAds(): number {
+    const store = load();
+    const before = store.ads.filter((a) => a.status === "expired").length;
+    sweep(store);
+    return store.ads.filter((a) => a.status === "expired").length - before;
+  },
+
   createDigestIfAbsent(
     slotKey: string,
     slotHour: number,
@@ -772,6 +779,17 @@ export async function getQueuedBumps(): Promise<BumpRecord[]> {
 
 export async function getNewDigestAds(cap: number): Promise<StoredAd[]> {
   return supabaseConfigured ? remote.getNewDigestAds(cap) : file.getNewDigestAds(cap);
+}
+
+/**
+ * Transition approved ads past their expiry window to 'expired'. The file store
+ * does this lazily on every read (sweep); Supabase has no such trigger, so the
+ * digest cron calls this each tick to give production the same 30-day-listing
+ * behavior (otherwise approved ads stay live on the public site forever).
+ * Returns how many ads were newly expired.
+ */
+export async function expireDueAds(): Promise<number> {
+  return supabaseConfigured ? remote.expireDueAds() : file.expireDueAds();
 }
 
 export async function createDigestIfAbsent(

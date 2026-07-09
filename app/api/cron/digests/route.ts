@@ -11,6 +11,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { drainDigestOutbox, runDueDigests } from "@/lib/digest-engine";
 import { runDueEmailDigests } from "@/lib/email-digest";
+import { expireDueAds } from "@/lib/engine-store";
 import { isProduction } from "@/lib/env";
 
 /** Vercel function ceiling; the drain's own time budget stays safely under it. */
@@ -30,6 +31,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const startedAt = Date.now();
+  // Retire ads past their 30-day window before composing, so an expired ad is
+  // never included in a digest and drops off the public site (file-store parity).
+  const expired = await expireDueAds();
   // SMS first so the email edition can carry what just went out.
   const sms = await runDueDigests();
   const email = await runDueEmailDigests();
@@ -39,5 +43,5 @@ export async function GET(req: NextRequest) {
     timeBudgetMs: Math.max(5_000, 45_000 - (Date.now() - startedAt)),
     newlyEnqueued,
   });
-  return NextResponse.json({ ok: true, sms, email, drain });
+  return NextResponse.json({ ok: true, expired, sms, email, drain });
 }
