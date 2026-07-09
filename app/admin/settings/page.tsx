@@ -34,7 +34,17 @@ const FIELDS: { key: string; label: string; hint?: string }[] = [
   {
     key: "smsPicsPerHour",
     label: "Pictures (PIC) per number per hour",
-    hint: "picture texts cost the most to send",
+    hint: "burst limit — picture texts cost the most to send",
+  },
+  {
+    key: "picDailyAllowance",
+    label: "Picture pulls per number per day",
+    hint: "PIC photos each number gets a day; unused ones bank (below). 0 turns the daily limit off",
+  },
+  {
+    key: "picBankCap",
+    label: "Most picture pulls a number can bank",
+    hint: "the rolling/sinking fund ceiling — unused daily pulls stack up to this many",
   },
   {
     key: "smsGlobalPerHour",

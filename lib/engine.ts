@@ -31,6 +31,7 @@ import {
   getCreditBalance,
   grantStarterAdsIfFirst,
   hasLedgerRef,
+  reservePicQuota,
   setSubscribed,
   spendCredits,
 } from "@/lib/store";
@@ -38,6 +39,8 @@ import { discountedCents, formatPrice, packs, site } from "@/lib/config";
 import { getEngineSettings, getWordRules, matchWordRules, effectiveSmsCaps } from "@/lib/settings";
 import type { EngineSettings } from "@/lib/settings";
 import { stripEmoji, hasLink, mayPostLinks } from "@/lib/content-filter";
+import { etParts } from "@/lib/et";
+import { picLimitMessage, PIC_LIMIT_MARKER } from "@/lib/pic-quota";
 import { isAllowedPhotoSrc } from "@/lib/media";
 import { chargeSavedCard, paymentsDevMode } from "@/lib/payments";
 import { devToolsEnabled } from "@/lib/env";
@@ -443,8 +446,28 @@ async function route(
         return { body: `No ad found with number ${command.id}.` };
       }
       if (!ad.photo) return { body: `Ad #${command.id} has no picture.` };
-      // The per-number PIC/MMS cap is enforced atomically at send time
-      // (reserveSms with kind "pic"), so no separate check is needed here.
+      // Daily allowance + rolling bank — the real MMS cost control. Charged only
+      // here, once we're actually about to send a photo (past the not-found /
+      // no-photo gates), so a mistyped id never burns a pull. ensureAccount so an
+      // accountless puller still gets a quota row; the atomic accrue+spend is
+      // race-safe in prod. The hourly smsPicsPerHour cap (reserveSms, above)
+      // stays on top as a burst limiter.
+      await ensureAccount(from);
+      const today = etParts(new Date()).day;
+      const quota = await reservePicQuota(
+        from,
+        settings.picDailyAllowance,
+        settings.picBankCap,
+        today,
+      );
+      if (!quota.allowed) {
+        // Deduped: a number hammering PIC after running dry hears "you're out" at
+        // most once every few hours, not on every pull (still bounded by the
+        // hourly PIC cap, which already reserved this slot).
+        const told = await countRecentOutboundContaining(from, PIC_LIMIT_MARKER, 3 * HOUR_MS);
+        if (told > 0) return null;
+        return { body: picLimitMessage(settings.picDailyAllowance, settings.picBankCap) };
+      }
       return { body: `Photo for ad #${command.id} — ${deriveTitle(ad.body)}:`, media: [ad.photo.src] };
     }
     case "credits": {

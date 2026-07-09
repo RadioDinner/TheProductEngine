@@ -1,0 +1,2 @@
+--- 2026-07-09 (session 006 start) ---
+I want you to comprehensively, BRUTALLY, test my systems for extreme failure cases. Like, what happens when someone tries to do /AD SOLD 1325 20 times in a row, or requests /PIC insessantly. Also, did you get my idea about making a limit for /PIC requests? Put a control on the admin side where I can set how many they should get a day and how many they can bank in a sinking/rolling fund. Like, they get up to 3 a day, and they can bank up to 20 of those

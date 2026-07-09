@@ -3,7 +3,44 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-07-09 (session 005).
+**Last updated:** 2026-07-09 (session 006).
+
+## What shipped in session 006 (branch `claude/stress-test-pic-limits-ki1jf0`)
+
+Two asks: (1) brutal failure-case testing, and (2) a PIC request limit with an
+admin control. **Both shipped, dev-verified; ⚠️ migration 0011 must be applied.**
+
+- **PIC daily allowance + rolling/sinking bank — the real MMS cost control.**
+  Every number gets `picDailyAllowance` photo pulls per ET calendar day (default
+  **3**); unused pulls bank up to `picBankCap` (default **20**). Admin-tunable on
+  `/admin/settings` ("Picture pulls per number per day" + "Most picture pulls a
+  number can bank"); set the daily number to 0 to turn the quota off (falls back to
+  the hourly cap alone). Pure accrual math in **`lib/pic-quota.ts`** (unit-tested,
+  20 checks); atomic accrue-then-spend via **`reserve_pic_quota`** (advisory lock,
+  **migration 0011**) in prod and a file-store equivalent in dev. Enforced in the
+  engine's PIC handler only once a photo is actually about to send (a mistyped id
+  never burns a pull); accountless pullers are `ensureAccount`'d first so the quota
+  applies to everyone. Denial ("you're out of picture pulls") is a friendly SMS
+  deduped to 1 / 3h / number. The hourly `smsPicsPerHour` cap stays as a burst
+  limiter on top. **Documented on `/admin/help`.**
+  - ⚠️ **Product-behavior heads-up:** with the default 3/day ON, a buyer can pull
+    only 3 photos/day. Generous for a flip-phone audience, but if photo-browsing is
+    core, raise the daily number (or the bank) on Settings, or set daily to 0. This
+    is a live product decision — the control is there to tune.
+- **Command re-route fix:** `AD SOLD 1325` (and `AD BUMP/STATUS/PIC <id>`) now parse
+  as the owner command, not an ad whose body is "SOLD 1325". Before, a mistyped SOLD
+  silently posted a junk pending ad and burned a credit/free pass. Narrowly scoped
+  (only an exact `verb + number` body re-routes; a real ad that merely starts with
+  the word is untouched). Parser unit tests added.
+- **Brutal abuse suite extended to 19 vectors** (`npm run test:abuse`), all bounded.
+  New: SOLD same ad ×20 (idempotent, tail silenced), `AD SOLD <id>` ×20 (0 junk ads,
+  0 credits burned), PIC hammer 5 days with quota ON (**3 MMS/day**), PIC rolling bank
+  (idle 2 weeks → burst delivers **20** = the cap, not infinity). `docs/abuse-test.md`
+  rewritten. `npm test` now **107/107** (added the `pic-quota` + parser checks).
+- **Migration numbering:** stayed ascending (`0011_pic_quota.sql`) to match the ten
+  existing files, re-runnable per repo convention. (The descending `9999_` rule in
+  `new_session_instructions.md` §4 is a different project — HANDOFF says ask before
+  adopting it here; kept ascending, flagging for the user.)
 
 ## What shipped in session 005 (branch `claude/audit-continuation-qb7i83`)
 
@@ -371,7 +408,10 @@ configured (which disables all of it automatically).
 
 - One credit = one broadcast in the next digest; ad lists on site 30 days
   (config). Text ad 1 credit, picture 5, starter grant 3 ads flat — all
-  admin-config. `/PIC` pulls free. Digests: 4 ET slots, skip empty, cap 10
+  admin-config. `/PIC` pulls charge no credit but are rate-limited:
+  `picDailyAllowance`/day (default 3) per number with a rolling bank up to
+  `picBankCap` (default 20) — session 006, admin-tunable, 0 disables; also
+  bounded by `smsPicsPerHour`. Digests: 4 ET slots, skip empty, cap 10
   FIFO; bumps free at the default `bumpCost` 0 but the engine now CHARGES
   `bumpCost` when an admin sets it > 0 (session 002); one queued per ad,
   after new ads.

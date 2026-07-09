@@ -39,4 +39,19 @@ export function run(t) {
   t.eq("all-punctuation token -> unknown", parseCommand("...").kind, "unknown");
   // Known quirk (harmless — no pack is 100, so it's rejected downstream):
   t.eq("buycredit 1000 parses first 3 digits = 100", parseCommand("buycredit 1000").amount, 100);
+
+  // "AD <verb> <id>" re-routes to the owner command (a mistyped SOLD/BUMP must
+  // not silently post a junk ad + burn a credit). Only the exact keyword+number
+  // shape re-routes; a real ad that merely starts with the word does not.
+  t.eq("AD SOLD 1325 -> sold command", parseCommand("AD SOLD 1325").kind, "sold");
+  t.eq("AD SOLD 1325 -> id 1325", parseCommand("AD SOLD 1325").id, 1325);
+  t.eq("AD BUMP 1042 -> bump", parseCommand("AD BUMP 1042").kind, "bump");
+  t.eq("AD STATUS 1042 -> status", parseCommand("AD STATUS 1042").kind, "status");
+  t.eq("ad pic 900 -> pic", parseCommand("ad pic 900").kind, "pic");
+  // Even explicit "AD NEW SOLD 1325" re-routes — the body is the exact
+  // keyword+number shape, and no real ad is literally "SOLD 1325".
+  t.eq("AD NEW SOLD 1325 also re-routes to sold", parseCommand("AD NEW SOLD 1325").kind, "sold");
+  t.eq("real ad starting with 'sold' stays an ad",
+    parseCommand("AD sold out, taking spring orders, $200 each. 330-555-0100").kind, "ad");
+  t.eq("AD SOLD (no number) stays an ad", parseCommand("AD SOLD everything must go").kind, "ad");
 }

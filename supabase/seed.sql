@@ -87,6 +87,8 @@ insert into config (key, value) values
   ('sms_global_per_hour',     '500'),
   ('digest_daily_segment_budget', '12000'),
   ('pic_abuse_per_day',        '15'),
+  ('pic_daily_allowance',      '3'),
+  ('pic_bank_cap',             '20'),
   ('saved_card_discount_percent', '10')
 on conflict (key) do nothing;
 

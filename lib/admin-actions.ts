@@ -98,6 +98,8 @@ const SETTING_MAX: Record<string, number> = {
   smsGlobalPerHour: 5000,
   digestDailySegmentBudget: 100000,
   picAbusePerDay: 1000,
+  picDailyAllowance: 1000,
+  picBankCap: 10000,
   savedCardDiscountPercent: 100,
   outboundThrottlePerMin: 10000,
 };
@@ -141,6 +143,8 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
     "smsGlobalPerHour",
     "digestDailySegmentBudget",
     "picAbusePerDay",
+    "picDailyAllowance",
+    "picBankCap",
     "savedCardDiscountPercent",
     "outboundThrottlePerMin",
   ]) {

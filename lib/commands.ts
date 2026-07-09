@@ -59,6 +59,14 @@ export function parseCommand(raw: string): Command {
     case "ad": {
       // "AD NEW <body>" is canonical; bare "AD <body>" works too.
       const body = rest.replace(/^new\b[\s:,-]*/i, "").trim();
+      // "AD SOLD 1325" / "AD BUMP 3" / "AD STATUS 1042" / "AD PIC 900": the sender
+      // clearly meant the owner command, not an ad whose entire text is a keyword
+      // plus a number. Re-route ONLY that exact shape, so a real ad ("AD sold out,
+      // taking spring orders...") is never intercepted. Prevents a mistyped SOLD
+      // from silently posting a junk ad and burning a credit/free pass.
+      if (/^(sold|bump|status|pic)\s+\d{3,}\s*$/i.test(body)) {
+        return parseCommand(body);
+      }
       return { kind: "ad", body };
     }
     case "pic":

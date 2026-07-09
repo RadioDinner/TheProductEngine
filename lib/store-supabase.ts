@@ -15,6 +15,7 @@ import {
   type CreateCodeResult,
   type LedgerEntry,
   type LedgerSince,
+  type PicQuotaResult,
   type VerifyCodeResult,
 } from "@/lib/store";
 
@@ -31,10 +32,12 @@ interface UserRow {
   offense_count: number;
   posting_banned_at: string | null;
   stripe_customer_id: string | null;
+  pic_balance: number;
+  pic_accrual_day: string | null;
 }
 
 const USER_SELECT =
-  "id, phone, email, password_hash, created_at, subscribed_at, email_subscribed_at, free_ads, starter_granted_at, offense_count, posting_banned_at, stripe_customer_id";
+  "id, phone, email, password_hash, created_at, subscribed_at, email_subscribed_at, free_ads, starter_granted_at, offense_count, posting_banned_at, stripe_customer_id, pic_balance, pic_accrual_day";
 
 function toAccount(row: UserRow): Account {
   return {
@@ -49,6 +52,8 @@ function toAccount(row: UserRow): Account {
     offenseCount: row.offense_count,
     postingBannedAt: row.posting_banned_at,
     stripeCustomerId: row.stripe_customer_id,
+    picBalance: row.pic_balance ?? 0,
+    picAccrualDay: row.pic_accrual_day,
   };
 }
 
@@ -164,6 +169,25 @@ export async function grantFreeAd(phone: string): Promise<void> {
     .update({ free_ads: user.free_ads + 1 })
     .eq("id", user.id);
   if (error) throw error;
+}
+
+/** Atomically accrue + spend one PIC pull (migration 0011 reserve_pic_quota). */
+export async function reservePicQuota(
+  phone: string,
+  dailyAllowance: number,
+  bankCap: number,
+  today: string,
+): Promise<PicQuotaResult> {
+  const { data, error } = await db().rpc("reserve_pic_quota", {
+    p_phone: phone,
+    p_daily: dailyAllowance,
+    p_cap: bankCap,
+    p_today: today,
+  });
+  if (error) throw error;
+  const row = (data ?? {}) as { allowed?: boolean; remaining?: number };
+  // Fail-open on an unexpected shape — never wrongly deny a paid-for photo.
+  return { allowed: row.allowed !== false, remaining: row.remaining ?? -1 };
 }
 
 export async function recordOffense(phone: string): Promise<number> {

@@ -135,13 +135,15 @@ async function scReviveLoop() {
 async function scPicFlood() {
   reset();
   const A = "3305550005";
+  await saveEngineSettings({ picDailyAllowance: 0 }); // isolate the HOURLY cap (quota off)
   const id = await seedApprovedAd(A, "Puppies for sale, $50. Photo!", true);
   for (let i = 0; i < 500; i++) await send(A, `PIC ${id}`); // same hour
   const s = await stats(A);
-  verdict("5. PIC/MMS flood ×500 (same hour)", s.outMms <= 15,
+  verdict("5. PIC/MMS flood ×500 (same hour, daily quota OFF)", s.outMms <= 15,
     `  inbound=${s.inbound}  MMS sent=${s.outMms}  MMS cost=$${(s.outMms * MMS).toFixed(2)}\n` +
-    `  -> per-number PIC cap (12/hr) bounds MMS. The other ~488 pulls get no MMS. Cross-hour a number could\n` +
-    `     pull 12/hr sustained (R3 flagged the per-ad/global MMS cap gap for many-number swarms).`);
+    `  -> with the daily quota OFF, the per-number hourly PIC cap (12/hr) alone bounds MMS. The other ~488\n` +
+    `     pulls get no MMS. Cross-hour a number could pull 12/hr sustained — which is exactly why the daily\n` +
+    `     allowance + bank exists. Scenario 18 turns the quota ON and shows it tighten this to ${3}/day.`);
 }
 
 async function scAdNewFlood() {
@@ -330,12 +332,96 @@ async function scBlocklistDrop() {
     `  -> a blocked number is dropped right after inbound logging: no account, no reply, no charge, no MMS.`);
 }
 
+async function scSoldRepeat() {
+  reset();
+  const A = "3305550020";
+  const id = await seedApprovedAd(A, "Buggy for sale $1,200. 330-555-0020");
+  // The literal ask: SOLD the same ad 20 times in a row (same instant).
+  for (let i = 0; i < 20; i++) await send(A, `SOLD ${id}`);
+  const ad = await getAdRecord(id);
+  const msgs = await listMessages(A, 100000);
+  // One state transition ("Congratulations"), the rest idempotent ("already sold").
+  const transitions = msgs.filter((m) => m.direction === "outbound" && /Congratulations/i.test(m.body)).length;
+  const alreadyReplies = msgs.filter((m) => m.direction === "outbound" && /already marked sold/i.test(m.body)).length;
+  const s = await stats(A);
+  verdict("16. SOLD the same ad ×20 in a row", ad?.status === "sold" && transitions === 1 && s.outSms <= 22,
+    `  ad status=${ad?.status} (expect sold)  actual SOLD transitions=${transitions} (expect 1)  idempotent "already sold"=${alreadyReplies}  total outbound=${s.outSms} (incl. 2 seed msgs)  cost=$${s.cost}\n` +
+    `  -> only the FIRST SOLD transitions the ad; the rest are idempotent no-ops ("already marked sold"), each a\n` +
+    `     cheap 1-segment reply, and the 20/hr reply cap silences the tail. No double state change, nothing charged.`);
+}
+
+async function scAdSold() {
+  reset();
+  const V = "3305550021"; // owns the ad
+  const A = "3305550022"; // texts "AD SOLD <id>" for their OWN ad
+  const id = await seedApprovedAd(A, "Wagon for sale $600. 330-555-0022");
+  await seedApprovedAd(V); // noise
+  const beforePending = (await getPendingAds()).length;
+  const beforeCredits = await getCreditBalance(A);
+  // The user's literal example: "AD SOLD 1325" ×20. Post-fix this re-routes to
+  // the SOLD command instead of posting a junk ad + burning credits.
+  for (let i = 0; i < 20; i++) await send(A, `AD SOLD ${id}`);
+  const ad = await getAdRecord(id);
+  const posted = (await getPendingAds()).length - beforePending;
+  const afterCredits = await getCreditBalance(A);
+  verdict("17. 'AD SOLD <id>' ×20 (parse re-route)", ad?.status === "sold" && posted === 0 && afterCredits === beforeCredits,
+    `  ad status=${ad?.status} (expect sold)  junk ads created=${posted} (expect 0)  credits ${beforeCredits}->${afterCredits} (unchanged)\n` +
+    `  -> "AD SOLD 1325" now parses as the SOLD command, not an ad body. Before the fix it posted a pending ad\n` +
+    `     titled "SOLD 1325" and charged a credit/free pass each time. Now: marks sold once, then idempotent.`);
+}
+
+async function scPicQuota() {
+  reset();
+  const A = "3305550023";
+  const id = await seedApprovedAd(A, "Puppies for sale $50. Photo!", true);
+  await saveEngineSettings({ picDailyAllowance: 3, picBankCap: 20 });
+  // Hammer PIC across 5 ET days (spaced ~8 min so the 12/hr burst cap never bites
+  // — the DAILY quota is the binding limit).
+  const perDay = [];
+  for (let d = 0; d < 5; d++) {
+    const before = (await stats(A)).outMms;
+    for (let i = 0; i < 8; i++) { await send(A, `PIC ${id}`); advance(8 * MIN); }
+    perDay.push((await stats(A)).outMms - before);
+    advance(24 * HOUR);
+  }
+  const s = await stats(A);
+  verdict("18. PIC daily quota ON: hammer PIC for 5 days (3/day)", perDay.every((n) => n <= 3) && s.outMms <= 15,
+    `  MMS sent per day = [${perDay.join(", ")}]  total MMS over 5 days=${s.outMms}  MMS cost=$${(s.outMms * MMS).toFixed(2)}\n` +
+    `  -> the daily allowance (3) caps picture cost at 3 MMS/number/day no matter how hard they hammer.\n` +
+    `     Same number, quota OFF (scenario 5): 12/hr sustained. Quota ON: 3/day. The MMS leak is CLOSED.`);
+}
+
+async function scPicBanking() {
+  reset();
+  const A = "3305550024";
+  const id = await seedApprovedAd(A, "Quilt for sale $300. Photo!", true);
+  await saveEngineSettings({ picDailyAllowance: 3, picBankCap: 20 });
+  // First-ever pull seeds day-0 = 3, spends 1 -> 2 banked. Then idle 14 days: the
+  // bank should accrue 2 + 14*3 = 44 but CAP at 20 (the sinking-fund ceiling).
+  await send(A, `PIC ${id}`);
+  advance(14 * 24 * HOUR);
+  // Burst spread over ~3h so the 12/hr cap doesn't hide the bank size; count MMS.
+  let mms = 0;
+  for (let i = 0; i < 30; i++) {
+    const before = (await stats(A)).outMms;
+    await send(A, `PIC ${id}`);
+    if ((await stats(A)).outMms > before) mms++;
+    advance(6 * MIN);
+  }
+  // 1 (day 0) + 20 (banked, capped) = 21 total pulls delivered.
+  verdict("19. PIC rolling bank: idle 2 weeks then burst", mms === 20,
+    `  MMS delivered by the post-idle burst=${mms} (expect 20 = the bank cap)\n` +
+    `  -> unused daily pulls bank like a sinking fund and STOP accruing at the cap (20). Two idle weeks would be\n` +
+    `     42 pulls uncapped; the ceiling holds it to 20, so a saved-up user gets a real cushion but not infinity.`);
+}
+
 // ---- run all ----
 const scenarios = [
   scStatusFlood, scStatusSustained, scBumpFlood, scBumpFloodPaid, scReviveLoop, scPicFlood,
   scAdNewFlood, scConcurrentSpend, scStopStartLoop, scSubscribeFlood,
   scGibberishFlood, scAdversarialBodies, scGlobalBreaker,
   scCrossUser, scWebhookReplay, scBlocklistDrop,
+  scSoldRepeat, scAdSold, scPicQuota, scPicBanking,
 ];
 LOG("======== BRUTAL ABUSE HARNESS (real engine, file store, controlled clock) ========");
 for (const sc of scenarios) {

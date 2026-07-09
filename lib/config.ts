@@ -82,6 +82,17 @@ export const engineDefaults = {
    */
   picAbusePerDay: 15,
   /**
+   * PIC daily allowance + rolling bank — the real MMS cost control. A number
+   * gets `picDailyAllowance` photo pulls per ET calendar day; unused pulls bank
+   * up to `picBankCap` (a light user builds a cushion, a heavy user is capped).
+   * The hourly `smsPicsPerHour` cap stays on top as a burst limiter. Set
+   * picDailyAllowance to 0 to turn the daily quota OFF (photos then bounded only
+   * by the hourly cap). See lib/pic-quota.ts.
+   */
+  picDailyAllowance: 3,
+  /** Max photo pulls a number can bank across days (the sinking-fund ceiling). */
+  picBankCap: 20,
+  /**
    * Percent off a credit pack when it's bought with a saved card by text
    * (BUYCREDIT) — the incentive to keep a card on file. 0 = no discount.
    */

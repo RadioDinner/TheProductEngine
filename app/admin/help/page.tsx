@@ -86,7 +86,31 @@ export default async function AdminHelp() {
         </li>
         <li>
           <strong>{s.smsPicsPerHour} pictures per number per hour.</strong> Pictures are the
-          most expensive kind of text to send, so they get their own tighter limit.
+          most expensive kind of text to send, so they get their own tighter limit. This is a
+          burst limit — the day/bank limit below is the main control.
+        </li>
+        <li>
+          <strong>
+            {s.picDailyAllowance > 0
+              ? `${s.picDailyAllowance} picture pulls per number per day, banking up to ${s.picBankCap}.`
+              : "Daily picture limit is OFF."}
+          </strong>{" "}
+          {s.picDailyAllowance > 0 ? (
+            <>
+              Each number gets {s.picDailyAllowance} PIC photos a day. Unused pulls roll over
+              and stack up like a sinking fund — up to {s.picBankCap} saved — so someone who
+              rarely asks builds a cushion, while someone hammering PIC is stopped at their
+              allowance for the day. It resets/tops up each morning (Eastern). This is the real
+              cap on picture-text cost; the hourly limit above just smooths bursts. Set the daily
+              number to 0 to turn this off and rely on the hourly limit alone.
+            </>
+          ) : (
+            <>
+              Pictures are bounded only by the hourly limit above. Set “Picture pulls per number
+              per day” above 0 on Settings to give each number a daily photo allowance that banks
+              unused pulls up to a ceiling.
+            </>
+          )}
         </li>
         <li>
           <strong>{s.smsGlobalPerHour} replies across the whole service per hour.</strong> A

@@ -16,6 +16,7 @@ import {
 } from "node:crypto";
 import { supabaseConfigured } from "@/lib/db";
 import * as remote from "@/lib/store-supabase";
+import { accruePicQuota } from "@/lib/pic-quota";
 
 // ---------- shared types & rules ----------
 
@@ -40,6 +41,16 @@ export interface Account {
   starterGrantedAt?: string | null;
   offenseCount?: number;
   postingBannedAt?: string | null;
+  /** PIC daily-quota bank — pulls available right now (lib/pic-quota.ts). */
+  picBalance?: number;
+  /** ET day (YYYY-MM-DD) the PIC bank was last accrued to; null/undefined = never. */
+  picAccrualDay?: string | null;
+}
+
+/** Result of an atomic PIC-quota reservation. remaining = -1 when the quota is off. */
+export interface PicQuotaResult {
+  allowed: boolean;
+  remaining: number;
 }
 
 /** Email-only subscriber (no phone account) — spec Q11. */
@@ -204,6 +215,34 @@ const file = {
     if (!account) return;
     account.freeAds = (account.freeAds ?? 0) + 1;
     save(store);
+  },
+
+  reservePicQuota(
+    phone: string,
+    dailyAllowance: number,
+    bankCap: number,
+    today: string,
+  ): PicQuotaResult {
+    if (dailyAllowance <= 0) return { allowed: true, remaining: -1 }; // quota off
+    const store = load();
+    const account = store.accounts[phone];
+    if (!account) return { allowed: true, remaining: -1 }; // fail-open (defensive)
+    const state = accruePicQuota(
+      { balance: account.picBalance ?? 0, day: account.picAccrualDay ?? null },
+      today,
+      dailyAllowance,
+      bankCap,
+    );
+    if (state.balance >= 1) {
+      account.picBalance = state.balance - 1;
+      account.picAccrualDay = state.day;
+      save(store);
+      return { allowed: true, remaining: account.picBalance };
+    }
+    account.picBalance = state.balance;
+    account.picAccrualDay = state.day;
+    save(store);
+    return { allowed: false, remaining: 0 };
   },
 
   recordOffense(phone: string): number {
@@ -483,6 +522,23 @@ export async function grantStarterAdsIfFirst(phone: string): Promise<Account> {
 /** Return a starter pass (benign rejection refund). */
 export async function grantFreeAd(phone: string): Promise<void> {
   return supabaseConfigured ? remote.grantFreeAd(phone) : file.grantFreeAd(phone);
+}
+
+/**
+ * Atomically accrue the PIC daily allowance / rolling bank and spend one pull.
+ * Returns { allowed, remaining } — allowed=false when the bank is empty for the
+ * ET day. `today` is the ET calendar day (YYYY-MM-DD); dailyAllowance <= 0 turns
+ * the quota off (always allowed, remaining -1). Serialized per user in prod.
+ */
+export async function reservePicQuota(
+  phone: string,
+  dailyAllowance: number,
+  bankCap: number,
+  today: string,
+): Promise<PicQuotaResult> {
+  return supabaseConfigured
+    ? remote.reservePicQuota(phone, dailyAllowance, bankCap, today)
+    : file.reservePicQuota(phone, dailyAllowance, bankCap, today);
 }
 
 /** Increment strikes; auto-bans posting at the threshold. Returns the new count. */

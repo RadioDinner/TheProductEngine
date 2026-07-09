@@ -28,6 +28,10 @@ export interface EngineSettings {
   digestDailySegmentBudget: number;
   /** Insights: flag numbers requesting more than this many PICs per 24h. */
   picAbusePerDay: number;
+  /** PIC photo pulls granted per number per ET day (0 = daily quota off). */
+  picDailyAllowance: number;
+  /** Max PIC pulls a number can bank across days (rolling/sinking fund cap). */
+  picBankCap: number;
   /** Percent off a credit pack bought by text with a saved card (BUYCREDIT). */
   savedCardDiscountPercent: number;
   /** Master outbound kill switch: "off" | "bulk" (partial) | "all" (full). */
@@ -58,6 +62,8 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   smsGlobalPerHour: "sms_global_per_hour",
   digestDailySegmentBudget: "digest_daily_segment_budget",
   picAbusePerDay: "pic_abuse_per_day",
+  picDailyAllowance: "pic_daily_allowance",
+  picBankCap: "pic_bank_cap",
   savedCardDiscountPercent: "saved_card_discount_percent",
   pauseMode: "pause_mode",
   underAttack: "under_attack",
@@ -107,6 +113,8 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     smsGlobalPerHour: engineDefaults.smsGlobalPerHour,
     digestDailySegmentBudget: engineDefaults.digestDailySegmentBudget,
     picAbusePerDay: engineDefaults.picAbusePerDay,
+    picDailyAllowance: engineDefaults.picDailyAllowance,
+    picBankCap: engineDefaults.picBankCap,
     savedCardDiscountPercent: engineDefaults.savedCardDiscountPercent,
     pauseMode: engineDefaults.pauseMode,
     underAttack: engineDefaults.underAttack,
