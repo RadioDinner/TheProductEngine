@@ -28,8 +28,17 @@ Continued + finished the three-round audit. **Round 2 (function) COMPLETE, Round
   free list grows. Inventories code-fixable leaks (free bumps/revive, uncapped
   PIC MMS, budget-invisible catch-up) + pricing levers + a staged scaling
   playbook. **Safety-valve code changes + pricing model await a user decision.**
-- All session-005 work is on `claude/audit-continuation-qb7i83` (NOT yet merged
-  to main). ⚠️ **Migration 0010 must run before this branch reaches prod.**
+- **MERGED to `main` 2026-07-09** (fast-forward `6d85c1f → ba3b9e5`); prod
+  auto-deploys `main`. **Migration 0010 applied by the user** before/at merge, so
+  the `starter_granted_at` reads are safe. `claude/audit-continuation-qb7i83` and
+  `main` are identical at the merge. (Heads-up: a **stale local `main`** pointing
+  at an ancient session-001 commit surfaced during the merge — realigned to
+  `origin/main`; the FF push went via `branch:main`, not the local branch.)
+- **Brutal abuse suite added** (`npm run test:abuse`, `test/abuse/brute.mjs`,
+  `docs/abuse-test.md`): 15 attack vectors, all bounded. Empirically confirms
+  `bumpCost>0` closes the free-rebroadcast/revival leak.
+- **⚠️ Still open:** `bumpCost` is still `0` (the raise was discussed but never
+  committed). R3 safety-valves + the pricing model still await a decision.
 
 ## What this project is
 
