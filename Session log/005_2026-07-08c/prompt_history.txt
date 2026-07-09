@@ -11,3 +11,9 @@ on the deferred security TO-DO, grant the starter credits upon /AD NEW . Keep in
 
 --- 2026-07-08 (mid-session) ---
 will my campaign pass this time?
+
+--- 2026-07-09 ---
+did you move up the bump cost like we discussed
+
+--- 2026-07-09 ---
+I need this BRUTALLY tested. I want all manner of extremes thrown at it. Every extreme possible. Like, I want you to test what would happen if someone checks the status of an ad compulsively or repeatedly tries to /BUMP every 5 minutes for a couple hours. I want you to simulate one of the brutes trying to exploit the system
