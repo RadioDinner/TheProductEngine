@@ -59,6 +59,16 @@ export interface EmailSubscriber {
   subscribedAt: string;
 }
 
+/** Admin Subscribers view rows — who is subscribed and since when. */
+export interface SmsSubscriberEntry {
+  phone: string;
+  subscribedAt: string;
+}
+export interface EmailSubscriberEntry {
+  email: string;
+  subscribedAt: string | null;
+}
+
 export const OFFENSE_BAN_THRESHOLD = 3;
 
 export type LedgerKind = "grant" | "purchase" | "spend" | "refund" | "adjustment";
@@ -310,6 +320,33 @@ const file = {
       .map((a) => a.email!);
     const emailOnly = Object.values(store.emailSubscribers ?? {}).map((s) => s.email);
     return [...new Set([...fromAccounts, ...emailOnly].map((e) => e.toLowerCase()))];
+  },
+
+  listSmsSubscribers(): SmsSubscriberEntry[] {
+    return Object.values(load().accounts)
+      .filter((a) => a.subscribedAt)
+      .map((a) => ({ phone: a.phone, subscribedAt: a.subscribedAt! }))
+      .sort((a, b) => Date.parse(b.subscribedAt) - Date.parse(a.subscribedAt));
+  },
+
+  listEmailSubscribers(): EmailSubscriberEntry[] {
+    const store = load();
+    const rows = new Map<string, EmailSubscriberEntry>();
+    for (const a of Object.values(store.accounts)) {
+      if (a.email && a.emailSubscribedAt) {
+        rows.set(a.email.toLowerCase(), {
+          email: a.email.toLowerCase(),
+          subscribedAt: a.emailSubscribedAt,
+        });
+      }
+    }
+    for (const s of Object.values(store.emailSubscribers ?? {})) {
+      const key = s.email.toLowerCase();
+      if (!rows.has(key)) rows.set(key, { email: key, subscribedAt: s.subscribedAt ?? null });
+    }
+    return [...rows.values()].sort(
+      (a, b) => Date.parse(b.subscribedAt ?? "1970") - Date.parse(a.subscribedAt ?? "1970"),
+    );
   },
 
   setPostingBanned(phone: string, banned: boolean): void {
@@ -571,6 +608,16 @@ export async function unsubscribeEmail(email: string): Promise<void> {
 
 export async function listEmailRecipients(): Promise<string[]> {
   return supabaseConfigured ? remote.listEmailRecipients() : file.listEmailRecipients();
+}
+
+/** All current SMS subscribers with their subscribe time, newest first. */
+export async function listSmsSubscribers(): Promise<SmsSubscriberEntry[]> {
+  return supabaseConfigured ? remote.listSmsSubscribers() : file.listSmsSubscribers();
+}
+
+/** All current email-edition subscribers with their subscribe time, newest first. */
+export async function listEmailSubscribers(): Promise<EmailSubscriberEntry[]> {
+  return supabaseConfigured ? remote.listEmailSubscribers() : file.listEmailSubscribers();
 }
 
 export async function setPostingBanned(phone: string, banned: boolean): Promise<void> {

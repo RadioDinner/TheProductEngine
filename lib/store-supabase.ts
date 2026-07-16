@@ -13,9 +13,11 @@ import {
   STARTER_FREE_ADS,
   type Account,
   type CreateCodeResult,
+  type EmailSubscriberEntry,
   type LedgerEntry,
   type LedgerSince,
   type PicQuotaResult,
+  type SmsSubscriberEntry,
   type VerifyCodeResult,
 } from "@/lib/store";
 
@@ -274,6 +276,54 @@ export async function listEmailRecipients(): Promise<string[]> {
     if ((data?.length ?? 0) < PAGE) break;
   }
   return [...emails];
+}
+
+export async function listSmsSubscribers(): Promise<SmsSubscriberEntry[]> {
+  const rows: SmsSubscriberEntry[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db()
+      .from("users")
+      .select("phone, subscribed_at")
+      .not("subscribed_at", "is", null)
+      .not("phone", "is", null)
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    rows.push(
+      ...(data ?? []).map((r) => ({
+        phone: r.phone as string,
+        subscribedAt: r.subscribed_at as string,
+      })),
+    );
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  return rows.sort((a, b) => Date.parse(b.subscribedAt) - Date.parse(a.subscribedAt));
+}
+
+export async function listEmailSubscribers(): Promise<EmailSubscriberEntry[]> {
+  // Email-only signups also live in users (null phone), so one paged read
+  // covers both member emails and email-in subscribers.
+  const byEmail = new Map<string, EmailSubscriberEntry>();
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db()
+      .from("users")
+      .select("email, email_subscribed_at")
+      .not("email", "is", null)
+      .not("email_subscribed_at", "is", null)
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    for (const r of data ?? []) {
+      const email = (r.email as string).toLowerCase();
+      if (!byEmail.has(email)) {
+        byEmail.set(email, { email, subscribedAt: (r.email_subscribed_at as string) ?? null });
+      }
+    }
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  return [...byEmail.values()].sort(
+    (a, b) => Date.parse(b.subscribedAt ?? "1970") - Date.parse(a.subscribedAt ?? "1970"),
+  );
 }
 
 export async function setPostingBanned(phone: string, banned: boolean): Promise<void> {
