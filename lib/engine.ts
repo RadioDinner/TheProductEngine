@@ -44,6 +44,7 @@ import { picLimitMessage, PIC_LIMIT_MARKER } from "@/lib/pic-quota";
 import { isAllowedPhotoSrc } from "@/lib/media";
 import { rehostInboundPhoto } from "@/lib/photos";
 import { siteUrl } from "@/lib/email";
+import { supabaseConfigured } from "@/lib/db";
 import { chargeSavedCard, paymentsDevMode } from "@/lib/payments";
 import { devToolsEnabled } from "@/lib/env";
 import { dispatchSms } from "@/lib/outbound";
@@ -133,14 +134,15 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
     };
   }
 
-  // Re-host the MMS photo into our own storage first (Telnyx media URLs expire
-  // and are not always on an allowlisted host); fall back to the original URL,
-  // which is kept only if its host passes the allowlist (site-relative path or
-  // an https Supabase/Telnyx URL) — never a data:/http:/off-site/protocol-
-  // relative URL from a crafted inbound MMS.
+  // Attachment security (user policy, session 007): a photo is stored ONLY
+  // after re-hosting validates its bytes as a real image (jpg/png/gif/webp)
+  // and copies it into our own storage. In production there is NO fallback to
+  // the sender-supplied URL — unvalidated bytes and expiring provider links
+  // never reach the site. Dev (no Supabase) keeps the allowlist-checked
+  // original so fixtures and simulators still work.
   const inboundPhoto = media?.[0];
   const rehosted = inboundPhoto ? await rehostInboundPhoto(inboundPhoto) : null;
-  const photoSrc = rehosted ?? inboundPhoto;
+  const photoSrc = rehosted ?? (supabaseConfigured ? undefined : inboundPhoto);
   const hasPhoto = isAllowedPhotoSrc(photoSrc);
   // The sender attached a picture we could neither re-host nor trust: the ad
   // still posts (as text, at text price) but the seller must be TOLD — a

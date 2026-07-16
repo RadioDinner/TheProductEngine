@@ -10,6 +10,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
 import { normalizePhone } from "@/lib/phone";
+import { rehostInboundPhotoDetailed, type RehostResult } from "@/lib/photos";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -74,7 +75,7 @@ function verdict(call: TelnyxCall): string | null {
 export default async function SmsDiagPage({
   searchParams,
 }: {
-  searchParams: Promise<{ to?: string; send?: string; id?: string }>;
+  searchParams: Promise<{ to?: string; send?: string; id?: string; mediaUrl?: string }>;
 }) {
   const adminPhone = await requireAdmin();
   const params = await searchParams;
@@ -82,6 +83,10 @@ export default async function SmsDiagPage({
 
   const calls: TelnyxCall[] = [];
   let messageId: string | null = null;
+  let rehost: RehostResult | null = null;
+  if (params.mediaUrl?.trim()) {
+    rehost = await rehostInboundPhotoDetailed(params.mediaUrl.trim());
+  }
 
   if (configured && params.send === "1") {
     const to = normalizePhone(params.to ?? "");
@@ -128,6 +133,34 @@ export default async function SmsDiagPage({
           Message id: <code>{messageId}</code> —{" "}
           <Link href={`/admin/sms-diag?id=${encodeURIComponent(messageId)}`}>re-check its status</Link>{" "}
           (delivery can take a minute; re-check until <code>to[].status</code> settles).
+        </p>
+      )}
+
+      <h2>Photo attachment test</h2>
+      <p className="fine">
+        Paste an inbound MMS media URL (open the message in{" "}
+        <Link href="/admin/messages">Messages</Link>, right-click its 📷 attachment link, copy the
+        address) — this runs the exact re-host + image-validation pipeline a picture ad goes
+        through and reports the outcome.
+      </p>
+      <form method="get" action="/admin/sms-diag">
+        <label>
+          Media URL <input name="mediaUrl" defaultValue={params.mediaUrl ?? ""} size={60} />
+        </label>{" "}
+        <button type="submit">Test re-host</button>
+      </form>
+      {rehost && rehost.ok && (
+        <p>
+          <strong>✓ Saved to storage:</strong>{" "}
+          <a href={rehost.url} target="_blank" rel="noreferrer">
+            {rehost.url}
+          </a>{" "}
+          — the pipeline works; a picture ad with this attachment would keep its photo.
+        </p>
+      )}
+      {rehost && !rehost.ok && (
+        <p>
+          <strong>✗ Re-host failed:</strong> {rehost.reason}
         </p>
       )}
 

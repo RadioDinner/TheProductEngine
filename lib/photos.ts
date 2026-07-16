@@ -8,44 +8,11 @@
  */
 import { randomUUID } from "node:crypto";
 import { db, supabaseConfigured } from "@/lib/db";
+import { CONTENT_TYPE_BY_EXT, sniffImage } from "@/lib/image-sniff";
 
 const BUCKET = "ad-photos";
 const MAX_BYTES = 8 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 10_000;
-
-const EXT_BY_TYPE: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/jpg": "jpg",
-  "image/png": "png",
-  "image/gif": "gif",
-  "image/webp": "webp",
-};
-
-const CONTENT_TYPE_BY_EXT: Record<string, string> = {
-  jpg: "image/jpeg",
-  png: "image/png",
-  gif: "image/gif",
-  webp: "image/webp",
-};
-
-const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-
-/** MMS media frequently arrives as application/octet-stream — trust the bytes
- * over the header. Returns the storage extension, or null for a non-image. */
-function imageExt(contentType: string, bytes: Buffer): string | null {
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "jpg";
-  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(PNG_MAGIC)) return "png";
-  const head6 = bytes.subarray(0, 6).toString("latin1");
-  if (head6 === "GIF87a" || head6 === "GIF89a") return "gif";
-  if (
-    bytes.length >= 12 &&
-    bytes.subarray(0, 4).toString("latin1") === "RIFF" &&
-    bytes.subarray(8, 12).toString("latin1") === "WEBP"
-  ) {
-    return "webp";
-  }
-  return EXT_BY_TYPE[contentType] ?? null;
-}
 
 let bucketReady = false;
 
@@ -75,39 +42,66 @@ async function ensureBucket(): Promise<void> {
   bucketReady = true;
 }
 
-/** Copy an inbound MMS photo into our storage; null on any failure. */
-export async function rehostInboundPhoto(src: string): Promise<string | null> {
-  if (!supabaseConfigured || !fetchableHost(src)) return null;
+export type RehostResult = { ok: true; url: string } | { ok: false; reason: string };
+
+/** Telnyx-hosted media (api.telnyx.com/v2/media style) requires API-key auth
+ * to fetch; send the bearer ONLY to telnyx.com hosts, never anywhere else. */
+function fetchHeaders(src: string): Record<string, string> {
+  const host = new URL(src).hostname.toLowerCase();
+  const isTelnyx = host === "telnyx.com" || host.endsWith(".telnyx.com");
+  return isTelnyx && process.env.TELNYX_API_KEY
+    ? { Authorization: `Bearer ${process.env.TELNYX_API_KEY}` }
+    : {};
+}
+
+/** Copy an inbound MMS photo into our storage, reporting exactly why not. */
+export async function rehostInboundPhotoDetailed(src: string): Promise<RehostResult> {
+  if (!supabaseConfigured) return { ok: false, reason: "Supabase is not configured (dev mode)" };
+  if (!fetchableHost(src)) return { ok: false, reason: `not a fetchable https host: ${src}` };
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     let response: Response;
     try {
-      response = await fetch(src, { signal: controller.signal });
+      response = await fetch(src, { signal: controller.signal, headers: fetchHeaders(src) });
     } finally {
       clearTimeout(timer);
     }
-    if (!response.ok) throw new Error(`fetch returned ${response.status}`);
+    if (!response.ok) return { ok: false, reason: `media fetch returned HTTP ${response.status}` };
     const bytes = Buffer.from(await response.arrayBuffer());
     if (bytes.byteLength === 0 || bytes.byteLength > MAX_BYTES) {
-      throw new Error(`unacceptable size (${bytes.byteLength} bytes)`);
+      return { ok: false, reason: `unacceptable size (${bytes.byteLength} bytes)` };
     }
-    const headerType = (response.headers.get("content-type") ?? "")
-      .split(";")[0]
-      .trim()
-      .toLowerCase();
-    const ext = imageExt(headerType, bytes);
-    if (!ext) throw new Error(`not an image (content-type ${headerType || "missing"})`);
+    // Security: the bytes must PROVE the file is an accepted image format —
+    // the content-type header is sender-controlled and is not consulted.
+    const ext = sniffImage(bytes);
+    if (!ext) {
+      const headerType = (response.headers.get("content-type") ?? "unknown").split(";")[0];
+      return {
+        ok: false,
+        reason: `not an accepted image — bytes are not jpg/png/gif/webp (sender labeled it ${headerType})`,
+      };
+    }
     await ensureBucket();
     const path = `${randomUUID()}.${ext}`;
     const { error } = await db()
       .storage.from(BUCKET)
       .upload(path, bytes, { contentType: CONTENT_TYPE_BY_EXT[ext] });
-    if (error) throw error;
+    if (error) return { ok: false, reason: `storage upload failed: ${error.message}` };
     const { data } = db().storage.from(BUCKET).getPublicUrl(path);
-    return data.publicUrl || null;
+    if (!data.publicUrl) return { ok: false, reason: "storage returned no public URL" };
+    return { ok: true, url: data.publicUrl };
   } catch (e) {
-    console.error("[photos] re-host failed:", e instanceof Error ? e.message : e);
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Copy an inbound MMS photo into our storage; null on any failure. */
+export async function rehostInboundPhoto(src: string): Promise<string | null> {
+  const result = await rehostInboundPhotoDetailed(src);
+  if (!result.ok) {
+    console.error("[photos] re-host failed:", result.reason);
     return null;
   }
+  return result.url;
 }

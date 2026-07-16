@@ -90,3 +90,12 @@ Currently I am getting the "new ad to review" emails sent to derricktw@prontonma
 
 --- 2026-07-16 ---
 The pictures are still not being received
+
+--- 2026-07-16 ---
+No badge
+
+--- 2026-07-16 ---
+I want to harden the security around attachments, and I want only images to be sent as attachments. So basically .jpg,.jpeg,.heic,.png, and whatever other photo file types I should include
+
+--- 2026-07-16 ---
+In the digest queue editor, I want to be able to delay an ad until the next digest, and or move an ad up or down in the queue, or remove it from the queue and put it back in the review list
