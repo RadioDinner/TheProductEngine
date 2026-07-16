@@ -99,3 +99,6 @@ I want to harden the security around attachments, and I want only images to be s
 
 --- 2026-07-16 ---
 In the digest queue editor, I want to be able to delay an ad until the next digest, and or move an ad up or down in the queue, or remove it from the queue and put it back in the review list
+
+--- 2026-07-16 ---
+I saw the badge and the photos are working now. Also I want a button to force send the digest ahead of schedule. And I want to be able to click "Send early" which would force send the immediate queue, or "Send extra" which would add an extra digest into the day. So for "Send early" if the digest was to send at 3pm, and it's 130pm if I click "Send early", all the ads go out right then, not at 3pm. But if I click, "Send extra" it would send out all the ads in the queue, and then send the queue again at 3pm. If its clicked I want the digest to say something about it being early or an extra digest, so people don't get confused.

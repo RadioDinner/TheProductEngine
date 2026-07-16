@@ -67,17 +67,27 @@ const STOP_MARKER = "unsubscribed and won't get more";
 const HOUR_MS = 60 * 60 * 1000;
 
 /**
- * The opt-in confirmation sent when a consumer texts the opt-in keyword
- * (SUBSCRIBE / START). It must MATCH the "Opt-in message" registered on the
- * 10DLC campaign and carry every element a carrier verifies for a Marketing
- * use case: brand, explicit marketing disclosure, message frequency, "message
- * and data rates may apply," STOP + HELP, and the no-third-party-sharing clause.
+ * The COMPLIANCE opt-in confirmation (brand, marketing disclosure, frequency,
+ * msg&data rates, STOP/HELP) is sent by TELNYX's campaign keyword
+ * auto-responder — the "Opt-in message" registered on the 10DLC campaign.
+ * The app follows it with this practical welcome (user decision, session
+ * 007): when the digests come and how to place an ad. Kept GSM-7.
  */
-const OPT_IN_CONFIRMATION =
-  `${site.name}: you're opted in to receive marketing texts - our local ` +
-  `classified-ad digests. Msg freq varies, up to 4/day. Msg & data rates may apply. ` +
-  `Reply STOP to cancel, HELP for help. We won't sell or share your mobile info ` +
-  `with third parties for marketing.`;
+function slotTimeShort(hour: number): string {
+  const h = hour % 12 === 0 ? 12 : hour % 12;
+  return `${h} ${hour < 12 ? "AM" : "PM"}`;
+}
+
+function welcomeMessage(settings: EngineSettings): string {
+  const times = [...settings.slots].sort((a, b) => a - b).map(slotTimeShort);
+  const timeList =
+    times.length > 1 ? `${times.slice(0, -1).join(", ")} and ${times[times.length - 1]}` : times[0] ?? "";
+  return (
+    `Welcome to ${site.name}! Ad digests go out daily at ${timeList} ET. ` +
+    `To place your own ad, text AD NEW and your ad - for example: ` +
+    `AD NEW Hay for sale, $5/bale. Call 330-555-0142. Text HELP for all commands.`
+  );
+}
 
 function fmtDate(d: Date): string {
   return d.toLocaleDateString("en-US", {
@@ -401,7 +411,9 @@ async function route(
     case "subscribe": {
       const account = await ensureAccount(from);
       if (account.subscribedAt) {
-        return { body: `You're already subscribed. Ads come up to 4 times a day. Reply STOP to cancel, HELP for help.` };
+        return {
+          body: `You're already subscribed. Ads come up to ${settings.slots.length} times a day. Reply STOP to cancel, HELP for help.`,
+        };
       }
       await setSubscribed(from, true);
       // Send the most recent digest right away so a new subscriber isn't
@@ -415,7 +427,7 @@ async function route(
           console.error("[engine] catch-up digest failed:", e);
         }
       }
-      return { body: OPT_IN_CONFIRMATION };
+      return { body: welcomeMessage(settings) };
     }
     case "stop": {
       // No ensureAccount here: a STOP from an unknown number shouldn't mint an
@@ -442,7 +454,7 @@ async function route(
           console.error("[engine] catch-up digest failed:", e);
         }
       }
-      return { body: OPT_IN_CONFIRMATION };
+      return { body: welcomeMessage(settings) };
     }
     case "help":
       return {

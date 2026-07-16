@@ -258,15 +258,114 @@ export async function getNewDigestAds(cap: number): Promise<StoredAd[]> {
   // broadcast_at column (migration 0007) so the queue is an O(cap) indexed
   // read — the old "cap*3 oldest, filter client-side" scan silently starved
   // new paid ads once already-broadcast approved ads outnumbered the window.
+  // Admin holds ("skip next digest", migration 0012) exclude an ad until the
+  // hold passes.
   const { data, error } = await db()
     .from("ads")
     .select(AD_SELECT)
     .eq("status", "approved")
     .is("broadcast_at", null)
+    .or(`hold_until.is.null,hold_until.lte.${new Date().toISOString()}`)
     .order("approved_at", { ascending: true })
     .limit(cap);
   if (error) throw error;
   return ((data ?? []) as unknown as AdRow[]).map(toStored);
+}
+
+export async function listHeldNewAds(): Promise<StoredAd[]> {
+  const { data, error } = await db()
+    .from("ads")
+    .select(`${AD_SELECT}, hold_until`)
+    .eq("status", "approved")
+    .is("broadcast_at", null)
+    .gt("hold_until", new Date().toISOString())
+    .order("id", { ascending: true });
+  if (error) throw error;
+  return ((data ?? []) as unknown as (AdRow & { hold_until: string | null })[]).map((row) => ({
+    ...toStored(row),
+    holdUntil: row.hold_until,
+  }));
+}
+
+export async function setAdHold(id: number, untilIso: string | null): Promise<void> {
+  const { error } = await db().from("ads").update({ hold_until: untilIso }).eq("id", id);
+  if (error) throw error;
+}
+
+export async function swapAdApprovalOrder(idA: number, idB: number): Promise<void> {
+  const { data, error } = await db()
+    .from("ads")
+    .select("id, approved_at")
+    .in("id", [idA, idB]);
+  if (error) throw error;
+  const a = data?.find((r) => r.id === idA);
+  const b = data?.find((r) => r.id === idB);
+  if (!a || !b) return;
+  const { error: e1 } = await db().from("ads").update({ approved_at: b.approved_at }).eq("id", idA);
+  if (e1) throw e1;
+  const { error: e2 } = await db().from("ads").update({ approved_at: a.approved_at }).eq("id", idB);
+  if (e2) throw e2;
+}
+
+export async function revertAdToPending(id: number): Promise<boolean> {
+  // Only a still-queued ad (approved, never broadcast) goes back to review.
+  const { data, error } = await db()
+    .from("ads")
+    .update({ status: "pending", hold_until: null })
+    .eq("id", id)
+    .eq("status", "approved")
+    .is("broadcast_at", null)
+    .select("id");
+  if (error) throw error;
+  const transitioned = (data?.length ?? 0) > 0;
+  if (transitioned) {
+    const { error: bumpError } = await db()
+      .from("bumps")
+      .delete()
+      .eq("ad_id", id)
+      .eq("status", "queued");
+    if (bumpError) throw bumpError;
+  }
+  return transitioned;
+}
+
+export async function createExtraDigest(channel: "sms" | "email", now: Date): Promise<number> {
+  // scheduled_for doubles as the digest's unique identity: the exact instant
+  // makes an extra edition collide with nothing (slots use whole hours).
+  const { data, error } = await db()
+    .from("digests")
+    .insert({ channel, scheduled_for: now.toISOString() })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id as number;
+}
+
+export async function finalizeExtraDigest(
+  digestId: number,
+  adIds: number[],
+  itemCount: number,
+): Promise<void> {
+  // An EXTRA edition records what it carried but consumes NOTHING: no
+  // broadcast_at marking, no bump transitions — the queue rides again at the
+  // next regular slot. digest_items rows keep catch-up/history correct.
+  if (adIds.length) {
+    const items = adIds.map((adId, i) => ({
+      digest_id: digestId,
+      ad_id: adId,
+      kind: "new",
+      position: i,
+    }));
+    const { error } = await db()
+      .from("digest_items")
+      .upsert(items, { onConflict: "digest_id,ad_id", ignoreDuplicates: true });
+    if (error) throw error;
+  }
+  const { error } = await db()
+    .from("digests")
+    .update({ sent_at: new Date().toISOString(), item_count: itemCount })
+    .eq("id", digestId);
+  if (error) throw error;
 }
 
 export async function expireDueAds(): Promise<number> {
@@ -409,10 +508,15 @@ export async function listRecentDigests(limit: number): Promise<DigestRecord[]> 
     const scheduled = String(row.scheduled_for ?? "");
     const day = scheduled.slice(0, 10);
     const hour = Number(scheduled.slice(11, 13));
+    // Slot digests are written with a whole-hour identity; anything with
+    // minutes/seconds is an admin "extra" edition — label it as such.
+    const isExtra = scheduled.slice(14, 19) !== "00:00" && scheduled.length >= 19;
     return {
       id: row.id as number,
       channel: row.channel as DigestRecord["channel"],
-      slotKey: `${day}#${Number.isFinite(hour) ? hour : "?"}`,
+      slotKey: isExtra
+        ? `${day}#extra#${scheduled.slice(11, 16)}`
+        : `${day}#${Number.isFinite(hour) ? hour : "?"}`,
       slotHour: Number.isFinite(hour) ? hour : 0,
       itemCount: (row.item_count as number | null) ?? 0,
       sentAt: (row.sent_at as string | null) ?? undefined,

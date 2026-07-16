@@ -29,6 +29,9 @@ export interface StoredAd {
   soldAt?: string;
   /** Set when the ad rode its one included broadcast (new-ad slot). */
   broadcastAt?: string;
+  /** Admin "skip the next digest": excluded from digest selection until this
+   * time passes (migration 0012). */
+  holdUntil?: string | null;
   flagged: boolean;
   rejectedReason?: string;
   rejectionKind?: "benign" | "violation";
@@ -427,12 +430,89 @@ const file = {
   getNewDigestAds(cap: number): StoredAd[] {
     const store = load();
     sweep(store);
+    const now = Date.now();
     return store.ads
-      .filter((a) => a.status === "approved" && !a.broadcastAt)
+      .filter(
+        (a) =>
+          a.status === "approved" &&
+          !a.broadcastAt &&
+          (!a.holdUntil || Date.parse(a.holdUntil) <= now),
+      )
       .sort(
         (a, b) => Date.parse(a.approvedAt ?? a.createdAt) - Date.parse(b.approvedAt ?? b.createdAt),
       )
       .slice(0, cap);
+  },
+
+  listHeldNewAds(): StoredAd[] {
+    const now = Date.now();
+    return load()
+      .ads.filter(
+        (a) =>
+          a.status === "approved" &&
+          !a.broadcastAt &&
+          a.holdUntil &&
+          Date.parse(a.holdUntil) > now,
+      )
+      .sort((a, b) => a.id - b.id);
+  },
+
+  setAdHold(id: number, untilIso: string | null): void {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === id);
+    if (!ad) return;
+    ad.holdUntil = untilIso;
+    save(store);
+  },
+
+  swapAdApprovalOrder(idA: number, idB: number): void {
+    const store = load();
+    const a = store.ads.find((x) => x.id === idA);
+    const b = store.ads.find((x) => x.id === idB);
+    if (!a || !b) return;
+    [a.approvedAt, b.approvedAt] = [b.approvedAt, a.approvedAt];
+    save(store);
+  },
+
+  revertAdToPending(id: number): boolean {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === id);
+    // Only a still-queued ad (approved, never broadcast) can go back to review.
+    if (!ad || ad.status !== "approved" || ad.broadcastAt) return false;
+    ad.status = "pending";
+    ad.holdUntil = null;
+    store.bumps = store.bumps.filter((b) => !(b.adId === id && b.status === "queued"));
+    save(store);
+    return true;
+  },
+
+  createExtraDigest(channel: "sms" | "email", now: Date): number {
+    const store = load();
+    const digest: DigestRecord = {
+      id: store.nextId++,
+      channel,
+      slotKey: `${now.toISOString().slice(0, 10)}#extra#${now.toISOString().slice(11, 19)}`,
+      slotHour: now.getUTCHours(),
+      itemCount: 0,
+      createdAt: now.toISOString(),
+    };
+    store.digests.push(digest);
+    save(store);
+    return digest.id;
+  },
+
+  finalizeExtraDigest(digestId: number, adIds: number[], itemCount: number): void {
+    // An EXTRA edition records what it carried but consumes nothing: no
+    // broadcast_at marking, no bump transitions — the queue rides again at
+    // the next regular slot.
+    const store = load();
+    const digest = store.digests.find((d) => d.id === digestId);
+    if (digest) {
+      digest.itemCount = itemCount;
+      digest.sentAt = new Date().toISOString();
+      if (digest.channel === "sms") digest.items = adIds;
+    }
+    save(store);
   },
 
   expireDueAds(): number {
@@ -794,6 +874,46 @@ export async function getQueuedBumps(): Promise<BumpRecord[]> {
 
 export async function getNewDigestAds(cap: number): Promise<StoredAd[]> {
   return supabaseConfigured ? remote.getNewDigestAds(cap) : file.getNewDigestAds(cap);
+}
+
+/** Approved, never-broadcast ads currently held past a digest ("skip next"). */
+export async function listHeldNewAds(): Promise<StoredAd[]> {
+  return supabaseConfigured ? remote.listHeldNewAds() : file.listHeldNewAds();
+}
+
+/** Hold (or release, with null) an ad from digest selection until a time. */
+export async function setAdHold(id: number, untilIso: string | null): Promise<void> {
+  return supabaseConfigured ? remote.setAdHold(id, untilIso) : file.setAdHold(id, untilIso);
+}
+
+/** Swap two ads' approval order — the digest queue's move up/down. */
+export async function swapAdApprovalOrder(idA: number, idB: number): Promise<void> {
+  return supabaseConfigured
+    ? remote.swapAdApprovalOrder(idA, idB)
+    : file.swapAdApprovalOrder(idA, idB);
+}
+
+/** Pull a queued (approved, never-broadcast) ad back into the review list. */
+export async function revertAdToPending(id: number): Promise<boolean> {
+  return supabaseConfigured ? remote.revertAdToPending(id) : file.revertAdToPending(id);
+}
+
+/** A digest row OUTSIDE the slot system (the admin "Send extra" edition). */
+export async function createExtraDigest(channel: "sms" | "email", now: Date): Promise<number> {
+  return supabaseConfigured
+    ? remote.createExtraDigest(channel, now)
+    : file.createExtraDigest(channel, now);
+}
+
+/** Record an extra edition's contents WITHOUT consuming the queue. */
+export async function finalizeExtraDigest(
+  digestId: number,
+  adIds: number[],
+  itemCount: number,
+): Promise<void> {
+  return supabaseConfigured
+    ? remote.finalizeExtraDigest(digestId, adIds, itemCount)
+    : file.finalizeExtraDigest(digestId, adIds, itemCount);
 }
 
 /**

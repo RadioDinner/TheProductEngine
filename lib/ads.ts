@@ -75,27 +75,5 @@ export async function listAdsByOwner(phone: string): Promise<Ad[]> {
 }
 
 // ---------- display derivations (shared by site + digest composer) ----------
-
-/**
- * Display title: the lead clause of the free-text body, the way a
- * classified's first line works in print.
- */
-export function deriveTitle(body: string): string {
-  const firstClause = body.split(/[.,]/, 1)[0]?.trim() ?? body;
-  return firstClause.length > 64 ? `${firstClause.slice(0, 61).trimEnd()}…` : firstClause;
-}
-
-/** Remainder of the body after the title clause, for the excerpt line. */
-export function deriveRest(body: string): string {
-  const title = body.split(/[.,]/, 1)[0] ?? "";
-  return body
-    .slice(title.length)
-    .replace(/^[.,]\s*/, "")
-    .trim();
-}
-
-/** First dollar amount in the body, if any — shown as the row's price. */
-export function derivePrice(body: string): string | null {
-  const match = body.match(/\$[\d,]+(?:\.\d{2})?/);
-  return match ? match[0] : null;
-}
+// Pure implementations live in lib/ad-display.ts (dependency-free, unit-tested).
+export { deriveTitle, deriveRest, derivePrice } from "@/lib/ad-display";

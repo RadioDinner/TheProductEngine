@@ -16,9 +16,13 @@ import {
   cancelQueuedOutboxFor,
   getAdRecord,
   queueBump,
+  revertAdToPending,
   reviveAd,
+  setAdHold,
+  swapAdApprovalOrder,
   updateAdBody,
 } from "@/lib/engine-store";
+import { nextSlotOccurrence, selectDigestItems, sendDigestNow } from "@/lib/digest-engine";
 import { normalizePhone } from "@/lib/phone";
 
 /** Whitelisted return targets for shared ad actions — never trust a form string. */
@@ -74,6 +78,68 @@ export async function adminQueueBump(formData: FormData): Promise<void> {
     }
   }
   redirect(backTarget(formData));
+}
+
+/** Skip the next digest: hold the ad until just after the upcoming slot. */
+export async function adminDelayAd(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (Number.isInteger(id)) {
+    const settings = await getEngineSettings();
+    const next = nextSlotOccurrence(settings.slots);
+    if (next) {
+      // One hour past the skipped slot: safely later than any late-running
+      // compose of that slot, and at/before the following slot's compose.
+      await setAdHold(id, new Date(next.at.getTime() + 3600_000).toISOString());
+    }
+  }
+  redirect("/admin/digests");
+}
+
+/** Release a held ad back into the digest queue immediately. */
+export async function adminReleaseAd(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (Number.isInteger(id)) await setAdHold(id, null);
+  redirect("/admin/digests");
+}
+
+/** Move an ad up/down in the digest queue by swapping approval order with its
+ * neighbor (new ads run FIFO by approval time; bumps always follow new ads). */
+export async function adminMoveAd(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  const dir = formData.get("dir") === "up" ? "up" : "down";
+  if (Number.isInteger(id)) {
+    const settings = await getEngineSettings();
+    const { newAds } = await selectDigestItems(settings.digestCap);
+    const index = newAds.findIndex((a) => a.id === id);
+    const neighbor = dir === "up" ? newAds[index - 1] : newAds[index + 1];
+    if (index >= 0 && neighbor) await swapAdApprovalOrder(id, neighbor.id);
+  }
+  redirect("/admin/digests");
+}
+
+/** Pull a queued ad out of the digest queue, back into the review list. */
+export async function adminRevertAd(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (Number.isInteger(id)) await revertAdToPending(id);
+  redirect("/admin/digests");
+}
+
+/** Send the digest now: "early" (the upcoming slot, ahead of schedule) or
+ * "extra" (an additional edition that doesn't consume the queue). */
+export async function adminSendDigest(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const edition = formData.get("edition") === "extra" ? "extra" : "early";
+  const result = await sendDigestNow(edition);
+  if (result.ok) {
+    redirect(
+      `/admin/digests?sent=${edition}&items=${result.items}&to=${result.recipients}&emails=${result.emailRecipients}`,
+    );
+  }
+  redirect(`/admin/digests?senderror=${encodeURIComponent(result.reason)}`);
 }
 
 export async function adminGrantCredits(formData: FormData): Promise<void> {

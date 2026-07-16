@@ -13,10 +13,12 @@ import {
   claimDigestOutbox,
   countRecentOutboundContaining,
   createDigestIfAbsent,
+  createExtraDigest,
   digestSegmentsSentSince,
   digestsSentOnDay,
   enqueueDigestOutbox,
   finalizeDigest,
+  finalizeExtraDigest,
   getAdRecord,
   getNewDigestAds,
   getQueuedBumps,
@@ -31,7 +33,9 @@ import {
   type OutboxRow,
   type StoredAd,
 } from "@/lib/engine-store";
-import { listSubscriberPhones } from "@/lib/store";
+import { listEmailRecipients, listSubscriberPhones } from "@/lib/store";
+import { unsubscribeUrl } from "@/lib/email";
+import { composeEmailHtml, composeEmailText } from "@/lib/email-digest";
 import { sms } from "@/lib/sms";
 import { email } from "@/lib/email";
 import { site } from "@/lib/config";
@@ -62,18 +66,26 @@ export const DIGEST_MSG_MAX_GSM = 612;
  * packed into the fewest messages under the single-SMS ceiling. This is what
  * gets enqueued and delivered per subscriber.
  */
+export type DigestEdition = "early" | "extra";
+
 export function composeDigestMessages(
   now: Date,
   slotHour: number,
   items: StoredAd[],
   firstOfDay: boolean,
+  edition?: DigestEdition,
 ): string[] {
   const dateLabel = now.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     timeZone: "America/New_York",
   });
-  const label = SLOT_LABELS[slotHour] ?? `${slotHour}:00`;
+  // Label admin-triggered editions so subscribers aren't confused by an
+  // off-schedule digest ("(sent early)") or one that repeats ads ("extra").
+  const label =
+    edition === "extra"
+      ? "extra edition"
+      : `${SLOT_LABELS[slotHour] ?? `${slotHour}:00`}${edition === "early" ? " (sent early)" : ""}`;
   const header = gsmSanitize(`Plain Exchange ${dateLabel} ${label}:`);
   const adLines = items.map((ad) =>
     gsmSanitize(`#${ad.id} ${ad.body}${ad.photo ? ` Pic? Reply PIC ${ad.id}` : ""}`),
@@ -148,6 +160,28 @@ export async function sendRecentDigestTo(phone: string): Promise<number> {
 }
 
 /**
+ * The next slot occurrence after `now`: its ET day key, hour, and (approximate)
+ * instant. Wall-clock arithmetic off etParts — exact enough for holds and
+ * labels; digests never run near the 2 AM DST boundary.
+ */
+export function nextSlotOccurrence(
+  slots: number[],
+  now = new Date(),
+): { day: string; slot: number; at: Date } | null {
+  const sorted = [...slots].sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const { day, hour } = etParts(now);
+  const todaySlot = sorted.find((s) => s > hour);
+  const hoursAhead = todaySlot !== undefined ? todaySlot - hour : 24 - hour + sorted[0];
+  // Minutes/seconds are timezone-independent (ET offsets are whole hours).
+  const at = new Date(
+    now.getTime() + hoursAhead * 3600_000 - now.getMinutes() * 60_000 - now.getSeconds() * 1000,
+  );
+  if (todaySlot !== undefined) return { day, slot: todaySlot, at };
+  return { day: etParts(at).day, slot: sorted[0], at };
+}
+
+/**
  * What the next digest slot would carry if it composed right now: new ads
  * first (FIFO by approval), queued bumps filling the remaining capacity.
  * Shared by runDueDigests (the authority) and the admin Digests tab preview,
@@ -173,6 +207,132 @@ export async function selectDigestItems(cap: number): Promise<{
     }
   }
   return { newAds, bumpAds, bumpRecords };
+}
+
+export type SendNowResult =
+  | { ok: true; items: number; recipients: number; emailRecipients: number; drained: number }
+  | { ok: false; reason: string };
+
+/**
+ * Admin "Send early" / "Send extra" (session 007).
+ *
+ * early — composes the UPCOMING slot's digest right now, under that slot's
+ * identity, so the scheduled run becomes a no-op: the 3 PM digest simply goes
+ * out at 1:30. Consumes the queue exactly like the scheduled run would
+ * (broadcast_at set, bumps spent). Header says "(sent early)".
+ *
+ * extra — an additional edition outside the slot system: sends the current
+ * queue right now but consumes NOTHING, so the same ads ride again at the
+ * next regular slot. Header says "extra edition".
+ *
+ * Both also send the matching email edition immediately, then drain the
+ * outbox so delivery starts within the click, not at the next cron tick.
+ */
+export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResult> {
+  const now = new Date();
+  const settings = await getEngineSettings();
+  if (pauseBlocks("bulk", settings.pauseMode)) {
+    return { ok: false, reason: "Digest sending is paused (see Settings → System controls)." };
+  }
+  const { newAds, bumpAds, bumpRecords } = await selectDigestItems(settings.digestCap);
+  const items = [...newAds, ...bumpAds];
+  if (!items.length) return { ok: false, reason: "Nothing is queued for a digest right now." };
+
+  // Identify the digest rows.
+  let smsDigestId: number;
+  let emailDigestId: number;
+  let slotHour: number;
+  if (edition === "early") {
+    const next = nextSlotOccurrence(settings.slots, now);
+    if (!next) return { ok: false, reason: "No digest slots are configured." };
+    slotHour = next.slot;
+    const sms = await createDigestIfAbsent(`${next.day}#${next.slot}`, next.slot);
+    if (sms.finalized) {
+      return { ok: false, reason: `The ${next.day} ${next.slot}:00 digest was already sent.` };
+    }
+    smsDigestId = sms.id;
+    emailDigestId = (await createDigestIfAbsent(`${next.day}#email#${next.slot}`, next.slot, "email")).id;
+  } else {
+    slotHour = etParts(now).hour;
+    smsDigestId = await createExtraDigest("sms", now);
+    emailDigestId = await createExtraDigest("email", new Date(now.getTime() + 1000));
+  }
+
+  // Compose + enqueue the SMS edition.
+  const { day } = etParts(now);
+  const firstOfDay = (await digestsSentOnDay(day)) === 0;
+  const messages = composeDigestMessages(now, slotHour, items, firstOfDay, edition);
+  const partSegments = messages.map((m) => segmentation(m).segments);
+  const blocked = new Set((await listBlocked()).map((b) => b.phone));
+  const subscribers = (await listSubscriberPhones()).filter((p) => !blocked.has(p));
+  const rows: OutboxInsert[] = [];
+  for (const phone of subscribers) {
+    for (let i = 0; i < messages.length; i++) {
+      rows.push({
+        digestId: smsDigestId,
+        channel: "sms",
+        address: phone,
+        part: i + 1,
+        parts: messages.length,
+        body: messages[i],
+        segments: partSegments[i],
+      });
+    }
+  }
+  await enqueueDigestOutbox(rows);
+
+  // Compose + enqueue the matching email edition (mirrors the SMS digest).
+  const recipients = await listEmailRecipients();
+  const dateLabel = now.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    timeZone: "America/New_York",
+  });
+  const editionTag = edition === "early" ? " (sent early)" : " (extra edition)";
+  const subject = `${site.name} — ${items.length} ad${items.length === 1 ? "" : "s"}, ${dateLabel}${editionTag}`;
+  const sorted = [...items].sort((a, b) => a.id - b.id);
+  const emailRows: OutboxInsert[] = recipients.map((to) => {
+    const unsub = unsubscribeUrl(to);
+    return {
+      digestId: emailDigestId,
+      channel: "email" as const,
+      address: to,
+      part: 1,
+      parts: 1,
+      subject,
+      body: composeEmailText(sorted, `${dateLabel}${editionTag}`, unsub),
+      html: composeEmailHtml(sorted, `${dateLabel}${editionTag}`, unsub),
+      segments: 0,
+    };
+  });
+  await enqueueDigestOutbox(emailRows);
+
+  // Bookkeeping: early consumes the queue exactly like the scheduled run;
+  // extra records its contents and consumes nothing.
+  if (edition === "early") {
+    await finalizeDigest(
+      smsDigestId,
+      newAds.map((a) => a.id),
+      bumpRecords.map((b) => b.id),
+      items.length,
+      items.map((a) => a.id),
+    );
+    await finalizeDigest(emailDigestId, [], [], items.length);
+  } else {
+    await finalizeExtraDigest(smsDigestId, items.map((a) => a.id), items.length);
+    await finalizeExtraDigest(emailDigestId, [], items.length);
+  }
+
+  // Deliver now — don't make "send early" wait for the next cron tick.
+  const drain = await drainDigestOutbox({ newlyEnqueued: true });
+  return {
+    ok: true,
+    items: items.length,
+    recipients: subscribers.length,
+    emailRecipients: recipients.length,
+    drained: drain.sent,
+  };
 }
 
 export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {
