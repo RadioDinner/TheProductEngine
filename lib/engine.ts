@@ -232,6 +232,11 @@ async function handleOwnerCommand(
     return { body: `Ad #${id} doesn't belong to this number.` };
   }
 
+  // An admin-deleted ad is gone: never mark it sold or charge a bump for it.
+  if (ad.status === "deleted") {
+    return { body: `Ad #${id} was removed and is no longer listed.` };
+  }
+
   if (verb === "sold") {
     if (ad.status === "sold") return { body: `Ad #${id} is already marked sold.` };
     if (ad.status === "rejected") return { body: `Ad #${id} was not accepted, so there's nothing to mark sold.` };
@@ -471,8 +476,14 @@ async function route(
       const ad = await getAdRecord(command.id);
       // A pending ad is visible only to its OWNER (same rule as STATUS): the
       // seller who just posted deserves "wait for approval," but a stranger
-      // probing ad numbers must not learn unreviewed ads exist.
-      if (!ad || ad.status === "rejected" || (ad.status === "pending" && ad.ownerPhone !== from)) {
+      // probing ad numbers must not learn unreviewed ads exist. A deleted ad
+      // is simply gone.
+      if (
+        !ad ||
+        ad.status === "rejected" ||
+        ad.status === "deleted" ||
+        (ad.status === "pending" && ad.ownerPhone !== from)
+      ) {
         return { body: `No ad found with number ${command.id}.` };
       }
       if (ad.status === "pending") {
@@ -525,7 +536,12 @@ async function route(
     case "status": {
       if (!command.id) return { body: `Include the ad number — for example: STATUS 1042.` };
       const ad = await getAdRecord(command.id);
-      if (!ad || ad.status === "rejected" || (ad.status === "pending" && ad.ownerPhone !== from)) {
+      if (
+        !ad ||
+        ad.status === "rejected" ||
+        ad.status === "deleted" ||
+        (ad.status === "pending" && ad.ownerPhone !== from)
+      ) {
         return { body: `No ad found with number ${command.id}.` };
       }
       if (ad.status === "pending") {

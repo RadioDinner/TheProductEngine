@@ -14,6 +14,7 @@ import {
 import { blockNumber, unblockNumber } from "@/lib/blocklist";
 import {
   cancelQueuedOutboxFor,
+  deleteAdRecord,
   getAdRecord,
   queueBump,
   reassignAdOwnership,
@@ -79,6 +80,20 @@ export async function adminQueueBump(formData: FormData): Promise<void> {
     }
   }
   redirect(backTarget(formData));
+}
+
+/** Delete an ad (soft — migration 0013): off the website and out of the
+ * digest queue immediately, queued bumps dropped, photo removed from storage.
+ * Digest history and the message log keep the ad number. No refund and no
+ * seller notice — the confirm UI on /admin/ads says so and shows the charge,
+ * so a deserved refund goes through Grant credits on the user's page. */
+export async function adminDeleteAd(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (!Number.isInteger(id)) redirect("/admin/ads");
+  const outcome = await deleteAdRecord(id);
+  if (outcome === "unsupported") redirect("/admin/ads?error=migration0013");
+  redirect(outcome === "deleted" ? `/admin/ads?deleted=${id}` : "/admin/ads");
 }
 
 /** Skip the next digest: hold the ad until just after the upcoming slot. */

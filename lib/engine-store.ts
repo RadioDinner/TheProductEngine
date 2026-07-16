@@ -15,7 +15,7 @@ import { AD_TTL_DAYS, type Ad, type AdPage, type AdQuery, type AdStatus } from "
 
 // ---------- types ----------
 
-export type StoredAdStatus = "pending" | "approved" | "rejected" | "sold" | "expired";
+export type StoredAdStatus = "pending" | "approved" | "rejected" | "sold" | "expired" | "deleted";
 
 export interface StoredAd {
   id: number;
@@ -32,6 +32,8 @@ export interface StoredAd {
   /** Admin "skip the next digest": excluded from digest selection until this
    * time passes (migration 0012). */
   holdUntil?: string | null;
+  /** Admin deletion (soft — migration 0013): when the ad was removed. */
+  deletedAt?: string;
   flagged: boolean;
   rejectedReason?: string;
   rejectionKind?: "benign" | "violation";
@@ -499,6 +501,20 @@ const file = {
     return true;
   },
 
+  deleteAd(id: number): "deleted" | "noop" {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === id);
+    if (!ad || ad.status === "deleted") return "noop";
+    ad.status = "deleted";
+    ad.deletedAt = new Date().toISOString();
+    ad.holdUntil = null;
+    // The photo is removed with the ad (prod deletes the storage object too).
+    delete ad.photo;
+    store.bumps = store.bumps.filter((b) => !(b.adId === id && b.status === "queued"));
+    save(store);
+    return "deleted";
+  },
+
   createExtraDigest(channel: "sms" | "email", now: Date): number {
     const store = load();
     const digest: DigestRecord = {
@@ -916,6 +932,19 @@ export async function swapAdApprovalOrder(idA: number, idB: number): Promise<voi
 /** Pull a queued (approved, never-broadcast) ad back into the review list. */
 export async function revertAdToPending(id: number): Promise<boolean> {
   return supabaseConfigured ? remote.revertAdToPending(id) : file.revertAdToPending(id);
+}
+
+/**
+ * Admin deletion (soft, migration 0013): the ad's status flips to 'deleted' —
+ * every positive status filter (site, digests, My Ads, PIC) excludes it, while
+ * digest history and the message audit log keep the ad number. Queued bumps
+ * are dropped and the photo (row + storage object) is removed. No refund and
+ * no seller notice — that's admin judgement, handled elsewhere if deserved.
+ * "unsupported" = the store can't take the new status yet (migration 0013 not
+ * applied) — the caller surfaces that instead of 500ing.
+ */
+export async function deleteAdRecord(id: number): Promise<"deleted" | "noop" | "unsupported"> {
+  return supabaseConfigured ? remote.deleteAdRecord(id) : file.deleteAd(id);
 }
 
 /** A digest row OUTSIDE the slot system (the admin "Send extra" edition). */

@@ -5,6 +5,7 @@
  */
 import { db } from "@/lib/db";
 import { AD_TTL_DAYS } from "@/lib/ads";
+import { removeHostedPhotos } from "@/lib/photos";
 import type {
   BumpRecord,
   CreateAdOptions,
@@ -159,7 +160,12 @@ export async function getAllAds(
     }
   }
   const { data, error } = await query;
-  if (error) throw error;
+  if (error) {
+    // The admin filtered by 'deleted' before migration 0013 was pasted: the
+    // enum value doesn't exist yet (22P02). An empty list, not a 500.
+    if (status === "deleted" && error.code === "22P02") return [];
+    throw error;
+  }
   return ((data ?? []) as unknown as AdRow[]).map(toStored);
 }
 
@@ -327,6 +333,51 @@ export async function revertAdToPending(id: number): Promise<boolean> {
     if (bumpError) throw bumpError;
   }
   return transitioned;
+}
+
+/**
+ * Admin deletion (soft, migration 0013). Order matters for crash-safety: the
+ * status flip comes FIRST (the authoritative act — the ad is off the site the
+ * moment it lands), then the child cleanup; a crash mid-cleanup leaves only
+ * already-orphanable leftovers (a queued bump the digest selector skips, a
+ * storage object nothing links to), never a live ad in a broken state.
+ * A hard DELETE is impossible anyway: digest_items references ads(id) with no
+ * cascade — past digests are history and stay intact.
+ */
+export async function deleteAdRecord(id: number): Promise<"deleted" | "noop" | "unsupported"> {
+  const { data, error } = await db()
+    .from("ads")
+    .update({ status: "deleted", deleted_at: new Date().toISOString(), hold_until: null })
+    .eq("id", id)
+    .neq("status", "deleted")
+    .select("id");
+  if (error) {
+    // 22P02 = 'deleted' isn't a valid ad_status value yet — migration 0013
+    // hasn't been pasted. Degrade to a report instead of 500ing the action
+    // (the 0011/0012 migration races both took down whole surfaces this way).
+    if (error.code === "22P02" && /ad_status|enum/i.test(error.message)) return "unsupported";
+    throw error;
+  }
+  if ((data?.length ?? 0) === 0) return "noop";
+
+  const { error: bumpError } = await db()
+    .from("bumps")
+    .delete()
+    .eq("ad_id", id)
+    .eq("status", "queued");
+  if (bumpError) throw bumpError;
+
+  const { data: photos, error: photoReadError } = await db()
+    .from("ad_photos")
+    .select("src")
+    .eq("ad_id", id);
+  if (photoReadError) throw photoReadError;
+  if (photos?.length) {
+    await removeHostedPhotos(photos.map((p) => p.src as string));
+    const { error: photoDeleteError } = await db().from("ad_photos").delete().eq("ad_id", id);
+    if (photoDeleteError) throw photoDeleteError;
+  }
+  return "deleted";
 }
 
 export async function createExtraDigest(channel: "sms" | "email", now: Date): Promise<number> {

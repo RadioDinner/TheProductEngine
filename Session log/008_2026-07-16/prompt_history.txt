@@ -3,3 +3,20 @@ Lets kick off another session. Always commit to main, start on the items mention
 
 --- 2026-07-16 17:19 ---
 I want the email subject to be the most interesting ad in the digest. Currently its like "The Plain Exchange — 3 ads, Thursday, July 16 (sent early)". I'd rather have it be "The Plain Exchange : 07-16-26 - Tractor trailer +3 more ads"
+
+--- 2026-07-16 18:26 ---
+I want to start building out a feature list. When I add a feature to the feature list, just add it to the list
+
+Item zero, I want a "USER_ID" to exist to be a way of identifying people beyond their phone number or email. I want it to be a unique 6 digit ID made of random numbers. I dont want any of them to be the same. And when merged usernames are taken up, I want the old numbers not to be re-used for a whole year. 
+
+First item, on the feature list, I want people to be able to email in more pictures for their ads that would be displayed in the website. The email digest and SMS will still only have one more picture, but when people click the link in the email, I want the other pictures to be displayed in the listing
+
+Second item, I want a more in depth "profile" system. I want people to be able to rate sellers and buyers, BUT only if they're confirmed buyers and sellers. For instance. Lets say bob wants to sell his lawn mower, he sells it to Larry. Bob sends the SOLD 1040 to update his ad. Then the "SOLD 1040" would reply, "Your ad has been updated. What was the phone number of the buyer?" and then he can reply with Bob's phone number. Then it says, "Thanks! Would you like to rate the buyer? If so, please reply with RATE 5 for 5 stars."
+
+Third feature list item, I want people to be able to set a profile picture, an address for pickups, (This would be private to them but they can optionally send to a buyer with which they are in communication with).
+
+Fourth item, I want to add a "chat" feature. This would be between buyers and sellers. So people could send people messages on the platform itself, rather than exposing a phone number. It would be chats between user id's 
+
+Fifth item, I want each digest to have a digest number, incrementing up by 1, starting at 1. Reset the number now for digests to start sending out. 
+
+Now, start on item zero and keep working through the items until you get to item 5, then write the handoff, commit it to main and end the session

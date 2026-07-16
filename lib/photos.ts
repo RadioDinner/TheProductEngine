@@ -105,3 +105,24 @@ export async function rehostInboundPhoto(src: string): Promise<string | null> {
   }
   return result.url;
 }
+
+/**
+ * Remove re-hosted photo objects when their ad is deleted. Only objects in our
+ * own bucket are touched (public URL form …/object/public/ad-photos/<path>);
+ * fixture/site-relative and external allowlisted srcs are skipped. Best-effort:
+ * a storage failure logs and moves on — the ad_photos rows are the source of
+ * truth for what renders, and the caller has already removed those.
+ */
+export async function removeHostedPhotos(srcs: string[]): Promise<void> {
+  if (!supabaseConfigured) return;
+  const marker = `/object/public/${BUCKET}/`;
+  const paths = srcs
+    .map((src) => {
+      const at = src.indexOf(marker);
+      return at === -1 ? null : src.slice(at + marker.length);
+    })
+    .filter((p): p is string => Boolean(p));
+  if (!paths.length) return;
+  const { error } = await db().storage.from(BUCKET).remove(paths);
+  if (error) console.error("[photos] storage removal failed:", error.message);
+}

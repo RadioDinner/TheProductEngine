@@ -179,6 +179,19 @@ export default async function AdminHelp() {
         &ldquo;verified advertiser&rdquo; tier could be allowed to post links.)
       </p>
 
+      <h2 className="section-h">Deleting an ad (Ads tab)</h2>
+      <p>
+        <strong>Delete this ad…</strong> on the Ads tab removes an ad completely, whatever its
+        status: it leaves the website and the digest queue immediately, a queued bump is dropped,
+        and its photo is removed from storage. It is a <em>soft</em> delete under the hood — the
+        ad number stays in past digests and in the message log, because history is never
+        rewritten (filter the Ads tab by &ldquo;deleted&rdquo; to see removed ads). Deleting
+        <strong> does not refund</strong> and <strong>does not text the seller</strong> — the
+        confirm step shows what the seller paid so you can grant credits on their page first if
+        a refund is deserved. For a bad ad still in review, prefer <strong>Reject</strong>: that
+        is the flow that refunds (benign) or records a strike (violation) and tells the seller.
+      </p>
+
       <h2 className="section-h">Why credits are a ledger</h2>
       <p>
         Credit balances aren&rsquo;t a single number that gets edited. Every grant, purchase,

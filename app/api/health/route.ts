@@ -99,6 +99,17 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/0012_ad_hold.sql in the SQL editor",
           }
         : { applied: true };
+      // deleted_at ships in the same paste as the 'deleted' enum value, so
+      // this column probe stands in for the whole of 0013 (admin ad deletion).
+      const del = await db().from("ads").select("deleted_at", { count: "exact", head: true });
+      report.migration0013 = del.error
+        ? {
+            applied: false,
+            code: del.error.code,
+            error: del.error.message,
+            fix: "run supabase/migrations/0013_ad_delete.sql in the SQL editor",
+          }
+        : { applied: true };
     } catch (e) {
       report.db = { ok: false, thrown: e instanceof Error ? e.message : String(e) };
     }
