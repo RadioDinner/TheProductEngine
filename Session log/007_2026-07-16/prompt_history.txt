@@ -45,3 +45,11 @@ Not in the spam. How would I have gotten the welcome message if I am in the opt-
 
 [Telnyx Detail Record Search pasted: all inbound delivered; outbound 07:58 failed (2 parts), 07:59 failed x2 (2 parts each), 11:05 outbound delivered (2 parts). No outbound records visible for 11:07/11:09/11:17.]
 [Webhook deliveries pasted: all message.received delivered 7:58-11:09; 10dlc.phone_number.update events at 8:05, 8:10, 8:24 AM Jul 16; 10dlc.campaign.update events Jul 10-15.]
+
+--- 2026-07-16 ---
+this is what the debugging in telnyx shows but I never got an SMS reply
+
+[Telnyx Webhook Detail pasted for the CREDITS test, 11:59 AM: message.received webhook delivered to the app; inbound from +13306001834 (Verizon Wireless), to +13309607170, messaging_profile_id 40019862-683a-430b-a7bb-44f7faefe930, encoding GSM-7, is_spam false, status webhook_delivered]
+
+--- 2026-07-16 ---
+[Telnyx detail record JSON pasted — still the INBOUND CREDITS message: direction inbound, status delivered, tcr_campaign_id CD92DHL, tcr_campaign_registered REGISTERED, 10dlc_registered true, profile Advertising, carrier Verizon Wireless OH, errors []]
