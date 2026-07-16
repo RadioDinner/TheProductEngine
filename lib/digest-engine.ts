@@ -43,6 +43,7 @@ import { notifyAdminDigestHalted } from "@/lib/notify";
 import { pauseBlocks } from "@/lib/outbound";
 import { listBlocked } from "@/lib/blocklist";
 import { etParts } from "@/lib/et";
+import { composeEmailSubject } from "@/lib/ad-display";
 import { gsmSanitize, packMessages, segmentation } from "@/lib/sms-segments";
 
 const SLOT_LABELS: Record<number, string> = {
@@ -290,8 +291,8 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
     timeZone: "America/New_York",
   });
   const editionTag = edition === "early" ? " (sent early)" : " (extra edition)";
-  const subject = `${site.name} — ${items.length} ad${items.length === 1 ? "" : "s"}, ${dateLabel}${editionTag}`;
   const sorted = [...items].sort((a, b) => a.id - b.id);
+  const subject = composeEmailSubject(site.name, sorted, day, editionTag);
   const emailRows: OutboxInsert[] = recipients.map((to) => {
     const unsub = unsubscribeUrl(to);
     return {

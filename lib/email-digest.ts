@@ -10,6 +10,7 @@ import { siteUrl, unsubscribeUrl } from "@/lib/email";
 import { type SlotResult } from "@/lib/digest-engine";
 import { etParts } from "@/lib/et";
 import { deriveTitle, deriveRest } from "@/lib/ads";
+import { composeEmailSubject } from "@/lib/ad-display";
 import {
   createDigestIfAbsent,
   enqueueDigestOutbox,
@@ -126,7 +127,7 @@ export async function runDueEmailDigests(now = new Date()): Promise<SlotResult[]
       day: "numeric",
       timeZone: "America/New_York",
     });
-    const subject = `${site.name} — ${ads.length} new ad${ads.length === 1 ? "" : "s"}, ${dateLabel}`;
+    const subject = composeEmailSubject(site.name, ads, day);
     const recipients = await listEmailRecipients();
     const rows: OutboxInsert[] = recipients.map((to) => {
       const unsub = unsubscribeUrl(to); // personalized (signed) per recipient

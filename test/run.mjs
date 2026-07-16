@@ -3,7 +3,7 @@
 //   npm test            (node --experimental-strip-types test/run.mjs)
 // A test file exports `name` and `run(t)`, where t.eq(label, got, want) records
 // a check. Exit code is non-zero if any check fails.
-const SUITES = ["segments", "commands", "dst", "phone", "pic-quota", "image-sniff", "ads"];
+const SUITES = ["segments", "commands", "dst", "phone", "pic-quota", "image-sniff", "ads", "email-subject"];
 
 let totalPass = 0;
 let totalFail = 0;
