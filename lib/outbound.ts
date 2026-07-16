@@ -68,8 +68,19 @@ export async function dispatchSms(
   opts: { cls: SendClass; media?: string[]; settings?: EngineSettings },
 ): Promise<DispatchResult> {
   const g = await gate(opts.cls, to, opts.settings);
-  if (!g.ok) return { sent: false, reason: g.reason };
-  await sms.send(to, body, opts.media);
+  if (!g.ok) {
+    // Name every suppressed send in the function logs: a pause/blocklist/
+    // throttle drop is deliberate, but "deliberate" must never mean invisible —
+    // an operator staring at a silent phone needs this line to exist.
+    console.warn(`[outbound] ${opts.cls} SMS to ${to} suppressed: ${g.reason}`);
+    return { sent: false, reason: g.reason };
+  }
+  try {
+    await sms.send(to, body, opts.media);
+  } catch (e) {
+    console.error(`[outbound] ${opts.cls} SMS to ${to} send failed:`, e);
+    throw e;
+  }
   return { sent: true };
 }
 
@@ -79,7 +90,15 @@ export async function dispatchEmail(
   opts: { cls: SendClass; settings?: EngineSettings },
 ): Promise<DispatchResult> {
   const g = await gate(opts.cls, null, opts.settings);
-  if (!g.ok) return { sent: false, reason: g.reason };
-  await email.send(msg);
+  if (!g.ok) {
+    console.warn(`[outbound] ${opts.cls} email suppressed: ${g.reason}`);
+    return { sent: false, reason: g.reason };
+  }
+  try {
+    await email.send(msg);
+  } catch (e) {
+    console.error(`[outbound] ${opts.cls} email send failed:`, e);
+    throw e;
+  }
   return { sent: true };
 }
