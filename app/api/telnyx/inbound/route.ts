@@ -96,8 +96,19 @@ export async function POST(req: NextRequest) {
     } else {
       console.warn(`[telnyx-inbound] dropped message.received with unparseable from number`);
     }
+  } else if (data?.event_type === "message.sent" || data?.event_type === "message.finalized") {
+    // Delivery receipts for our outbound sends. Not yet persisted, but logged:
+    // this line in the function logs is the ground truth for "did the carrier
+    // deliver it, and if not, which 4xxxx code came back".
+    const p = data.payload ?? {};
+    const recipients = Array.isArray(p.to)
+      ? (p.to as { phone_number?: string; status?: string }[])
+          .map((t) => `${t.phone_number}:${t.status}`)
+          .join(",")
+      : "";
+    console.log(
+      `[telnyx-dlr] ${data.event_type} id=${p.id} to=${recipients} errors=${JSON.stringify(p.errors ?? [])}`,
+    );
   }
-  // Delivery-status events (message.sent / message.finalized) are accepted
-  // and ignored for now; provider_status updates come with the admin pass.
   return NextResponse.json({ ok: true });
 }

@@ -53,3 +53,6 @@ this is what the debugging in telnyx shows but I never got an SMS reply
 
 --- 2026-07-16 ---
 [Telnyx detail record JSON pasted — still the INBOUND CREDITS message: direction inbound, status delivered, tcr_campaign_id CD92DHL, tcr_campaign_registered REGISTERED, 10dlc_registered true, profile Advertising, carrier Verizon Wireless OH, errors []]
+
+--- 2026-07-16 ---
+I have no outbound messages in the detail record search or webhook deliveries. I need you to get this for me!!!!
