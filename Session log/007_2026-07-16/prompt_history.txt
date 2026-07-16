@@ -111,3 +111,12 @@ I want users to be able to be "doubly" subscribed. And I want to be able to merg
 
 --- 2026-07-16 ---
 [AskUserQuestion answers: "doubly subscribed" = SMS + email for one person; merge scope = FULL account merge]
+
+--- 2026-07-16 ---
+This page couldn't load
+
+A server error occurred. Reload to try again.
+
+ERROR 3495887845@E394
+
+When browsing to https://www.theplainexchange.com/admin/digests

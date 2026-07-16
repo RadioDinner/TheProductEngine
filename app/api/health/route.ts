@@ -75,10 +75,10 @@ export async function GET(req: NextRequest) {
       report.adsTable = ads.error
         ? { ok: false, code: ads.error.code, error: ads.error.message }
         : { ok: true, rows: ads.count };
-      // Migration 0011 probe: the deployed code selects users.pic_balance on
-      // EVERY account read (ensureAccount), so if this column is missing every
-      // inbound SMS command 500s. Surface that here instead of leaving it to
-      // be inferred from silence.
+      // Migration probes: the deployed code depends on these columns; a
+      // missing one breaks a whole surface (0011: every inbound SMS command;
+      // 0012: digest composition + /admin/digests). Surface drift here instead
+      // of leaving it to be inferred from 500s.
       const quota = await db()
         .from("users")
         .select("pic_balance", { count: "exact", head: true });
@@ -88,6 +88,15 @@ export async function GET(req: NextRequest) {
             code: quota.error.code,
             error: quota.error.message,
             fix: "run supabase/migrations/0011_pic_quota.sql in the SQL editor",
+          }
+        : { applied: true };
+      const hold = await db().from("ads").select("hold_until", { count: "exact", head: true });
+      report.migration0012 = hold.error
+        ? {
+            applied: false,
+            code: hold.error.code,
+            error: hold.error.message,
+            fix: "run supabase/migrations/0012_ad_hold.sql in the SQL editor",
           }
         : { applied: true };
     } catch (e) {
