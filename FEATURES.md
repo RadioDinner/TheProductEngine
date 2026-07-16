@@ -10,8 +10,8 @@ itself; build details live in the session logs and HANDOFF.md.
 | 0 | **USER_ID** — a way of identifying people beyond phone/email: unique, random, 6-digit, never duplicated; ids freed by an account merge are not reused for a whole year | session 008 | **built** (migration 0014) |
 | 1 | **Email-in extra ad pictures** — sellers email more pictures for an ad; the website listing shows them all; the email digest and SMS still carry only the one picture | session 008 | **built** (migration 0015) |
 | 2 | **Profiles: confirmed buyer/seller ratings** — only confirmed parties can rate. `SOLD 1040` replies asking for the buyer's phone number; then invites `RATE 1–5`; the named buyer gets the same invitation to rate the seller | session 008 | **built** (migration 0016) |
-| 3 | **Profile picture + pickup address** — settable by the member; the address is private to them, optionally shareable with a buyer they're in conversation with | session 008 | not started |
-| 4 | **Chat** — on-platform messages between buyers and sellers, keyed on user ids, so nobody's phone number is exposed | session 008 | not started |
+| 3 | **Profile picture + pickup address** — settable by the member; the address is private to them, optionally shareable with a buyer they're in conversation with | session 008 | **built** (migration 0017) |
+| 4 | **Chat** — on-platform messages between buyers and sellers, keyed on user ids, so nobody's phone number is exposed | session 008 | **built** (migration 0017) |
 | 5 | **Digest numbers** — every digest carries a number, incrementing by 1 from 1; counter reset at build time | session 008 | not started |
 
 ## Item notes (decisions made while building — flag anything to change)

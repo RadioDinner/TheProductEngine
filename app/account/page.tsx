@@ -2,10 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signOut } from "@/lib/auth-actions";
-import { saveEmail, toggleEmailEdition, toggleSubscription } from "@/lib/account-actions";
+import { saveEmail, saveProfile, toggleEmailEdition, toggleSubscription } from "@/lib/account-actions";
 import { formatPhone } from "@/lib/phone";
 import { readSession } from "@/lib/session";
-import { ensureUserId, getAccount, getCreditBalance, getLedger } from "@/lib/store";
+import {
+  ensureUserId,
+  getAccount,
+  getCreditBalance,
+  getLedger,
+  getProfile,
+  listChatsFor,
+} from "@/lib/store";
 import { adExpiresAt, deriveTitle, listAdsByOwner, type Ad } from "@/lib/ads";
 import { formatPrice, packs, site } from "@/lib/config";
 import { checkoutUrl } from "@/lib/payments";
@@ -50,6 +57,7 @@ export default async function AccountPage({
     checkout?: string;
     saved?: string;
     error?: string;
+    profile?: string;
   }>;
 }) {
   const session = await readSession();
@@ -58,6 +66,8 @@ export default async function AccountPage({
   const params = await searchParams;
   const account = await getAccount(session.phone);
   const memberId = await ensureUserId(session.phone);
+  const profile = await getProfile(session.phone);
+  const unreadChats = (await listChatsFor(session.phone)).filter((c) => c.unread).length;
   const balance = await getCreditBalance(session.phone);
   const ledger = await getLedger(session.phone);
   const myAds = await listAdsByOwner(session.phone);
@@ -202,6 +212,74 @@ export default async function AccountPage({
             <strong>AD NEW</strong> and your ad to <strong>{site.smsNumber}</strong> — see{" "}
             <Link href="/how-it-works">how it works</Link>.
           </p>
+        )}
+      </section>
+
+      <section id="messages" aria-labelledby="messages-h">
+        <h2 id="messages-h" className="section-h">
+          Messages
+        </h2>
+        <p>
+          <Link href="/account/messages">Your conversations with other members →</Link>
+          {unreadChats > 0 && <span className="ad-sold"> {unreadChats} new</span>}
+        </p>
+      </section>
+
+      <section id="profile" aria-labelledby="profile-h">
+        <h2 id="profile-h" className="section-h">
+          Profile
+        </h2>
+        {params.profile === "saved" && (
+          <p className="notice" role="status">
+            Profile saved.
+          </p>
+        )}
+        {params.profile === "badphoto" && (
+          <p className="form-error" role="alert">
+            That picture couldn&apos;t be used — jpg, png, gif, or webp up to 8 MB.
+          </p>
+        )}
+        {params.profile === "unsupported" && (
+          <p className="form-error" role="alert">
+            Profiles aren&apos;t available just yet — try again later.
+          </p>
+        )}
+        {profile ? (
+          <form action={saveProfile}>
+            {profile.profilePhoto && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={profile.profilePhoto}
+                alt="Your profile picture"
+                width={72}
+                height={72}
+                style={{ borderRadius: "50%", objectFit: "cover", marginBottom: 8 }}
+              />
+            )}
+            <div className="field">
+              <label htmlFor="profile-photo">Profile picture (shown to members you message)</label>
+              <input id="profile-photo" name="photo" type="file" accept="image/*" />
+            </div>
+            <div className="field">
+              <label htmlFor="pickup-address">
+                Pickup address — private. It&apos;s shared only when YOU press &ldquo;Share my
+                pickup address&rdquo; inside a conversation.
+              </label>
+              <input
+                id="pickup-address"
+                name="pickupAddress"
+                type="text"
+                maxLength={200}
+                defaultValue={profile.pickupAddress ?? ""}
+                placeholder="4392 CR 168, Millersburg"
+              />
+            </div>
+            <button className="btn btn-sm" type="submit">
+              Save profile
+            </button>
+          </form>
+        ) : (
+          <p className="fine">Profile settings aren&apos;t available just yet.</p>
         )}
       </section>
 

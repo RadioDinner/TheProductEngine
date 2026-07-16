@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deriveRest, deriveTitle, getAd } from "@/lib/ads";
 import { getRatingSummary } from "@/lib/store";
+import { startChat } from "@/lib/account-actions";
 import { MaskedText, maskPhonesPlain } from "@/components/MaskedText";
 import { readSession } from "@/lib/session";
 import { recordVisit } from "@/lib/analytics";
@@ -57,11 +58,18 @@ export async function generateMetadata({
   };
 }
 
-export default async function AdPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AdPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ chat?: string }>;
+}) {
   const id = parseId((await params).id);
   if (!id) notFound();
   const ad = await getAd(id);
   if (!ad) notFound();
+  const chatParam = (await searchParams).chat;
   await recordVisit("/ad");
 
   if (ad.status === "expired") {
@@ -148,6 +156,26 @@ export default async function AdPage({ params }: { params: Promise<{ id: string 
           <MaskedText text={rest || ad.body} revealed={!!session} />
         </p>
       </article>
+      {session && !sold && session.phone !== ad.ownerPhone && (
+        <aside className="contact-gate" aria-label="Message the seller">
+          <h2>Message the seller</h2>
+          <p>
+            Ask a question or make an offer right here — your phone number stays private
+            (messages travel between member numbers).
+          </p>
+          {chatParam === "unavailable" && (
+            <p className="form-error" role="alert">
+              Messaging isn&apos;t available just yet — use the contact info in the ad above.
+            </p>
+          )}
+          <form action={startChat}>
+            <input type="hidden" name="adId" value={ad.id} />
+            <button className="btn btn-sm" type="submit">
+              Message the seller on {site.name}
+            </button>
+          </form>
+        </aside>
+      )}
       {sold ? (
         <aside className="contact-gate" aria-label="Item sold">
           <h2>This item has sold</h2>

@@ -14,10 +14,13 @@ import {
   type Account,
   type CreateCodeResult,
   type EmailSubscriberEntry,
+  type ChatMessageView,
+  type ChatSummary,
   type LedgerEntry,
   type LedgerSince,
   type MergeOutcome,
   type PicQuotaResult,
+  type Profile,
   type RatingSummary,
   type SmsContext,
   type SmsSubscriberEntry,
@@ -339,6 +342,248 @@ export async function getRatingSummary(phone: string): Promise<RatingSummary> {
   return { asSeller: roll("seller"), asBuyer: roll("buyer") };
 }
 
+/** Missing 0017 schema (profile columns / chat tables) → feature dormant. */
+function chatSchemaMissing(error: { code?: string } | null): boolean {
+  return error?.code === "42P01" || error?.code === "42703";
+}
+
+export async function getProfile(phone: string): Promise<Profile | null> {
+  const { data, error } = await db()
+    .from("users")
+    .select("profile_photo, pickup_address")
+    .eq("phone", phone)
+    .maybeSingle();
+  if (error) {
+    if (chatSchemaMissing(error)) return null;
+    throw error;
+  }
+  if (!data) return null;
+  return {
+    profilePhoto: (data.profile_photo as string | null) ?? null,
+    pickupAddress: (data.pickup_address as string | null) ?? null,
+  };
+}
+
+export async function setProfile(
+  phone: string,
+  update: Partial<Profile>,
+): Promise<"saved" | "unsupported"> {
+  const fields: Record<string, string | null> = {};
+  if (update.profilePhoto !== undefined) fields.profile_photo = update.profilePhoto;
+  if (update.pickupAddress !== undefined) fields.pickup_address = update.pickupAddress;
+  if (!Object.keys(fields).length) return "saved";
+  const { error } = await db().from("users").update(fields).eq("phone", phone);
+  if (error) {
+    if (chatSchemaMissing(error)) return "unsupported";
+    throw error;
+  }
+  return "saved";
+}
+
+interface ChatRow {
+  id: number;
+  ad_id: number | null;
+  a_user_id: string;
+  b_user_id: string;
+  last_message_at: string;
+}
+
+export async function ensureChat(
+  adId: number | null,
+  phoneA: string,
+  phoneB: string,
+): Promise<number | null> {
+  const a = await userByPhone(phoneA);
+  const b = await userByPhone(phoneB);
+  if (!a || !b) return null;
+  const [first, second] = [a.id, b.id].sort();
+  let query = db()
+    .from("chats")
+    .select("id")
+    .eq("a_user_id", first)
+    .eq("b_user_id", second);
+  query = adId === null ? query.is("ad_id", null) : query.eq("ad_id", adId);
+  const { data: existing, error: findError } = await query.maybeSingle();
+  if (findError) {
+    if (chatSchemaMissing(findError)) return null;
+    throw findError;
+  }
+  if (existing) return existing.id as number;
+  const { data: created, error: insertError } = await db()
+    .from("chats")
+    .insert({ ad_id: adId, a_user_id: first, b_user_id: second })
+    .select("id")
+    .single();
+  if (insertError) {
+    if (insertError.code === "23505") {
+      // Concurrent open — the other insert won; read it back.
+      const { data: raced } = await query.maybeSingle();
+      return (raced?.id as number | undefined) ?? null;
+    }
+    if (chatSchemaMissing(insertError)) return null;
+    throw insertError;
+  }
+  return created.id as number;
+}
+
+/** The chat row, only if this phone's account is one of the two members. */
+async function chatForMember(
+  chatId: number,
+  phone: string,
+): Promise<{ chat: ChatRow; userId: string } | null> {
+  const user = await userByPhone(phone);
+  if (!user) return null;
+  const { data, error } = await db()
+    .from("chats")
+    .select("id, ad_id, a_user_id, b_user_id, last_message_at")
+    .eq("id", chatId)
+    .maybeSingle();
+  if (error) {
+    if (chatSchemaMissing(error)) return null;
+    throw error;
+  }
+  const chat = data as ChatRow | null;
+  if (!chat || (chat.a_user_id !== user.id && chat.b_user_id !== user.id)) return null;
+  return { chat, userId: user.id };
+}
+
+export async function listChatsFor(phone: string): Promise<ChatSummary[]> {
+  const user = await userByPhone(phone);
+  if (!user) return [];
+  const { data, error } = await db()
+    .from("chats")
+    .select("id, ad_id, a_user_id, b_user_id, last_message_at")
+    .or(`a_user_id.eq.${user.id},b_user_id.eq.${user.id}`)
+    .order("last_message_at", { ascending: false })
+    .limit(200);
+  if (error) {
+    if (chatSchemaMissing(error)) return [];
+    throw error;
+  }
+  const chats = (data ?? []) as ChatRow[];
+  if (!chats.length) return [];
+
+  const otherIds = [...new Set(chats.map((c) => (c.a_user_id === user.id ? c.b_user_id : c.a_user_id)))];
+  const others = new Map<string, { memberId: string | null; photo: string | null }>();
+  const { data: otherRows, error: othersError } = await db()
+    .from("users")
+    .select("id, user_id, profile_photo")
+    .in("id", otherIds);
+  if (!othersError) {
+    for (const row of otherRows ?? []) {
+      others.set(row.id as string, {
+        memberId: (row.user_id as string | null) ?? null,
+        photo: (row.profile_photo as string | null) ?? null,
+      });
+    }
+  }
+
+  const chatIds = chats.map((c) => c.id);
+  const { data: reads } = await db()
+    .from("chat_reads")
+    .select("chat_id, last_read_message_id")
+    .eq("user_id", user.id)
+    .in("chat_id", chatIds);
+  const readMap = new Map<number, number>(
+    (reads ?? []).map((r) => [r.chat_id as number, r.last_read_message_id as number]),
+  );
+  const { data: lastMsgs } = await db()
+    .from("chat_messages")
+    .select("chat_id, id, from_user_id")
+    .in("chat_id", chatIds)
+    .order("id", { ascending: false })
+    .limit(500);
+  const unreadSet = new Set<number>();
+  for (const m of lastMsgs ?? []) {
+    const cid = m.chat_id as number;
+    if (m.from_user_id !== user.id && (m.id as number) > (readMap.get(cid) ?? 0)) {
+      unreadSet.add(cid);
+    }
+  }
+
+  return chats.map((c) => {
+    const otherId = c.a_user_id === user.id ? c.b_user_id : c.a_user_id;
+    const other = others.get(otherId);
+    return {
+      id: c.id,
+      adId: c.ad_id,
+      otherMemberId: other?.memberId ?? null,
+      otherPhoto: other?.photo ?? null,
+      lastMessageAt: c.last_message_at,
+      unread: unreadSet.has(c.id),
+    };
+  });
+}
+
+export async function listChatMessages(
+  chatId: number,
+  phone: string,
+): Promise<ChatMessageView[] | null> {
+  const membership = await chatForMember(chatId, phone);
+  if (!membership) return null;
+  const { data, error } = await db()
+    .from("chat_messages")
+    .select("id, from_user_id, body, created_at")
+    .eq("chat_id", chatId)
+    .order("id", { ascending: true })
+    .limit(500);
+  if (error) {
+    if (chatSchemaMissing(error)) return null;
+    throw error;
+  }
+  return (data ?? []).map((m) => ({
+    id: m.id as number,
+    mine: m.from_user_id === membership.userId,
+    body: m.body as string,
+    at: m.created_at as string,
+  }));
+}
+
+export async function sendChatMessage(
+  chatId: number,
+  fromPhone: string,
+  body: string,
+): Promise<{ outcome: "sent"; otherPhone: string } | { outcome: "denied" | "unsupported" }> {
+  const membership = await chatForMember(chatId, fromPhone);
+  if (!membership) return { outcome: "denied" };
+  const { chat, userId } = membership;
+  const { data: inserted, error } = await db()
+    .from("chat_messages")
+    .insert({ chat_id: chatId, from_user_id: userId, body })
+    .select("id")
+    .single();
+  if (error) {
+    if (chatSchemaMissing(error)) return { outcome: "unsupported" };
+    throw error;
+  }
+  await db().from("chats").update({ last_message_at: new Date().toISOString() }).eq("id", chatId);
+  // Your own send marks the thread read for you.
+  await db()
+    .from("chat_reads")
+    .upsert({ chat_id: chatId, user_id: userId, last_read_message_id: inserted.id as number });
+  const otherId = chat.a_user_id === userId ? chat.b_user_id : chat.a_user_id;
+  const { data: other } = await db().from("users").select("phone").eq("id", otherId).maybeSingle();
+  const otherPhone = (other?.phone as string | null) ?? "";
+  return { outcome: "sent", otherPhone };
+}
+
+export async function markChatRead(chatId: number, phone: string): Promise<void> {
+  const membership = await chatForMember(chatId, phone);
+  if (!membership) return;
+  const { data: last } = await db()
+    .from("chat_messages")
+    .select("id")
+    .eq("chat_id", chatId)
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!last) return;
+  const { error } = await db()
+    .from("chat_reads")
+    .upsert({ chat_id: chatId, user_id: membership.userId, last_read_message_id: last.id as number });
+  if (error && !chatSchemaMissing(error)) throw error;
+}
+
 export async function consumeFreeAd(phone: string): Promise<boolean> {
   const user = await userByPhone(phone);
   if (!user || user.free_ads <= 0) return false;
@@ -535,11 +780,16 @@ async function reassignUserRows(fromId: string, toId: string): Promise<void> {
     ["sales", "buyer_user_id"],
     ["ratings", "rater_user_id"],
     ["ratings", "rated_user_id"],
+    ["chats", "a_user_id"],
+    ["chats", "b_user_id"],
+    ["chat_messages", "from_user_id"],
+    ["chat_reads", "user_id"],
   ] as const) {
     const { error } = await db().from(table).update({ [column]: toId }).eq(column, fromId);
-    if (error?.code === "23505" && table === "ratings") {
-      // Both accounts rated the same ad — the survivor's rating stands and the
-      // loser's duplicate opinion is dropped (one rating per person per ad).
+    if (error?.code === "23505") {
+      // A uniqueness collision (both accounts rated the same ad; both chatted
+      // with the same person; duplicate read rows): the survivor's row stands
+      // and the loser's duplicate is dropped.
       const { error: dropError } = await db().from(table).delete().eq(column, fromId);
       if (dropError) throw dropError;
     } else if (error && error.code !== "42P01") {

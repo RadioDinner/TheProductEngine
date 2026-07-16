@@ -141,6 +141,15 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/0016_ratings.sql in the SQL editor",
           }
         : { applied: true };
+      const chats = await db().from("chats").select("id", { count: "exact", head: true });
+      report.migration0017 = chats.error
+        ? {
+            applied: false,
+            code: chats.error.code,
+            error: chats.error.message,
+            fix: "run supabase/migrations/0017_profiles_chat.sql in the SQL editor",
+          }
+        : { applied: true };
     } catch (e) {
       report.db = { ok: false, thrown: e instanceof Error ? e.message : String(e) };
     }

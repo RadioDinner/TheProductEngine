@@ -51,6 +51,11 @@ export interface Account {
   picBalance?: number;
   /** ET day (YYYY-MM-DD) the PIC bank was last accrued to; null/undefined = never. */
   picAccrualDay?: string | null;
+  /** Profile picture URL (FEATURES item 3) — file store only; Supabase reads
+   * it via getProfile so core lookups never depend on migration 0017. */
+  profilePhoto?: string | null;
+  /** PRIVATE pickup address (FEATURES item 3) — same storage note as above. */
+  pickupAddress?: string | null;
 }
 
 /** Result of an atomic PIC-quota reservation. remaining = -1 when the quota is off. */
@@ -78,6 +83,31 @@ export interface SmsContext {
 export interface RatingSummary {
   asSeller: { count: number; average: number | null };
   asBuyer: { count: number; average: number | null };
+}
+
+/** Profile bits (FEATURES item 3): the picture is public; the pickup address
+ * is PRIVATE and only ever leaves via an explicit share into a chat. */
+export interface Profile {
+  profilePhoto: string | null;
+  pickupAddress: string | null;
+}
+
+/** One chat thread as one member sees it (FEATURES item 4). */
+export interface ChatSummary {
+  id: number;
+  adId: number | null;
+  /** The other party's public member id (never their phone). */
+  otherMemberId: string | null;
+  otherPhoto: string | null;
+  lastMessageAt: string;
+  unread: boolean;
+}
+
+export interface ChatMessageView {
+  id: number;
+  mine: boolean;
+  body: string;
+  at: string;
 }
 
 /** Email-only subscriber (no phone account) — spec Q11. */
@@ -179,6 +209,18 @@ interface StoreShape {
     stars: number;
     at: string;
   }[];
+  /** Chat threads + messages + per-member read watermarks (FEATURES item 4). */
+  chats?: {
+    id: number;
+    adId: number | null;
+    aPhone: string;
+    bPhone: string;
+    createdAt: string;
+    lastMessageAt: string;
+  }[];
+  chatMessages?: { id: number; chatId: number; fromPhone: string; body: string; at: string }[];
+  chatReads?: Record<string, number>; // `${chatId}#${phone}` -> last read message id
+  nextChatId?: number;
 }
 
 const STORE_PATH = join(process.cwd(), ".data", "store.json");
@@ -334,6 +376,110 @@ const file = {
       };
     };
     return { asSeller: roll("seller"), asBuyer: roll("buyer") };
+  },
+
+  getProfile(phone: string): Profile | null {
+    const account = load().accounts[phone];
+    if (!account) return null;
+    return {
+      profilePhoto: account.profilePhoto ?? null,
+      pickupAddress: account.pickupAddress ?? null,
+    };
+  },
+
+  setProfile(phone: string, update: Partial<Profile>): "saved" | "unsupported" {
+    const store = load();
+    const account = store.accounts[phone];
+    if (!account) return "unsupported";
+    if (update.profilePhoto !== undefined) account.profilePhoto = update.profilePhoto;
+    if (update.pickupAddress !== undefined) account.pickupAddress = update.pickupAddress;
+    save(store);
+    return "saved";
+  },
+
+  ensureChat(adId: number | null, phoneA: string, phoneB: string): number | null {
+    const store = load();
+    const chats = (store.chats ??= []);
+    const pair = [phoneA, phoneB].sort();
+    const existing = chats.find(
+      (c) => c.aPhone === pair[0] && c.bPhone === pair[1] && (c.adId ?? null) === (adId ?? null),
+    );
+    if (existing) return existing.id;
+    const id = (store.nextChatId ??= 1);
+    store.nextChatId = id + 1;
+    const now = new Date().toISOString();
+    chats.push({ id, adId: adId ?? null, aPhone: pair[0], bPhone: pair[1], createdAt: now, lastMessageAt: now });
+    save(store);
+    return id;
+  },
+
+  chatMember(chatId: number, phone: string): { otherPhone: string } | null {
+    const chat = (load().chats ?? []).find((c) => c.id === chatId);
+    if (!chat) return null;
+    if (chat.aPhone === phone) return { otherPhone: chat.bPhone };
+    if (chat.bPhone === phone) return { otherPhone: chat.aPhone };
+    return null;
+  },
+
+  listChatsFor(phone: string): ChatSummary[] {
+    const store = load();
+    const mine = (store.chats ?? []).filter((c) => c.aPhone === phone || c.bPhone === phone);
+    return mine
+      .sort((a, b) => Date.parse(b.lastMessageAt) - Date.parse(a.lastMessageAt))
+      .map((c) => {
+        const otherPhone = c.aPhone === phone ? c.bPhone : c.aPhone;
+        const other = store.accounts[otherPhone];
+        const lastRead = store.chatReads?.[`${c.id}#${phone}`] ?? 0;
+        const unread = (store.chatMessages ?? []).some(
+          (m) => m.chatId === c.id && m.fromPhone !== phone && m.id > lastRead,
+        );
+        return {
+          id: c.id,
+          adId: c.adId,
+          otherMemberId: other?.userId ?? null,
+          otherPhoto: other?.profilePhoto ?? null,
+          lastMessageAt: c.lastMessageAt,
+          unread,
+        };
+      });
+  },
+
+  listChatMessages(chatId: number, phone: string): ChatMessageView[] | null {
+    const store = load();
+    if (!file.chatMember(chatId, phone)) return null; // membership is the gate
+    return (store.chatMessages ?? [])
+      .filter((m) => m.chatId === chatId)
+      .sort((a, b) => a.id - b.id)
+      .map((m) => ({ id: m.id, mine: m.fromPhone === phone, body: m.body, at: m.at }));
+  },
+
+  sendChatMessage(
+    chatId: number,
+    fromPhone: string,
+    body: string,
+  ): { outcome: "sent"; otherPhone: string } | { outcome: "denied" | "unsupported" } {
+    const store = load();
+    const chat = (store.chats ?? []).find((c) => c.id === chatId);
+    if (!chat || (chat.aPhone !== fromPhone && chat.bPhone !== fromPhone)) {
+      return { outcome: "denied" };
+    }
+    const messages = (store.chatMessages ??= []);
+    const id = (messages[messages.length - 1]?.id ?? 0) + 1;
+    messages.push({ id, chatId, fromPhone, body, at: new Date().toISOString() });
+    chat.lastMessageAt = new Date().toISOString();
+    // Your own send marks the thread read for you.
+    (store.chatReads ??= {})[`${chatId}#${fromPhone}`] = id;
+    save(store);
+    return { outcome: "sent", otherPhone: chat.aPhone === fromPhone ? chat.bPhone : chat.aPhone };
+  },
+
+  markChatRead(chatId: number, phone: string): void {
+    const store = load();
+    if (!file.chatMember(chatId, phone)) return;
+    const last = (store.chatMessages ?? []).filter((m) => m.chatId === chatId).pop();
+    if (!last) return;
+    (store.chatReads ??= {})[`${chatId}#${phone}`] = last.id;
+    save(store);
   },
 
   consumeFreeAd(phone: string): boolean {
@@ -834,6 +980,64 @@ export async function addRating(
 /** Ratings received by a phone's account, split by role. */
 export async function getRatingSummary(phone: string): Promise<RatingSummary> {
   return supabaseConfigured ? remote.getRatingSummary(phone) : file.getRatingSummary(phone);
+}
+
+/** Profile picture + private pickup address. Null = no account, or the
+ * profile columns aren't there yet (migration 0017) — the UI hides itself. */
+export async function getProfile(phone: string): Promise<Profile | null> {
+  return supabaseConfigured ? remote.getProfile(phone) : file.getProfile(phone);
+}
+
+export async function setProfile(
+  phone: string,
+  update: Partial<Profile>,
+): Promise<"saved" | "unsupported"> {
+  return supabaseConfigured ? remote.setProfile(phone, update) : file.setProfile(phone, update);
+}
+
+/** Open (or find) the thread between two members about an ad (FEATURES item
+ * 4). Null = chat isn't available (migration 0017 missing). */
+export async function ensureChat(
+  adId: number | null,
+  phoneA: string,
+  phoneB: string,
+): Promise<number | null> {
+  return supabaseConfigured
+    ? remote.ensureChat(adId, phoneA, phoneB)
+    : file.ensureChat(adId, phoneA, phoneB);
+}
+
+/** All of a member's threads, most recent first. */
+export async function listChatsFor(phone: string): Promise<ChatSummary[]> {
+  return supabaseConfigured ? remote.listChatsFor(phone) : file.listChatsFor(phone);
+}
+
+/** A thread's messages — null unless the phone is one of the two members. */
+export async function listChatMessages(
+  chatId: number,
+  phone: string,
+): Promise<ChatMessageView[] | null> {
+  return supabaseConfigured
+    ? remote.listChatMessages(chatId, phone)
+    : file.listChatMessages(chatId, phone);
+}
+
+/** Send into a thread (members only). Returns the other party's phone so the
+ * caller can nudge them by SMS — the phone is never shown in the chat UI. */
+export async function sendChatMessage(
+  chatId: number,
+  fromPhone: string,
+  body: string,
+): Promise<{ outcome: "sent"; otherPhone: string } | { outcome: "denied" | "unsupported" }> {
+  return supabaseConfigured
+    ? remote.sendChatMessage(chatId, fromPhone, body)
+    : file.sendChatMessage(chatId, fromPhone, body);
+}
+
+export async function markChatRead(chatId: number, phone: string): Promise<void> {
+  return supabaseConfigured
+    ? remote.markChatRead(chatId, phone)
+    : file.markChatRead(chatId, phone);
 }
 
 /** Spend one starter pass if any remain. */

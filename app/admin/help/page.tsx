@@ -216,6 +216,19 @@ export default async function AdminHelp() {
         (or ignoring the question) opts out; the ask expires on its own.
       </p>
 
+      <h2 className="section-h">Member profiles, private addresses, and chat</h2>
+      <p>
+        Signed-in members can set a <strong>profile picture</strong> (public) and a{" "}
+        <strong>pickup address</strong> that is strictly private — it is never shown anywhere
+        and only leaves the account when the member presses &ldquo;Share my pickup
+        address&rdquo; inside a conversation. <strong>Chat</strong> lives on the website
+        (&ldquo;Message the seller&rdquo; on any ad): messages travel between 6-digit member
+        numbers so nobody&apos;s phone number is exposed, and the other party gets at most one
+        &ldquo;you have a message waiting&rdquo; text every few hours (reply-class — it respects
+        pause, blocklist, and the hourly caps). Flip-phone members simply keep using the phone
+        number printed in the ad, as always — chat is an extra lane, not a replacement.
+      </p>
+
       <h2 className="section-h">Why credits are a ledger</h2>
       <p>
         Credit balances aren&rsquo;t a single number that gets edited. Every grant, purchase,
