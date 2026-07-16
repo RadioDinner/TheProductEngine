@@ -18,6 +18,12 @@ function keyKind(key: string | undefined): string {
   return "unrecognized format";
 }
 
+/** Telnyx sends `from` verbatim — anything but E.164 (+1XXXXXXXXXX) 400s every reply. */
+function fromNumberKind(value: string | undefined): string {
+  if (!value) return "missing";
+  return /^\+1\d{10}$/.test(value) ? "set (E.164)" : "set but NOT +1XXXXXXXXXX — Telnyx sends will fail";
+}
+
 /** Operator check: the detailed report needs the CRON_SECRET bearer (open in dev). */
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
@@ -46,6 +52,9 @@ export async function GET(req: NextRequest) {
       SITE_URL: process.env.SITE_URL ?? null,
       CRON_SECRET: Boolean(process.env.CRON_SECRET),
       TELNYX_API_KEY: Boolean(process.env.TELNYX_API_KEY),
+      TELNYX_PUBLIC_KEY: Boolean(process.env.TELNYX_PUBLIC_KEY),
+      TELNYX_FROM_NUMBER: fromNumberKind(process.env.TELNYX_FROM_NUMBER),
+      TELNYX_MESSAGING_PROFILE_ID: Boolean(process.env.TELNYX_MESSAGING_PROFILE_ID),
       RESEND_API_KEY: Boolean(process.env.RESEND_API_KEY),
     },
   };
@@ -60,6 +69,21 @@ export async function GET(req: NextRequest) {
       report.adsTable = ads.error
         ? { ok: false, code: ads.error.code, error: ads.error.message }
         : { ok: true, rows: ads.count };
+      // Migration 0011 probe: the deployed code selects users.pic_balance on
+      // EVERY account read (ensureAccount), so if this column is missing every
+      // inbound SMS command 500s. Surface that here instead of leaving it to
+      // be inferred from silence.
+      const quota = await db()
+        .from("users")
+        .select("pic_balance", { count: "exact", head: true });
+      report.migration0011 = quota.error
+        ? {
+            applied: false,
+            code: quota.error.code,
+            error: quota.error.message,
+            fix: "run supabase/migrations/0011_pic_quota.sql in the SQL editor",
+          }
+        : { applied: true };
     } catch (e) {
       report.db = { ok: false, thrown: e instanceof Error ? e.message : String(e) };
     }

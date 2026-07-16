@@ -11,19 +11,23 @@ import { isProduction } from "@/lib/env";
 
 const TELNYX_TOLERANCE_S = 300;
 
-function verifySignature(raw: string, req: NextRequest): boolean {
+/** null = verified; otherwise the reason, logged so a rejected webhook is
+ * diagnosable from the Vercel function logs instead of a bare 401. */
+function signatureRejection(raw: string, req: NextRequest): string | null {
   const publicKeyB64 = process.env.TELNYX_PUBLIC_KEY;
   if (!publicKeyB64) {
     // Fail CLOSED in production: without the key we can't authenticate the
     // sender, and a forged `from` would let anyone act as any phone number.
-    return !isProduction;
+    return isProduction ? "TELNYX_PUBLIC_KEY is not set" : null;
   }
   const signature = req.headers.get("telnyx-signature-ed25519");
   const timestamp = req.headers.get("telnyx-timestamp");
-  if (!signature || !timestamp) return false;
+  if (!signature || !timestamp) return "missing telnyx-signature-ed25519/telnyx-timestamp headers";
   // Reject stale/replayed webhooks.
   const age = Math.abs(Date.now() / 1000 - Number(timestamp));
-  if (!Number.isFinite(age) || age > TELNYX_TOLERANCE_S) return false;
+  if (!Number.isFinite(age) || age > TELNYX_TOLERANCE_S) {
+    return `timestamp outside ${TELNYX_TOLERANCE_S}s tolerance (age ${Math.round(age)}s)`;
+  }
   try {
     // Wrap Telnyx's raw 32-byte Ed25519 key in an SPKI DER header.
     const spki = Buffer.concat([
@@ -31,14 +35,15 @@ function verifySignature(raw: string, req: NextRequest): boolean {
       Buffer.from(publicKeyB64, "base64"),
     ]);
     const key = createPublicKey({ key: spki, format: "der", type: "spki" });
-    return edVerify(
+    const ok = edVerify(
       null,
       Buffer.from(`${timestamp}|${raw}`),
       key,
       Buffer.from(signature, "base64"),
     );
-  } catch {
-    return false;
+    return ok ? null : "Ed25519 signature does not verify (TELNYX_PUBLIC_KEY mismatch?)";
+  } catch (e) {
+    return `signature check threw: ${e instanceof Error ? e.message : String(e)}`;
   }
 }
 
@@ -48,7 +53,9 @@ interface TelnyxMedia {
 
 export async function POST(req: NextRequest) {
   const raw = await req.text();
-  if (!verifySignature(raw, req)) {
+  const rejection = signatureRejection(raw, req);
+  if (rejection) {
+    console.warn(`[telnyx-inbound] webhook rejected: ${rejection}`);
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 
@@ -72,7 +79,22 @@ export async function POST(req: NextRequest) {
       : [];
     const providerId = typeof payload.id === "string" ? payload.id : undefined;
     if (from) {
-      await handleInbound({ from, text, ...(media.length && { media }) }, providerId);
+      try {
+        await handleInbound({ from, text, ...(media.length && { media }) }, providerId);
+      } catch (e) {
+        // Name the failure in the function logs — a bare 500 is invisible.
+        // NOTE: the message row was already recorded by recordInboundOnce, so
+        // Telnyx's retry of this 500 will dedup to a no-op; the text is lost
+        // until the underlying error (usually a missing migration) is fixed
+        // and the sender texts again.
+        console.error(
+          `[telnyx-inbound] handleInbound failed for ${from} (${JSON.stringify(text.slice(0, 40))}):`,
+          e,
+        );
+        return NextResponse.json({ error: "handler error" }, { status: 500 });
+      }
+    } else {
+      console.warn(`[telnyx-inbound] dropped message.received with unparseable from number`);
     }
   }
   // Delivery-status events (message.sent / message.finalized) are accepted
