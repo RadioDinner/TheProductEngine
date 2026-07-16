@@ -18,6 +18,7 @@ import {
   getAdRecord,
   queueBump,
   reassignAdOwnership,
+  resolvePhotoSubmission,
   revertAdToPending,
   reviveAd,
   setAdHold,
@@ -94,6 +95,15 @@ export async function adminDeleteAd(formData: FormData): Promise<void> {
   const outcome = await deleteAdRecord(id);
   if (outcome === "unsupported") redirect("/admin/ads?error=migration0013");
   redirect(outcome === "deleted" ? `/admin/ads?deleted=${id}` : "/admin/ads");
+}
+
+/** Approve (→ website gallery) or discard an emailed-in extra picture. */
+export async function adminResolvePhotoSubmission(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  const approve = formData.get("decision") === "approve";
+  if (Number.isInteger(id)) await resolvePhotoSubmission(id, approve);
+  redirect("/admin/ads");
 }
 
 /** Skip the next digest: hold the ad until just after the upcoming slot. */

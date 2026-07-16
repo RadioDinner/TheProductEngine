@@ -54,6 +54,36 @@ function fetchHeaders(src: string): Record<string, string> {
     : {};
 }
 
+/**
+ * Sniff-verify raw image bytes and store them in the public bucket. The shared
+ * back half of every ingest path (MMS re-host, emailed-in extras): the bytes
+ * must PROVE the file is jpg/png/gif/webp — sender-supplied content types and
+ * filenames are never consulted.
+ */
+export async function storeImageBytes(bytes: Buffer): Promise<RehostResult> {
+  if (!supabaseConfigured) return { ok: false, reason: "Supabase is not configured (dev mode)" };
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_BYTES) {
+    return { ok: false, reason: `unacceptable size (${bytes.byteLength} bytes)` };
+  }
+  const ext = sniffImage(bytes);
+  if (!ext) {
+    return { ok: false, reason: "not an accepted image — bytes are not jpg/png/gif/webp" };
+  }
+  try {
+    await ensureBucket();
+    const path = `${randomUUID()}.${ext}`;
+    const { error } = await db()
+      .storage.from(BUCKET)
+      .upload(path, bytes, { contentType: CONTENT_TYPE_BY_EXT[ext] });
+    if (error) return { ok: false, reason: `storage upload failed: ${error.message}` };
+    const { data } = db().storage.from(BUCKET).getPublicUrl(path);
+    if (!data.publicUrl) return { ok: false, reason: "storage returned no public URL" };
+    return { ok: true, url: data.publicUrl };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /** Copy an inbound MMS photo into our storage, reporting exactly why not. */
 export async function rehostInboundPhotoDetailed(src: string): Promise<RehostResult> {
   if (!supabaseConfigured) return { ok: false, reason: "Supabase is not configured (dev mode)" };
@@ -69,31 +99,48 @@ export async function rehostInboundPhotoDetailed(src: string): Promise<RehostRes
     }
     if (!response.ok) return { ok: false, reason: `media fetch returned HTTP ${response.status}` };
     const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.byteLength === 0 || bytes.byteLength > MAX_BYTES) {
-      return { ok: false, reason: `unacceptable size (${bytes.byteLength} bytes)` };
-    }
-    // Security: the bytes must PROVE the file is an accepted image format —
-    // the content-type header is sender-controlled and is not consulted.
-    const ext = sniffImage(bytes);
-    if (!ext) {
+    const stored = await storeImageBytes(bytes);
+    if (!stored.ok && /not an accepted image/.test(stored.reason)) {
       const headerType = (response.headers.get("content-type") ?? "unknown").split(";")[0];
-      return {
-        ok: false,
-        reason: `not an accepted image — bytes are not jpg/png/gif/webp (sender labeled it ${headerType})`,
-      };
+      return { ok: false, reason: `${stored.reason} (sender labeled it ${headerType})` };
     }
-    await ensureBucket();
-    const path = `${randomUUID()}.${ext}`;
-    const { error } = await db()
-      .storage.from(BUCKET)
-      .upload(path, bytes, { contentType: CONTENT_TYPE_BY_EXT[ext] });
-    if (error) return { ok: false, reason: `storage upload failed: ${error.message}` };
-    const { data } = db().storage.from(BUCKET).getPublicUrl(path);
-    if (!data.publicUrl) return { ok: false, reason: "storage returned no public URL" };
-    return { ok: true, url: data.publicUrl };
+    return stored;
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/** Bytes for an emailed-in attachment: inline base64 or an https download. */
+export async function attachmentBytes(att: {
+  content?: string;
+  url?: string;
+}): Promise<Buffer | null> {
+  if (att.content) {
+    try {
+      const bytes = Buffer.from(att.content, "base64");
+      return bytes.byteLength > 0 ? bytes : null;
+    } catch {
+      return null;
+    }
+  }
+  if (att.url && fetchableHost(att.url)) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetch(att.url, { signal: controller.signal, headers: fetchHeaders(att.url) });
+      } finally {
+        clearTimeout(timer);
+      }
+      if (!response.ok) return null;
+      const bytes = Buffer.from(await response.arrayBuffer());
+      return bytes.byteLength > 0 && bytes.byteLength <= MAX_BYTES ? bytes : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 /** Copy an inbound MMS photo into our storage; null on any failure. */

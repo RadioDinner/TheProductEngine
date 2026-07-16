@@ -17,6 +17,7 @@ import type {
   NewAdInput,
   OutboxInsert,
   OutboxRow,
+  PhotoSubmission,
   StoredAd,
   StoredAdStatus,
 } from "@/lib/engine-store";
@@ -35,7 +36,13 @@ interface AdRow {
   rejection_kind: string | null;
   broadcast_at?: string | null;
   users: { phone: string | null } | null;
-  ad_photos: { src: string; alt: string | null; width: number | null; height: number | null }[];
+  ad_photos: {
+    src: string;
+    alt: string | null;
+    width: number | null;
+    height: number | null;
+    position: number;
+  }[];
 }
 
 // broadcast_at is deliberately NOT selected here. It's only needed by the
@@ -44,13 +51,17 @@ interface AdRow {
 // migration 0007 — a code deploy that lands before the migration degrades to
 // "digests wait" (the cron fails loudly) instead of taking down /admin.
 const AD_SELECT =
-  "id, original_body, body, status, created_at, approved_at, expires_at, sold_at, flagged, rejected_reason, rejection_kind, users!inner(phone), ad_photos(src, alt, width, height)";
+  "id, original_body, body, status, created_at, approved_at, expires_at, sold_at, flagged, rejected_reason, rejection_kind, users!inner(phone), ad_photos(src, alt, width, height, position)";
 
 /** PostgREST silently caps un-ranged selects at ~1000 rows — page past it. */
 const PAGE = 1000;
 
 function toStored(row: AdRow): StoredAd {
-  const photo = row.ad_photos?.[0];
+  // Position 0 is THE ad picture (the one MMS/PIC/digests carry); higher
+  // positions are approved emailed-in extras — website gallery only.
+  const sorted = [...(row.ad_photos ?? [])].sort((a, b) => a.position - b.position);
+  const photo = sorted.find((p) => p.position === 0);
+  const extras = sorted.filter((p) => p.position > 0);
   return {
     id: row.id,
     ownerPhone: row.users?.phone ?? "",
@@ -72,6 +83,14 @@ function toStored(row: AdRow): StoredAd {
         width: photo.width ?? 800,
         height: photo.height ?? 600,
       },
+    }),
+    ...(extras.length && {
+      morePhotos: extras.map((p) => ({
+        src: p.src,
+        alt: p.alt ?? "",
+        width: p.width ?? 800,
+        height: p.height ?? 600,
+      })),
     }),
   };
 }
@@ -377,7 +396,122 @@ export async function deleteAdRecord(id: number): Promise<"deleted" | "noop" | "
     const { error: photoDeleteError } = await db().from("ad_photos").delete().eq("ad_id", id);
     if (photoDeleteError) throw photoDeleteError;
   }
+  // Pending emailed-in pictures for the ad go too (row + storage object).
+  const { data: submissions, error: subError } = await db()
+    .from("ad_photo_submissions")
+    .select("src")
+    .eq("ad_id", id);
+  if (!subError && submissions?.length) {
+    await removeHostedPhotos(submissions.map((s) => s.src as string));
+    await db().from("ad_photo_submissions").delete().eq("ad_id", id);
+  }
   return "deleted";
+}
+
+/** Missing ad_photo_submissions table = migration 0015 not applied yet; the
+ * emailed-pictures feature stays dormant instead of erroring. */
+function submissionsSchemaMissing(error: { code?: string } | null): boolean {
+  return error?.code === "42P01";
+}
+
+export async function addPhotoSubmission(
+  adId: number,
+  src: string,
+  fromEmail: string,
+): Promise<"added" | "unsupported"> {
+  const { error } = await db()
+    .from("ad_photo_submissions")
+    .insert({ ad_id: adId, src, from_email: fromEmail });
+  if (error) {
+    if (submissionsSchemaMissing(error)) return "unsupported";
+    throw error;
+  }
+  return "added";
+}
+
+export async function listPhotoSubmissions(): Promise<PhotoSubmission[]> {
+  const { data, error } = await db()
+    .from("ad_photo_submissions")
+    .select("id, ad_id, src, from_email, created_at")
+    .order("id", { ascending: true });
+  if (error) {
+    if (submissionsSchemaMissing(error)) return [];
+    throw error;
+  }
+  return (data ?? []).map((row) => ({
+    id: row.id as number,
+    adId: row.ad_id as number,
+    src: row.src as string,
+    fromEmail: row.from_email as string,
+    createdAt: row.created_at as string,
+  }));
+}
+
+export async function countAdPhotos(adId: number): Promise<number> {
+  const { count: live, error: liveError } = await db()
+    .from("ad_photos")
+    .select("id", { count: "exact", head: true })
+    .eq("ad_id", adId);
+  if (liveError) throw liveError;
+  const { count: pending, error: pendingError } = await db()
+    .from("ad_photo_submissions")
+    .select("id", { count: "exact", head: true })
+    .eq("ad_id", adId);
+  if (pendingError && !submissionsSchemaMissing(pendingError)) throw pendingError;
+  return (live ?? 0) + (pending ?? 0);
+}
+
+export async function resolvePhotoSubmission(
+  id: number,
+  approve: boolean,
+): Promise<PhotoSubmission | null> {
+  const { data, error } = await db()
+    .from("ad_photo_submissions")
+    .select("id, ad_id, src, from_email, created_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    if (submissionsSchemaMissing(error)) return null;
+    throw error;
+  }
+  if (!data) return null;
+  const submission: PhotoSubmission = {
+    id: data.id as number,
+    adId: data.ad_id as number,
+    src: data.src as string,
+    fromEmail: data.from_email as string,
+    createdAt: data.created_at as string,
+  };
+  // Delete-first makes a double-submit resolve exactly once (0 rows = lost).
+  const { data: deleted, error: deleteError } = await db()
+    .from("ad_photo_submissions")
+    .delete()
+    .eq("id", id)
+    .select("id");
+  if (deleteError) throw deleteError;
+  if (!deleted?.length) return null;
+  if (!approve) {
+    await removeHostedPhotos([submission.src]);
+    return submission;
+  }
+  // Approved extras live at position 1+ — position 0 stays reserved for the
+  // MMS picture the seller paid for (SMS/PIC/digests read only position 0).
+  const { data: positions, error: posError } = await db()
+    .from("ad_photos")
+    .select("position")
+    .eq("ad_id", submission.adId)
+    .order("position", { ascending: false })
+    .limit(1);
+  if (posError) throw posError;
+  const next = Math.max(0, ...(positions ?? []).map((p) => p.position as number)) + 1;
+  const { error: insertError } = await db().from("ad_photos").insert({
+    ad_id: submission.adId,
+    src: submission.src,
+    alt: `More of ad #${submission.adId}`,
+    position: next,
+  });
+  if (insertError) throw insertError;
+  return submission;
 }
 
 export async function createExtraDigest(channel: "sms" | "email", now: Date): Promise<number> {

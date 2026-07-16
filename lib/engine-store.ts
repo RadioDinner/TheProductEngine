@@ -37,7 +37,19 @@ export interface StoredAd {
   flagged: boolean;
   rejectedReason?: string;
   rejectionKind?: "benign" | "violation";
+  /** The MMS picture (position 0) — the one SMS/PIC/email digests carry. */
   photo?: { src: string; alt: string; width: number; height: number };
+  /** Approved emailed-in extras (FEATURES item 1) — website gallery only. */
+  morePhotos?: { src: string; alt: string; width: number; height: number }[];
+}
+
+/** An emailed-in picture awaiting admin review (FEATURES item 1). */
+export interface PhotoSubmission {
+  id: number;
+  adId: number;
+  src: string;
+  fromEmail: string;
+  createdAt: string;
 }
 
 export interface DigestRecord {
@@ -154,6 +166,7 @@ interface EngineShape {
   messages: MessageRecord[];
   reservations?: { address: string; kind: string; at: number }[];
   outbox?: OutboxRow[];
+  photoSubmissions?: PhotoSubmission[];
 }
 
 const ENGINE_PATH = join(process.cwd(), ".data", "engine.json");
@@ -228,6 +241,7 @@ function sweep(store: EngineShape): void {
 }
 
 function toSiteAd(ad: StoredAd): Ad {
+  const photos = [...(ad.photo ? [ad.photo] : []), ...(ad.morePhotos ?? [])];
   return {
     id: ad.id,
     body: ad.body,
@@ -235,7 +249,8 @@ function toSiteAd(ad: StoredAd): Ad {
     approvedAt: new Date(ad.approvedAt ?? ad.createdAt),
     ...(ad.expiresAt && { expiresAt: new Date(ad.expiresAt) }),
     ownerPhone: ad.ownerPhone,
-    ...(ad.photo && { photo: ad.photo }),
+    ...(photos[0] && { photo: photos[0] }),
+    ...(photos.length && { photos }),
   };
 }
 
@@ -508,11 +523,58 @@ const file = {
     ad.status = "deleted";
     ad.deletedAt = new Date().toISOString();
     ad.holdUntil = null;
-    // The photo is removed with the ad (prod deletes the storage object too).
+    // Photos are removed with the ad (prod deletes the storage objects too).
     delete ad.photo;
+    delete ad.morePhotos;
     store.bumps = store.bumps.filter((b) => !(b.adId === id && b.status === "queued"));
+    store.photoSubmissions = (store.photoSubmissions ?? []).filter((s) => s.adId !== id);
     save(store);
     return "deleted";
+  },
+
+  addPhotoSubmission(adId: number, src: string, fromEmail: string): "added" | "unsupported" {
+    const store = load();
+    (store.photoSubmissions ??= []).push({
+      id: store.nextId++,
+      adId,
+      src,
+      fromEmail,
+      createdAt: new Date().toISOString(),
+    });
+    save(store);
+    return "added";
+  },
+
+  listPhotoSubmissions(): PhotoSubmission[] {
+    return [...(load().photoSubmissions ?? [])].sort((a, b) => a.id - b.id);
+  },
+
+  countAdPhotos(adId: number): number {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === adId);
+    const live = (ad?.photo ? 1 : 0) + (ad?.morePhotos?.length ?? 0);
+    const pending = (store.photoSubmissions ?? []).filter((s) => s.adId === adId).length;
+    return live + pending;
+  },
+
+  resolvePhotoSubmission(id: number, approve: boolean): PhotoSubmission | null {
+    const store = load();
+    const submission = (store.photoSubmissions ?? []).find((s) => s.id === id);
+    if (!submission) return null;
+    store.photoSubmissions = (store.photoSubmissions ?? []).filter((s) => s.id !== id);
+    if (approve) {
+      const ad = store.ads.find((a) => a.id === submission.adId);
+      if (ad) {
+        (ad.morePhotos ??= []).push({
+          src: submission.src,
+          alt: `More of ad #${ad.id}`,
+          width: 800,
+          height: 600,
+        });
+      }
+    }
+    save(store);
+    return submission;
   },
 
   createExtraDigest(channel: "sms" | "email", now: Date): number {
@@ -945,6 +1007,44 @@ export async function revertAdToPending(id: number): Promise<boolean> {
  */
 export async function deleteAdRecord(id: number): Promise<"deleted" | "noop" | "unsupported"> {
   return supabaseConfigured ? remote.deleteAdRecord(id) : file.deleteAd(id);
+}
+
+/**
+ * Record an emailed-in extra picture (already re-hosted) as awaiting review
+ * (FEATURES item 1). "unsupported" = migration 0015 not applied — the caller
+ * tells nobody and the feature stays dormant.
+ */
+export async function addPhotoSubmission(
+  adId: number,
+  src: string,
+  fromEmail: string,
+): Promise<"added" | "unsupported"> {
+  return supabaseConfigured
+    ? remote.addPhotoSubmission(adId, src, fromEmail)
+    : file.addPhotoSubmission(adId, src, fromEmail);
+}
+
+/** Every emailed-in picture awaiting review, oldest first. */
+export async function listPhotoSubmissions(): Promise<PhotoSubmission[]> {
+  return supabaseConfigured ? remote.listPhotoSubmissions() : file.listPhotoSubmissions();
+}
+
+/** Live + pending picture count for one ad — the per-ad submission cap. */
+export async function countAdPhotos(adId: number): Promise<number> {
+  return supabaseConfigured ? remote.countAdPhotos(adId) : file.countAdPhotos(adId);
+}
+
+/**
+ * Approve (→ live website gallery) or discard an emailed-in picture. Returns
+ * the resolved submission, or null if it no longer exists (double-submit).
+ */
+export async function resolvePhotoSubmission(
+  id: number,
+  approve: boolean,
+): Promise<PhotoSubmission | null> {
+  return supabaseConfigured
+    ? remote.resolvePhotoSubmission(id, approve)
+    : file.resolvePhotoSubmission(id, approve);
 }
 
 /** A digest row OUTSIDE the slot system (the admin "Send extra" edition). */

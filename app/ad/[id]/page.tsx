@@ -117,6 +117,23 @@ export default async function AdPage({ params }: { params: Promise<{ id: string 
             />
           </figure>
         )}
+        {(ad.photos?.length ?? 0) > 1 && (
+          <div className="ad-photo-gallery" aria-label="More pictures">
+            {ad.photos!.slice(1).map((photo, i) => (
+              <a key={photo.src} href={photo.src} target="_blank" rel="noreferrer">
+                {/* Extras are plain storage/data URLs (emailed in, admin-approved);
+                    a plain img keeps them outside next/image's host allowlist. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photo.src}
+                  alt={photo.alt || `More of ad #${ad.id} (${i + 2})`}
+                  loading="lazy"
+                  style={{ maxWidth: "100%", height: "auto" }}
+                />
+              </a>
+            ))}
+          </div>
+        )}
         <p className="ad-fulltext">
           <MaskedText text={rest || ad.body} revealed={!!session} />
         </p>

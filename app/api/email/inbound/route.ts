@@ -14,14 +14,19 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { logMessage } from "@/lib/engine-store";
+import { addPhotoSubmission, countAdPhotos, getAdRecord, logMessage } from "@/lib/engine-store";
 import { confirmUrl, siteUrl } from "@/lib/email";
 import { dispatchEmail } from "@/lib/outbound";
 import { isProduction } from "@/lib/env";
 import { site } from "@/lib/config";
+import { MAX_PHOTOS_PER_AD, normalizeAttachments, parseAdNumber } from "@/lib/email-photos";
+import { attachmentBytes, storeImageBytes } from "@/lib/photos";
+import { sniffImage, CONTENT_TYPE_BY_EXT } from "@/lib/image-sniff";
+import { supabaseConfigured } from "@/lib/db";
 
 const TOLERANCE_S = 300;
 const INBOUND_ADDRESS = (process.env.EMAIL_INBOUND_ADDRESS ?? "subscribe@theplainexchange.com").toLowerCase();
+const PHOTOS_ADDRESS = (process.env.EMAIL_PHOTOS_ADDRESS ?? "photos@theplainexchange.com").toLowerCase();
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Verify a Svix-signed webhook (Resend's scheme). */
@@ -90,6 +95,97 @@ function confirmEmail(to: string): { subject: string; html: string; text: string
   return { subject, html, text };
 }
 
+/**
+ * Emailed-in extra ad pictures (FEATURES item 1): a message to photos@ with
+ * the ad number in the subject ("Ad 1042" / "#1042") and pictures attached.
+ * Every image is byte-sniffed and re-hosted exactly like an MMS photo, then
+ * parked as a SUBMISSION awaiting admin review on /admin/ads — the sender
+ * address is spoofable, so review is the gate, and nothing goes live here.
+ * The sender gets one acknowledgment only when something was actually saved
+ * (no backscatter for junk mail).
+ */
+async function handlePhotoEmail(
+  sender: string,
+  data: Record<string, unknown>,
+): Promise<NextResponse> {
+  const subject = typeof data.subject === "string" ? data.subject : "";
+  const text = typeof data.text === "string" ? data.text : "";
+  const adId = parseAdNumber(subject, text);
+  if (!adId) {
+    console.log("[email:photos] no ad number in subject/body — ignored");
+    return NextResponse.json({ ok: true });
+  }
+  const ad = await getAdRecord(adId);
+  // Live-ish ads only: extras make no sense for rejected/sold/expired/deleted.
+  if (!ad || (ad.status !== "approved" && ad.status !== "pending")) {
+    console.log(`[email:photos] ad #${adId} not accepting pictures — ignored`);
+    return NextResponse.json({ ok: true });
+  }
+  const attachments = normalizeAttachments(data.attachments);
+  if (!attachments.length) return NextResponse.json({ ok: true });
+
+  const room = MAX_PHOTOS_PER_AD - (await countAdPhotos(adId));
+  let saved = 0;
+  let unsupported = false;
+  for (const attachment of attachments.slice(0, Math.max(0, room))) {
+    const bytes = await attachmentBytes(attachment);
+    if (!bytes) continue;
+    let url: string | null = null;
+    if (supabaseConfigured) {
+      const stored = await storeImageBytes(bytes);
+      if (!stored.ok) {
+        console.log("[email:photos] attachment rejected:", stored.reason);
+        continue;
+      }
+      url = stored.url;
+    } else {
+      // Dev mode has no storage bucket — inline the (sniff-verified) image so
+      // the review/gallery flow still works end-to-end in walks.
+      const ext = sniffImage(bytes);
+      if (!ext) continue;
+      url = `data:${CONTENT_TYPE_BY_EXT[ext]};base64,${bytes.toString("base64")}`;
+    }
+    const outcome = await addPhotoSubmission(adId, url, sender);
+    if (outcome === "unsupported") {
+      unsupported = true;
+      break;
+    }
+    saved++;
+  }
+  if (unsupported) {
+    console.error("[email:photos] migration 0015 not applied — submission dropped");
+    return NextResponse.json({ ok: true });
+  }
+  if (saved > 0) {
+    const ackText = [
+      `Got ${saved === 1 ? "your picture" : `${saved} pictures`} for ad #${adId}.`,
+      ``,
+      `They'll appear on the ad's website listing once they're approved (every picture is reviewed by hand, usually within a day).`,
+      ``,
+      `${site.name} · ${siteUrl}/ad/${adId}`,
+    ].join("\n");
+    const ackHtml = `<div style="margin:0 auto;max-width:600px;padding:16px;font-family:'Segoe UI',Arial,sans-serif;color:#20262b;">
+      <p style="font-size:16px;">Got ${saved === 1 ? "your picture" : `${saved} pictures`} for <strong>ad #${adId}</strong>.</p>
+      <p style="font-size:14px;">They'll appear on <a href="${siteUrl}/ad/${adId}" style="color:#2d5570;">the ad's website listing</a> once they're approved — every picture is reviewed by hand, usually within a day.</p>
+    </div>`;
+    try {
+      await dispatchEmail(
+        { to: sender, subject: `Pictures received for ad #${adId}`, text: ackText, html: ackHtml },
+        { cls: "transactional" },
+      );
+      await logMessage({
+        direction: "outbound",
+        channel: "email",
+        address: sender,
+        body: `Pictures received for ad #${adId}\n\n${ackText}`,
+      });
+    } catch (e) {
+      console.error("[email:photos] ack send failed:", e);
+    }
+  }
+  return NextResponse.json({ ok: true, saved });
+}
+
 export async function POST(req: NextRequest) {
   const secret = process.env.RESEND_WEBHOOK_SECRET;
   const raw = await req.text();
@@ -125,6 +221,9 @@ export async function POST(req: NextRequest) {
     ...addressList(data.to),
     ...addressList((data.envelope as Record<string, unknown> | undefined)?.to),
   ];
+  // photos@ = emailed-in extra pictures for an ad (FEATURES item 1).
+  const toPhotos = recipients.some((r) => r === PHOTOS_ADDRESS || r.split("@")[0] === "photos");
+  if (sender && toPhotos) return handlePhotoEmail(sender, data);
   const toSubscribe =
     recipients.some((r) => r === INBOUND_ADDRESS || r.split("@")[0] === "subscribe") ||
     (looksInbound && recipients.length === 0);

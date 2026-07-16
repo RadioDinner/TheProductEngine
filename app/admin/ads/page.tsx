@@ -1,10 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { adminDeleteAd, adminEditAd, adminQueueBump } from "@/lib/admin-actions";
+import {
+  adminDeleteAd,
+  adminEditAd,
+  adminQueueBump,
+  adminResolvePhotoSubmission,
+} from "@/lib/admin-actions";
 import {
   getAdRecord,
   getAllAds,
   getQueuedBumps,
+  listPhotoSubmissions,
+  type PhotoSubmission,
   type StoredAd,
   type StoredAdStatus,
 } from "@/lib/engine-store";
@@ -29,6 +36,13 @@ export default async function AdminAds({
     : undefined;
   const ads = await getAllAds(params.q, status);
   const bumpQueued = new Set((await getQueuedBumps()).map((b) => b.adId));
+  // Emailed-in extra pictures awaiting review, grouped per ad (FEATURES item 1).
+  const submissionsByAd = new Map<number, PhotoSubmission[]>();
+  for (const submission of await listPhotoSubmissions()) {
+    const list = submissionsByAd.get(submission.adId) ?? [];
+    list.push(submission);
+    submissionsByAd.set(submission.adId, list);
+  }
 
   // Filter-preserving links: Cancel and per-row Delete… keep q/status intact.
   const listParams = new URLSearchParams();
@@ -173,6 +187,37 @@ export default async function AdminAds({
                 </form>
               </details>
             )}
+            {(submissionsByAd.get(ad.id) ?? []).map((submission) => (
+              <div key={submission.id} className="dev-notice">
+                <p className="fine">
+                  Emailed-in picture awaiting review — from {submission.fromEmail}.
+                  {!ad.photo &&
+                    " This ad has no MMS picture (text price paid); approving shows this on the website only — it never rides SMS/PIC."}
+                </p>
+                <a href={submission.src} target="_blank" rel="noreferrer">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={submission.src}
+                    alt={`Submitted for ad #${ad.id}`}
+                    style={{ maxWidth: 160, maxHeight: 120, border: "1px solid #ccc" }}
+                  />
+                </a>
+                <form action={adminResolvePhotoSubmission} className="sim-actions">
+                  <input type="hidden" name="id" value={submission.id} />
+                  <button className="btn btn-sm" name="decision" value="approve" type="submit">
+                    Approve — show on website
+                  </button>
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    name="decision"
+                    value="discard"
+                    type="submit"
+                  >
+                    Discard
+                  </button>
+                </form>
+              </div>
+            ))}
             {ad.status !== "deleted" && (
               <p className="fine">
                 <Link href={deleteHref(ad.id)}>Delete this ad…</Link>

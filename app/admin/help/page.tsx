@@ -192,6 +192,19 @@ export default async function AdminHelp() {
         is the flow that refunds (benign) or records a strike (violation) and tells the seller.
       </p>
 
+      <h2 className="section-h">Emailed-in extra pictures (Ads tab)</h2>
+      <p>
+        Sellers (or a helper with email) can send <strong>more pictures for an ad</strong> to the
+        photos@ inbound address with the ad number in the subject line (&ldquo;Ad 1042&rdquo;).
+        Each image is verified by its bytes and copied into our storage exactly like an MMS
+        photo, then waits as a submission on the <strong>Ads tab</strong> — nothing goes live
+        until you approve it there, because an email From line is easy to fake. Approved
+        pictures appear in the ad&apos;s <em>website</em> gallery only: the SMS digest, the email
+        digest, and PIC keep carrying the one MMS picture the seller paid for, so extra
+        pictures never add sending cost or bypass picture-ad pricing. An ad holds at most 8
+        pictures in total.
+      </p>
+
       <h2 className="section-h">Why credits are a ledger</h2>
       <p>
         Credit balances aren&rsquo;t a single number that gets edited. Every grant, purchase,

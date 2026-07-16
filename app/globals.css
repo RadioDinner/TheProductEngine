@@ -1107,3 +1107,17 @@ a.btn-sm:hover {
     break-inside: avoid;
   }
 }
+
+/* Extra-pictures gallery on an ad's listing (FEATURES item 1). */
+.ad-photo-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.ad-photo-gallery img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--rule-strong);
+}

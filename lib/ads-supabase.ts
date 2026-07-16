@@ -28,7 +28,16 @@ const SELECT =
   "id, body, status, approved_at, expires_at, users!inner(phone), ad_photos(src, width, height, alt, position)";
 
 function toAd(row: AdRowDb): Ad {
-  const photo = [...(row.ad_photos ?? [])].sort((a, b) => a.position - b.position)[0];
+  // Position order: 0 is the MMS/digest picture, 1+ are approved emailed-in
+  // extras — the website shows the whole gallery (FEATURES item 1).
+  const photos = [...(row.ad_photos ?? [])]
+    .sort((a, b) => a.position - b.position)
+    .map((p) => ({
+      src: p.src,
+      alt: p.alt ?? "",
+      width: p.width ?? 800,
+      height: p.height ?? 600,
+    }));
   return {
     id: row.id,
     body: row.body,
@@ -36,14 +45,7 @@ function toAd(row: AdRowDb): Ad {
     approvedAt: new Date(row.approved_at),
     ...(row.expires_at && { expiresAt: new Date(row.expires_at) }),
     ownerPhone: row.users?.phone ?? "",
-    ...(photo && {
-      photo: {
-        src: photo.src,
-        alt: photo.alt ?? "",
-        width: photo.width ?? 800,
-        height: photo.height ?? 600,
-      },
-    }),
+    ...(photos[0] && { photo: photos[0], photos }),
   };
 }
 

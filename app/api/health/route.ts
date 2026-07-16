@@ -119,6 +119,17 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/0014_user_ids.sql in the SQL editor",
           }
         : { applied: true };
+      const subs = await db()
+        .from("ad_photo_submissions")
+        .select("id", { count: "exact", head: true });
+      report.migration0015 = subs.error
+        ? {
+            applied: false,
+            code: subs.error.code,
+            error: subs.error.message,
+            fix: "run supabase/migrations/0015_ad_photo_submissions.sql in the SQL editor",
+          }
+        : { applied: true };
     } catch (e) {
       report.db = { ok: false, thrown: e instanceof Error ? e.message : String(e) };
     }

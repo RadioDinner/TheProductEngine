@@ -28,6 +28,9 @@ export interface Ad {
   /** The seller's phone (their SMS identity), 10 digits. */
   ownerPhone: string;
   photo?: { src: string; alt: string; width: number; height: number };
+  /** Every live picture, position order — the website gallery (FEATURES item
+   * 1). photo (the MMS/digest picture) is photos[0] when the ad has one. */
+  photos?: { src: string; alt: string; width: number; height: number }[];
 }
 
 /** Listing lifetime on the website. */

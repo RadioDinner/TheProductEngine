@@ -13,6 +13,7 @@ const SUITES = [
   "ads",
   "email-subject",
   "user-id",
+  "email-photos",
 ];
 
 let totalPass = 0;
