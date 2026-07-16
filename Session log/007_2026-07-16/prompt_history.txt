@@ -5,3 +5,6 @@ Lets kick off a session. I am texting my number advertising number (330)960 7170
 Its asigned the profiel of Advertising .
 
 Inbound webhook URL is https://www.theplainexchange.com/api/telnyx/inbound and the failover is https://the-product-engine.vercel.app/api/telnyx/inbound . There is no outbound settings. And it says "To authenticate API v2 outbound, retrieve your auth key here."
+
+--- 2026-07-16 ---
+I applied the migration
