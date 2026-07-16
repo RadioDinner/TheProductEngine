@@ -120,3 +120,6 @@ A server error occurred. Reload to try again.
 ERROR 3495887845@E394
 
 When browsing to https://www.theplainexchange.com/admin/digests
+
+--- 2026-07-16 ---
+write the handoff, commit it to main and wrap the session. Next session I want to add the capability to delete an ad from the ads list in the admin dashboard

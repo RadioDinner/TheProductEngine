@@ -67,6 +67,13 @@ Redeploy after any change — env edits never touch running deployments.
       a real phone). Sanity-check any time at `/admin/sms-diag`.
 
 ### A5. Digest cron — THE silent launch-killer
+**Empirically WORKING as of 2026-07-16** (session 007): digests have composed
+on schedule at every slot since Jul 14, so something already pings
+`/api/cron/digests` every few minutes — most likely the `vercel.json` cron on
+a paid plan. Confirm the source in Vercel → Settings → Cron Jobs so it's a
+known dependency, then check this section off. Original guidance kept below
+in case the plan ever changes:
+
 Vercel **Hobby runs crons at most once per day**; the `*/5` schedule in
 `vercel.json` will not fire every 5 minutes on Hobby, and digests simply
 won't send. Pick one:

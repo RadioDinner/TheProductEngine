@@ -38,23 +38,76 @@ Diagnostics now built into the product (all dev-verified + walked):
   (E.164 check + last-4 echo) / TELNYX_MESSAGING_PROFILE_ID posture, and a
   `migration0011` probe.
 
-Feature batch (same day, user-requested):
+Feature sprint (same day, all user-requested, each dev-walked before push):
 - **MMS photo re-hosting** (`lib/photos.ts`): picture-ad media copied to
   Supabase Storage (public `ad-photos` bucket, lazily auto-created) at
-  ingest; fallback to the original URL only if allowlisted; if the photo
-  can't be saved the ad posts as text AND the confirmation says so (before:
-  silent drop — the user's real picture ad posted textless with no warning).
+  ingest. **Attachment security policy (user decision):** only byte-proven
+  jpg/png/gif/webp accepted (`lib/image-sniff.ts`, unit-tested; headers/
+  extensions never trusted; SVG/HEIC/BMP/TIFF rejected); NO raw-URL fallback
+  in prod; if a photo can't be saved the ad posts as text AND the
+  confirmation tells the seller. Telnyx-hosted media fetched with API-key
+  auth (telnyx.com hosts only). **CONFIRMED WORKING LIVE** (user saw the
+  badge; photos land in storage).
 - **Admin Digests tab** (`/admin/digests`): the exact next-digest lineup
   (shares `selectDigestItems()` with the composer), next slot time, queued
-  outbox count, inline ad-text editing, digest history.
+  outbox count, inline editing, digest history — PLUS queue controls
+  (move up/down = approval-order swap; **Skip next digest** = `ads.hold_until`
+  hold, **migration 0012**; Back to review = revert to pending + clear queued
+  bumps; Held section with Release) and **Send early / Send extra** buttons
+  ('early' composes the upcoming slot NOW under its identity — scheduled run
+  no-ops, queue consumed; 'extra' sends now consuming NOTHING so the queue
+  rides again at the regular slot; both labeled in the SMS header + email
+  subject, email mirror + immediate outbox drain included).
+- **Email edition mirrors SMS 1:1** (user decision): same slots (emailSlots
+  setting removed), each email carries exactly that slot's digest via
+  `getSmsDigestAdIds`; email HTML handles absolute photo URLs.
 - **Ads tab**: free admin Bump (expired relists first), inline editing,
   Picture badges, bump-queued indicator; review-queue Picture badge +
-  full-size photo link; MMS attachment links in the messages log. New store
-  ops `updateAdBody`/`listRecentDigests` (both stores, no new migrations).
+  full-size link; MMS attachment links in the messages log.
+- **Subscribers tab** (`/admin/subscribers`): every SMS + email subscriber
+  with the time their current subscription started, newest first.
+- **Account merge + double subscription** (`/admin/users` detail → "Merge /
+  link identities"): a PHONE does a FULL merge (ads, credit ledger, passes,
+  strikes, PIC bank, saved card, subscription state move to the survivor;
+  survivor wins conflicts; loser deleted; the message audit log is never
+  rewritten). An EMAIL links the address + its subscription to the member
+  (absorbs email-only signups) → subscribed to BOTH editions.
+- **Engine/UX**: fresh SUBSCRIBE/START now gets a practical welcome (digest
+  times from settings + AD NEW example — the compliance opt-in text is
+  Telnyx's registered campaign auto-response, which fires on keywords);
+  PIC on a pending ad tells the OWNER "not yet approved" (strangers still
+  get no-ad-found); PIC media URLs absolutized; review-alert email embeds
+  the ad photo inline; website price fix ("$10k OBO" rendered $10 — pure
+  `lib/ad-display.ts`, unit-tested). Unit suite 107 → **129 checks**.
 
-**⚠️ #1 launch blocker now: the external cron pinger (LAUNCH §A5)** — digests
-don't compose (noon slot confirmed missed) and the public site stays empty
-until `GET /api/cron/digests` (Bearer CRON_SECRET) runs every 5 min.
+**Migrations:** 0011 applied (2026-07-16). **0012 (`ads.hold_until`) written
+this session — the user was applying it at session end** after it caused the
+day's second migration race: the deploy reached prod before the paste,
+/admin/digests 500'd and the cron crashed at compose, so **the 4 PM ET
+digest was missed; it self-heals on the first cron tick after 0012 lands**
+(the slot's digest row exists un-finalized → the composer redoes it).
+`/api/health` (CRON_SECRET) now probes 0011 AND 0012. **VERIFY EARLY NEXT
+SESSION: health shows `migration0012: {applied: true}` and digests are
+composing again** (Digests tab → Recent digests).
+
+**Ops notes discovered:** the digest cron IS firing (slots composed on
+schedule since Jul 14 — the LAUNCH §A5 "set up a pinger" item appears
+already satisfied; confirm what's pinging, likely Vercel cron on a paid
+plan). ADMIN_EMAIL had a typo (`prontonmail.com`) — user was told to fix the
+Vercel env var + redeploy; **verify the review alerts actually arrive now**.
+
+**NEXT SESSION (user request): add the ability to DELETE an ad from the Ads
+list in the admin dashboard.** Design note: digest_items/bumps/ad_photos
+reference ads — decide soft-delete vs cleanup vs forbidding deletion of
+broadcast ads (see session log for details).
+
+**Recommended-but-unbuilt follow-ups:** (1) schema-dependent features should
+degrade gracefully instead of 500ing when their migration is missing (twice
+bitten today); (2) the retry-swallow design trap (any throw after
+`recordInboundOnce` permanently eats that inbound message); (3) persist
+Telnyx delivery receipts ([telnyx-dlr] logs exist) into /admin/messages as
+delivered/failed badges.
+
 Full session detail: `Session log/007_2026-07-16/session_log.md`.
 
 ## What shipped in session 006 (branch `claude/stress-test-pic-limits-ki1jf0`)

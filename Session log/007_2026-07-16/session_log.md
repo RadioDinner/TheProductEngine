@@ -128,10 +128,42 @@ with Playwright/webhook dev walks before push:
   keeps "$10k" (was rendering $10) — display derivations extracted to pure
   lib/ad-display.ts, unit-tested.
 - `ccbe9ce` **review-alert email embeds the ad photo inline.**
+- `0f0197e` **admin account merge + double subscription** (user-scoped via
+  AskUserQuestion: SMS+email = one person; FULL phone merge). One
+  "Merge / link identities" control on /admin/users: a PHONE does a full
+  merge (ads, ledger, passes, strikes, PIC bank, saved card, subscription
+  state move; survivor wins conflicts; loser deleted; message audit log
+  never rewritten) — Supabase order is crash-safe (reassign FK children →
+  strip loser → add to survivor → delete). An EMAIL links the address + its
+  subscription (absorbing an email-only signup row) → doubly subscribed.
+  User page shows Text digests / Email digests as separate facts.
+- `c13fe1d` **health migration0012 probe** after the 0012 drift incident (see
+  below).
 - User fixes along the way: TELNYX_API_KEY created + set (was never a thing —
   only the PUBLIC key existed), ADMIN_EMAIL typo (prontonmail→protonmail)
-  identified (env fix on user), migration 0011 + 0012 applied by user.
+  identified (env fix on user), migration 0011 applied by user.
 - Suite grew 107 → **129 unit checks** (image-sniff + ads price).
+
+## ⚠️ Migration-0012 drift incident (end of session)
+
+The `ab6384e` deploy reads `ads.hold_until` (migration 0012) in
+getNewDigestAds. The user hadn't pasted 0012 yet → /admin/digests 500'd AND
+every cron tick crashed at compose, so **the 4 PM ET digest was missed**
+(SMS + email). Fix communicated: paste 0012; the 16:00 slot self-heals (its
+digest row exists un-finalized → next tick redoes it). Health now probes
+0012. **Second migration race of the day** — see the standing rule, and the
+proposed follow-up: make schema-dependent features degrade gracefully
+(feature hides until its column exists) instead of 500ing.
+
+## Next session (user request)
+
+**Add the ability to DELETE an ad from the Ads list in the admin dashboard.**
+Design notes for future-me: decide semantics vs the existing reject flow —
+deleting an approved/broadcast ad should remove it from the site
+(`ads` row + `ad_photos`, and consider queued bumps + digest_items FKs;
+digest_items references ads(id) without cascade → either forbid deleting
+broadcast ads, soft-delete via a status, or clean children first). Refunds:
+probably none (admin judgement), but surface the charge in the confirm UI.
 
 ## Commits (first half, all `main`)
 
