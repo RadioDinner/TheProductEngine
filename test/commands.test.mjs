@@ -54,4 +54,15 @@ export function run(t) {
   t.eq("real ad starting with 'sold' stays an ad",
     parseCommand("AD sold out, taking spring orders, $200 each. 330-555-0100").kind, "ad");
   t.eq("AD SOLD (no number) stays an ad", parseCommand("AD SOLD everything must go").kind, "ad");
+
+  // Ratings flow (FEATURES item 2): RATE 1-5 and SKIP.
+  t.eq("RATE 5 -> rate", parseCommand("RATE 5").kind, "rate");
+  t.eq("RATE 5 stars", parseCommand("rate 5").stars, 5);
+  t.eq("rate 3 stars text", parseCommand("RATE 3 stars").stars, 3);
+  t.eq("RATE 6 -> null stars (hint)", parseCommand("RATE 6").stars, null);
+  t.eq("RATE alone -> null stars", parseCommand("RATE").stars, null);
+  t.eq("RATE 55 -> null stars", parseCommand("RATE 55").stars, null);
+  t.eq("SKIP -> skip", parseCommand("SKIP").kind, "skip");
+  t.eq("skip. with punctuation", parseCommand("skip.").kind, "skip");
+  t.eq("NO -> skip", parseCommand("No").kind, "skip");
 }

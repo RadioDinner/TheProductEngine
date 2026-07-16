@@ -17,6 +17,8 @@ export type Command =
   | { kind: "bump"; id: number | null }
   | { kind: "buycredit"; amount: number | null }
   | { kind: "confirm" }
+  | { kind: "rate"; stars: number | null }
+  | { kind: "skip" }
   | { kind: "unknown"; text: string };
 
 function adNumber(arg: string): number | null {
@@ -93,6 +95,16 @@ export function parseCommand(raw: string): Command {
     case "y":
     case "confirm":
       return { kind: "confirm" };
+    case "rate": {
+      // "RATE 5", "RATE 5 stars" — anything outside 1–5 is a null (hint reply).
+      const match = rest.match(/^([1-5])\b/);
+      return { kind: "rate", stars: match ? Number(match[1]) : null };
+    }
+    case "skip":
+    case "no":
+      // Declines an open conversational prompt (rating flow). With no prompt
+      // open the engine answers like any unknown keyword.
+      return { kind: "skip" };
     default:
       return { kind: "unknown", text };
   }

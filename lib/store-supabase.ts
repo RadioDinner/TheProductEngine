@@ -18,6 +18,8 @@ import {
   type LedgerSince,
   type MergeOutcome,
   type PicQuotaResult,
+  type RatingSummary,
+  type SmsContext,
   type SmsSubscriberEntry,
   type VerifyCodeResult,
 } from "@/lib/store";
@@ -196,6 +198,145 @@ export async function getAccountByUserId(userId: string): Promise<Account | null
   const account = toAccount(data as unknown as UserRow);
   account.userId = (data as { user_id?: string | null }).user_id ?? null;
   return account;
+}
+
+/** Missing 0016 tables (sms_contexts / sales / ratings) → feature dormant. */
+function ratingsSchemaMissing(error: { code?: string } | null): boolean {
+  return error?.code === "42P01";
+}
+
+export async function setSmsContext(
+  phone: string,
+  context: SmsContext,
+): Promise<"set" | "unsupported"> {
+  const { error } = await db()
+    .from("sms_contexts")
+    .upsert({
+      phone,
+      kind: context.kind,
+      ad_id: context.adId,
+      other_phone: context.otherPhone ?? null,
+      rated_role: context.ratedRole ?? null,
+      expires_at: context.expiresAt,
+    });
+  if (error) {
+    if (ratingsSchemaMissing(error)) return "unsupported";
+    throw error;
+  }
+  return "set";
+}
+
+export async function getSmsContext(phone: string): Promise<SmsContext | null> {
+  const { data, error } = await db()
+    .from("sms_contexts")
+    .select("kind, ad_id, other_phone, rated_role, expires_at")
+    .eq("phone", phone)
+    .maybeSingle();
+  if (error) {
+    if (ratingsSchemaMissing(error)) return null;
+    throw error;
+  }
+  if (!data) return null;
+  if (Date.parse(data.expires_at as string) <= Date.now()) {
+    await db().from("sms_contexts").delete().eq("phone", phone);
+    return null;
+  }
+  return {
+    kind: data.kind as SmsContext["kind"],
+    adId: data.ad_id as number,
+    otherPhone: (data.other_phone as string | null) ?? undefined,
+    ratedRole: (data.rated_role as SmsContext["ratedRole"]) ?? undefined,
+    expiresAt: data.expires_at as string,
+  };
+}
+
+export async function clearSmsContext(phone: string): Promise<void> {
+  const { error } = await db().from("sms_contexts").delete().eq("phone", phone);
+  if (error && !ratingsSchemaMissing(error)) throw error;
+}
+
+export async function recordSale(
+  adId: number,
+  sellerPhone: string,
+  buyerPhone: string,
+): Promise<"recorded" | "unsupported"> {
+  const seller = await userByPhone(sellerPhone);
+  const buyer = await userByPhone(buyerPhone);
+  if (!seller || !buyer) return "unsupported";
+  // Upsert on the ad-id key: the seller can correct a mistyped buyer number.
+  const { error } = await db()
+    .from("sales")
+    .upsert({ ad_id: adId, seller_user_id: seller.id, buyer_user_id: buyer.id });
+  if (error) {
+    if (ratingsSchemaMissing(error)) return "unsupported";
+    throw error;
+  }
+  return "recorded";
+}
+
+export async function addRating(
+  adId: number,
+  raterPhone: string,
+  ratedPhone: string,
+  ratedRole: "buyer" | "seller",
+  stars: number,
+): Promise<"added" | "duplicate" | "notconfirmed" | "unsupported"> {
+  const rater = await userByPhone(raterPhone);
+  const rated = await userByPhone(ratedPhone);
+  if (!rater || !rated) return "notconfirmed";
+  const { data: sale, error: saleError } = await db()
+    .from("sales")
+    .select("seller_user_id, buyer_user_id")
+    .eq("ad_id", adId)
+    .maybeSingle();
+  if (saleError) {
+    if (ratingsSchemaMissing(saleError)) return "unsupported";
+    throw saleError;
+  }
+  // Confirmed parties only, in the claimed direction.
+  const confirmed =
+    sale &&
+    ((ratedRole === "buyer" && sale.seller_user_id === rater.id && sale.buyer_user_id === rated.id) ||
+      (ratedRole === "seller" && sale.buyer_user_id === rater.id && sale.seller_user_id === rated.id));
+  if (!confirmed) return "notconfirmed";
+  const { error } = await db().from("ratings").insert({
+    ad_id: adId,
+    rater_user_id: rater.id,
+    rated_user_id: rated.id,
+    rated_role: ratedRole,
+    stars,
+  });
+  if (error) {
+    if (error.code === "23505") return "duplicate";
+    if (ratingsSchemaMissing(error)) return "unsupported";
+    throw error;
+  }
+  return "added";
+}
+
+export async function getRatingSummary(phone: string): Promise<RatingSummary> {
+  const empty = { count: 0, average: null };
+  const user = await userByPhone(phone);
+  if (!user) return { asSeller: empty, asBuyer: empty };
+  const { data, error } = await db()
+    .from("ratings")
+    .select("rated_role, stars")
+    .eq("rated_user_id", user.id)
+    .limit(PAGE);
+  if (error) {
+    if (ratingsSchemaMissing(error)) return { asSeller: empty, asBuyer: empty };
+    throw error;
+  }
+  const roll = (role: "buyer" | "seller") => {
+    const stars = (data ?? []).filter((r) => r.rated_role === role).map((r) => r.stars as number);
+    return {
+      count: stars.length,
+      average: stars.length
+        ? Math.round((stars.reduce((a, b) => a + b, 0) / stars.length) * 10) / 10
+        : null,
+    };
+  };
+  return { asSeller: roll("seller"), asBuyer: roll("buyer") };
 }
 
 export async function consumeFreeAd(phone: string): Promise<boolean> {
@@ -386,6 +527,24 @@ async function reassignUserRows(fromId: string, toId: string): Promise<void> {
   for (const table of ["ads", "credit_ledger", "messages", "offenses"]) {
     const { error } = await db().from(table).update({ user_id: toId }).eq("user_id", fromId);
     if (error) throw error;
+  }
+  // Ratings/sales (migration 0016) reference users too — they must follow the
+  // merge or the loser's delete hits their FKs. Absent pre-migration: skipped.
+  for (const [table, column] of [
+    ["sales", "seller_user_id"],
+    ["sales", "buyer_user_id"],
+    ["ratings", "rater_user_id"],
+    ["ratings", "rated_user_id"],
+  ] as const) {
+    const { error } = await db().from(table).update({ [column]: toId }).eq(column, fromId);
+    if (error?.code === "23505" && table === "ratings") {
+      // Both accounts rated the same ad — the survivor's rating stands and the
+      // loser's duplicate opinion is dropped (one rating per person per ad).
+      const { error: dropError } = await db().from(table).delete().eq(column, fromId);
+      if (dropError) throw dropError;
+    } else if (error && error.code !== "42P01") {
+      throw error;
+    }
   }
 }
 

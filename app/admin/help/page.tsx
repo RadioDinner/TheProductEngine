@@ -205,6 +205,17 @@ export default async function AdminHelp() {
         pictures in total.
       </p>
 
+      <h2 className="section-h">Buyer/seller ratings (confirmed parties only)</h2>
+      <p>
+        After a seller texts <strong>SOLD 1042</strong>, the system asks for the buyer&apos;s
+        phone number. Naming the buyer records a <em>confirmed sale</em>; only then can each
+        side rate the other, by replying <strong>RATE 1–5</strong> (the buyer gets one text
+        inviting them). One rating per person per ad, and a rating that doesn&apos;t match the
+        recorded sale is refused — so nobody can rate a stranger, and star averages on the
+        website (&ldquo;Seller rated ★ 4.8 by 5 confirmed buyers&rdquo;) mean something. SKIP
+        (or ignoring the question) opts out; the ask expires on its own.
+      </p>
+
       <h2 className="section-h">Why credits are a ledger</h2>
       <p>
         Credit balances aren&rsquo;t a single number that gets edited. Every grant, purchase,

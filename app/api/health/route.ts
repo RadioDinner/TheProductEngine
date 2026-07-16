@@ -130,6 +130,17 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/0015_ad_photo_submissions.sql in the SQL editor",
           }
         : { applied: true };
+      const contexts = await db()
+        .from("sms_contexts")
+        .select("phone", { count: "exact", head: true });
+      report.migration0016 = contexts.error
+        ? {
+            applied: false,
+            code: contexts.error.code,
+            error: contexts.error.message,
+            fix: "run supabase/migrations/0016_ratings.sql in the SQL editor",
+          }
+        : { applied: true };
     } catch (e) {
       report.db = { ok: false, thrown: e instanceof Error ? e.message : String(e) };
     }

@@ -6,7 +6,14 @@ import {
   adminSetBan,
   adminSetStrikes,
 } from "@/lib/admin-actions";
-import { ensureUserId, getAccount, getCreditBalance, getLedger, searchAccounts } from "@/lib/store";
+import {
+  ensureUserId,
+  getAccount,
+  getCreditBalance,
+  getLedger,
+  getRatingSummary,
+  searchAccounts,
+} from "@/lib/store";
 import { listAdsByOwner } from "@/lib/ads";
 import { formatPhone, normalizePhone } from "@/lib/phone";
 import { site } from "@/lib/config";
@@ -107,6 +114,18 @@ export default async function AdminUsers({
               <dt>Member since</dt>
               <dd>{shortDate(account.createdAt)}</dd>
             </div>
+            {await getRatingSummary(phone).then((r) =>
+              r.asSeller.count + r.asBuyer.count > 0 ? (
+                <div>
+                  <dt>Ratings</dt>
+                  <dd>
+                    {r.asSeller.count > 0 && `as seller ★ ${r.asSeller.average} (${r.asSeller.count})`}
+                    {r.asSeller.count > 0 && r.asBuyer.count > 0 && " · "}
+                    {r.asBuyer.count > 0 && `as buyer ★ ${r.asBuyer.average} (${r.asBuyer.count})`}
+                  </dd>
+                </div>
+              ) : null,
+            )}
             <div>
               <dt>Text digests</dt>
               <dd>{account.subscribedAt ? "Yes" : "No"}</dd>

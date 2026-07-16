@@ -59,6 +59,27 @@ export interface PicQuotaResult {
   remaining: number;
 }
 
+/**
+ * Short-lived SMS conversation state (FEATURES item 2): after SOLD, the open
+ * question to a phone — first the buyer's number, then the RATE 1–5 answer.
+ * One context per phone; expired contexts read as absent.
+ */
+export interface SmsContext {
+  kind: "buyer_phone" | "rate";
+  adId: number;
+  /** The other party (the person being rated when kind = "rate"). */
+  otherPhone?: string;
+  /** Role of the RATED party for a "rate" context. */
+  ratedRole?: "buyer" | "seller";
+  expiresAt: string; // ISO
+}
+
+/** Star ratings received, split by the role the person played. */
+export interface RatingSummary {
+  asSeller: { count: number; average: number | null };
+  asBuyer: { count: number; average: number | null };
+}
+
 /** Email-only subscriber (no phone account) — spec Q11. */
 export interface EmailSubscriber {
   email: string;
@@ -145,6 +166,19 @@ interface StoreShape {
   emailSubscribers?: Record<string, EmailSubscriber>;
   /** Merged-away member ids → when they retired (not reusable for a year). */
   retiredUserIds?: Record<string, string>;
+  /** Open conversational prompts, one per phone (FEATURES item 2). */
+  smsContexts?: Record<string, SmsContext>;
+  /** Confirmed sales by ad id: who sold to whom (FEATURES item 2). */
+  sales?: Record<string, { sellerPhone: string; buyerPhone: string; at: string }>;
+  /** Star ratings, one per (ad, rater) (FEATURES item 2). */
+  ratings?: {
+    adId: number;
+    raterPhone: string;
+    ratedPhone: string;
+    ratedRole: "buyer" | "seller";
+    stars: number;
+    at: string;
+  }[];
 }
 
 const STORE_PATH = join(process.cwd(), ".data", "store.json");
@@ -225,6 +259,81 @@ const file = {
 
   getAccountByUserId(userId: string): Account | null {
     return Object.values(load().accounts).find((a) => a.userId === userId) ?? null;
+  },
+
+  setSmsContext(phone: string, context: SmsContext): "set" {
+    const store = load();
+    (store.smsContexts ??= {})[phone] = context;
+    save(store);
+    return "set";
+  },
+
+  getSmsContext(phone: string): SmsContext | null {
+    const store = load();
+    const context = store.smsContexts?.[phone];
+    if (!context) return null;
+    if (Date.parse(context.expiresAt) <= Date.now()) {
+      delete store.smsContexts![phone];
+      save(store);
+      return null;
+    }
+    return context;
+  },
+
+  clearSmsContext(phone: string): void {
+    const store = load();
+    if (store.smsContexts?.[phone]) {
+      delete store.smsContexts[phone];
+      save(store);
+    }
+  },
+
+  recordSale(adId: number, sellerPhone: string, buyerPhone: string): "recorded" {
+    const store = load();
+    // Last answer wins: the seller can correct a mistyped buyer number.
+    (store.sales ??= {})[String(adId)] = {
+      sellerPhone,
+      buyerPhone,
+      at: new Date().toISOString(),
+    };
+    save(store);
+    return "recorded";
+  },
+
+  addRating(
+    adId: number,
+    raterPhone: string,
+    ratedPhone: string,
+    ratedRole: "buyer" | "seller",
+    stars: number,
+  ): "added" | "duplicate" | "notconfirmed" {
+    const store = load();
+    const sale = store.sales?.[String(adId)];
+    // Confirmed parties only, in the right direction.
+    const confirmed =
+      sale &&
+      ((ratedRole === "buyer" && sale.sellerPhone === raterPhone && sale.buyerPhone === ratedPhone) ||
+        (ratedRole === "seller" && sale.buyerPhone === raterPhone && sale.sellerPhone === ratedPhone));
+    if (!confirmed) return "notconfirmed";
+    const ratings = (store.ratings ??= []);
+    if (ratings.some((r) => r.adId === adId && r.raterPhone === raterPhone)) return "duplicate";
+    ratings.push({ adId, raterPhone, ratedPhone, ratedRole, stars, at: new Date().toISOString() });
+    save(store);
+    return "added";
+  },
+
+  getRatingSummary(phone: string): RatingSummary {
+    const ratings = (load().ratings ?? []).filter((r) => r.ratedPhone === phone);
+    const roll = (role: "buyer" | "seller") => {
+      const stars = ratings.filter((r) => r.ratedRole === role).map((r) => r.stars);
+      return {
+        count: stars.length,
+        average: stars.length
+          ? Math.round((stars.reduce((a, b) => a + b, 0) / stars.length) * 10) / 10
+          : null,
+      };
+    };
+    return { asSeller: roll("seller"), asBuyer: roll("buyer") };
   },
 
   consumeFreeAd(phone: string): boolean {
@@ -670,6 +779,61 @@ export async function ensureUserId(phone: string): Promise<string | null> {
 /** Look a member up by their public id (ratings, chat). */
 export async function getAccountByUserId(userId: string): Promise<Account | null> {
   return supabaseConfigured ? remote.getAccountByUserId(userId) : file.getAccountByUserId(userId);
+}
+
+/**
+ * Open a conversational prompt for a phone (FEATURES item 2). "unsupported" =
+ * migration 0016 missing — the caller keeps its plain reply and moves on.
+ */
+export async function setSmsContext(
+  phone: string,
+  context: SmsContext,
+): Promise<"set" | "unsupported"> {
+  return supabaseConfigured
+    ? remote.setSmsContext(phone, context)
+    : file.setSmsContext(phone, context);
+}
+
+/** The phone's open prompt, or null (absent, expired, or migration missing). */
+export async function getSmsContext(phone: string): Promise<SmsContext | null> {
+  return supabaseConfigured ? remote.getSmsContext(phone) : file.getSmsContext(phone);
+}
+
+export async function clearSmsContext(phone: string): Promise<void> {
+  return supabaseConfigured ? remote.clearSmsContext(phone) : file.clearSmsContext(phone);
+}
+
+/** The seller named the buyer: the sale is confirmed (last answer wins). */
+export async function recordSale(
+  adId: number,
+  sellerPhone: string,
+  buyerPhone: string,
+): Promise<"recorded" | "unsupported"> {
+  return supabaseConfigured
+    ? remote.recordSale(adId, sellerPhone, buyerPhone)
+    : file.recordSale(adId, sellerPhone, buyerPhone);
+}
+
+/**
+ * One star rating (1–5), confirmed parties only: the sale row must name the
+ * rater and rated in exactly the claimed direction. One rating per person
+ * per ad.
+ */
+export async function addRating(
+  adId: number,
+  raterPhone: string,
+  ratedPhone: string,
+  ratedRole: "buyer" | "seller",
+  stars: number,
+): Promise<"added" | "duplicate" | "notconfirmed" | "unsupported"> {
+  return supabaseConfigured
+    ? remote.addRating(adId, raterPhone, ratedPhone, ratedRole, stars)
+    : file.addRating(adId, raterPhone, ratedPhone, ratedRole, stars);
+}
+
+/** Ratings received by a phone's account, split by role. */
+export async function getRatingSummary(phone: string): Promise<RatingSummary> {
+  return supabaseConfigured ? remote.getRatingSummary(phone) : file.getRatingSummary(phone);
 }
 
 /** Spend one starter pass if any remain. */

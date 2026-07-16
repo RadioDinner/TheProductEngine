@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deriveRest, deriveTitle, getAd } from "@/lib/ads";
+import { getRatingSummary } from "@/lib/store";
 import { MaskedText, maskPhonesPlain } from "@/components/MaskedText";
 import { readSession } from "@/lib/session";
 import { recordVisit } from "@/lib/analytics";
@@ -84,6 +85,8 @@ export default async function AdPage({ params }: { params: Promise<{ id: string 
 
   const session = await readSession();
   const sold = ad.status === "sold";
+  // Confirmed-buyer ratings of this seller (FEATURES item 2).
+  const sellerRating = (await getRatingSummary(ad.ownerPhone)).asSeller;
   // Mask a phone number in the heading for signed-out visitors (the body below
   // is already masked via MaskedText).
   const rawTitle = deriveTitle(ad.body);
@@ -104,6 +107,13 @@ export default async function AdPage({ params }: { params: Promise<{ id: string 
             <span className="status-available">Available</span>
           )}{" "}
           · Posted {postedLine(ad.approvedAt)} · Ad #{ad.id}
+          {sellerRating.count > 0 && (
+            <>
+              {" "}
+              · Seller rated ★ {sellerRating.average} by {sellerRating.count} confirmed{" "}
+              {sellerRating.count === 1 ? "buyer" : "buyers"}
+            </>
+          )}
         </p>
         {ad.photo && (
           <figure className="ad-photo">

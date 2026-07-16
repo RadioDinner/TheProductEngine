@@ -25,16 +25,22 @@ import { listAdsByOwner } from "@/lib/ads";
 import { sendRecentDigestTo } from "@/lib/digest-engine";
 import {
   addLedgerEntry,
+  addRating,
+  clearSmsContext,
   consumeFreeAd,
   ensureAccount,
   getAccount,
   getCreditBalance,
+  getSmsContext,
   grantStarterAdsIfFirst,
   hasLedgerRef,
+  recordSale,
   reservePicQuota,
+  setSmsContext,
   setSubscribed,
   spendCredits,
 } from "@/lib/store";
+import { normalizePhone } from "@/lib/phone";
 import { discountedCents, formatPrice, packs, site } from "@/lib/config";
 import { getEngineSettings, getWordRules, matchWordRules, effectiveSmsCaps } from "@/lib/settings";
 import type { EngineSettings } from "@/lib/settings";
@@ -65,6 +71,11 @@ export interface Reply {
 const REDIRECT_MARKER = "automated system";
 const STOP_MARKER = "unsubscribed and won't get more";
 const HOUR_MS = 60 * 60 * 1000;
+
+// Ratings-flow conversation windows (FEATURES item 2): the seller has two
+// days to name the buyer; each side has a week to send their RATE 1–5.
+const BUYER_PHONE_CONTEXT_MS = 48 * HOUR_MS;
+const RATE_CONTEXT_MS = 7 * 24 * HOUR_MS;
 
 /**
  * The COMPLIANCE opt-in confirmation (brand, marketing disclosure, frequency,
@@ -246,6 +257,19 @@ async function handleOwnerCommand(
       return { body: `Ad #${id} is still waiting for review — you can mark it sold once it's approved.` };
     }
     await markAdSold(id);
+    // Ratings flow (FEATURES item 2): ask who bought it, so buyer and seller
+    // become CONFIRMED parties who may rate each other. If contexts aren't
+    // available yet (migration 0016), the plain confirmation stands alone.
+    const opened = await setSmsContext(from, {
+      kind: "buyer_phone",
+      adId: id,
+      expiresAt: new Date(Date.now() + BUYER_PHONE_CONTEXT_MS).toISOString(),
+    });
+    if (opened === "set") {
+      return {
+        body: `Ad #${id} marked SOLD. Congratulations! What was the phone number of the buyer? Reply with their number and you can rate each other — or reply SKIP.`,
+      };
+    }
     return { body: `Ad #${id} marked SOLD. Congratulations!` };
   }
 
@@ -398,6 +422,59 @@ async function handleConfirmPurchase(from: string): Promise<Reply> {
   };
 }
 
+/**
+ * The seller answered the "what was the buyer's phone number?" question
+ * (FEATURES item 2): confirm the sale, open a RATE prompt for the seller, and
+ * invite the buyer to rate back. Returns null when the text isn't an answer —
+ * the message then routes like any other.
+ */
+async function answerBuyerPhone(from: string, text: string): Promise<Reply | null> {
+  const context = await getSmsContext(from);
+  if (!context || context.kind !== "buyer_phone") return null;
+  const buyer = normalizePhone(text);
+  if (!buyer) return null; // not a phone number — not an answer to the question
+  if (buyer === from) {
+    return { body: `That's your own number — reply with the BUYER's phone number, or SKIP.` };
+  }
+  const ad = await getAdRecord(context.adId);
+  if (!ad || ad.ownerPhone !== from) {
+    await clearSmsContext(from);
+    return null;
+  }
+  // Both parties need accounts for the sale/ratings records (a fixture-mode
+  // ad owner may not have one yet; a real seller always does via AD NEW).
+  await ensureAccount(from);
+  await ensureAccount(buyer);
+  const recorded = await recordSale(context.adId, from, buyer);
+  await clearSmsContext(from);
+  if (recorded === "unsupported") return { body: "Thanks!" };
+  const rateExpiry = new Date(Date.now() + RATE_CONTEXT_MS).toISOString();
+  await setSmsContext(from, {
+    kind: "rate",
+    adId: context.adId,
+    otherPhone: buyer,
+    ratedRole: "buyer",
+    expiresAt: rateExpiry,
+  });
+  // Invite the buyer to rate back. The prompt opens even if the invite SMS is
+  // suppressed (pause/caps) — a buyer who heard about it can still RATE.
+  await setSmsContext(buyer, {
+    kind: "rate",
+    adId: context.adId,
+    otherPhone: from,
+    ratedRole: "seller",
+    expiresAt: rateExpiry,
+  });
+  const invite = `The seller of ad #${context.adId} (${deriveTitle(ad.body)}) marked it sold to you. Want to rate the seller? Reply RATE 1-5 (5 = best), or SKIP.`;
+  const { sent } = await dispatchSms(buyer, invite, { cls: "reply" });
+  if (sent) {
+    await logMessage({ direction: "outbound", channel: "sms", address: buyer, body: invite });
+  }
+  return {
+    body: `Thanks! Would you like to rate the buyer? If so, please reply with RATE 5 for 5 stars (RATE 1-5), or SKIP.`,
+  };
+}
+
 async function route(
   msg: InboundSms,
   command: ReturnType<typeof parseCommand>,
@@ -410,6 +487,13 @@ async function route(
     return {
       body: `To post an ad with this picture, resend it with your ad text, like: AD NEW Horse cart for sale $1,000, call ${site.smsNumber}.`,
     };
+  }
+
+  // An open conversational prompt may consume a non-command message — the
+  // buyer's phone number after SOLD. Real commands still work mid-conversation.
+  if (command.kind === "unknown") {
+    const answered = await answerBuyerPhone(from, command.text);
+    if (answered) return answered;
   }
 
   switch (command.kind) {
@@ -577,6 +661,47 @@ async function route(
       return handleBuyCredit(from, command.amount);
     case "confirm":
       return handleConfirmPurchase(from);
+    case "rate": {
+      const context = await getSmsContext(from);
+      if (!context || context.kind !== "rate" || !context.otherPhone || !context.ratedRole) {
+        return {
+          body: `There's no rating waiting from this number. Ratings open after a sale is confirmed (the seller marks the ad SOLD and names the buyer).`,
+        };
+      }
+      if (!command.stars) {
+        return { body: `Rate 1 to 5 stars — for example: RATE 5.` };
+      }
+      const outcome = await addRating(
+        context.adId,
+        from,
+        context.otherPhone,
+        context.ratedRole,
+        command.stars,
+      );
+      await clearSmsContext(from);
+      if (outcome === "duplicate") {
+        return { body: `You already rated the ${context.ratedRole} of ad #${context.adId}.` };
+      }
+      if (outcome === "notconfirmed") {
+        return {
+          body: `That sale isn't on record, so the rating can't be saved. Ratings open after the seller marks the ad SOLD and names the buyer.`,
+        };
+      }
+      if (outcome === "unsupported") return { body: `Thanks!` };
+      return {
+        body: `Thanks! Your ${command.stars}-star rating of the ${context.ratedRole} of ad #${context.adId} is saved.`,
+      };
+    }
+    case "skip": {
+      const context = await getSmsContext(from);
+      if (!context) {
+        return {
+          body: `This is ${site.name}'s automated system. Text HELP for a list of commands.`,
+        };
+      }
+      await clearSmsContext(from);
+      return { body: `No problem.` };
+    }
     case "unknown": {
       // No ensureAccount: gibberish from a spoofed number shouldn't mint an
       // account. While UNDER ATTACK we don't even send the one-per-day redirect
