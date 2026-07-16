@@ -3,7 +3,73 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-07-16 (session 007).
+**Last updated:** 2026-07-16 (session 008).
+
+## What shipped in session 008 (committed DIRECTLY to `main`, per user)
+
+**The 007 handoff items, then the new `FEATURES.md` list — items 0–5 ALL
+BUILT, each dev-walked (75 Playwright checks across 6 walks) and pushed
+separately.** Unit suite 129 → **181 checks**.
+
+⚠️ **SIX MIGRATIONS WRITTEN, NONE APPLIED at session end: 0013–0018.**
+Prod auto-deploys `main`, so the code is live NOW with every new feature
+**dormant-but-safe** until its paste: this session every schema-dependent
+feature degrades gracefully (hides / reports "paste migration X" / omits
+itself — never a 500) and `/api/health` (CRON_SECRET) probes
+`migration0013`…`migration0018` individually. **User: paste
+0013_ad_delete, 0014_user_ids, 0015_ad_photo_submissions, 0016_ratings,
+0017_profiles_chat, 0018_digest_numbers in file order, then check health.**
+
+- **Email digest subject** (user request): now led by the standout ad —
+  `The Plain Exchange : 07-16-26 - Tractor trailer +3 more ads`. Standout =
+  highest-priced ad (fallback: digest order); pure + unit-tested
+  (`lib/ad-display.ts`), applies to scheduled AND early/extra editions.
+- **Admin ad deletion (0013)** — the 007 request. "Delete this ad…" on
+  /admin/ads, any status: two-step confirm shows the seller's charge and
+  warns no-refund/no-notice. SOFT delete (new `deleted` status — broadcast
+  history/digest_items never rewritten): hidden from site/digests/MYADS,
+  PIC/STATUS no-ad-found, SOLD/BUMP refuse, queued bumps dropped, photos
+  removed from storage too. `deleted` filter on the Ads tab; /admin/help
+  documents it.
+- **FEATURES.md created** — the running feature list (user convention: when
+  they add a feature, append it there). Items 0–5 all **built**:
+  - **0 · USER_ID (0014):** unique random 6-digit member ids, backfilled by
+    the migration, lazily assigned after; merged-away ids not reusable for a
+    YEAR (`retired_user_ids` tombstones). On /account + /admin/users.
+  - **1 · Email-in extra pictures (0015):** photos@ + "Ad 1042" in the
+    subject → sniffed + re-hosted → `ad_photo_submissions` awaiting review
+    on /admin/ads → approved extras join the WEBSITE gallery at position 1+
+    (position 0 = the paid MMS picture; SMS/PIC/digest costs untouchable).
+    **Ops: add the photos@ inbound address in Resend → same webhook.**
+  - **2 · Confirmed ratings (0016):** SOLD → "what was the buyer's phone
+    number?" → sale recorded → RATE 1–5 both directions (buyer gets one SMS
+    invite). Store-enforced: only the recorded sale's parties, right
+    direction, once per ad. Averages on the ad page + /admin/users. New
+    `sms_contexts` conversation-state (48 h / 7 d windows; SKIP opts out).
+  - **3 · Profile (0017):** picture (re-hosted) + pickup address that is
+    STRICTLY private — leaves only via the explicit "Share my pickup
+    address" button inside a chat.
+  - **4 · Chat (0017):** "Message the seller" on ad pages → threads under
+    /account/messages keyed on member ids (phones never shown; non-members
+    404). One "message waiting" SMS nudge / number / 3 h, reply-class.
+  - **5 · Digest numbers (0018):** every sent digest numbers itself from 1
+    (reset now, per user): "Plain Exchange No. 3 Jul 16 morning:"; email
+    edition mirrors it; /admin/digests history shows it.
+
+**VERIFY EARLY NEXT SESSION (couldn't reach prod from the session
+container):** (1) health shows `migration0012` AND `migration0013`–`0018`
+all applied + digests composing (carried from 007); (2) review-alert emails
+arrive post-ADMIN_EMAIL-fix (carried); (3) after the user adds photos@ in
+Resend, a real photo email lands as a submission.
+
+**Recommended-but-unbuilt (carried + new):** (1) the retry-swallow inbound
+trap (any throw after `recordInboundOnce` still permanently eats that
+message); (2) persist Telnyx DLRs as delivered/failed badges in
+/admin/messages; (3) graceful-degradation retrofit for PRE-0013 features;
+(4) extend the abuse suite to the new conversational flows (RATE hammering,
+buyer-phone spoofing, chat-nudge abuse) — none of it is brutally tested yet.
+
+Full session detail: `Session log/008_2026-07-16/session_log.md`.
 
 ## What shipped in session 007 (committed DIRECTLY to `main`, per user)
 
