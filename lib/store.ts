@@ -18,11 +18,16 @@ import { supabaseConfigured } from "@/lib/db";
 import * as remote from "@/lib/store-supabase";
 import { accruePicQuota } from "@/lib/pic-quota";
 import { normalizePhone } from "@/lib/phone";
+import { USER_ID_MAX_ATTEMPTS, isRetirementActive, randomUserId } from "@/lib/user-id";
 
 // ---------- shared types & rules ----------
 
 export interface Account {
   phone: string; // 10 digits
+  /** Public 6-digit member id (FEATURES item 0, migration 0014). Populated
+   * lazily via ensureUserId — most account reads leave it undefined so the
+   * core lookup path never depends on the migration. */
+  userId?: string | null;
   passwordHash?: string; // "salt:hash" hex
   createdAt: string; // ISO
   email?: string;
@@ -138,6 +143,8 @@ interface StoreShape {
   codeRequests: Record<string, number[]>;
   ledgers: Record<string, LedgerEntry[]>;
   emailSubscribers?: Record<string, EmailSubscriber>;
+  /** Merged-away member ids → when they retired (not reusable for a year). */
+  retiredUserIds?: Record<string, string>;
 }
 
 const STORE_PATH = join(process.cwd(), ".data", "store.json");
@@ -187,6 +194,37 @@ const file = {
     }
     account.freeAds ??= 0;
     return account;
+  },
+
+  ensureUserId(phone: string): string | null {
+    const store = load();
+    const account = store.accounts[phone];
+    if (!account) return null;
+    if (account.userId) return account.userId;
+    const taken = new Set(
+      Object.values(store.accounts)
+        .map((a) => a.userId)
+        .filter(Boolean),
+    );
+    const retired = (store.retiredUserIds ??= {});
+    const now = Date.now();
+    // Tombstones past their year are reaped — those ids are free again.
+    for (const [id, at] of Object.entries(retired)) {
+      if (!isRetirementActive(at, now)) delete retired[id];
+    }
+    for (let i = 0; i < USER_ID_MAX_ATTEMPTS; i++) {
+      const candidate = randomUserId();
+      if (taken.has(candidate) || retired[candidate]) continue;
+      account.userId = candidate;
+      save(store);
+      return candidate;
+    }
+    console.error("[user-id] could not draw a unique member id");
+    return null;
+  },
+
+  getAccountByUserId(userId: string): Account | null {
+    return Object.values(load().accounts).find((a) => a.userId === userId) ?? null;
   },
 
   consumeFreeAd(phone: string): boolean {
@@ -341,6 +379,10 @@ const file = {
       }
       const loser = store.accounts[sourcePhone];
       if (!loser) return { ok: false, reason: `No account exists for ${sourcePhone}.` };
+      // The merged-away member id retires for a year (FEATURES item 0).
+      if (loser.userId) {
+        (store.retiredUserIds ??= {})[loser.userId] = new Date().toISOString();
+      }
       survivor.freeAds += loser.freeAds;
       survivor.offenseCount = (survivor.offenseCount ?? 0) + (loser.offenseCount ?? 0);
       survivor.picBalance = (survivor.picBalance ?? 0) + (loser.picBalance ?? 0);
@@ -614,6 +656,20 @@ export async function getAccount(phone: string): Promise<Account | null> {
 /** Create-on-first-contact (spec Q6): any inbound message makes an account. */
 export async function ensureAccount(phone: string): Promise<Account> {
   return supabaseConfigured ? remote.ensureAccount(phone) : file.ensureAccount(phone);
+}
+
+/**
+ * The member's public 6-digit id (FEATURES item 0) — assigned lazily when the
+ * account doesn't have one yet. Null when the account doesn't exist or when
+ * migration 0014 isn't applied (the feature stays dormant; never a 500).
+ */
+export async function ensureUserId(phone: string): Promise<string | null> {
+  return supabaseConfigured ? remote.ensureUserId(phone) : file.ensureUserId(phone);
+}
+
+/** Look a member up by their public id (ratings, chat). */
+export async function getAccountByUserId(userId: string): Promise<Account | null> {
+  return supabaseConfigured ? remote.getAccountByUserId(userId) : file.getAccountByUserId(userId);
 }
 
 /** Spend one starter pass if any remain. */

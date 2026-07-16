@@ -110,6 +110,15 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/0013_ad_delete.sql in the SQL editor",
           }
         : { applied: true };
+      const uid = await db().from("users").select("user_id", { count: "exact", head: true });
+      report.migration0014 = uid.error
+        ? {
+            applied: false,
+            code: uid.error.code,
+            error: uid.error.message,
+            fix: "run supabase/migrations/0014_user_ids.sql in the SQL editor",
+          }
+        : { applied: true };
     } catch (e) {
       report.db = { ok: false, thrown: e instanceof Error ? e.message : String(e) };
     }

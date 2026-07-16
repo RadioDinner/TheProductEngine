@@ -22,6 +22,7 @@ import {
   type VerifyCodeResult,
 } from "@/lib/store";
 import { normalizePhone } from "@/lib/phone";
+import { USER_ID_MAX_ATTEMPTS, isRetirementActive, randomUserId } from "@/lib/user-id";
 
 interface UserRow {
   id: string;
@@ -117,6 +118,84 @@ export async function ensureAccount(phone: string): Promise<Account> {
     .single();
   if (error) throw error;
   return toAccount(data as UserRow);
+}
+
+/** Missing user_id column / retired_user_ids table = migration 0014 not
+ * applied yet. The member-id feature stays dormant instead of 500ing (the
+ * 0011/0012 drift lesson) — every caller treats null as "no id yet". */
+function userIdSchemaMissing(error: { code?: string } | null): boolean {
+  return error?.code === "42703" || error?.code === "42P01";
+}
+
+export async function ensureUserId(phone: string): Promise<string | null> {
+  const { data, error } = await db()
+    .from("users")
+    .select("id, user_id")
+    .eq("phone", phone)
+    .maybeSingle();
+  if (error) {
+    if (userIdSchemaMissing(error)) return null;
+    throw error;
+  }
+  if (!data) return null;
+  if (data.user_id) return data.user_id as string;
+
+  for (let attempt = 0; attempt < USER_ID_MAX_ATTEMPTS; attempt++) {
+    const candidate = randomUserId();
+    const { data: tombstone, error: retiredError } = await db()
+      .from("retired_user_ids")
+      .select("user_id, retired_at")
+      .eq("user_id", candidate)
+      .maybeSingle();
+    if (retiredError) {
+      if (userIdSchemaMissing(retiredError)) return null;
+      throw retiredError;
+    }
+    if (tombstone) {
+      if (isRetirementActive(tombstone.retired_at as string, Date.now())) continue;
+      // A year has passed — reap the tombstone so the id can live again.
+      await db().from("retired_user_ids").delete().eq("user_id", candidate);
+    }
+    const { data: updated, error: assignError } = await db()
+      .from("users")
+      .update({ user_id: candidate })
+      .eq("id", data.id)
+      .is("user_id", null)
+      .select("user_id");
+    if (assignError) {
+      if (assignError.code === "23505") continue; // another member drew this id — again
+      if (userIdSchemaMissing(assignError)) return null;
+      throw assignError;
+    }
+    // 0 rows = a concurrent call assigned this account first; read what won.
+    if (!updated?.length) {
+      const { data: raced } = await db()
+        .from("users")
+        .select("user_id")
+        .eq("id", data.id)
+        .maybeSingle();
+      return (raced?.user_id as string | null) ?? null;
+    }
+    return candidate;
+  }
+  console.error("[user-id] could not draw a unique member id");
+  return null;
+}
+
+export async function getAccountByUserId(userId: string): Promise<Account | null> {
+  const { data, error } = await db()
+    .from("users")
+    .select(`${USER_SELECT}, user_id`)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) {
+    if (userIdSchemaMissing(error)) return null;
+    throw error;
+  }
+  if (!data) return null;
+  const account = toAccount(data as unknown as UserRow);
+  account.userId = (data as { user_id?: string | null }).user_id ?? null;
+  return account;
 }
 
 export async function consumeFreeAd(phone: string): Promise<boolean> {
@@ -369,8 +448,23 @@ export async function mergeAccounts(survivorPhone: string, source: string): Prom
       })
       .eq("id", survivor.id);
     if (updateError) throw updateError;
+    // The merged-away member id retires for a year (FEATURES item 0). Read it
+    // with a dedicated query so the merge itself never depends on migration
+    // 0014 — pre-migration this select errors and the retirement is skipped.
+    const { data: loserIdRow } = await db()
+      .from("users")
+      .select("user_id")
+      .eq("id", loser.id)
+      .maybeSingle();
+    const loserUserId = (loserIdRow as { user_id?: string | null } | null)?.user_id ?? null;
     const { error: deleteError } = await db().from("users").delete().eq("id", loser.id);
     if (deleteError) throw deleteError;
+    if (loserUserId) {
+      const { error: retireError } = await db()
+        .from("retired_user_ids")
+        .upsert({ user_id: loserUserId, retired_at: new Date().toISOString() });
+      if (retireError && !userIdSchemaMissing(retireError)) throw retireError;
+    }
     const { error: codesError } = await db()
       .from("verification_codes")
       .delete()

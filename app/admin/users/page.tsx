@@ -6,7 +6,7 @@ import {
   adminSetBan,
   adminSetStrikes,
 } from "@/lib/admin-actions";
-import { getAccount, getCreditBalance, getLedger, searchAccounts } from "@/lib/store";
+import { ensureUserId, getAccount, getCreditBalance, getLedger, searchAccounts } from "@/lib/store";
 import { listAdsByOwner } from "@/lib/ads";
 import { formatPhone, normalizePhone } from "@/lib/phone";
 import { site } from "@/lib/config";
@@ -99,6 +99,10 @@ export default async function AdminUsers({
             </p>
           )}
           <dl className="account-facts">
+            <div>
+              <dt>Member ID</dt>
+              <dd>{(await ensureUserId(phone)) ?? "— (needs migration 0014)"}</dd>
+            </div>
             <div>
               <dt>Member since</dt>
               <dd>{shortDate(account.createdAt)}</dd>

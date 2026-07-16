@@ -5,7 +5,7 @@ import { signOut } from "@/lib/auth-actions";
 import { saveEmail, toggleEmailEdition, toggleSubscription } from "@/lib/account-actions";
 import { formatPhone } from "@/lib/phone";
 import { readSession } from "@/lib/session";
-import { getAccount, getCreditBalance, getLedger } from "@/lib/store";
+import { ensureUserId, getAccount, getCreditBalance, getLedger } from "@/lib/store";
 import { adExpiresAt, deriveTitle, listAdsByOwner, type Ad } from "@/lib/ads";
 import { formatPrice, packs, site } from "@/lib/config";
 import { checkoutUrl } from "@/lib/payments";
@@ -57,6 +57,7 @@ export default async function AccountPage({
 
   const params = await searchParams;
   const account = await getAccount(session.phone);
+  const memberId = await ensureUserId(session.phone);
   const balance = await getCreditBalance(session.phone);
   const ledger = await getLedger(session.phone);
   const myAds = await listAdsByOwner(session.phone);
@@ -79,6 +80,12 @@ export default async function AccountPage({
           <dt>Phone number</dt>
           <dd>{formatPhone(session.phone)}</dd>
         </div>
+        {memberId && (
+          <div>
+            <dt>Member ID</dt>
+            <dd>{memberId}</dd>
+          </div>
+        )}
         {memberSince && (
           <div>
             <dt>Member since</dt>
