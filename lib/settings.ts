@@ -14,10 +14,8 @@ export interface EngineSettings {
   costPhoto: number;
   bumpCost: number;
   digestCap: number;
-  /** SMS digest slots, hours in America/New_York. */
+  /** Digest slots, hours in America/New_York (the email edition mirrors these). */
   slots: number[];
-  /** Email edition slots, hours in America/New_York. */
-  emailSlots: number[];
   maxChars: number;
   expiryDays: number;
   /** Abuse guards — see engineDefaults for what each cap means. */
@@ -54,7 +52,6 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   bumpCost: "bump_cost",
   digestCap: "digest_ad_cap",
   slots: "digest_slots_sms",
-  emailSlots: "digest_slots_email",
   maxChars: "ad_max_chars",
   expiryDays: "ad_expiry_days",
   smsRepliesPerHour: "sms_replies_per_hour",
@@ -105,7 +102,6 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     bumpCost: engineDefaults.bumpCost,
     digestCap: engineDefaults.digestCap,
     slots: [...engineDefaults.slots],
-    emailSlots: [...engineDefaults.emailSlots],
     maxChars: engineDefaults.maxChars,
     expiryDays: engineDefaults.expiryDays,
     smsRepliesPerHour: engineDefaults.smsRepliesPerHour,

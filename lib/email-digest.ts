@@ -1,9 +1,10 @@
 /**
- * The email edition: at each email slot, compose everything the SMS digests
- * carried since the last email — minus ads no longer available — with
- * pictures inline, and enqueue one outbox row per recipient. Delivery rides
- * the same drained outbox as the SMS digests (bounded batches, resumable),
- * with the same idempotency guarantees.
+ * The email edition mirrors the SMS digests 1:1 (user decision, session 007):
+ * it composes at the SAME slots, and each email carries exactly the ads of
+ * that slot's SMS digest — minus ads no longer available — with pictures
+ * inline. One outbox row per recipient; delivery rides the same drained
+ * outbox as the SMS digests (bounded batches, resumable), with the same
+ * idempotency guarantees.
  */
 import { siteUrl, unsubscribeUrl } from "@/lib/email";
 import { type SlotResult } from "@/lib/digest-engine";
@@ -14,8 +15,7 @@ import {
   enqueueDigestOutbox,
   finalizeDigest,
   getAdRecord,
-  getLastEmailDigestAt,
-  getSmsAdIdsSince,
+  getSmsDigestAdIds,
   type OutboxInsert,
   type StoredAd,
 } from "@/lib/engine-store";
@@ -33,8 +33,15 @@ function esc(s: string): string {
 export function composeEmailHtml(ads: StoredAd[], dateLabel: string, unsubHref: string): string {
   const rows = ads
     .map((ad) => {
+      // Re-hosted photos carry an absolute URL (Supabase Storage); only
+      // site-relative fixture paths still need the siteUrl prefix.
+      const photoSrc = ad.photo
+        ? ad.photo.src.startsWith("http")
+          ? ad.photo.src
+          : `${siteUrl}${ad.photo.src}`
+        : "";
       const photo = ad.photo
-        ? `<img src="${siteUrl}${ad.photo.src}" alt="${esc(ad.photo.alt)}" width="280" style="max-width:100%;height:auto;border:1px solid #ddd;margin:8px 0 0;" />`
+        ? `<img src="${photoSrc}" alt="${esc(ad.photo.alt)}" width="280" style="max-width:100%;height:auto;border:1px solid #ddd;margin:8px 0 0;" />`
         : "";
       // The title already shows the lead clause (the whole body for a
       // single-clause ad); only render the excerpt when there's a real
@@ -83,15 +90,23 @@ export async function runDueEmailDigests(now = new Date()): Promise<SlotResult[]
   const settings = await getEngineSettings();
   const results: SlotResult[] = [];
 
-  for (const slot of settings.emailSlots) {
+  // Same slots as the SMS digests — the email edition is their mirror.
+  for (const slot of settings.slots) {
     if (hour < slot) continue;
     const slotKey = `${day}#email#${slot}`;
     const { id: digestId, finalized } = await createDigestIfAbsent(slotKey, slot, "email");
     // Not finalized = a previous run died mid-enqueue; redo it (outbox dedups).
     if (finalized) continue;
 
-    const watermark = await getLastEmailDigestAt(digestId);
-    const carriedIds = await getSmsAdIdsSince(watermark);
+    // Exactly this slot's SMS digest. null = it hasn't composed yet (the SMS
+    // pass runs first in the same cron tick, but it can fail mid-run) — leave
+    // this email slot un-finalized so the next tick retries, rather than
+    // sending an empty or incomplete edition.
+    const carriedIds = await getSmsDigestAdIds(`${day}#${slot}`);
+    if (carriedIds === null) {
+      results.push({ slotKey, items: 0, recipients: 0, skipped: true });
+      continue;
+    }
     const ads: StoredAd[] = [];
     for (const id of carriedIds) {
       const ad = await getAdRecord(id);

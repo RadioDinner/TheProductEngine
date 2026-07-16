@@ -180,15 +180,7 @@ export default async function AdminSettings({
         <div className="field">
           <label htmlFor="slots">Digest slots (hours ET, comma-separated)</label>
           <input id="slots" name="slots" type="text" defaultValue={settings.slots.join(", ")} />
-        </div>
-        <div className="field">
-          <label htmlFor="emailSlots">Email edition slots (hours ET, comma-separated)</label>
-          <input
-            id="emailSlots"
-            name="emailSlots"
-            type="text"
-            defaultValue={settings.emailSlots.join(", ")}
-          />
+          <p className="fine">The email edition goes out at these same times.</p>
         </div>
         <button className="btn" type="submit">
           Save settings

@@ -194,8 +194,6 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
   }
   const slots = parseSlots("slots");
   if (slots.length) update.slots = [...new Set(slots)].sort((a, b) => a - b);
-  const emailSlots = parseSlots("emailSlots");
-  if (emailSlots.length) update.emailSlots = [...new Set(emailSlots)].sort((a, b) => a - b);
   await saveEngineSettings(update);
   redirect("/admin/settings?saved=1");
 }

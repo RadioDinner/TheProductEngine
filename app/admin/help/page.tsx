@@ -250,8 +250,7 @@ export default async function AdminHelp() {
           <tr><td>Max ads per digest</td><td>{s.digestCap}</td></tr>
           <tr><td>Max ad length</td><td>{s.maxChars} characters</td></tr>
           <tr><td>Ad run time</td><td>{s.expiryDays} days</td></tr>
-          <tr><td>SMS digest send-times (ET)</td><td>{s.slots.join(", ")}</td></tr>
-          <tr><td>Email digest send-times (ET)</td><td>{s.emailSlots.join(", ")}</td></tr>
+          <tr><td>Digest send-times, SMS + email (ET)</td><td>{s.slots.join(", ")}</td></tr>
         </tbody>
       </table>
     </>

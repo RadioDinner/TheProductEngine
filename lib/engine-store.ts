@@ -490,13 +490,6 @@ const file = {
     save(store);
   },
 
-  getLastEmailDigestAt(excludeId: number): string | null {
-    const sent = load()
-      .digests.filter((d) => d.channel === "email" && d.id !== excludeId && d.sentAt)
-      .sort((a, b) => Date.parse(b.sentAt!) - Date.parse(a.sentAt!));
-    return sent[0]?.sentAt ?? null;
-  },
-
   getRecentDigestAdIds(): number[] {
     const sent = load()
       .digests.filter(
@@ -506,14 +499,10 @@ const file = {
     return sent[0]?.items ?? [];
   },
 
-  getSmsAdIdsSince(sinceIso: string | null): number[] {
-    const cutoff = sinceIso ? Date.parse(sinceIso) : 0;
-    const ids = load()
-      .digests.filter(
-        (d) => d.channel === "sms" && d.sentAt && Date.parse(d.sentAt) > cutoff && d.items?.length,
-      )
-      .flatMap((d) => d.items ?? []);
-    return [...new Set(ids)];
+  getSmsDigestAdIds(slotKey: string): number[] | null {
+    const digest = load().digests.find((d) => d.channel === "sms" && d.slotKey === slotKey);
+    if (!digest?.sentAt) return null; // not composed yet — the email edition waits
+    return digest.items ?? [];
   },
 
   digestsSentOnDay(dayKey: string): number {
@@ -840,16 +829,10 @@ export async function finalizeDigest(
     : file.finalizeDigest(digestId, adIds, bumpIds, itemCount, carriedAdIds);
 }
 
-/** Watermark for the email edition: when the previous email digest went out. */
-export async function getLastEmailDigestAt(excludeId: number): Promise<string | null> {
-  return supabaseConfigured
-    ? remote.getLastEmailDigestAt(excludeId)
-    : file.getLastEmailDigestAt(excludeId);
-}
-
-/** Ad ids the SMS digests carried after the watermark (deduplicated). */
-export async function getSmsAdIdsSince(sinceIso: string | null): Promise<number[]> {
-  return supabaseConfigured ? remote.getSmsAdIdsSince(sinceIso) : file.getSmsAdIdsSince(sinceIso);
+/** Ads carried by one SMS digest (`day#hour`), or null while it hasn't
+ * composed — the email edition mirrors it 1:1 and waits on null. */
+export async function getSmsDigestAdIds(slotKey: string): Promise<number[] | null> {
+  return supabaseConfigured ? remote.getSmsDigestAdIds(slotKey) : file.getSmsDigestAdIds(slotKey);
 }
 
 export async function digestsSentOnDay(dayKey: string): Promise<number> {

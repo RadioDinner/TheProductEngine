@@ -78,3 +78,9 @@ when I got to admin/digests
 --- 2026-07-16 ---
 [Recent digests list pasted from /admin/digests: sms+email rows at 7:00/16:00, sms-only at 12:00/20:00, Jul 14-16 all composed on the hour; 2026-07-16#12 sms carried 1 ad at 12:01 PM]
 Why are some times doubled up?
+
+--- 2026-07-16 ---
+I want the email digests to be sent at the same time as the SMS digests. Also, I want it to be a single digest in each email
+
+--- 2026-07-16 ---
+Currently Resend shows that its been sending me emails. How do I see who all is subscribed? I'd like to be able to see the SMS and email subscribers from the admin page of theplainexchange.com . I also want to track when people subscribe, via SMS or Email,

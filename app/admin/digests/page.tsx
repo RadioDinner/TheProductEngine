@@ -74,8 +74,9 @@ export default async function AdminDigests() {
     <>
       <h1>Digests</h1>
       <p>
-        Slots: {slots.length ? slots.map(slotLabel).join(", ") : "none"} · next digest composes{" "}
-        <strong>{nextSlotLabel}</strong> · capacity {settings.digestCap} ads per digest
+        Slots: {slots.length ? slots.map(slotLabel).join(", ") : "none"} (email edition goes out at
+        the same times) · next digest composes <strong>{nextSlotLabel}</strong> · capacity{" "}
+        {settings.digestCap} ads per digest
         {queued > 0 && (
           <>
             {" "}

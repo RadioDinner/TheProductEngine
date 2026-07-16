@@ -321,55 +321,31 @@ export async function createDigestIfAbsent(
   return { id: data.id as number, created: true, finalized: false };
 }
 
-export async function getLastEmailDigestAt(excludeId: number): Promise<string | null> {
-  const { data, error } = await db()
+export async function getSmsDigestAdIds(slotKey: string): Promise<number[] | null> {
+  // slotKey is "day#hour"; the table's slot identity is the canonical
+  // scheduled_for that createDigestIfAbsent writes for it.
+  const parts = slotKey.split("#");
+  const scheduledFor = `${parts[0]}T${parts[parts.length - 1].padStart(2, "0")}:00:00Z`;
+  const { data: digest, error } = await db()
     .from("digests")
-    .select("sent_at")
-    .eq("channel", "email")
-    .neq("id", excludeId)
-    .not("sent_at", "is", null)
-    .order("sent_at", { ascending: false })
-    .limit(1)
+    .select("id, sent_at")
+    .eq("channel", "sms")
+    .eq("scheduled_for", scheduledFor)
     .maybeSingle();
   if (error) throw error;
-  return (data?.sent_at as string | undefined) ?? null;
-}
-
-export async function getSmsAdIdsSince(sinceIso: string | null): Promise<number[]> {
-  const since = sinceIso ?? "1970-01-01T00:00:00Z";
+  if (!digest?.sent_at) return null; // not composed yet — the email edition waits
+  const digestId = digest.id as number;
+  // A digest carries at most digestCap (≤15) items — no paging needed.
+  const [{ data: items, error: itemsError }, { data: bumps, error: bumpsError }] =
+    await Promise.all([
+      db().from("digest_items").select("ad_id").eq("digest_id", digestId),
+      db().from("bumps").select("ad_id").eq("digest_id", digestId).eq("status", "sent"),
+    ]);
+  if (itemsError) throw itemsError;
+  if (bumpsError) throw bumpsError;
   const ids = new Set<number>();
-  // Paged: the first-ever email digest (null watermark) or a long email-off
-  // gap can carry more than 1000 rows — truncating there would drop ads from
-  // the email edition. New-ad items live in digest_items; bumps link through
-  // bumps.digest_id.
-  // Order by ad_id so page boundaries are stable across queries: without a
-  // deterministic sort, PostgREST can return rows in a different order per
-  // page and a distinct ad id could fall through the crack between pages.
-  for (let offset = 0; ; offset += PAGE) {
-    const { data, error } = await db()
-      .from("digest_items")
-      .select("ad_id, digests!inner(channel, sent_at)")
-      .eq("digests.channel", "sms")
-      .gt("digests.sent_at", since)
-      .order("ad_id", { ascending: true })
-      .range(offset, offset + PAGE - 1);
-    if (error) throw error;
-    for (const r of data ?? []) ids.add(r.ad_id as number);
-    if ((data?.length ?? 0) < PAGE) break;
-  }
-  for (let offset = 0; ; offset += PAGE) {
-    const { data, error } = await db()
-      .from("bumps")
-      .select("ad_id, digests!inner(channel, sent_at)")
-      .eq("status", "sent")
-      .eq("digests.channel", "sms")
-      .gt("digests.sent_at", since)
-      .order("ad_id", { ascending: true })
-      .range(offset, offset + PAGE - 1);
-    if (error) throw error;
-    for (const r of data ?? []) ids.add(r.ad_id as number);
-    if ((data?.length ?? 0) < PAGE) break;
-  }
+  for (const r of items ?? []) ids.add(r.ad_id as number);
+  for (const r of bumps ?? []) ids.add(r.ad_id as number);
   return [...ids];
 }
 
