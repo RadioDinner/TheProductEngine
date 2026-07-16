@@ -56,3 +56,9 @@ this is what the debugging in telnyx shows but I never got an SMS reply
 
 --- 2026-07-16 ---
 I have no outbound messages in the detail record search or webhook deliveries. I need you to get this for me!!!!
+
+--- 2026-07-16 ---
+[/admin/sms-diag pasted: "TELNYX_API_KEY is not set — this deployment can't reach Telnyx (dev mode)."]
+
+--- 2026-07-16 ---
+TELNYX_PUBLIC_KEY is set, is the API_KEY different?
