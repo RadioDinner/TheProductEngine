@@ -74,3 +74,7 @@ This page couldn't load
 
 A server error occurred. Reload to try again.
 when I got to admin/digests
+
+--- 2026-07-16 ---
+[Recent digests list pasted from /admin/digests: sms+email rows at 7:00/16:00, sms-only at 12:00/20:00, Jul 14-16 all composed on the hour; 2026-07-16#12 sms carried 1 ad at 12:01 PM]
+Why are some times doubled up?
