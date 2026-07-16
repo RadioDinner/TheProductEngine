@@ -61,6 +61,9 @@ export interface DigestRecord {
   itemCount: number;
   /** Ad ids carried (SMS digests) — the email edition's union source. */
   items?: number[];
+  /** Public edition number, 1, 2, 3… (FEATURES item 5) — SENT SMS digests
+   * with items only; the email mirror shows the same number. */
+  digestNo?: number | null;
   sentAt?: string;
   createdAt: string;
 }
@@ -436,6 +439,22 @@ const file = {
     return [...load().digests]
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.id - a.id)
       .slice(0, limit);
+  },
+
+  allocateDigestNumber(digestId: number): number | null {
+    const store = load();
+    const digest = store.digests.find((d) => d.id === digestId);
+    if (!digest) return null;
+    if (digest.digestNo) return digest.digestNo; // idempotent on retry
+    const max = Math.max(0, ...store.digests.map((d) => d.digestNo ?? 0));
+    digest.digestNo = max + 1;
+    save(store);
+    return digest.digestNo;
+  },
+
+  getSmsDigestNumber(slotKey: string): number | null {
+    const digest = load().digests.find((d) => d.channel === "sms" && d.slotKey === slotKey);
+    return digest?.digestNo ?? null;
   },
 
   queueBump(adId: number): boolean {
@@ -956,6 +975,24 @@ export async function reassignAdOwnership(fromPhone: string, toPhone: string): P
 /** Newest-first digest history for the admin Digests tab. */
 export async function listRecentDigests(limit = 20): Promise<DigestRecord[]> {
   return supabaseConfigured ? remote.listRecentDigests(limit) : file.listRecentDigests(limit);
+}
+
+/**
+ * Assign (or read back) a digest's public number (FEATURES item 5): 1, 2, 3…
+ * in send order, counting from this feature's launch. Idempotent per digest;
+ * null when migration 0018 isn't applied — the header simply omits the number.
+ */
+export async function allocateDigestNumber(digestId: number): Promise<number | null> {
+  return supabaseConfigured
+    ? remote.allocateDigestNumber(digestId)
+    : file.allocateDigestNumber(digestId);
+}
+
+/** The number of one slot's SMS digest — the email mirror shows the same. */
+export async function getSmsDigestNumber(slotKey: string): Promise<number | null> {
+  return supabaseConfigured
+    ? remote.getSmsDigestNumber(slotKey)
+    : file.getSmsDigestNumber(slotKey);
 }
 
 export async function reviveAd(id: number, ttlDays?: number): Promise<void> {

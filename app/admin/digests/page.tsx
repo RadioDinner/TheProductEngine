@@ -232,6 +232,7 @@ export default async function AdminDigests({
           {history.map((d) => (
             <li key={d.id} className="myad-row">
               <p className="myad-title">
+                {d.digestNo ? `No. ${d.digestNo} · ` : ""}
                 {d.slotKey} <span className="status-muted">· {d.channel}</span> · {d.itemCount} ad
                 {d.itemCount === 1 ? "" : "s"}
                 <span className="status-muted">

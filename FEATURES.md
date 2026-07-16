@@ -12,7 +12,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 2 | **Profiles: confirmed buyer/seller ratings** — only confirmed parties can rate. `SOLD 1040` replies asking for the buyer's phone number; then invites `RATE 1–5`; the named buyer gets the same invitation to rate the seller | session 008 | **built** (migration 0016) |
 | 3 | **Profile picture + pickup address** — settable by the member; the address is private to them, optionally shareable with a buyer they're in conversation with | session 008 | **built** (migration 0017) |
 | 4 | **Chat** — on-platform messages between buyers and sellers, keyed on user ids, so nobody's phone number is exposed | session 008 | **built** (migration 0017) |
-| 5 | **Digest numbers** — every digest carries a number, incrementing by 1 from 1; counter reset at build time | session 008 | not started |
+| 5 | **Digest numbers** — every digest carries a number, incrementing by 1 from 1; counter reset at build time | session 008 | **built** (migration 0018) |
 
 ## Item notes (decisions made while building — flag anything to change)
 

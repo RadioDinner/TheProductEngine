@@ -10,6 +10,7 @@
  */
 import { getEngineSettings, effectiveSmsCaps } from "@/lib/settings";
 import {
+  allocateDigestNumber,
   claimDigestOutbox,
   countRecentOutboundContaining,
   createDigestIfAbsent,
@@ -75,6 +76,7 @@ export function composeDigestMessages(
   items: StoredAd[],
   firstOfDay: boolean,
   edition?: DigestEdition,
+  digestNo?: number | null,
 ): string[] {
   const dateLabel = now.toLocaleDateString("en-US", {
     month: "short",
@@ -87,7 +89,11 @@ export function composeDigestMessages(
     edition === "extra"
       ? "extra edition"
       : `${SLOT_LABELS[slotHour] ?? `${slotHour}:00`}${edition === "early" ? " (sent early)" : ""}`;
-  const header = gsmSanitize(`Plain Exchange ${dateLabel} ${label}:`);
+  // Every sent digest carries its edition number (FEATURES item 5); omitted
+  // only while migration 0018 is pending.
+  const header = gsmSanitize(
+    `Plain Exchange${digestNo ? ` No. ${digestNo}` : ""} ${dateLabel} ${label}:`,
+  );
   const adLines = items.map((ad) =>
     gsmSanitize(`#${ad.id} ${ad.body}${ad.photo ? ` Pic? Reply PIC ${ad.id}` : ""}`),
   );
@@ -262,7 +268,8 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   // Compose + enqueue the SMS edition.
   const { day } = etParts(now);
   const firstOfDay = (await digestsSentOnDay(day)) === 0;
-  const messages = composeDigestMessages(now, slotHour, items, firstOfDay, edition);
+  const digestNo = await allocateDigestNumber(smsDigestId);
+  const messages = composeDigestMessages(now, slotHour, items, firstOfDay, edition, digestNo);
   const partSegments = messages.map((m) => segmentation(m).segments);
   const blocked = new Set((await listBlocked()).map((b) => b.phone));
   const subscribers = (await listSubscriberPhones()).filter((p) => !blocked.has(p));
@@ -293,6 +300,8 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   const editionTag = edition === "early" ? " (sent early)" : " (extra edition)";
   const sorted = [...items].sort((a, b) => a.id - b.id);
   const subject = composeEmailSubject(site.name, sorted, day, editionTag);
+  // The email edition mirrors the SMS digest's number (FEATURES item 5).
+  const emailDateLabel = `${dateLabel}${editionTag}${digestNo ? ` · Digest No. ${digestNo}` : ""}`;
   const emailRows: OutboxInsert[] = recipients.map((to) => {
     const unsub = unsubscribeUrl(to);
     return {
@@ -302,8 +311,8 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
       part: 1,
       parts: 1,
       subject,
-      body: composeEmailText(sorted, `${dateLabel}${editionTag}`, unsub),
-      html: composeEmailHtml(sorted, `${dateLabel}${editionTag}`, unsub),
+      body: composeEmailText(sorted, emailDateLabel, unsub),
+      html: composeEmailHtml(sorted, emailDateLabel, unsub),
       segments: 0,
     };
   });
@@ -361,7 +370,8 @@ export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {
     }
 
     const firstOfDay = (await digestsSentOnDay(day)) === 0;
-    const messages = composeDigestMessages(now, slot, items, firstOfDay);
+    const digestNo = await allocateDigestNumber(digestId);
+    const messages = composeDigestMessages(now, slot, items, firstOfDay, undefined, digestNo);
     const parts = messages.length;
     const partSegments = messages.map((m) => segmentation(m).segments);
     // Blocked numbers get no broadcast (the drain sends via the raw transport,

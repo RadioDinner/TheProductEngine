@@ -150,6 +150,17 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/0017_profiles_chat.sql in the SQL editor",
           }
         : { applied: true };
+      const digestNo = await db()
+        .from("digests")
+        .select("digest_no", { count: "exact", head: true });
+      report.migration0018 = digestNo.error
+        ? {
+            applied: false,
+            code: digestNo.error.code,
+            error: digestNo.error.message,
+            fix: "run supabase/migrations/0018_digest_numbers.sql in the SQL editor",
+          }
+        : { applied: true };
     } catch (e) {
       report.db = { ok: false, thrown: e instanceof Error ? e.message : String(e) };
     }

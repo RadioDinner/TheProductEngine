@@ -17,6 +17,7 @@ import {
   finalizeDigest,
   getAdRecord,
   getSmsDigestAdIds,
+  getSmsDigestNumber,
   type OutboxInsert,
   type StoredAd,
 } from "@/lib/engine-store";
@@ -121,12 +122,15 @@ export async function runDueEmailDigests(now = new Date()): Promise<SlotResult[]
       continue;
     }
 
-    const dateLabel = now.toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      timeZone: "America/New_York",
-    });
+    // The email edition mirrors its SMS digest's number (FEATURES item 5).
+    const digestNo = await getSmsDigestNumber(`${day}#${slot}`);
+    const dateLabel =
+      now.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        timeZone: "America/New_York",
+      }) + (digestNo ? ` · Digest No. ${digestNo}` : "");
     const subject = composeEmailSubject(site.name, ads, day);
     const recipients = await listEmailRecipients();
     const rows: OutboxInsert[] = recipients.map((to) => {

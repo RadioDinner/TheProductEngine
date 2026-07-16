@@ -682,14 +682,26 @@ export async function listRecentDigests(limit: number): Promise<DigestRecord[]> 
   // The table has no slot_key/slot_hour columns — the slot identity lives in
   // scheduled_for, written by createDigestIfAbsent as "<day>T<HH>:00:00Z"
   // (canonical ET identity, not a real instant). Derive both back from it.
-  const { data, error } = await db()
-    .from("digests")
-    .select("id, channel, scheduled_for, item_count, sent_at, created_at")
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(limit);
+  // digest_no (migration 0018) is fetched with a fallback so this page never
+  // 500s while the migration is pending (the e50f73d lesson).
+  const fetchRecent = (columns: string) =>
+    db()
+      .from("digests")
+      .select(columns)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(limit);
+  let { data, error } = await fetchRecent(
+    "id, channel, scheduled_for, item_count, sent_at, created_at, digest_no",
+  );
+  if (error?.code === "42703") {
+    ({ data, error } = await fetchRecent(
+      "id, channel, scheduled_for, item_count, sent_at, created_at",
+    ));
+  }
   if (error) throw error;
-  return (data ?? []).map((row) => {
+  const rows = (data ?? []) as unknown as Record<string, unknown>[];
+  return rows.map((row) => {
     const scheduled = String(row.scheduled_for ?? "");
     const day = scheduled.slice(0, 10);
     const hour = Number(scheduled.slice(11, 13));
@@ -704,10 +716,77 @@ export async function listRecentDigests(limit: number): Promise<DigestRecord[]> 
         : `${day}#${Number.isFinite(hour) ? hour : "?"}`,
       slotHour: Number.isFinite(hour) ? hour : 0,
       itemCount: (row.item_count as number | null) ?? 0,
+      digestNo: (row.digest_no as number | null) ?? null,
       sentAt: (row.sent_at as string | null) ?? undefined,
       createdAt: row.created_at as string,
     };
   });
+}
+
+/** Missing digest_no column = migration 0018 pending; numbering dormant. */
+function digestNoSchemaMissing(error: { code?: string } | null): boolean {
+  return error?.code === "42703";
+}
+
+export async function allocateDigestNumber(digestId: number): Promise<number | null> {
+  const { data: existing, error: readError } = await db()
+    .from("digests")
+    .select("digest_no")
+    .eq("id", digestId)
+    .maybeSingle();
+  if (readError) {
+    if (digestNoSchemaMissing(readError)) return null;
+    throw readError;
+  }
+  if (!existing) return null;
+  if (existing.digest_no) return existing.digest_no as number; // idempotent on retry
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { data: top, error: maxError } = await db()
+      .from("digests")
+      .select("digest_no")
+      .not("digest_no", "is", null)
+      .order("digest_no", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (maxError) throw maxError;
+    const next = ((top?.digest_no as number | undefined) ?? 0) + 1;
+    const { data: updated, error: writeError } = await db()
+      .from("digests")
+      .update({ digest_no: next })
+      .eq("id", digestId)
+      .is("digest_no", null)
+      .select("digest_no");
+    if (writeError) {
+      if (writeError.code === "23505") continue; // a concurrent send took this number
+      throw writeError;
+    }
+    if (updated?.length) return next;
+    // 0 rows: another run numbered this digest — read what it got.
+    const { data: raced } = await db()
+      .from("digests")
+      .select("digest_no")
+      .eq("id", digestId)
+      .maybeSingle();
+    return (raced?.digest_no as number | null) ?? null;
+  }
+  console.error("[digest-no] could not allocate a number after 5 attempts");
+  return null;
+}
+
+export async function getSmsDigestNumber(slotKey: string): Promise<number | null> {
+  const parts = slotKey.split("#");
+  const scheduledFor = `${parts[0]}T${parts[parts.length - 1].padStart(2, "0")}:00:00Z`;
+  const { data, error } = await db()
+    .from("digests")
+    .select("digest_no")
+    .eq("channel", "sms")
+    .eq("scheduled_for", scheduledFor)
+    .maybeSingle();
+  if (error) {
+    if (digestNoSchemaMissing(error)) return null;
+    throw error;
+  }
+  return (data?.digest_no as number | null) ?? null;
 }
 
 export async function getRecentDigestAdIds(): Promise<number[]> {
