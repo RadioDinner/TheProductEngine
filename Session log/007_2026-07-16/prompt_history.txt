@@ -39,3 +39,9 @@ I confirmed that the TELNYX_FROM_NUMBER is +13309607170
 
 --- 2026-07-16 ---
 I dont know how to do the curl -H business
+
+--- 2026-07-16 ---
+Not in the spam. How would I have gotten the welcome message if I am in the opt-out list?
+
+[Telnyx Detail Record Search pasted: all inbound delivered; outbound 07:58 failed (2 parts), 07:59 failed x2 (2 parts each), 11:05 outbound delivered (2 parts). No outbound records visible for 11:07/11:09/11:17.]
+[Webhook deliveries pasted: all message.received delivered 7:58-11:09; 10dlc.phone_number.update events at 8:05, 8:10, 8:24 AM Jul 16; 10dlc.campaign.update events Jul 10-15.]
