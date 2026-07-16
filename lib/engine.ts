@@ -43,6 +43,7 @@ import { etParts } from "@/lib/et";
 import { picLimitMessage, PIC_LIMIT_MARKER } from "@/lib/pic-quota";
 import { isAllowedPhotoSrc } from "@/lib/media";
 import { rehostInboundPhoto } from "@/lib/photos";
+import { siteUrl } from "@/lib/email";
 import { chargeSavedCard, paymentsDevMode } from "@/lib/payments";
 import { devToolsEnabled } from "@/lib/env";
 import { dispatchSms } from "@/lib/outbound";
@@ -454,8 +455,16 @@ async function route(
     case "pic": {
       if (!command.id) return { body: `Include the ad number — for example: PIC 1042.` };
       const ad = await getAdRecord(command.id);
-      if (!ad || ad.status === "pending" || ad.status === "rejected") {
+      // A pending ad is visible only to its OWNER (same rule as STATUS): the
+      // seller who just posted deserves "wait for approval," but a stranger
+      // probing ad numbers must not learn unreviewed ads exist.
+      if (!ad || ad.status === "rejected" || (ad.status === "pending" && ad.ownerPhone !== from)) {
         return { body: `No ad found with number ${command.id}.` };
+      }
+      if (ad.status === "pending") {
+        return {
+          body: `Ad #${command.id} is not yet approved. Its picture will be available when the ad is approved.`,
+        };
       }
       if (!ad.photo) return { body: `Ad #${command.id} has no picture.` };
       // Daily allowance + rolling bank — the real MMS cost control. Charged only
@@ -480,7 +489,13 @@ async function route(
         if (told > 0) return null;
         return { body: picLimitMessage(settings.picDailyAllowance, settings.picBankCap) };
       }
-      return { body: `Photo for ad #${command.id} — ${deriveTitle(ad.body)}:`, media: [ad.photo.src] };
+      // Telnyx needs an ABSOLUTE media URL: re-hosted photos already carry one,
+      // but a site-relative src (fixtures, pre-re-hosting ads) must be prefixed
+      // or the MMS send 400s and the requester hears nothing.
+      const mediaUrl = ad.photo.src.startsWith("http")
+        ? ad.photo.src
+        : `${siteUrl}${ad.photo.src}`;
+      return { body: `Photo for ad #${command.id} — ${deriveTitle(ad.body)}:`, media: [mediaUrl] };
     }
     case "credits": {
       const account = await ensureAccount(from);

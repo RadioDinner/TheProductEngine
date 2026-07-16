@@ -87,3 +87,6 @@ Currently Resend shows that its been sending me emails. How do I see who all is 
 
 --- 2026-07-16 ---
 Currently I am getting the "new ad to review" emails sent to derricktw@prontonmail.com . That is an error. It should be sent to "derricktw@protonmail.com". Where do I change that?
+
+--- 2026-07-16 ---
+The pictures are still not being received
