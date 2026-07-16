@@ -17,6 +17,7 @@ import {
 import { supabaseConfigured } from "@/lib/db";
 import * as remote from "@/lib/store-supabase";
 import { accruePicQuota } from "@/lib/pic-quota";
+import { normalizePhone } from "@/lib/phone";
 
 // ---------- shared types & rules ----------
 
@@ -68,6 +69,12 @@ export interface EmailSubscriberEntry {
   email: string;
   subscribedAt: string | null;
 }
+
+/** Result of an admin account merge (see mergeAccounts). */
+export type MergeOutcome =
+  | { ok: true; kind: "phone"; loserPhone: string; adsMoved: number; creditEntriesMoved: number }
+  | { ok: true; kind: "email"; email: string }
+  | { ok: false; reason: string };
 
 export const OFFENSE_BAN_THRESHOLD = 3;
 
@@ -320,6 +327,75 @@ const file = {
       .map((a) => a.email!);
     const emailOnly = Object.values(store.emailSubscribers ?? {}).map((s) => s.email);
     return [...new Set([...fromAccounts, ...emailOnly].map((e) => e.toLowerCase()))];
+  },
+
+  mergeAccounts(survivorPhone: string, source: string): MergeOutcome {
+    const store = load();
+    const survivor = store.accounts[survivorPhone];
+    if (!survivor) return { ok: false, reason: "No account exists for this phone." };
+
+    const sourcePhone = normalizePhone(source);
+    if (sourcePhone) {
+      if (sourcePhone === survivorPhone) {
+        return { ok: false, reason: "That is this same account." };
+      }
+      const loser = store.accounts[sourcePhone];
+      if (!loser) return { ok: false, reason: `No account exists for ${sourcePhone}.` };
+      survivor.freeAds += loser.freeAds;
+      survivor.offenseCount = (survivor.offenseCount ?? 0) + (loser.offenseCount ?? 0);
+      survivor.picBalance = (survivor.picBalance ?? 0) + (loser.picBalance ?? 0);
+      survivor.subscribedAt ??= loser.subscribedAt;
+      survivor.starterGrantedAt ??= loser.starterGrantedAt;
+      survivor.postingBannedAt ??= loser.postingBannedAt;
+      survivor.stripeCustomerId ??= loser.stripeCustomerId;
+      survivor.passwordHash ??= loser.passwordHash;
+      if (!survivor.email && loser.email) {
+        survivor.email = loser.email;
+        survivor.emailSubscribedAt ??= loser.emailSubscribedAt;
+      }
+      const movedLedger = store.ledgers[sourcePhone] ?? [];
+      if (movedLedger.length) (store.ledgers[survivorPhone] ??= []).push(...movedLedger);
+      delete store.ledgers[sourcePhone];
+      delete store.codes[sourcePhone];
+      delete store.accounts[sourcePhone];
+      save(store);
+      // Ads are phone-keyed in the file store; the caller reassigns them via
+      // engine-store.reassignAdOwnership and fills in adsMoved.
+      return {
+        ok: true,
+        kind: "phone",
+        loserPhone: sourcePhone,
+        adsMoved: 0,
+        creditEntriesMoved: movedLedger.length,
+      };
+    }
+
+    const key = source.trim().toLowerCase();
+    if (!key.includes("@")) {
+      return { ok: false, reason: "Enter a 10-digit phone number or an email address." };
+    }
+    const otherOwner = Object.values(store.accounts).find(
+      (a) => a.phone !== survivorPhone && a.email?.toLowerCase() === key,
+    );
+    if (otherOwner) {
+      return {
+        ok: false,
+        reason: `That email belongs to the account for ${otherOwner.phone} — merge that phone number instead.`,
+      };
+    }
+    if (survivor.email && survivor.email.toLowerCase() !== key) {
+      return {
+        ok: false,
+        reason: `This account already has ${survivor.email} — replace it first if that's wrong.`,
+      };
+    }
+    const emailOnly = store.emailSubscribers?.[key];
+    survivor.email = key;
+    survivor.emailSubscribedAt =
+      survivor.emailSubscribedAt ?? emailOnly?.subscribedAt ?? new Date().toISOString();
+    if (store.emailSubscribers) delete store.emailSubscribers[key];
+    save(store);
+    return { ok: true, kind: "email", email: key };
   },
 
   listSmsSubscribers(): SmsSubscriberEntry[] {
@@ -608,6 +684,19 @@ export async function unsubscribeEmail(email: string): Promise<void> {
 
 export async function listEmailRecipients(): Promise<string[]> {
   return supabaseConfigured ? remote.listEmailRecipients() : file.listEmailRecipients();
+}
+
+/**
+ * Merge one identity into a phone account. `source` may be a phone number
+ * (FULL merge: ads, credits, passes, strikes, saved card move to the survivor
+ * and the other account is deleted; the message audit log is history and is
+ * never rewritten) or an email address (links the email + its subscription to
+ * this account — the person is then subscribed to both editions).
+ */
+export async function mergeAccounts(survivorPhone: string, source: string): Promise<MergeOutcome> {
+  return supabaseConfigured
+    ? remote.mergeAccounts(survivorPhone, source)
+    : file.mergeAccounts(survivorPhone, source);
 }
 
 /** All current SMS subscribers with their subscribe time, newest first. */

@@ -393,6 +393,19 @@ const file = {
     save(store);
   },
 
+  reassignAdOwnership(fromPhone: string, toPhone: string): number {
+    const store = load();
+    let moved = 0;
+    for (const ad of store.ads) {
+      if (ad.ownerPhone === fromPhone) {
+        ad.ownerPhone = toPhone;
+        moved++;
+      }
+    }
+    if (moved) save(store);
+    return moved;
+  },
+
   updateAdBody(id: number, body: string): boolean {
     const store = load();
     const ad = store.ads.find((a) => a.id === id);
@@ -853,6 +866,13 @@ export async function markAdSold(id: number): Promise<void> {
 /** Admin edit of an ad's public text; the raw submission stays in originalBody. */
 export async function updateAdBody(id: number, body: string): Promise<boolean> {
   return supabaseConfigured ? remote.updateAdBody(id, body) : file.updateAdBody(id, body);
+}
+
+/** Account-merge helper: move all of a phone's ads to another phone. The file
+ * store keys ads by owner phone; in Supabase ads follow users.id and are moved
+ * by the account merge itself, so this is a no-op there. */
+export async function reassignAdOwnership(fromPhone: string, toPhone: string): Promise<number> {
+  return supabaseConfigured ? 0 : file.reassignAdOwnership(fromPhone, toPhone);
 }
 
 /** Newest-first digest history for the admin Digests tab. */

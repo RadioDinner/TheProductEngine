@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   adminGrantCredits,
+  adminMergeUsers,
   adminSetBan,
   adminSetStrikes,
 } from "@/lib/admin-actions";
@@ -26,7 +27,14 @@ function shortDate(iso: string): string {
 export default async function AdminUsers({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; phone?: string; saved?: string; error?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    phone?: string;
+    saved?: string;
+    error?: string;
+    detail?: string;
+    reason?: string;
+  }>;
 }) {
   const params = await searchParams;
   const phone = params.phone ? normalizePhone(params.phone) : null;
@@ -80,14 +88,28 @@ export default async function AdminUsers({
               A non-zero amount and a note are both required.
             </p>
           )}
+          {params.saved === "merge" && params.detail && (
+            <p className="notice" role="status">
+              {params.detail}
+            </p>
+          )}
+          {params.error === "merge" && params.reason && (
+            <p className="form-error" role="alert">
+              Merge failed: {params.reason}
+            </p>
+          )}
           <dl className="account-facts">
             <div>
               <dt>Member since</dt>
               <dd>{shortDate(account.createdAt)}</dd>
             </div>
             <div>
-              <dt>Subscribed</dt>
+              <dt>Text digests</dt>
               <dd>{account.subscribedAt ? "Yes" : "No"}</dd>
+            </div>
+            <div>
+              <dt>Email digests</dt>
+              <dd>{account.emailSubscribedAt ? "Yes" : "No"}</dd>
             </div>
             {account.email && (
               <div>
@@ -121,6 +143,29 @@ export default async function AdminUsers({
               <input name="note" type="text" placeholder="Required note — e.g. phone order, check #204" required />
               <button className="btn btn-sm" type="submit">
                 Apply
+              </button>
+            </div>
+          </form>
+
+          <h3 className="subsection-h">Merge / link identities</h3>
+          <p className="fine">
+            Enter a <strong>phone number</strong> for a FULL merge (that account&apos;s ads,
+            credits, free passes, strikes, and saved card move here; the account is then deleted —
+            its message history stays under the old number in the Messages log). Enter an{" "}
+            <strong>email address</strong> to link it to this member — they then get both the text
+            and email digests (&quot;doubly subscribed&quot;).
+          </p>
+          <form action={adminMergeUsers} className="review-form">
+            <input type="hidden" name="phone" value={phone} />
+            <div className="inline-fields">
+              <input
+                name="source"
+                type="text"
+                placeholder="Phone or email to merge into this account"
+                required
+              />
+              <button className="btn btn-sm" type="submit">
+                Merge into this account
               </button>
             </div>
           </form>

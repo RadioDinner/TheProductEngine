@@ -108,3 +108,6 @@ When I get the alert for an ad review sent to my admin email, i want the picture
 
 --- 2026-07-16 ---
 I want users to be able to be "doubly" subscribed. And I want to be able to merge users.
+
+--- 2026-07-16 ---
+[AskUserQuestion answers: "doubly subscribed" = SMS + email for one person; merge scope = FULL account merge]

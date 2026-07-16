@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { approveAd, rejectAd } from "@/lib/moderation";
-import { addLedgerEntry, setOffenseCount, setPostingBanned } from "@/lib/store";
+import { addLedgerEntry, mergeAccounts, setOffenseCount, setPostingBanned } from "@/lib/store";
 import {
   addWordRule,
   getEngineSettings,
@@ -16,6 +16,7 @@ import {
   cancelQueuedOutboxFor,
   getAdRecord,
   queueBump,
+  reassignAdOwnership,
   revertAdToPending,
   reviveAd,
   setAdHold,
@@ -153,6 +154,31 @@ export async function adminGrantCredits(formData: FormData): Promise<void> {
   }
   await addLedgerEntry(phone, { delta, kind: "adjustment", note });
   redirect(`/admin/users?phone=${phone}&saved=grant`);
+}
+
+/** Merge another identity (a phone account, or an email signup) into the
+ * account being viewed. Phone = FULL merge: ads, credits, passes, strikes,
+ * saved card move here and the other account is deleted. Email = link the
+ * email + its subscription here (the person gets both editions). */
+export async function adminMergeUsers(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const phone = normalizePhone(String(formData.get("phone") ?? ""));
+  const source = String(formData.get("source") ?? "").trim();
+  if (!phone) redirect("/admin/users");
+  if (!source) redirect(`/admin/users?phone=${phone}&error=merge&reason=Enter a phone or email.`);
+  const outcome = await mergeAccounts(phone, source);
+  if (!outcome.ok) {
+    redirect(`/admin/users?phone=${phone}&error=merge&reason=${encodeURIComponent(outcome.reason)}`);
+  }
+  let detail: string;
+  if (outcome.kind === "phone") {
+    const fileAdsMoved = await reassignAdOwnership(outcome.loserPhone, phone);
+    const adsMoved = outcome.adsMoved + fileAdsMoved;
+    detail = `Merged ${outcome.loserPhone}: ${adsMoved} ad${adsMoved === 1 ? "" : "s"} and ${outcome.creditEntriesMoved} credit entr${outcome.creditEntriesMoved === 1 ? "y" : "ies"} moved here; that account is gone. Its message history stays under the old number in the Messages log.`;
+  } else {
+    detail = `Linked ${outcome.email} — this member now gets both the text and email digests.`;
+  }
+  redirect(`/admin/users?phone=${phone}&saved=merge&detail=${encodeURIComponent(detail)}`);
 }
 
 export async function adminSetStrikes(formData: FormData): Promise<void> {

@@ -16,10 +16,12 @@ import {
   type EmailSubscriberEntry,
   type LedgerEntry,
   type LedgerSince,
+  type MergeOutcome,
   type PicQuotaResult,
   type SmsSubscriberEntry,
   type VerifyCodeResult,
 } from "@/lib/store";
+import { normalizePhone } from "@/lib/phone";
 
 interface UserRow {
   id: string;
@@ -276,6 +278,149 @@ export async function listEmailRecipients(): Promise<string[]> {
     if ((data?.length ?? 0) < PAGE) break;
   }
   return [...emails];
+}
+
+const MERGE_SELECT =
+  "id, phone, email, password_hash, subscribed_at, email_subscribed_at, free_ads, " +
+  "starter_granted_at, offense_count, posting_banned_at, full_blocked_at, " +
+  "stripe_customer_id, pic_balance";
+
+interface MergeRow {
+  id: string;
+  phone: string | null;
+  email: string | null;
+  password_hash: string | null;
+  subscribed_at: string | null;
+  email_subscribed_at: string | null;
+  free_ads: number;
+  starter_granted_at: string | null;
+  offense_count: number;
+  posting_banned_at: string | null;
+  full_blocked_at: string | null;
+  stripe_customer_id: string | null;
+  pic_balance: number | null;
+}
+
+/** Move every users-FK row from one account to another (ads, ledger,
+ * messages, offenses) — idempotent, safe to re-run after a partial failure. */
+async function reassignUserRows(fromId: string, toId: string): Promise<void> {
+  for (const table of ["ads", "credit_ledger", "messages", "offenses"]) {
+    const { error } = await db().from(table).update({ user_id: toId }).eq("user_id", fromId);
+    if (error) throw error;
+  }
+}
+
+export async function mergeAccounts(survivorPhone: string, source: string): Promise<MergeOutcome> {
+  const { data: a, error: aError } = await db()
+    .from("users")
+    .select(MERGE_SELECT)
+    .eq("phone", survivorPhone)
+    .maybeSingle();
+  if (aError) throw aError;
+  if (!a) return { ok: false, reason: "No account exists for this phone." };
+  const survivor = a as unknown as MergeRow;
+
+  const sourcePhone = normalizePhone(source);
+  if (sourcePhone) {
+    if (sourcePhone === survivorPhone) return { ok: false, reason: "That is this same account." };
+    const { data: b, error: bError } = await db()
+      .from("users")
+      .select(MERGE_SELECT)
+      .eq("phone", sourcePhone)
+      .maybeSingle();
+    if (bError) throw bError;
+    if (!b) return { ok: false, reason: `No account exists for ${sourcePhone}.` };
+    const loser = b as unknown as MergeRow;
+
+    const [adsMoved, creditEntriesMoved] = await Promise.all([
+      db().from("ads").select("id", { count: "exact", head: true }).eq("user_id", loser.id),
+      db().from("credit_ledger").select("id", { count: "exact", head: true }).eq("user_id", loser.id),
+    ]).then((results) => {
+      for (const r of results) if (r.error) throw r.error;
+      return results.map((r) => r.count ?? 0);
+    });
+
+    // Order matters for crash-safety: (1) move children (idempotent), (2) strip
+    // the loser's transferable values so a retry can't double-count, (3) add
+    // them to the survivor, (4) delete the loser.
+    await reassignUserRows(loser.id, survivor.id);
+    const { error: stripError } = await db()
+      .from("users")
+      .update({ free_ads: 0, offense_count: 0, pic_balance: 0, email: null, stripe_customer_id: null })
+      .eq("id", loser.id);
+    if (stripError) throw stripError;
+    const takeEmail = !survivor.email && loser.email;
+    const { error: updateError } = await db()
+      .from("users")
+      .update({
+        free_ads: survivor.free_ads + loser.free_ads,
+        offense_count: survivor.offense_count + loser.offense_count,
+        pic_balance: (survivor.pic_balance ?? 0) + (loser.pic_balance ?? 0),
+        subscribed_at: survivor.subscribed_at ?? loser.subscribed_at,
+        starter_granted_at: survivor.starter_granted_at ?? loser.starter_granted_at,
+        posting_banned_at: survivor.posting_banned_at ?? loser.posting_banned_at,
+        full_blocked_at: survivor.full_blocked_at ?? loser.full_blocked_at,
+        stripe_customer_id: survivor.stripe_customer_id ?? loser.stripe_customer_id,
+        password_hash: survivor.password_hash ?? loser.password_hash,
+        ...(takeEmail && {
+          email: loser.email,
+          email_subscribed_at: survivor.email_subscribed_at ?? loser.email_subscribed_at,
+        }),
+      })
+      .eq("id", survivor.id);
+    if (updateError) throw updateError;
+    const { error: deleteError } = await db().from("users").delete().eq("id", loser.id);
+    if (deleteError) throw deleteError;
+    const { error: codesError } = await db()
+      .from("verification_codes")
+      .delete()
+      .eq("phone", sourcePhone);
+    if (codesError) throw codesError;
+    return { ok: true, kind: "phone", loserPhone: sourcePhone, adsMoved, creditEntriesMoved };
+  }
+
+  const key = source.trim().toLowerCase();
+  if (!key.includes("@")) {
+    return { ok: false, reason: "Enter a 10-digit phone number or an email address." };
+  }
+  const { data: owner, error: ownerError } = await db()
+    .from("users")
+    .select(MERGE_SELECT)
+    .eq("email", key)
+    .maybeSingle();
+  if (ownerError) throw ownerError;
+  const ownerRow = owner as unknown as MergeRow | null;
+  if (ownerRow && ownerRow.id !== survivor.id && ownerRow.phone) {
+    return {
+      ok: false,
+      reason: `That email belongs to the account for ${ownerRow.phone} — merge that phone number instead.`,
+    };
+  }
+  if (survivor.email && survivor.email.toLowerCase() !== key) {
+    return {
+      ok: false,
+      reason: `This account already has ${survivor.email} — replace it first if that's wrong.`,
+    };
+  }
+  let inheritedSubscribedAt: string | null = null;
+  if (ownerRow && !ownerRow.phone) {
+    // Email-only signup: absorb it — move any stray children, capture the
+    // subscription time, delete the row so the unique email frees up.
+    inheritedSubscribedAt = ownerRow.email_subscribed_at;
+    await reassignUserRows(ownerRow.id, survivor.id);
+    const { error: deleteError } = await db().from("users").delete().eq("id", ownerRow.id);
+    if (deleteError) throw deleteError;
+  }
+  const { error: linkError } = await db()
+    .from("users")
+    .update({
+      email: key,
+      email_subscribed_at:
+        survivor.email_subscribed_at ?? inheritedSubscribedAt ?? new Date().toISOString(),
+    })
+    .eq("id", survivor.id);
+  if (linkError) throw linkError;
+  return { ok: true, kind: "email", email: key };
 }
 
 export async function listSmsSubscribers(): Promise<SmsSubscriberEntry[]> {
