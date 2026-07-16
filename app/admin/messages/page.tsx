@@ -57,6 +57,15 @@ export default async function AdminMessages({
               {m.digestId && " · digest"}
             </p>
             <p className="sim-body">{m.body || "(no text)"}</p>
+            {m.media && m.media.length > 0 && (
+              <p className="sim-meta">
+                {m.media.map((src, i) => (
+                  <a key={i} href={src} target="_blank" rel="noreferrer">
+                    📷 attachment {i + 1}{" "}
+                  </a>
+                ))}
+              </p>
+            )}
           </li>
         ))}
       </ul>

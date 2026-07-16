@@ -42,6 +42,7 @@ import { stripEmoji, hasLink, mayPostLinks } from "@/lib/content-filter";
 import { etParts } from "@/lib/et";
 import { picLimitMessage, PIC_LIMIT_MARKER } from "@/lib/pic-quota";
 import { isAllowedPhotoSrc } from "@/lib/media";
+import { rehostInboundPhoto } from "@/lib/photos";
 import { chargeSavedCard, paymentsDevMode } from "@/lib/payments";
 import { devToolsEnabled } from "@/lib/env";
 import { dispatchSms } from "@/lib/outbound";
@@ -131,11 +132,19 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
     };
   }
 
-  // Accept a photo source only from an allowlisted host (site-relative path or
+  // Re-host the MMS photo into our own storage first (Telnyx media URLs expire
+  // and are not always on an allowlisted host); fall back to the original URL,
+  // which is kept only if its host passes the allowlist (site-relative path or
   // an https Supabase/Telnyx URL) — never a data:/http:/off-site/protocol-
   // relative URL from a crafted inbound MMS.
-  const photoSrc = media?.[0];
+  const inboundPhoto = media?.[0];
+  const rehosted = inboundPhoto ? await rehostInboundPhoto(inboundPhoto) : null;
+  const photoSrc = rehosted ?? inboundPhoto;
   const hasPhoto = isAllowedPhotoSrc(photoSrc);
+  // The sender attached a picture we could neither re-host nor trust: the ad
+  // still posts (as text, at text price) but the seller must be TOLD — a
+  // silent drop reads as "my picture ad is live" when it isn't.
+  const photoDropped = Boolean(inboundPhoto) && !hasPhoto;
   const cost = hasPhoto ? settings.costPhoto : settings.costText;
   // Apply the one-time starter free-ad grant now — on the seller's FIRST real
   // AD NEW (past the empty/too-long/auto-reject gates), not on account creation.
@@ -189,8 +198,11 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
 
   await notifyAdminNewAd({ id, from, hasPhoto, body });
 
+  const photoNote = photoDropped
+    ? ` Note: we couldn't save your picture, so this will run as a text-only ad. Reply with the photo again, or call ${site.supportPhone}.`
+    : "";
   return {
-    body: `Got it! Your ad is #${id} and is waiting for review. You'll get a text when it's approved for the next digest. (${chargeNote})`,
+    body: `Got it! Your ad is #${id} and is waiting for review. You'll get a text when it's approved for the next digest. (${chargeNote})${photoNote}`,
   };
 }
 

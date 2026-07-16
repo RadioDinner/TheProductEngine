@@ -62,3 +62,9 @@ I have no outbound messages in the detail record search or webhook deliveries. I
 
 --- 2026-07-16 ---
 TELNYX_PUBLIC_KEY is set, is the API_KEY different?
+
+--- 2026-07-16 ---
+in the review screen, I don't see when pictures are attached. Can this be fixed?
+
+--- 2026-07-16 ---
+I want a "Digests" tab in the admin dashboard, so I can see what is queued for the next digest. I also want to be able to manually edit and bump ads. I want to be able to edit them from the digest, and I want to be able to manually bump ads in the "Ads" tab

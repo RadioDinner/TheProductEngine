@@ -390,6 +390,21 @@ const file = {
     save(store);
   },
 
+  updateAdBody(id: number, body: string): boolean {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === id);
+    if (!ad) return false;
+    ad.body = body;
+    save(store);
+    return true;
+  },
+
+  listRecentDigests(limit: number): DigestRecord[] {
+    return [...load().digests]
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.id - a.id)
+      .slice(0, limit);
+  },
+
   queueBump(adId: number): boolean {
     const store = load();
     if (store.bumps.some((b) => b.adId === adId && b.status === "queued")) return false;
@@ -764,6 +779,16 @@ export async function rejectAdRecord(
 
 export async function markAdSold(id: number): Promise<void> {
   return supabaseConfigured ? remote.markAdSold(id) : file.markSold(id);
+}
+
+/** Admin edit of an ad's public text; the raw submission stays in originalBody. */
+export async function updateAdBody(id: number, body: string): Promise<boolean> {
+  return supabaseConfigured ? remote.updateAdBody(id, body) : file.updateAdBody(id, body);
+}
+
+/** Newest-first digest history for the admin Digests tab. */
+export async function listRecentDigests(limit = 20): Promise<DigestRecord[]> {
+  return supabaseConfigured ? remote.listRecentDigests(limit) : file.listRecentDigests(limit);
 }
 
 export async function reviveAd(id: number, ttlDays?: number): Promise<void> {

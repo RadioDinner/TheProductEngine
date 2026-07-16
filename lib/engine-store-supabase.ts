@@ -8,6 +8,7 @@ import { AD_TTL_DAYS } from "@/lib/ads";
 import type {
   BumpRecord,
   CreateAdOptions,
+  DigestRecord,
   InsightAd,
   InsightBump,
   InsightMessage,
@@ -192,6 +193,12 @@ export async function rejectAdRecord(
     .eq("id", id)
     .eq("status", "pending")
     .select("id");
+  if (error) throw error;
+  return (data?.length ?? 0) > 0;
+}
+
+export async function updateAdBody(id: number, body: string): Promise<boolean> {
+  const { data, error } = await db().from("ads").update({ body }).eq("id", id).select("id");
   if (error) throw error;
   return (data?.length ?? 0) > 0;
 }
@@ -409,6 +416,25 @@ export async function finalizeDigest(
     .update({ sent_at: new Date().toISOString(), item_count: itemCount })
     .eq("id", digestId);
   if (error) throw error;
+}
+
+export async function listRecentDigests(limit: number): Promise<DigestRecord[]> {
+  const { data, error } = await db()
+    .from("digests")
+    .select("id, channel, slot_key, slot_hour, item_count, sent_at, created_at")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id as number,
+    channel: row.channel as DigestRecord["channel"],
+    slotKey: row.slot_key as string,
+    slotHour: row.slot_hour as number,
+    itemCount: (row.item_count as number | null) ?? 0,
+    sentAt: (row.sent_at as string | null) ?? undefined,
+    createdAt: row.created_at as string,
+  }));
 }
 
 export async function getRecentDigestAdIds(): Promise<number[]> {

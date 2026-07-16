@@ -36,6 +36,7 @@ export default async function AdminReview() {
               #{ad.id} from {formatPhone(ad.ownerPhone)}
               {ad.flagged && <span className="ad-sold"> Flagged</span>}
               {links.length > 0 && <span className="ad-sold"> 🔗 Link</span>}
+              {ad.photo && <span className="ad-sold"> 📷 Picture ad</span>}
               <span className="status-muted"> · {submitted(ad.createdAt)}</span>
             </p>
             {links.length > 0 && (
@@ -44,13 +45,15 @@ export default async function AdminReview() {
               </p>
             )}
             {ad.photo && (
-              <Image
-                className="ad-thumb"
-                src={ad.photo.src}
-                alt={ad.photo.alt}
-                width={88}
-                height={88}
-              />
+              <a href={ad.photo.src} target="_blank" rel="noreferrer" title="Open full-size photo">
+                <Image
+                  className="ad-thumb"
+                  src={ad.photo.src}
+                  alt={ad.photo.alt}
+                  width={88}
+                  height={88}
+                />
+              </a>
             )}
             <form action={adminApprove} className="review-form">
               <input type="hidden" name="id" value={ad.id} />

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getAllAds, type StoredAdStatus } from "@/lib/engine-store";
+import { adminEditAd, adminQueueBump } from "@/lib/admin-actions";
+import { getAllAds, getQueuedBumps, type StoredAdStatus } from "@/lib/engine-store";
 import { formatPhone } from "@/lib/phone";
 import { site } from "@/lib/config";
 
@@ -20,6 +21,7 @@ export default async function AdminAds({
     ? (params.status as StoredAdStatus)
     : undefined;
   const ads = await getAllAds(params.q, status);
+  const bumpQueued = new Set((await getQueuedBumps()).map((b) => b.adId));
 
   return (
     <>
@@ -53,14 +55,41 @@ export default async function AdminAds({
                 <>#{ad.id}</>
               )}{" "}
               · {ad.status}
-              {ad.flagged && <span className="ad-sold"> Flagged</span>} ·{" "}
+              {ad.flagged && <span className="ad-sold"> Flagged</span>}
+              {ad.photo && <span className="ad-sold"> 📷 Picture</span>} ·{" "}
               <Link href={`/admin/users?phone=${ad.ownerPhone}`}>{formatPhone(ad.ownerPhone)}</Link>
+              {bumpQueued.has(ad.id) && <span className="status-muted"> · bump queued</span>}
             </p>
             <p className="sim-body">{ad.body}</p>
             {ad.rejectedReason && (
               <p className="myad-dates">
                 Rejected ({ad.rejectionKind}): {ad.rejectedReason}
               </p>
+            )}
+            {(ad.status === "approved" || ad.status === "expired") && !bumpQueued.has(ad.id) && (
+              <form action={adminQueueBump} className="sim-actions">
+                <input type="hidden" name="id" value={ad.id} />
+                <input type="hidden" name="back" value="/admin/ads" />
+                <button className="btn btn-sm btn-secondary" type="submit">
+                  Bump — run in next digest{ad.status === "expired" ? " (relists)" : ""}
+                </button>
+              </form>
+            )}
+            {(ad.status === "pending" || ad.status === "approved" || ad.status === "expired") && (
+              <details>
+                <summary className="fine">Edit text</summary>
+                <form action={adminEditAd} className="review-form">
+                  <input type="hidden" name="id" value={ad.id} />
+                  <input type="hidden" name="back" value="/admin/ads" />
+                  <label className="visually-hidden" htmlFor={`edit-body-${ad.id}`}>
+                    Ad text (editable)
+                  </label>
+                  <textarea id={`edit-body-${ad.id}`} name="body" rows={3} defaultValue={ad.body} />
+                  <button className="btn btn-sm" type="submit">
+                    Save text
+                  </button>
+                </form>
+              </details>
             )}
           </li>
         ))}

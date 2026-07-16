@@ -147,6 +147,34 @@ export async function sendRecentDigestTo(phone: string): Promise<number> {
   return ads.length;
 }
 
+/**
+ * What the next digest slot would carry if it composed right now: new ads
+ * first (FIFO by approval), queued bumps filling the remaining capacity.
+ * Shared by runDueDigests (the authority) and the admin Digests tab preview,
+ * so what the admin sees is exactly what the composer will pick.
+ */
+export async function selectDigestItems(cap: number): Promise<{
+  newAds: StoredAd[];
+  bumpAds: StoredAd[];
+  bumpRecords: { id: number }[];
+}> {
+  const newAds = await getNewDigestAds(cap);
+  const bumpRecords: { id: number }[] = [];
+  const bumpAds: StoredAd[] = [];
+  const remaining = cap - newAds.length;
+  if (remaining > 0) {
+    for (const bump of await getQueuedBumps()) {
+      if (bumpAds.length >= remaining) break;
+      const ad = await getAdRecord(bump.adId);
+      if (ad && ad.status === "approved" && !newAds.some((n) => n.id === ad.id)) {
+        bumpRecords.push(bump);
+        bumpAds.push(ad);
+      }
+    }
+  }
+  return { newAds, bumpAds, bumpRecords };
+}
+
 export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {
   const { day, hour } = etParts(now);
   const settings = await getEngineSettings();
@@ -161,21 +189,7 @@ export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {
     // fall through and redo it (the outbox unique key dedups the rows).
     if (finalized) continue;
 
-    // New ads first (FIFO by approval), bumps fill the remaining capacity.
-    const newAds = await getNewDigestAds(settings.digestCap);
-    const bumpRecords: { id: number }[] = [];
-    const bumpAds: StoredAd[] = [];
-    const remaining = settings.digestCap - newAds.length;
-    if (remaining > 0) {
-      for (const bump of await getQueuedBumps()) {
-        if (bumpAds.length >= remaining) break;
-        const ad = await getAdRecord(bump.adId);
-        if (ad && ad.status === "approved" && !newAds.some((n) => n.id === ad.id)) {
-          bumpRecords.push(bump);
-          bumpAds.push(ad);
-        }
-      }
-    }
+    const { newAds, bumpAds, bumpRecords } = await selectDigestItems(settings.digestCap);
     const items = [...newAds, ...bumpAds];
 
     if (!items.length) {

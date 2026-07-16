@@ -6,13 +6,25 @@ import { approveAd, rejectAd } from "@/lib/moderation";
 import { addLedgerEntry, setOffenseCount, setPostingBanned } from "@/lib/store";
 import {
   addWordRule,
+  getEngineSettings,
   removeWordRule,
   saveEngineSettings,
   toggleWordRule,
 } from "@/lib/settings";
 import { blockNumber, unblockNumber } from "@/lib/blocklist";
-import { cancelQueuedOutboxFor } from "@/lib/engine-store";
+import {
+  cancelQueuedOutboxFor,
+  getAdRecord,
+  queueBump,
+  reviveAd,
+  updateAdBody,
+} from "@/lib/engine-store";
 import { normalizePhone } from "@/lib/phone";
+
+/** Whitelisted return targets for shared ad actions — never trust a form string. */
+function backTarget(formData: FormData): string {
+  return String(formData.get("back")) === "/admin/digests" ? "/admin/digests" : "/admin/ads";
+}
 
 export async function adminApprove(formData: FormData): Promise<void> {
   await requireAdmin();
@@ -33,6 +45,35 @@ export async function adminReject(formData: FormData): Promise<void> {
       : "It offers an item we can't run.");
   if (Number.isInteger(id)) await rejectAd(id, reason, kind);
   redirect("/admin");
+}
+
+/** Edit an ad's public text from the Ads or Digests tab. */
+export async function adminEditAd(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  // Same ceiling as the maxChars setting clamp — an admin edit shouldn't be
+  // able to balloon a digest.
+  const body = String(formData.get("body") ?? "").trim().slice(0, 300);
+  if (Number.isInteger(id) && body) await updateAdBody(id, body);
+  redirect(backTarget(formData));
+}
+
+/** Queue a free admin bump: the ad rides the next digest again. An expired ad
+ * is relisted first — the same semantics as the seller's own BUMP. */
+export async function adminQueueBump(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (Number.isInteger(id)) {
+    const ad = await getAdRecord(id);
+    if (ad?.status === "expired") {
+      const settings = await getEngineSettings();
+      await reviveAd(id, settings.expiryDays);
+      await queueBump(id);
+    } else if (ad?.status === "approved") {
+      await queueBump(id);
+    }
+  }
+  redirect(backTarget(formData));
 }
 
 export async function adminGrantCredits(formData: FormData): Promise<void> {
