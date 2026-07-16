@@ -8,3 +8,11 @@ Inbound webhook URL is https://www.theplainexchange.com/api/telnyx/inbound and t
 
 --- 2026-07-16 ---
 I applied the migration
+
+--- 2026-07-16 ---
+working!
+
+--- 2026-07-16 ---
+I texted SUBSCRIBE and it replied "You're subscribed to The Plain Exchange - Holmes County, Ohio classifieds by text, up to 4 digests a day. Msg & data rates may apply. Reply STOP to cancel, HELP for help."
+
+I sent "/AD NEW 7x12 10k lb capacity tandem axle dump trailer. $10k OBO Text Derrick Wengerd 330-600-1834" and nothing happened
