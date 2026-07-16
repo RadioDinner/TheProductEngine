@@ -90,7 +90,50 @@ Diagnostic aids built along the way (all on `main`):
   alignment, launch-day smoke walk §B (partially done live today: SUBSCRIBE,
   AD NEW, approve/reject, PIC all exercised on real SMS).
 
-## Commits (all `main`)
+## Second half of the session (afternoon): feature sprint, all on `main`
+
+After the outage was resolved (photos confirmed working live, TELNYX_API_KEY
+restored by the user), the session became a rapid feature build, each verified
+with Playwright/webhook dev walks before push:
+
+- `e50f73d` **/admin/digests prod 500 fix** — listRecentDigests selected
+  slot_key/slot_hour, columns that only exist in the file store; the real
+  table's identity is scheduled_for. (Lesson re-learned: my dev walks run the
+  FILE store; every new Supabase query must be checked against the actual
+  migrations.)
+- `0b43ea2` **email edition mirrors SMS 1:1** — same slots, each email carries
+  exactly that slot's digest (was: own emailSlots + union-since-last-email).
+  emailSlots setting removed everywhere; getSmsDigestAdIds replaces the
+  watermark readers. Also fixed email HTML for absolute (re-hosted) photo URLs.
+- `23d9f00` **admin Subscribers tab** — all SMS + email subscribers with the
+  time their current subscription started (paged readers both stores).
+- `6058fb1` **PIC fixes** — owner-aware "not yet approved" message (stranger
+  still gets no-ad-found), absolute MMS media URLs (relative src 400'd the
+  send), byte-sniffed photo ingest.
+- `7f9b132` **attachment security (user policy)** — lib/image-sniff.ts: only
+  byte-proven jpg/png/gif/webp accepted; SVG/HEIC/BMP/TIFF rejected with the
+  seller told; NO raw-URL fallback in prod; Telnyx-hosted media fetched with
+  API-key auth (telnyx.com hosts only); /admin/sms-diag grew a photo re-host
+  tester; 14 sniff unit checks.
+- `ab6384e` **digest queue controls + send buttons + welcome + price fix**
+  (⚠️ **MIGRATION 0012** — ads.hold_until): move up/down (approval-order
+  swap), skip-next-digest (hold + Held section + release), back-to-review
+  (revert to pending, clears queued bumps); **Send early** (composes the
+  upcoming slot NOW under its identity — scheduled run no-ops; consumes
+  queue) vs **Send extra** (extra edition consuming NOTHING — queue rides
+  again at the regular slot), both labeled in the SMS header + email subject,
+  email mirror + immediate drain included; SUBSCRIBE/START now answered with
+  a practical welcome (digest times from settings + AD NEW how-to — the
+  compliance opt-in text is Telnyx's registered auto-response); derivePrice
+  keeps "$10k" (was rendering $10) — display derivations extracted to pure
+  lib/ad-display.ts, unit-tested.
+- `ccbe9ce` **review-alert email embeds the ad photo inline.**
+- User fixes along the way: TELNYX_API_KEY created + set (was never a thing —
+  only the PUBLIC key existed), ADMIN_EMAIL typo (prontonmail→protonmail)
+  identified (env fix on user), migration 0011 + 0012 applied by user.
+- Suite grew 107 → **129 unit checks** (image-sniff + ads price).
+
+## Commits (first half, all `main`)
 
 - `0b77a97` webhook/health observability (rejection reasons, 0011 probe)
 - `f51ecff` outbound suppression/failure logging

@@ -105,3 +105,6 @@ I saw the badge and the photos are working now. Also I want a button to force se
 
 --- 2026-07-16 ---
 When I get the alert for an ad review sent to my admin email, i want the pictures inline with the ad in the email
+
+--- 2026-07-16 ---
+I want users to be able to be "doubly" subscribed. And I want to be able to merge users.
