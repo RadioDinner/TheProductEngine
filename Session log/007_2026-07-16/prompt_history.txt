@@ -22,3 +22,11 @@ Oh i see it now. I tried it twice, so I will approve one and reject one with a r
 
 --- 2026-07-16 ---
 Also, I don't see the ad on the website
+
+--- 2026-07-16 ---
+oh yeah, hehe forgot about the digest wait time until it publishes to the website lolololol. This is what https://www.theplainexchange.com/admin/messages shows
+
+[admin/messages transcript: app logged outbound opt-in confirmations 7:58+7:59 AM, "already subscribed" 7:59+11:05, Got it! #1001 11:07, Got it! #1002 11:09, approval #1002 + benign rejection #1001 11:17 — all To (330) 600-1834, plus the matching inbound rows]
+
+This is what my actual phone messages show
+[phone thread with (330) 960-7170: user's own texts START 7:58, SUBSCRIBE x3 + START 11:05, /AD NEW + AD NEW 11:06; ONLY ONE reply ever received: the Telnyx campaign auto-response "You're subscribed to The Plain Exchange - Holmes County, Ohio classifieds..." at 11:05 AM. None of the app's logged outbound messages arrived.]

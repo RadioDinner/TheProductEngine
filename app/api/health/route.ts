@@ -18,10 +18,16 @@ function keyKind(key: string | undefined): string {
   return "unrecognized format";
 }
 
-/** Telnyx sends `from` verbatim — anything but E.164 (+1XXXXXXXXXX) 400s every reply. */
+/** Telnyx sends `from` verbatim — anything but E.164 (+1XXXXXXXXXX) 400s every
+ * reply, and a WRONG owned number is accepted by the API but carrier-filtered
+ * (10DLC: only the campaign-linked number delivers). Echo the last 4 so a
+ * stale value is visible without opening the Vercel dashboard. */
 function fromNumberKind(value: string | undefined): string {
   if (!value) return "missing";
-  return /^\+1\d{10}$/.test(value) ? "set (E.164)" : "set but NOT +1XXXXXXXXXX — Telnyx sends will fail";
+  const last4 = value.replace(/\D/g, "").slice(-4);
+  return /^\+1\d{10}$/.test(value)
+    ? `set (E.164, ends ${last4})`
+    : `set but NOT +1XXXXXXXXXX (ends ${last4}) — Telnyx sends will fail`;
 }
 
 /** Operator check: the detailed report needs the CRON_SECRET bearer (open in dev). */
