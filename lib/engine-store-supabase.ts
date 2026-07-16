@@ -419,22 +419,30 @@ export async function finalizeDigest(
 }
 
 export async function listRecentDigests(limit: number): Promise<DigestRecord[]> {
+  // The table has no slot_key/slot_hour columns — the slot identity lives in
+  // scheduled_for, written by createDigestIfAbsent as "<day>T<HH>:00:00Z"
+  // (canonical ET identity, not a real instant). Derive both back from it.
   const { data, error } = await db()
     .from("digests")
-    .select("id, channel, slot_key, slot_hour, item_count, sent_at, created_at")
+    .select("id, channel, scheduled_for, item_count, sent_at, created_at")
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(limit);
   if (error) throw error;
-  return (data ?? []).map((row) => ({
-    id: row.id as number,
-    channel: row.channel as DigestRecord["channel"],
-    slotKey: row.slot_key as string,
-    slotHour: row.slot_hour as number,
-    itemCount: (row.item_count as number | null) ?? 0,
-    sentAt: (row.sent_at as string | null) ?? undefined,
-    createdAt: row.created_at as string,
-  }));
+  return (data ?? []).map((row) => {
+    const scheduled = String(row.scheduled_for ?? "");
+    const day = scheduled.slice(0, 10);
+    const hour = Number(scheduled.slice(11, 13));
+    return {
+      id: row.id as number,
+      channel: row.channel as DigestRecord["channel"],
+      slotKey: `${day}#${Number.isFinite(hour) ? hour : "?"}`,
+      slotHour: Number.isFinite(hour) ? hour : 0,
+      itemCount: (row.item_count as number | null) ?? 0,
+      sentAt: (row.sent_at as string | null) ?? undefined,
+      createdAt: row.created_at as string,
+    };
+  });
 }
 
 export async function getRecentDigestAdIds(): Promise<number[]> {
