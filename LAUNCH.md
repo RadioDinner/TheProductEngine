@@ -46,19 +46,25 @@ Redeploy after any change — env edits never touch running deployments.
       **`0008_blocklist_and_controls.sql`** — all run 2026-07-08 (session 004).
       (0006 = outbox delivery; 0007 = `ads.broadcast_at`; 0008 = blocklist +
       operator-control config rows.)
-- [ ] **Run `supabase/migrations/0009_verify_login_code.sql`** (SQL editor;
-      re-runnable). Adds the `verify_login_code` RPC that checks-and-burns a
-      login code under a row lock (fixes the OTP attempt-cap race →
-      brute-force/takeover). Until it's applied, sign-in code verification
-      errors (the app calls the RPC). Run before this deploy reaches prod.
+- [x] **`0009_verify_login_code.sql`** applied 2026-07-09, **`0010`** applied
+      2026-07-09, **`0011_pic_quota.sql`** applied 2026-07-16 (session 007 —
+      its absence was root cause #1 of the inbound-SMS outage). All
+      migrations 0001–0011 are now applied.
 
 ### A4. Telnyx
 - [x] Campaign fully accepted (TCR_ACCEPTED ✓ 2026-07-07; wait for carrier
       acceptance — typically hours to ~2 days after TCR).
-- [ ] Number **+1 330 960 7170** assigned to the campaign's messaging profile.
+- [x] Number **+1 330 960 7170** assigned to the campaign's messaging profile
+      ("Advertising" — confirmed 2026-07-16; carrier-side 10DLC provisioning
+      completed 8:05–8:24 AM that day per phone_number.update webhooks).
 - [x] Messaging profile inbound webhook:
       `https://www.theplainexchange.com/api/telnyx/inbound` (API v2),
       failover `https://the-product-engine.vercel.app/api/telnyx/inbound`.
+- [x] **TELNYX_API_KEY set in Vercel Production + redeployed 2026-07-16** —
+      it was missing (only the PUBLIC key was set), which silently put prod
+      in dev-echo SMS mode: root cause #2 of the outage. **Real SMS confirmed
+      live end-to-end 2026-07-16** (SUBSCRIBE/AD NEW/moderation notices/PIC on
+      a real phone). Sanity-check any time at `/admin/sms-diag`.
 
 ### A5. Digest cron — THE silent launch-killer
 Vercel **Hobby runs crons at most once per day**; the `*/5` schedule in

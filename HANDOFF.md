@@ -3,7 +3,59 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-07-09 (session 006).
+**Last updated:** 2026-07-16 (session 007).
+
+## What shipped in session 007 (committed DIRECTLY to `main`, per user)
+
+**The "texting the number does nothing" outage — root-caused (two stacked
+causes), fixed, and REAL SMS CONFIRMED LIVE end-to-end 2026-07-16** (SUBSCRIBE,
+AD NEW, approve/reject notices, PIC all exercised on the user's real phone).
+
+1. **Migration 0011 wasn't applied** while `main` (auto-deploys) read
+   `users.pic_balance` on every account lookup → every inbound command 500'd
+   → Telnyx's retry was swallowed by the inbound dedup → texts permanently
+   eaten. **User applied 0011 (2026-07-16) — now ALL migrations 0001–0011 are
+   applied.** ⚠️ The retry-swallow design trap remains (any throw after
+   `recordInboundOnce` permanently loses that message; the fix — a
+   processing-state column + idempotent handlers — was offered, not built).
+2. **TELNYX_API_KEY was missing from the prod deployment** (the user had the
+   PUBLIC key and thought it was "the key"; the API key is a separate `KEY…`
+   credential). With it absent, `smsDevEcho` silently flipped the transport
+   to console-log — /admin/messages showed replies "sent" while nothing real
+   existed; the only genuine texts were Telnyx's campaign-keyword
+   auto-responses. **Key set + redeployed 2026-07-16 → outbound live.**
+   (Number's 10DLC provisioning itself completed 8:05–8:24 AM that morning.)
+
+Diagnostics now built into the product (all dev-verified + walked):
+- `/admin/sms-diag` (admin-only, not in nav): send a test SMS through the
+  app's exact payload, then fetch the message's LIVE Telnyx status + carrier
+  error codes by id (catches sends stuck queued/held that portal reports
+  never show).
+- Reason-coded webhook-rejection logs; handleInbound failure logs;
+  `[telnyx-dlr]` delivery-receipt logging; `[outbound]` logs for every
+  suppressed (pause/blocklist/throttle) or failed send.
+- `/api/health` (CRON_SECRET view): TELNYX_PUBLIC_KEY / TELNYX_FROM_NUMBER
+  (E.164 check + last-4 echo) / TELNYX_MESSAGING_PROFILE_ID posture, and a
+  `migration0011` probe.
+
+Feature batch (same day, user-requested):
+- **MMS photo re-hosting** (`lib/photos.ts`): picture-ad media copied to
+  Supabase Storage (public `ad-photos` bucket, lazily auto-created) at
+  ingest; fallback to the original URL only if allowlisted; if the photo
+  can't be saved the ad posts as text AND the confirmation says so (before:
+  silent drop — the user's real picture ad posted textless with no warning).
+- **Admin Digests tab** (`/admin/digests`): the exact next-digest lineup
+  (shares `selectDigestItems()` with the composer), next slot time, queued
+  outbox count, inline ad-text editing, digest history.
+- **Ads tab**: free admin Bump (expired relists first), inline editing,
+  Picture badges, bump-queued indicator; review-queue Picture badge +
+  full-size photo link; MMS attachment links in the messages log. New store
+  ops `updateAdBody`/`listRecentDigests` (both stores, no new migrations).
+
+**⚠️ #1 launch blocker now: the external cron pinger (LAUNCH §A5)** — digests
+don't compose (noon slot confirmed missed) and the public site stays empty
+until `GET /api/cron/digests` (Bearer CRON_SECRET) runs every 5 min.
+Full session detail: `Session log/007_2026-07-16/session_log.md`.
 
 ## What shipped in session 006 (branch `claude/stress-test-pic-limits-ki1jf0`)
 
