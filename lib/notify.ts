@@ -14,11 +14,18 @@ export async function notifyAdminNewAd(args: {
   from: string;
   hasPhoto: boolean;
   body: string;
+  /** Stored photo src — absolute (re-hosted) or site-relative (dev fixtures). */
+  photoSrc?: string;
 }): Promise<void> {
   const to = process.env.ADMIN_EMAIL;
   if (!to) return;
   const reviewUrl = `${siteUrl}/admin`;
   const kind = args.hasPhoto ? "picture ad" : "text ad";
+  const photoUrl = args.photoSrc
+    ? args.photoSrc.startsWith("http")
+      ? args.photoSrc
+      : `${siteUrl}${args.photoSrc}`
+    : null;
   const subject = `New ad #${args.id} to review — ${site.name}`;
   const text = [
     `A new ${kind} was posted and is waiting for review.`,
@@ -27,6 +34,7 @@ export async function notifyAdminNewAd(args: {
     `From: ${formatPhone(args.from)}`,
     ``,
     args.body,
+    ...(photoUrl ? [``, `Picture: ${photoUrl}`] : []),
     ``,
     `Review it: ${reviewUrl}`,
   ].join("\n");
@@ -34,6 +42,7 @@ export async function notifyAdminNewAd(args: {
     <p style="font-size:16px;">A new ${kind} is waiting for review.</p>
     <p style="font-size:14px;color:#5b6670;">Ad #${args.id} · from ${formatPhone(args.from)}</p>
     <blockquote style="margin:12px 0;padding:8px 12px;border-left:3px solid #2d5570;">${args.body.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!)}</blockquote>
+    ${photoUrl ? `<p><img src="${photoUrl}" alt="Ad photo" width="320" style="max-width:100%;height:auto;border:1px solid #ddd;" /></p>` : ""}
     <p><a href="${reviewUrl}" style="color:#2d5570;font-weight:600;">Open the review queue</a></p>
   </div>`;
   try {

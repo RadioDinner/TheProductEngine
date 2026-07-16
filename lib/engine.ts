@@ -209,7 +209,7 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
     };
   }
 
-  await notifyAdminNewAd({ id, from, hasPhoto, body });
+  await notifyAdminNewAd({ id, from, hasPhoto, body, ...(hasPhoto && { photoSrc: photoSrc! }) });
 
   const photoNote = photoDropped
     ? ` Note: we couldn't save your picture, so this will run as a text-only ad. Reply with the photo again, or call ${site.supportPhone}.`
