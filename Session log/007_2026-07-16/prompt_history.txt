@@ -30,3 +30,12 @@ oh yeah, hehe forgot about the digest wait time until it publishes to the websit
 
 This is what my actual phone messages show
 [phone thread with (330) 960-7170: user's own texts START 7:58, SUBSCRIBE x3 + START 11:05, /AD NEW + AD NEW 11:06; ONLY ONE reply ever received: the Telnyx campaign auto-response "You're subscribed to The Plain Exchange - Holmes County, Ohio classifieds..." at 11:05 AM. None of the app's logged outbound messages arrived.]
+
+--- 2026-07-16 ---
+[Telnyx usage report pasted: inbound SMS 3 received; outbound SMS 6 sent, 6 delivered; total $0.096]
+
+--- 2026-07-16 ---
+I confirmed that the TELNYX_FROM_NUMBER is +13309607170
+
+--- 2026-07-16 ---
+I dont know how to do the curl -H business
