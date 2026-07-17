@@ -264,6 +264,8 @@ export default async function AdminHelp() {
         owners always see their own numbers; digests and texting are untouched (numbers are
         the product there, and SMS is bulk-limited by nature). All three numbers are on{" "}
         <Link href="/admin/settings">Settings</Link>.
+      </p>
+
       <h2 className="section-h">Town hall events (the free board)</h2>
       <p>
         Members list upcoming community events free at <span className="cmd">/town-hall</span>{" "}
