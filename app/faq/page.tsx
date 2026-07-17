@@ -116,7 +116,7 @@ export default function Faq() {
 
       <h2>Something else?</h2>
       <p>
-        Call <strong>{site.supportPhone}</strong> or text <strong>{site.smsNumber}</strong>. A
+        Call or text <strong>{site.supportPhone}</strong>. A
         person answers, and plain questions get plain answers.
       </p>
     </div>

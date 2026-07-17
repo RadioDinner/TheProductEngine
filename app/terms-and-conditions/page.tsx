@@ -145,8 +145,8 @@ export default function TermsAndConditions() {
 
       <h2>Disagreements</h2>
       <p>
-        If you have a problem with the service, tell us first — call{" "}
-        <strong>{site.supportPhone}</strong> or text <strong>{site.smsNumber}</strong> —
+        If you have a problem with the service, tell us first — call or text{" "}
+        <strong>{site.supportPhone}</strong> —
         and we will try to sort it out plainly and quickly before anything formal.
       </p>
 
@@ -177,7 +177,7 @@ export default function TermsAndConditions() {
 
       <h2>Contact</h2>
       <p>
-        Call <strong>{site.supportPhone}</strong> or text <strong>{site.smsNumber}</strong>, or
+        Call or text <strong>{site.supportPhone}</strong>, or
         write to us through the website. See also the{" "}
         <Link href="/privacy">privacy policy</Link>.
       </p>

@@ -96,8 +96,8 @@ export default function PrivacyPolicy() {
       </p>
       <p>
         Reply <strong>STOP</strong> any time to stop the digests. Reply{" "}
-        <strong>HELP</strong> for help, or call <strong>{site.supportPhone}</strong> or text{" "}
-        <strong>{site.smsNumber}</strong>.
+        <strong>HELP</strong> for help, or call or text{" "}
+        <strong>{site.supportPhone}</strong> for support.
       </p>
       <p>
         <strong>
@@ -212,7 +212,7 @@ export default function PrivacyPolicy() {
 
       <h2 id="questions">Questions</h2>
       <p>
-        Call <strong>{site.supportPhone}</strong> or text <strong>{site.smsNumber}</strong>, or
+        Call or text <strong>{site.supportPhone}</strong>, or
         write to us through the website. See also the{" "}
         <Link href="/terms-and-conditions">terms and conditions</Link> and{" "}
         <Link href="/how-it-works">how it works</Link>.

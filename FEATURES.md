@@ -32,6 +32,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 22 | **Category subscriptions** — SUBSCRIBE/START answers with a category menu (alphabetical, reformatted from the user's competitor example); subscribers text one category word per message to pick what ads they get; digests filter accordingly | session 009 | not started |
 | 23 | **Metered click-to-reveal for phone numbers** (anti-scraping, user concern + decision session 009) — the website never renders seller numbers in HTML; a signed-in member clicks "Show number" per ad, metered ~10/day per account (admin-tunable, PIC-quota style), every reveal logged; excessive-reveal flags + one-click block in /admin/insights | session 009 | not started |
 | 24 | **Category management + toggle replies + spam guard** (extends item 22, builds with it) — members manage their categories from the web (/account), kept in sync with SMS; texting a category name TOGGLES it with a confirmation ("You will now receive ads in the Horses category. To stop receiving them, reply Horses"); gibberish or endless category texts must not spike outbound SMS cost — throttled while legitimate use keeps working | session 009 | not started |
+| 25 | **Homepage category browser** (extends item 22, builds with it) — a category picker on the homepage ad list so anyone browsing can filter the ads they see by category | session 009 | not started |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -221,6 +222,13 @@ itself; build details live in the session logs and HANDOFF.md.
   unknown-command handling + its dedup; UNDER ATTACK mode already
   suppresses unknown replies entirely. Add a LIST command (free-form
   category status check, same throttle class).
+- **25 · homepage category browser** (session 009, builds WITH 22/24): a
+  row of category links above the homepage ad list (server-rendered filter
+  via a query param, e.g. /?category=horses — works without JS, plays fine
+  with the existing pagination and the 18/19 sidebars). "All" is the
+  default; the active category is visibly marked; categories with zero
+  current ads still render (grayed) so the taxonomy is learnable. Ad detail
+  pages show their category as a link back to the filtered list.
 - **23 · metered click-to-reveal** (session 009; the user spotted the risk:
   one burner-phone account could scrape every seller number off the site).
   Decided posture: numbers NEVER render in page HTML (list rows or detail);

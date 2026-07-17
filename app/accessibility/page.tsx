@@ -76,10 +76,7 @@ export default function AccessibilityStatement() {
       </p>
       <ul>
         <li>
-          Call <strong>{site.supportPhone}</strong>
-        </li>
-        <li>
-          Text <strong>{site.smsNumber}</strong>
+          Call or text <strong>{site.supportPhone}</strong>
         </li>
       </ul>
       <p>

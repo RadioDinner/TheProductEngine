@@ -78,8 +78,7 @@ export default function RefundPolicy() {
       <p>
         If something odd happened — a double charge, an ad that ran wrong, anything that
         doesn&rsquo;t fit the rules above — tell us and we will make it right where it is
-        right to do so. Call <strong>{site.supportPhone}</strong> or text{" "}
-        <strong>{site.smsNumber}</strong>.
+        right to do so. Call or text <strong>{site.supportPhone}</strong>.
       </p>
     </div>
   );
