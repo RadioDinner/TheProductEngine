@@ -19,6 +19,7 @@ const SUITES = [
   "chat",
   "myads",
   "reveal-quota",
+  "business",
 ];
 
 let totalPass = 0;

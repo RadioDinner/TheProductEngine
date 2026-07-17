@@ -72,10 +72,12 @@ export function hasLink(text: string): boolean {
 }
 
 /**
- * Whether this poster is allowed to include links. Walled garden for now:
- * nobody may. The seam is here so a future verified-advertiser flag flips it
- * without touching the ingest path. `verified` is reserved for that tier.
+ * Whether this poster is allowed to include links. Walled garden for members:
+ * they may not (`verified` is reserved for a future verified-advertiser
+ * tier). Paid business sponsor packages (FEATURES item 17, user decision) ARE
+ * allowed ONE link — manual review is the safety valve, exactly like every
+ * other ad.
  */
-export function mayPostLinks(_opts: { verified?: boolean } = {}): boolean {
-  return false;
+export function mayPostLinks(opts: { verified?: boolean; businessSponsor?: boolean } = {}): boolean {
+  return opts.businessSponsor === true;
 }

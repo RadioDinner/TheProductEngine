@@ -351,6 +351,45 @@ export default async function AdminHelp() {
         a one-click unsubscribe and the business mailing address, as the law requires.
       </p>
 
+      <h2 className="section-h">Business advertising packages (the Business tab)</h2>
+      <p>
+        Businesses buy a package on the public <span className="cmd">/advertising</span>{" "}
+        page (the &ldquo;Advertising for Businesses&rdquo; footer link): 1&nbsp;week $39.99,
+        2&nbsp;weeks $59.99, 1&nbsp;month $89.99. They pay by card up front (Stripe), and the
+        ad then lands on the <strong>Business</strong> tab waiting for review — paying never
+        skips the human gate, same as every member ad. Business ads MAY carry one website
+        link (members can&rsquo;t); the review is where you judge it.
+      </p>
+      <p>
+        Approving starts the run <strong>that day</strong> (the clock starts at approval,
+        not payment — the page tells them so). From then on the ad rides the{" "}
+        <strong>first digest of each day</strong> as a labeled line — &ldquo;Sponsor:
+        Miller&rsquo;s Harness Shop - &hellip;&rdquo; — placed on top of the member ads and{" "}
+        <strong>never</strong> consuming one of the {s.digestCap} member slots. The email
+        edition mirrors it with the link clickable. Sponsor text is run through the same
+        character-set cleaner as everything else, so it can&rsquo;t inflate the SMS cost,
+        and its messages count against the daily segment budget like any other digest text.
+      </p>
+      <p>
+        <strong>Missed days extend the run — they are never silently eaten.</strong> A
+        package is done when its ad has ridden the number of days bought, not on a calendar
+        date. If a day&rsquo;s digest never goes out (a pause, the segment-budget breaker,
+        or simply no member ads that day), that day doesn&rsquo;t count; the Business tab
+        shows the package as &ldquo;N missed days — run extends&rdquo; so you can see it
+        happening.
+      </p>
+      <p>
+        <strong>Declining = refunding by hand.</strong> A declined package never ran, so
+        per the refund policy the money goes back — but nothing is refunded automatically
+        (deliberate: no code path can move money out). The Business tab keeps a
+        &ldquo;refund due&rdquo; note with the amount and the Stripe payment ref; do the
+        refund in the Stripe dashboard (Payments → search the ref → Refund) and press
+        &ldquo;mark done&rdquo;. If someone pays while the business_packages migration
+        (9978) is missing, the package can&rsquo;t be stored — the server log carries the
+        full details under &ldquo;PAID PACKAGE COULD NOT BE STORED&rdquo; and /api/health
+        reports the missing migration.
+      </p>
+
       <h2 className="section-h">Current tunable numbers</h2>
       <p>All editable on the Settings page; changes take effect immediately.</p>
       <table className="cmd-table">

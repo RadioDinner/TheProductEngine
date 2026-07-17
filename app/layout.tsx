@@ -103,7 +103,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               for help, <strong>STOP</strong> to cancel ·{" "}
               <Link href="/email">Get the ads by email</Link> ·{" "}
               <Link href="/how-it-works">How it works</Link> ·{" "}
-              <Link href="/faq">Questions</Link>
+              <Link href="/faq">Questions</Link> ·{" "}
+              <Link href="/advertising">Advertising for Businesses</Link>
             </p>
             <p>
               <Link href="/sms">Text message program</Link> ·{" "}

@@ -15,6 +15,8 @@ import {
 } from "@/lib/store";
 import { formatPrice, getPack } from "@/lib/config";
 import { normalizePhone } from "@/lib/phone";
+import { createBusinessPackage } from "@/lib/business";
+import { getBusinessTier } from "@/lib/business-packages";
 
 const TOLERANCE_S = 300;
 
@@ -47,7 +49,67 @@ interface CheckoutSessionPayload {
   payment_intent?: string | null;
   customer?: string | null;
   amount_total?: number | null;
-  metadata?: { phone?: string; pack?: string };
+  metadata?: {
+    phone?: string;
+    pack?: string;
+    /** "business_package" marks a business-advertising purchase (item 17). */
+    kind?: string;
+    tier?: string;
+    business_name?: string;
+    ad_text?: string;
+    link?: string;
+  };
+}
+
+/**
+ * A paid business advertising package (FEATURES item 17). The webhook is the
+ * ONLY writer: nothing is stored until Stripe confirms payment, and the
+ * insert dedups on the payment-intent ref (business_packages.stripe_ref
+ * unique), so retries/replays never create two packages. The package lands as
+ * pending_review — payment never skips the human review (user decision) —
+ * and its run clock starts at APPROVAL, not here.
+ */
+async function handleBusinessPackage(session: CheckoutSessionPayload): Promise<void> {
+  const meta = session.metadata ?? {};
+  const tier = getBusinessTier(meta.tier ?? "");
+  const ref = session.payment_intent ?? session.id ?? "";
+  const businessName = (meta.business_name ?? "").trim();
+  const adText = (meta.ad_text ?? "").trim();
+  if (!tier || !ref || !businessName || !adText) {
+    console.error("[business] completed session missing metadata:", session.id, meta);
+    return;
+  }
+  if (session.amount_total != null && session.amount_total < tier.priceCents) {
+    // Defense in depth: never accept a package for less than its price.
+    console.error(
+      `[business] amount ${session.amount_total} < tier ${tier.id} price ${tier.priceCents}; not storing`,
+    );
+    return;
+  }
+  const result = await createBusinessPackage({
+    businessName,
+    adText,
+    link: meta.link?.trim() || null,
+    phone: normalizePhone(meta.phone ?? "") ?? null,
+    tier: tier.id,
+    daysPurchased: tier.days,
+    priceCents: tier.priceCents,
+    stripeRef: ref,
+  });
+  if (result.outcome === "unsupported") {
+    // Migration 9978 isn't applied but the business HAS PAID. Nothing can be
+    // stored, so shout: this log line is the only record — the operator must
+    // paste the migration and re-enter the package (details below) or refund
+    // ref in Stripe. Stripe will also retry the webhook, and once the table
+    // exists the retry stores it (stripe_ref keeps that idempotent).
+    console.error(
+      `[business] PAID PACKAGE COULD NOT BE STORED — migration 9978 not applied. ` +
+        `MANUAL ACTION NEEDED. ref=${ref} tier=${tier.id} (${formatPrice(tier.priceCents)}) ` +
+        `business=${JSON.stringify(businessName)} ad=${JSON.stringify(adText)} ` +
+        `link=${meta.link ?? "-"} phone=${meta.phone ?? "-"}`,
+    );
+  }
+  // "duplicate" = Stripe retry of an already-stored payment: correctly ignored.
 }
 
 export async function POST(req: NextRequest) {
@@ -69,7 +131,9 @@ export async function POST(req: NextRequest) {
 
   if (event.type === "checkout.session.completed") {
     const session = event.data?.object ?? {};
-    if (session.payment_status === "paid") {
+    if (session.payment_status === "paid" && session.metadata?.kind === "business_package") {
+      await handleBusinessPackage(session);
+    } else if (session.payment_status === "paid") {
       const phone = normalizePhone(session.metadata?.phone ?? "");
       const pack = getPack(session.metadata?.pack ?? "");
       const ref = session.payment_intent ?? session.id ?? "";

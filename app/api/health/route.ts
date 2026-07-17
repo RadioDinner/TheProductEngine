@@ -200,6 +200,20 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/9979_reveal_quota.sql in the SQL editor",
           }
         : { applied: true };
+      // Business advertising packages (item 17): without this table the
+      // /advertising purchase form says "not available yet" and a paid webhook
+      // event can only LOG the package — so surface the drift loudly here.
+      const business = await db()
+        .from("business_packages")
+        .select("id", { count: "exact", head: true });
+      report.migration9978 = business.error
+        ? {
+            applied: false,
+            code: business.error.code,
+            error: business.error.message,
+            fix: "run supabase/migrations/9978_business_packages.sql in the SQL editor",
+          }
+        : { applied: true };
     } catch (e) {
       report.db = { ok: false, thrown: e instanceof Error ? e.message : String(e) };
     }
