@@ -40,6 +40,16 @@ import {
 } from "@/lib/engine-store";
 import { nextSlotOccurrence, selectDigestItems, sendDigestNow } from "@/lib/digest-engine";
 import { resolveEvent } from "@/lib/town-hall-store";
+import { FEATURED_CAPTION_MAX, acceptableSpotLink } from "@/lib/featured";
+import {
+  addFeaturedSpot,
+  deleteFeaturedSpot,
+  setFeaturedSpotActive,
+} from "@/lib/featured-store";
+import { removeHostedPhotos, storeImageBytes } from "@/lib/photos";
+import { sniffImage, CONTENT_TYPE_BY_EXT } from "@/lib/image-sniff";
+import { supabaseConfigured } from "@/lib/db";
+import { stripEmoji } from "@/lib/content-filter";
 import { normalizePhone } from "@/lib/phone";
 
 /** Whitelisted return targets for shared ad actions — never trust a form string. */
@@ -457,4 +467,75 @@ export async function adminUnblockNumber(formData: FormData): Promise<void> {
   const phone = normalizePhone(String(formData.get("phone") ?? ""));
   if (phone) await unblockNumber(phone);
   redirect("/admin/settings?saved=unblock");
+}
+
+// ---------- Featured sidebar spots (item 19 — operator-posted only) ----------
+
+/** Same 8 MB ceiling as every other image ingest path. */
+const MAX_FEATURED_IMAGE_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Add a Featured spot: image (required, byte-sniffed, re-hosted), optional
+ * caption, optional EXTERNAL http(s) link (the operator-only exception to the
+ * no-links rule), slot 1|2, order 1–3, active toggle. Dev mode has no storage
+ * bucket, so — matching the profile-photo and web-extras pattern — the
+ * sniff-verified image is inlined as a data: URI (the sidebar renders it with
+ * a plain <img>, so dev walks see the real rotation).
+ */
+export async function adminAddFeaturedSpot(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const slot = Number(formData.get("slot")) === 2 ? 2 : 1;
+  const rawPosition = Number(formData.get("position"));
+  const position = rawPosition === 2 || rawPosition === 3 ? rawPosition : 1;
+  const caption = stripEmoji(String(formData.get("caption") ?? "")).slice(0, FEATURED_CAPTION_MAX);
+  const linkUrl = String(formData.get("link") ?? "").trim();
+  if (linkUrl && !acceptableSpotLink(linkUrl)) redirect("/admin/featured?error=link");
+  const active = formData.get("active") === "on";
+
+  const image = formData.get("image");
+  if (!(image instanceof File) || image.size === 0) redirect("/admin/featured?error=photo");
+  if (image.size > MAX_FEATURED_IMAGE_BYTES) redirect("/admin/featured?error=photo");
+  const bytes = Buffer.from(await image.arrayBuffer());
+  let src: string;
+  if (supabaseConfigured) {
+    const stored = await storeImageBytes(bytes);
+    if (!stored.ok) redirect("/admin/featured?error=photo");
+    src = (stored as { ok: true; url: string }).url;
+  } else {
+    const ext = sniffImage(bytes);
+    if (!ext) redirect("/admin/featured?error=photo");
+    src = `data:${CONTENT_TYPE_BY_EXT[ext!]};base64,${bytes.toString("base64")}`;
+  }
+
+  const outcome = await addFeaturedSpot({
+    slot,
+    position,
+    src,
+    caption: caption || null,
+    linkUrl: linkUrl || null,
+    active,
+  });
+  redirect(outcome === "added" ? "/admin/featured?saved=1" : "/admin/featured?error=migration");
+}
+
+/** Turn a Featured spot on or off without deleting it. */
+export async function adminSetFeaturedActive(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (Number.isInteger(id)) {
+    await setFeaturedSpotActive(id, formData.get("on") === "yes");
+  }
+  redirect("/admin/featured");
+}
+
+/** Delete a Featured spot and clean its image out of storage (best-effort;
+ * dev data: URIs are naturally skipped by removeHostedPhotos). */
+export async function adminDeleteFeaturedSpot(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (Number.isInteger(id)) {
+    const src = await deleteFeaturedSpot(id);
+    if (src) await removeHostedPhotos([src]);
+  }
+  redirect("/admin/featured?deleted=1");
 }

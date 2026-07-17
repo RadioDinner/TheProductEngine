@@ -6,7 +6,10 @@ import { site } from "@/lib/config";
 import { etParts } from "@/lib/et";
 import { formatEventDay } from "@/lib/town-hall";
 import { listUpcomingEvents } from "@/lib/town-hall-store";
+import { slotRotation } from "@/lib/featured";
+import { listActiveFeaturedSpots } from "@/lib/featured-store";
 import { AdRow } from "@/components/AdRow";
+import { FeaturedRotator, type RotatorSpot } from "@/components/FeaturedRotator";
 
 /** Upcoming events shown in the homepage sidebar (the full board is /town-hall). */
 const SIDEBAR_EVENTS = 5;
@@ -59,6 +62,13 @@ export default async function Home({
   const groups = groupByDay(ads);
   // Town hall sidebar (item 18) — null until migration 9977 (sidebar hides).
   const events = await listUpcomingEvents(etParts(new Date()).day, SIDEBAR_EVENTS);
+  // Featured sidebar (item 19) — [] until migration 9977 or while the
+  // operator has nothing active (either way the sidebar hides entirely).
+  const featured = await listActiveFeaturedSpots();
+  const toRotator = (spots: typeof featured): RotatorSpot[] =>
+    spots.map((s) => ({ id: s.id, src: s.src, caption: s.caption, linkUrl: s.linkUrl }));
+  const slot1 = toRotator(slotRotation(featured, 1));
+  const slot2 = toRotator(slotRotation(featured, 2));
 
   return (
     <>
@@ -82,6 +92,27 @@ export default async function Home({
           the stack — Featured above the ads, Town hall below. Either sidebar
           hides entirely when it has nothing to show (no empty scaffolding). */}
       <div className="home-layout">
+      {/* Featured sidebar (item 19) — operator-posted image spots; hides
+          entirely when nothing is active. On narrow screens only slot 1
+          shows (compact), above the ads. */}
+      {(slot1.length > 0 || slot2.length > 0) && (
+        <aside className="home-side home-featured" aria-labelledby="featured-h">
+          <h2 id="featured-h" className="side-h">
+            Featured
+          </h2>
+          {slot1.length > 0 && <FeaturedRotator slot={1} spots={slot1} />}
+          {slot2.length > 0 &&
+            (slot1.length > 0 ? (
+              // Narrow screens keep just ONE compact slot above the ads —
+              // .featured-secondary hides below the grid breakpoint.
+              <div className="featured-secondary">
+                <FeaturedRotator slot={2} spots={slot2} />
+              </div>
+            ) : (
+              <FeaturedRotator slot={2} spots={slot2} />
+            ))}
+        </aside>
+      )}
       <div className="home-center container">
         <h1 className="visually-hidden">Latest classified ads</h1>
 

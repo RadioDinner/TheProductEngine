@@ -257,6 +257,21 @@ export default async function AdminHelp() {
         later phase — nothing about events sends messages today.
       </p>
 
+      <h2 className="section-h">Featured spots (the rotating left sidebar)</h2>
+      <p>
+        The homepage&apos;s left column carries two <strong>Featured</strong> slots, each
+        rotating every 8 seconds through up to three image ads you post by hand on the{" "}
+        <strong>Featured</strong> tab — six sellable spots total, though selling them has
+        no flow yet (pricing isn&apos;t set; today you place them for whoever you&apos;ve
+        arranged it with). A spot may link out to an external website — the one sanctioned
+        exception to the no-links rule, safe because only you can post there — and the
+        link is marked as a paid placement (<span className="cmd">rel=&quot;sponsored&quot;</span>)
+        so search engines treat it honestly. Images go through the same 8&nbsp;MB
+        byte-checked upload as everything else. When nothing is active the sidebar
+        disappears entirely, and for visitors who prefer reduced motion the rotation
+        stops — they page through with the dots instead.
+      </p>
+
       <h2 className="section-h">The green check (verified members)</h2>
       <p>
         The <strong>✓ Verified</strong> mark is yours to give and take, one account at a time,

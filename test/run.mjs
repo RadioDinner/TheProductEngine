@@ -19,6 +19,7 @@ const SUITES = [
   "chat",
   "myads",
   "town-hall",
+  "featured",
 ];
 
 let totalPass = 0;
