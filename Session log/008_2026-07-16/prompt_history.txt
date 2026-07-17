@@ -43,3 +43,6 @@ Also a few more changes for the queue. When people are logged in, hide or make l
 Also, when users are logged in, I want an icon at the top of the page with messages and a notification system so that if user Jacob is logged in and Joe responds to his message, Jacob gets an alert, and a little red nubmer 1 on his messaging icon at the top. 
 
 Also, make the conversation threads look a bit more like a modern day messagging platform in terms of function. I want messages sent from the sender side to pop up from the right, and messages received pop up from the left. I also want a way for people to report messages for review. And I don't want people to be able to send links. Also, I want all messages send on TPE message exchange to be audit logged
+
+--- 2026-07-17 12:13 ---
+Also, I want people messaging to be able to send pictures to the other buyer, BUT if they reply with a picture, only send it to the messaging platform, don't double it up and send it to the person via SMS. Say something like "View image on the web" or message them directly.

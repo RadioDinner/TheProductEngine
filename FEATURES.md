@@ -21,6 +21,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 11 | **Hide the SMS signup strip for signed-in members** — the "Get the ads by text — text SUBSCRIBE to (330) 960-7170…" compliance section is hidden (or made much less obvious) once someone is logged in | session 008 | not started |
 | 12 | **Header messages icon + notifications** — signed-in members get a messages icon at the top of every page with a little red unread count (Joe replies → Jacob sees a red "1"), and an alert when a reply arrives | session 008 | not started |
 | 13 | **Modern chat threads** — sent messages bubble from the right, received from the left; a "report this message" path for review; links can't be sent; and every message on the TPE exchange is audit logged | session 008 | not started |
+| 14 | **Pictures in chat** — people in a conversation can send each other pictures; a picture NEVER rides the SMS copy (no MMS doubling) — the SMS side just gets "View image on the web" (or messages them directly) | session 008 | not started |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -103,3 +104,11 @@ itself; build details live in the session logs and HANDOFF.md.
   deliberately stayed out of the admin message log) — when built, log them
   (probably into the existing messages table or an admin chat viewer) and
   note the privacy stance on /admin/help.
+- **14 · pictures in chat**: web-side upload (byte-sniffed + re-hosted like
+  every other image) and, once item 10's SMS reply-routing exists, an
+  inbound MMS in a chat context lands the photo in the thread. The rule that
+  keeps costs sane: **media never rides outbound SMS copies** — the SMS side
+  of a picture message is text only ("[Name] sent a picture — view it at
+  ThePlainExchange.com/account/messages"), so no MMS doubling, ever. Chat
+  photos should count against a sensible per-thread cap and follow item
+  13's report/audit rules.
