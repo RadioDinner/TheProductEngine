@@ -22,3 +22,6 @@ Links policy: "Yes, after review (Recommended)"
 I want another feature added to the main website. I want a "Town hall" feature built, where eventually, people will be able to add upcoming events with the option to advertise via an SMS or email blast. I'm not sure yet how the pricing will work, probably just $19.99 a listing for an event. 
 
 For this feature and for business listings, I want an approval process same as the regular ads
+
+--- 2026-07-17 17:47 ---
+When you get to building the "Town hall feature" I want it as a side bar to the home page on the right hand side of the ads. Then I want add a rotating "Featured" section on the left hand side of the ads. I want two side bar ad spots that will rotate every 8 seconds. I'll have up to 3 ads on each section. I want the two "Featured" slots to be stacked on top of each other on the left hand side of the ads. I will manually post these Featured advertisers. I want to sell "Featured" slots. There will be six total feature spots available and I'll post those manually but I'd want them to be image ads, capable of linking to external websites

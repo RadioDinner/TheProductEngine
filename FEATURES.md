@@ -25,7 +25,8 @@ itself; build details live in the session logs and HANDOFF.md.
 | 15 | **Messaging performance overhaul** — sending a message has a distinct lag; overhaul the whole messaging system's speed | session 008 | not started |
 | 16 | **Member ad management ("My ads" tab)** — signed-in members get a "My ads" tab in the header next to the messages icon / their member link; from it they can mark an ad sold, bump it, change the picture that rides `PIC`, add additional pictures, or delete it themselves. Delete refund rules (user decision): posted but not yet approved → refund the credit; approved but never sent in any digest → refund the credit; ever sent in a digest → no refund ("game over") | session 009 | not started |
 | 17 | **Business advertising packages** — a website link titled "Advertising for Businesses"; businesses buy a package that runs their ad in a digest once a day: 1 week $39.99, 2 weeks $59.99, 1 month $89.99; same approval process as regular ads | session 009 | not started |
-| 18 | **Town hall** — a main-website feature where (eventually) people add upcoming events, with the option to advertise the event via an SMS or email blast; pricing not settled — probably $19.99 per event listing; same approval process as regular ads | session 009 | not started |
+| 18 | **Town hall** — a main-website feature where (eventually) people add upcoming events, with the option to advertise the event via an SMS or email blast; pricing not settled — probably $19.99 per event listing; same approval process as regular ads; renders as a homepage sidebar on the RIGHT of the ads | session 009 | not started |
+| 19 | **"Featured" rotating sidebar spots** — LEFT of the homepage ads: two Featured slots stacked on top of each other, each rotating every 8 seconds through up to 3 ads (6 sellable spots total); operator posts them manually; they are image ads that may link to external websites | session 009 | not started |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -188,3 +189,21 @@ itself; build details live in the session logs and HANDOFF.md.
   field and should auto-expire after the event date; likely its own table +
   migration and its own review queue tab (or a type flag reusing the ads
   pipeline — decide against the ads-table-overload tradeoff at build).
+  **Placement (user, session 009): Town hall renders as a homepage SIDEBAR
+  on the RIGHT-hand side of the ads** (see item 19 for the matching left
+  sidebar; homepage becomes featured-left / ads-center / town-hall-right,
+  and both sidebars must collapse gracefully on narrow screens).
+- **19 · Featured rotating sidebar** (arrived session 009, user words in
+  prompt history): LEFT of the homepage ads, TWO Featured slots stacked
+  vertically; each slot rotates every 8 seconds through up to 3 ads → 6
+  sellable spots total. Operator-posted ONLY (manual, via admin — no
+  self-serve); each spot is an IMAGE ad and may link to an EXTERNAL website
+  (explicit exception to the no-links rule — acceptable because only the
+  operator can post them; still re-host images like everything else, and
+  use rel="sponsored noopener" on outbound links). Rotation is client-side
+  (8 s timer — needs a small client component; pause rotation when the tab
+  is hidden). Pricing for selling Featured slots: not stated yet — ask
+  before wiring any checkout. Needs admin CRUD (image + link + slot + order
+  + active toggle), likely one small migration for a featured_spots table.
+  Mobile: sidebars stack (featured above / town hall below the ads, or
+  collapse) — decide at build; never horizontal-scroll the homepage.
