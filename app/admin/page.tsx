@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { adminApprove, adminReject, adminResolveChatReport } from "@/lib/admin-actions";
-import { getPendingAds } from "@/lib/engine-store";
-import { listChatReports } from "@/lib/store";
+import { getAdCategories, getPendingAds } from "@/lib/engine-store";
+import { categoriesSupported, listChatReports } from "@/lib/store";
+import { CATEGORIES } from "@/lib/categories";
 import { findLinks } from "@/lib/content-filter";
 import { formatPhone } from "@/lib/phone";
 import { site } from "@/lib/config";
@@ -26,6 +27,13 @@ export default async function AdminReview() {
   const pending = await getPendingAds();
   // Member-reported chat messages (item 13) — empty until migration 9980.
   const reports = await listChatReports();
+  // Category dropdown (item 22): the operator assigns the category here at
+  // review. Hidden until migration 9976 — approvals then work exactly as
+  // before. A web-posted ad's seller suggestion pre-fills the dropdown.
+  const withCategories = await categoriesSupported();
+  const adCategories = withCategories
+    ? await getAdCategories(pending.map((ad) => ad.id))
+    : new Map<number, string | null>();
 
   return (
     <>
@@ -65,6 +73,24 @@ export default async function AdminReview() {
                 Ad text (editable)
               </label>
               <textarea id={`body-${ad.id}`} name="body" rows={3} defaultValue={ad.body} />
+              {withCategories && (
+                <p className="fine">
+                  <label htmlFor={`category-${ad.id}`}>Category </label>
+                  <select
+                    id={`category-${ad.id}`}
+                    name="category"
+                    defaultValue={adCategories.get(ad.id) ?? ""}
+                    className="admin-select"
+                  >
+                    <option value="">Uncategorized — rides every digest</option>
+                    {CATEGORIES.map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.label} — {c.menu}
+                      </option>
+                    ))}
+                  </select>
+                </p>
+              )}
               <button className="btn btn-sm" type="submit">
                 Approve
               </button>

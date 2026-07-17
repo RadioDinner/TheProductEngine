@@ -26,7 +26,14 @@ import {
   grantStarterAdsIfFirst,
   spendCredits,
 } from "@/lib/store";
-import { addPhotoSubmission, countAdPhotos, createAd, rejectAdRecord } from "@/lib/engine-store";
+import {
+  addPhotoSubmission,
+  countAdPhotos,
+  createAd,
+  rejectAdRecord,
+  setAdCategory,
+} from "@/lib/engine-store";
+import { isCategoryKey } from "@/lib/categories";
 import { getEngineSettings, getWordRules, matchWordRules } from "@/lib/settings";
 import { hasLink, mayPostLinks, stripEmoji } from "@/lib/content-filter";
 import { deriveTitle } from "@/lib/ads";
@@ -146,6 +153,18 @@ export async function postAd(formData: FormData): Promise<void> {
     // of leaving an unpaid pending record in the review queue.
     await rejectAdRecord(id, "Not enough credits at submission.", "benign");
     redirect(`/account/post?error=funds&cost=${cost}&balance=${await getCreditBalance(phone)}`);
+  }
+
+  // Seller's category suggestion (item 22 — web posting only; SMS sellers
+  // don't pick). Best-effort: it pre-fills the review dropdown and the
+  // OPERATOR's choice at review is authoritative. Never blocks the post.
+  const suggested = String(formData.get("category") ?? "");
+  if (isCategoryKey(suggested)) {
+    try {
+      await setAdCategory(id, suggested);
+    } catch (e) {
+      console.error("[post] category suggestion not saved:", e);
+    }
   }
 
   await notifyAdminNewAd({ id, from: phone, hasPhoto, body, ...(hasPhoto && { photoSrc: photoSrc! }) });

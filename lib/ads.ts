@@ -11,7 +11,12 @@
  */
 import { supabaseConfigured } from "@/lib/db";
 import * as remote from "@/lib/ads-supabase";
-import { fileGetAd, fileListAds, fileListAdsByOwner } from "@/lib/engine-store";
+import {
+  fileCountLiveAdsByCategory,
+  fileGetAd,
+  fileListAds,
+  fileListAdsByOwner,
+} from "@/lib/engine-store";
 
 export type AdStatus = "available" | "sold" | "expired";
 
@@ -49,6 +54,9 @@ export function adExpiresAt(ad: Ad): Date {
 
 export interface AdQuery {
   q?: string;
+  /** Homepage browse filter (item 25): a lowercase category key. Callers gate
+   * on categoriesSupported() — uncategorized ads appear under All only. */
+  category?: string;
   page?: number;
   perPage?: number;
 }
@@ -75,6 +83,12 @@ export async function getAd(id: number): Promise<Ad | null> {
 /** All of a seller's ads, every status, newest first — for My Ads. */
 export async function listAdsByOwner(phone: string): Promise<Ad[]> {
   return supabaseConfigured ? remote.listAdsByOwner(phone) : fileListAdsByOwner(phone);
+}
+
+/** Live (listed) ad count per category — the homepage row grays the zero-ad
+ * categories. Callers gate on categoriesSupported(). */
+export async function countLiveAdsByCategory(): Promise<Map<string, number>> {
+  return supabaseConfigured ? remote.countLiveAdsByCategory() : fileCountLiveAdsByCategory();
 }
 
 // ---------- display derivations (shared by site + digest composer) ----------

@@ -20,6 +20,7 @@ import {
   enqueueDigestOutbox,
   finalizeDigest,
   finalizeExtraDigest,
+  getAdCategories,
   getAdRecord,
   getNewDigestAds,
   getQueuedBumps,
@@ -34,7 +35,12 @@ import {
   type OutboxRow,
   type StoredAd,
 } from "@/lib/engine-store";
-import { listEmailRecipients, listSubscriberPhones } from "@/lib/store";
+import {
+  getSubscriberCategories,
+  listEmailRecipientsWithCategories,
+  listSubscribersWithCategories,
+} from "@/lib/store";
+import { adMatchesCategories, partitionKey } from "@/lib/categories";
 import { unsubscribeUrl } from "@/lib/email";
 import { composeEmailHtml, composeEmailText } from "@/lib/email-digest";
 import { sms } from "@/lib/sms";
@@ -122,6 +128,76 @@ export interface SlotResult {
   skipped: boolean;
 }
 
+/**
+ * Category-aware SMS composition (item 22): ONE combined digest per
+ * subscriber per slot, carrying only their categories' ads (+ every
+ * uncategorized ad + the sponsor lines, which ride regardless of categories).
+ *
+ * Subscribers are grouped by their EFFECTIVE category set and each distinct
+ * set's edition is composed/packed exactly once, then its parts enqueued to
+ * that whole group — composition cost is O(distinct sets), not O(subscribers),
+ * and the ALL group's edition is byte-identical to the pre-category digest.
+ * A subscriber whose filtered edition is empty (and no sponsors ride) gets
+ * nothing this slot. Pre-9976 every ad reads uncategorized and every
+ * subscriber reads ALL, so exactly one group forms: today's behavior.
+ */
+export function buildCategorizedSmsRows(params: {
+  digestId: number;
+  now: Date;
+  slotHour: number;
+  items: StoredAd[];
+  /** Ad id → category (getAdCategories); missing ids read uncategorized. */
+  categoriesByAd: Map<number, string | null>;
+  firstOfDay: boolean;
+  edition?: DigestEdition;
+  digestNo: number | null;
+  sponsorLines: string[];
+  recipients: { phone: string; categories: string[] | null }[];
+}): { rows: OutboxInsert[]; recipients: number } {
+  const groups = new Map<string, { categories: string[] | null; phones: string[] }>();
+  for (const r of params.recipients) {
+    const key = partitionKey(r.categories);
+    const group = groups.get(key);
+    if (group) group.phones.push(r.phone);
+    else groups.set(key, { categories: r.categories, phones: [r.phone] });
+  }
+  const rows: OutboxInsert[] = [];
+  let recipients = 0;
+  for (const group of groups.values()) {
+    const filtered = params.items.filter((ad) =>
+      adMatchesCategories(params.categoriesByAd.get(ad.id) ?? null, group.categories),
+    );
+    // Nothing in their categories and no sponsor lines riding — no digest for
+    // this group this slot (an empty-set subscriber was already warned).
+    if (!filtered.length && !params.sponsorLines.length) continue;
+    const messages = composeDigestMessages(
+      params.now,
+      params.slotHour,
+      filtered,
+      params.firstOfDay,
+      params.edition,
+      params.digestNo,
+      params.sponsorLines,
+    );
+    const partSegments = messages.map((m) => segmentation(m).segments);
+    for (const phone of group.phones) {
+      recipients++;
+      for (let i = 0; i < messages.length; i++) {
+        rows.push({
+          digestId: params.digestId,
+          channel: "sms",
+          address: phone,
+          part: i + 1,
+          parts: messages.length,
+          body: messages[i],
+          segments: partSegments[i],
+        });
+      }
+    }
+  }
+  return { rows, recipients };
+}
+
 /** Catch-up messages for a brand-new subscriber: the most recent digest's ads. */
 export function composeCatchupMessages(items: StoredAd[]): string[] {
   const header = gsmSanitize(`${site.name} — most recent ads:`);
@@ -152,10 +228,17 @@ export async function sendRecentDigestTo(phone: string): Promise<number> {
   }
   const ids = await getRecentDigestAdIds();
   if (!ids.length) return 0;
-  const ads: StoredAd[] = [];
+  let ads: StoredAd[] = [];
   for (const id of ids) {
     const ad = await getAdRecord(id);
     if (ad && ad.status === "approved") ads.push(ad); // still-available only
+  }
+  // Respect the subscriber's category prefs (item 22) — a returning selective
+  // member's catch-up carries only their categories (+ uncategorized ads).
+  const prefs = await getSubscriberCategories(phone);
+  if (prefs !== "unsupported" && prefs !== null) {
+    const categoriesByAd = await getAdCategories(ads.map((a) => a.id));
+    ads = ads.filter((ad) => adMatchesCategories(categoriesByAd.get(ad.id) ?? null, prefs));
   }
   if (!ads.length) return 0;
   // Count catch-up against the service-wide SMS breaker (it otherwise bypassed
@@ -279,37 +362,31 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   const digestNo = await allocateDigestNumber(smsDigestId);
   // Sponsor lines (item 17) ride the first digest of the day — an early/extra
   // edition counts (and a later scheduled slot then skips them for the day).
+  // They ride EVERY recipient's edition regardless of category prefs.
   const sponsors = await listDueSponsors(day);
-  const messages = composeDigestMessages(
+  const blocked = new Set((await listBlocked()).map((b) => b.phone));
+  const subscribers = (await listSubscribersWithCategories()).filter(
+    (s) => !blocked.has(s.phone),
+  );
+  // Per-category-set composition — same machinery as the scheduled run.
+  const categoriesByAd = await getAdCategories(items.map((a) => a.id));
+  const { rows, recipients: smsRecipients } = buildCategorizedSmsRows({
+    digestId: smsDigestId,
     now,
     slotHour,
     items,
+    categoriesByAd,
     firstOfDay,
     edition,
     digestNo,
-    sponsors.map((s) => sponsorLine(s)),
-  );
-  const partSegments = messages.map((m) => segmentation(m).segments);
-  const blocked = new Set((await listBlocked()).map((b) => b.phone));
-  const subscribers = (await listSubscriberPhones()).filter((p) => !blocked.has(p));
-  const rows: OutboxInsert[] = [];
-  for (const phone of subscribers) {
-    for (let i = 0; i < messages.length; i++) {
-      rows.push({
-        digestId: smsDigestId,
-        channel: "sms",
-        address: phone,
-        part: i + 1,
-        parts: messages.length,
-        body: messages[i],
-        segments: partSegments[i],
-      });
-    }
-  }
+    sponsorLines: sponsors.map((s) => sponsorLine(s)),
+    recipients: subscribers,
+  });
   await enqueueDigestOutbox(rows);
 
-  // Compose + enqueue the matching email edition (mirrors the SMS digest).
-  const recipients = await listEmailRecipients();
+  // Compose + enqueue the matching email edition (mirrors the SMS digest),
+  // filtered per recipient the same way as the SMS side.
+  const recipients = await listEmailRecipientsWithCategories();
   const dateLabel = now.toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -318,23 +395,27 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   });
   const editionTag = edition === "early" ? " (sent early)" : " (extra edition)";
   const sorted = [...items].sort((a, b) => a.id - b.id);
-  const subject = composeEmailSubject(site.name, sorted, day, editionTag);
   // The email edition mirrors the SMS digest's number (FEATURES item 5).
   const emailDateLabel = `${dateLabel}${editionTag}${digestNo ? ` · Digest No. ${digestNo}` : ""}`;
-  const emailRows: OutboxInsert[] = recipients.map((to) => {
-    const unsub = unsubscribeUrl(to);
-    return {
+  const emailRows: OutboxInsert[] = [];
+  for (const r of recipients) {
+    const filtered = sorted.filter((ad) =>
+      adMatchesCategories(categoriesByAd.get(ad.id) ?? null, r.categories),
+    );
+    if (!filtered.length && !sponsors.length) continue;
+    const unsub = unsubscribeUrl(r.email);
+    emailRows.push({
       digestId: emailDigestId,
       channel: "email" as const,
-      address: to,
+      address: r.email,
       part: 1,
       parts: 1,
-      subject,
-      body: composeEmailText(sorted, emailDateLabel, unsub, sponsors),
-      html: composeEmailHtml(sorted, emailDateLabel, unsub, sponsors),
+      subject: composeEmailSubject(site.name, filtered, day, editionTag),
+      body: composeEmailText(filtered, emailDateLabel, unsub, sponsors),
+      html: composeEmailHtml(filtered, emailDateLabel, unsub, sponsors),
       segments: 0,
-    };
-  });
+    });
+  }
   await enqueueDigestOutbox(emailRows);
 
   // Bookkeeping: early consumes the queue exactly like the scheduled run;
@@ -366,8 +447,8 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   return {
     ok: true,
     items: items.length,
-    recipients: subscribers.length,
-    emailRecipients: recipients.length,
+    recipients: smsRecipients,
+    emailRecipients: emailRows.length,
     drained: drain.sent,
   };
 }
@@ -400,38 +481,30 @@ export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {
     const digestNo = await allocateDigestNumber(digestId);
     // Business sponsor lines (item 17): every active package rides the first
     // digest that composes each ET day (listDueSponsors excludes ones that
-    // already rode today), as labeled extra lines outside the cap-10.
+    // already rode today), as labeled extra lines outside the cap-10 — and
+    // they ride EVERY subscriber's edition regardless of category prefs.
     const sponsors = await listDueSponsors(day);
-    const messages = composeDigestMessages(
-      now,
-      slot,
-      items,
-      firstOfDay,
-      undefined,
-      digestNo,
-      sponsors.map((s) => sponsorLine(s)),
-    );
-    const parts = messages.length;
-    const partSegments = messages.map((m) => segmentation(m).segments);
     // Blocked numbers get no broadcast (the drain sends via the raw transport,
     // so filtering here is the blocklist's enforcement point for digests).
     const blocked = new Set((await listBlocked()).map((b) => b.phone));
-    const subscribers = (await listSubscriberPhones()).filter((p) => !blocked.has(p));
-
-    const rows: OutboxInsert[] = [];
-    for (const phone of subscribers) {
-      for (let i = 0; i < parts; i++) {
-        rows.push({
-          digestId,
-          channel: "sms",
-          address: phone,
-          part: i + 1,
-          parts,
-          body: messages[i],
-          segments: partSegments[i],
-        });
-      }
-    }
+    const subscribers = (await listSubscribersWithCategories()).filter(
+      (s) => !blocked.has(s.phone),
+    );
+    // Per-category-set composition (item 22): one combined digest per
+    // subscriber, packed once per distinct category set. Pre-9976 this map is
+    // empty (all ads uncategorized) and prefs read ALL — unfiltered as today.
+    const categoriesByAd = await getAdCategories(items.map((a) => a.id));
+    const { rows, recipients } = buildCategorizedSmsRows({
+      digestId,
+      now,
+      slotHour: slot,
+      items,
+      categoriesByAd,
+      firstOfDay,
+      digestNo,
+      sponsorLines: sponsors.map((s) => sponsorLine(s)),
+      recipients: subscribers,
+    });
     const queued = await enqueueDigestOutbox(rows);
     await finalizeDigest(
       digestId,
@@ -450,7 +523,7 @@ export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {
     results.push({
       slotKey,
       items: items.length,
-      recipients: subscribers.length,
+      recipients,
       queued,
       skipped: false,
     });

@@ -3,8 +3,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { postAd } from "@/lib/post-actions";
 import { readSession } from "@/lib/session";
-import { getAccount, getCreditBalance, STARTER_FREE_ADS } from "@/lib/store";
+import { categoriesSupported, getAccount, getCreditBalance, STARTER_FREE_ADS } from "@/lib/store";
 import { getEngineSettings } from "@/lib/settings";
+import { CATEGORIES } from "@/lib/categories";
 import { site } from "@/lib/config";
 import { chargeNoteLine, postingPreview } from "@/lib/post-ad";
 import { AdBodyField } from "@/components/AdBodyField";
@@ -41,6 +42,8 @@ export default async function PostAdPage({
   const account = await getAccount(session.phone);
   const balance = await getCreditBalance(session.phone);
   const settings = await getEngineSettings();
+  // Optional seller category picker (item 22) — hidden until migration 9976.
+  const withCategories = await categoriesSupported();
   const banned = Boolean(account?.postingBannedAt);
   const preview = postingPreview(
     {
@@ -222,6 +225,25 @@ export default async function PostAdPage({
                 {settings.maxChars}-character limit as texting it in. Emoji are removed;
                 links get held for review.
               </p>
+              {withCategories && (
+                <div className="field">
+                  <label htmlFor="post-category">Category (optional)</label>
+                  <select id="post-category" name="category" defaultValue="" className="admin-select">
+                    <option value="">Let the operator pick at review</option>
+                    {CATEGORIES.map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.label} — {c.menu}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {withCategories && (
+                <p className="fine">
+                  Your pick is a suggestion — the operator can adjust it at review so
+                  subscribers who chose that category get the right ads.
+                </p>
+              )}
               <div className="field">
                 <label htmlFor="listing-photo">Listing picture (optional — picture price)</label>
                 <input id="listing-photo" name="photo" type="file" accept="image/*" />

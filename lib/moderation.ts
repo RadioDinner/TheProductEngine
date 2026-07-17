@@ -9,6 +9,7 @@ import {
   getAdRecord,
   logMessage,
   rejectAdRecord,
+  setAdCategory,
 } from "@/lib/engine-store";
 import {
   OFFENSE_BAN_THRESHOLD,
@@ -27,11 +28,26 @@ async function notify(phone: string, body: string): Promise<void> {
   if (sent) await logMessage({ direction: "outbound", channel: "sms", address: phone, body });
 }
 
-export async function approveAd(id: number, editedBody?: string): Promise<void> {
+export async function approveAd(
+  id: number,
+  editedBody?: string,
+  category?: string | null,
+): Promise<void> {
   const ad = await getAdRecord(id);
   if (!ad || ad.status !== "pending") return;
   const settings = await getEngineSettings();
   await approveAdRecord(id, editedBody, settings.expiryDays);
+  // Category assignment (item 22) is best-effort and SEPARATE from approval:
+  // a category problem must never wedge a paid ad in pending. undefined =
+  // the caller had no dropdown (SMS simulator, pre-9976 admin) — leave as-is;
+  // null = the operator explicitly chose Uncategorized (rides every digest).
+  if (category !== undefined) {
+    try {
+      await setAdCategory(id, category);
+    } catch (e) {
+      console.error(`[moderation] category not saved for ad #${id}:`, e);
+    }
+  }
   await notify(
     ad.ownerPhone,
     `Your ad #${id} is approved and will run in the next digest. Text STATUS ${id} any time to check it.`,

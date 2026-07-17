@@ -214,6 +214,22 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/9978_business_packages.sql in the SQL editor",
           }
         : { applied: true };
+      // users.categories ships in the same paste as ads.category and the
+      // confirmation-throttle columns, so this column probe stands in for the
+      // whole of 9976 (the category system: menu welcome, toggles, filtered
+      // digests, homepage browser). Until it's applied the system is dormant
+      // by design: unknown-word replies, unfiltered digests, hidden UI.
+      const categories = await db()
+        .from("users")
+        .select("categories", { count: "exact", head: true });
+      report.migration9976 = categories.error
+        ? {
+            applied: false,
+            code: categories.error.code,
+            error: categories.error.message,
+            fix: "run supabase/migrations/9976_categories.sql in the SQL editor",
+          }
+        : { applied: true };
     } catch (e) {
       report.db = { ok: false, thrown: e instanceof Error ? e.message : String(e) };
     }

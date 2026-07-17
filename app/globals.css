@@ -1270,3 +1270,34 @@ a.btn-sm:hover {
   font-weight: 700;
   white-space: nowrap;
 }
+
+/* ---------- Category browser (FEATURES item 25) + /account checkboxes (24) ---------- */
+
+.category-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+  margin: var(--space-md) 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.category-row .category-active {
+  font-weight: 700;
+  border-bottom: 2px solid var(--ink);
+}
+
+/* Zero-ad categories still render (the taxonomy stays learnable) — grayed. */
+.category-row .category-empty {
+  color: var(--muted);
+}
+
+.category-checks {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-md);
+}
+
+.category-checks li {
+  margin: var(--space-xs) 0;
+}

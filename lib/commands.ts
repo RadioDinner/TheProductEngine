@@ -19,7 +19,30 @@ export type Command =
   | { kind: "confirm" }
   | { kind: "rate"; stars: number | null }
   | { kind: "skip" }
+  /** A category word (item 22): "all" or a lib/categories key — toggles it. */
+  | { kind: "category"; category: string }
+  /** LIST (item 24): the member's current categories. */
+  | { kind: "list" }
   | { kind: "unknown"; text: string };
+
+/**
+ * Category command words (item 22): "all" plus the nine lib/categories keys.
+ * Duplicated here (not imported) so this parser stays import-free for the
+ * unit suite — test/categories.test.mjs cross-checks it against CATEGORY_KEYS
+ * so the two lists can't drift.
+ */
+const CATEGORY_WORDS = new Set([
+  "all",
+  "buggies",
+  "dogs",
+  "garden",
+  "horses",
+  "household",
+  "hunting",
+  "livestock",
+  "machinery",
+  "wanted",
+]);
 
 function adNumber(arg: string): number | null {
   // Full digit run, not a 6-digit prefix: "SOLD 12345678" must not silently
@@ -105,7 +128,15 @@ export function parseCommand(raw: string): Command {
       // Declines an open conversational prompt (rating flow). With no prompt
       // open the engine answers like any unknown keyword.
       return { kind: "skip" };
+    case "list":
+      // Bare word only (like CREDITS): "list my stuff" stays unknown.
+      return rest ? { kind: "unknown", text } : { kind: "list" };
     default:
+      // Category words (item 22) — exact single word only, so a real message
+      // that merely STARTS with one ("horses for sale?") is never a toggle.
+      if (!rest && CATEGORY_WORDS.has(word)) {
+        return { kind: "category", category: word };
+      }
       return { kind: "unknown", text };
   }
 }

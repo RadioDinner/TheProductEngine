@@ -62,6 +62,11 @@ const FIELDS: { key: string; label: string; hint?: string }[] = [
     hint: "on Insights, flag any member revealing more than this many numbers in 24h (0 turns the flag off)",
   },
   {
+    key: "categoryConfirmsPerHour",
+    label: "Category confirmations per number per hour",
+    hint: "category toggles/LIST confirmed before one “changes still apply” notice and silence for the hour — toggles still apply (0 = unthrottled)",
+  },
+  {
     key: "smsGlobalPerHour",
     label: "Command replies service-wide per hour",
     hint: "circuit breaker — digests are never counted",

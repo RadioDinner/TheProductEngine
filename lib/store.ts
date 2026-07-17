@@ -22,6 +22,7 @@ import { decideReveal } from "@/lib/reveal-quota";
 import { unreadChatCount } from "@/lib/unread";
 import { normalizePhone } from "@/lib/phone";
 import { USER_ID_MAX_ATTEMPTS, isRetirementActive, randomUserId } from "@/lib/user-id";
+import { decideCategoryConfirm, type ConfirmAction } from "@/lib/categories";
 
 // ---------- shared types & rules ----------
 
@@ -69,6 +70,27 @@ export interface Account {
   /** Last you-have-a-chat-message SMS (item 15, migration 9980) — the nudge
    * dedup watermark that replaced the audit-log body scan. */
   chatNudgedAt?: string | null;
+  /** Category prefs (items 22/24, migration 9976): null/undefined = ALL
+   * (default/grandfathered), [] = none (warned, allowed), else lowercase keys. */
+  categories?: string[] | null;
+  /** Category-confirmation throttle window anchor (item 24) — watermark, not
+   * a log scan. */
+  categoryConfirmWindowStart?: string | null;
+  /** Confirmations counted inside the open throttle window. */
+  categoryConfirmCount?: number;
+}
+
+/** A subscriber with their category prefs — the digest composer's read. */
+export interface SubscriberCategories {
+  phone: string;
+  categories: string[] | null;
+}
+
+/** An email-edition recipient with their category prefs (null = ALL; email-
+ * only signups have no prefs and read as ALL). */
+export interface EmailRecipientCategories {
+  email: string;
+  categories: string[] | null;
 }
 
 /** Result of an atomic PIC-quota reservation. remaining = -1 when the quota is off. */
@@ -858,6 +880,67 @@ const file = {
       .map((a) => a.phone);
   },
 
+  getSubscriberCategories(phone: string): string[] | null {
+    return load().accounts[phone]?.categories ?? null;
+  },
+
+  setSubscriberCategories(phone: string, categories: string[] | null): "saved" {
+    const store = load();
+    const account = store.accounts[phone];
+    if (!account) return "saved"; // parity with the 0-row Supabase update
+    account.categories = categories;
+    save(store);
+    return "saved";
+  },
+
+  reserveCategoryConfirm(phone: string, limit: number): ConfirmAction {
+    const store = load();
+    const account = store.accounts[phone];
+    if (!account) return "confirm";
+    const decided = decideCategoryConfirm(
+      {
+        windowStartMs: account.categoryConfirmWindowStart
+          ? Date.parse(account.categoryConfirmWindowStart)
+          : null,
+        count: account.categoryConfirmCount ?? 0,
+      },
+      Date.now(),
+      limit,
+    );
+    account.categoryConfirmWindowStart =
+      decided.state.windowStartMs === null
+        ? null
+        : new Date(decided.state.windowStartMs).toISOString();
+    account.categoryConfirmCount = decided.state.count;
+    save(store);
+    return decided.action;
+  },
+
+  listSubscribersWithCategories(): SubscriberCategories[] {
+    return Object.values(load().accounts)
+      .filter((a) => a.subscribedAt && a.phone)
+      .map((a) => ({ phone: a.phone, categories: a.categories ?? null }));
+  },
+
+  listEmailRecipientsWithCategories(): EmailRecipientCategories[] {
+    const store = load();
+    const rows = new Map<string, EmailRecipientCategories>();
+    for (const a of Object.values(store.accounts)) {
+      if (a.email && a.emailSubscribedAt) {
+        rows.set(a.email.toLowerCase(), {
+          email: a.email.toLowerCase(),
+          categories: a.categories ?? null,
+        });
+      }
+    }
+    // Email-only signups have no account and no prefs — they read as ALL.
+    for (const s of Object.values(store.emailSubscribers ?? {})) {
+      const key = s.email.toLowerCase();
+      if (!rows.has(key)) rows.set(key, { email: key, categories: null });
+    }
+    return [...rows.values()];
+  },
+
   setEmailEdition(phone: string, on: boolean): void {
     const store = load();
     const account = store.accounts[phone];
@@ -1482,6 +1565,69 @@ export async function recordOffense(phone: string): Promise<number> {
 
 export async function listSubscriberPhones(): Promise<string[]> {
   return supabaseConfigured ? remote.listSubscriberPhones() : file.listSubscriberPhones();
+}
+
+/**
+ * A member's category prefs (items 22/24): null = ALL (the default and the
+ * grandfather state), [] = none, else lowercase keys. "unsupported" =
+ * migration 9976 not applied — category commands/UI stay dormant.
+ */
+export async function getSubscriberCategories(
+  phone: string,
+): Promise<string[] | null | "unsupported"> {
+  return supabaseConfigured
+    ? remote.getSubscriberCategories(phone)
+    : file.getSubscriberCategories(phone);
+}
+
+/** Save category prefs (null resets to ALL). Shared by the SMS toggles and
+ * the /account checkboxes — either side's change shows on the other. */
+export async function setSubscriberCategories(
+  phone: string,
+  categories: string[] | null,
+): Promise<"saved" | "unsupported"> {
+  return supabaseConfigured
+    ? remote.setSubscriberCategories(phone, categories)
+    : file.setSubscriberCategories(phone, categories);
+}
+
+/**
+ * Count one category/LIST confirmation against the per-number hourly throttle
+ * (item 24 spam guard; watermark + counter on the user row, migration 9976).
+ * "confirm" = send the normal confirmation; "notice" = send the ONE "changes
+ * still apply" notice; "silent" = send nothing (the toggle still applied).
+ */
+export async function reserveCategoryConfirm(
+  phone: string,
+  limit: number,
+): Promise<ConfirmAction> {
+  return supabaseConfigured
+    ? remote.reserveCategoryConfirm(phone, limit)
+    : file.reserveCategoryConfirm(phone, limit);
+}
+
+/** Every subscriber with their category prefs — the digest composer groups
+ * these by effective set. Pre-9976, categories read as null (= ALL). */
+export async function listSubscribersWithCategories(): Promise<SubscriberCategories[]> {
+  return supabaseConfigured
+    ? remote.listSubscribersWithCategories()
+    : file.listSubscribersWithCategories();
+}
+
+/** Email-edition recipients with category prefs (null = ALL) — the email
+ * mirror filters per recipient with these. */
+export async function listEmailRecipientsWithCategories(): Promise<
+  EmailRecipientCategories[]
+> {
+  return supabaseConfigured
+    ? remote.listEmailRecipientsWithCategories()
+    : file.listEmailRecipientsWithCategories();
+}
+
+/** Whether the category system's schema (migration 9976) is available — pages
+ * use this to HIDE category UI instead of failing. Always true in dev. */
+export async function categoriesSupported(): Promise<boolean> {
+  return supabaseConfigured ? remote.categoriesSupported() : true;
 }
 
 /** Toggle the email edition for a phone member (requires a saved email). */
