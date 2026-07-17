@@ -68,9 +68,24 @@ posting/events/reveal-clicks beyond quotas); private bucket + signed URLs
 for chat images (currently the public ad-photos bucket, unguessable URLs
 only — user informed); abuse-suite pass over the new surfaces; HELP/FAQ
 don't mention category commands yet; retry-swallow inbound trap; Telnyx DLR
-badges. An adversarial review workflow swept the merged session diff at
-wrap — its confirmed findings + fixes land in the commits right after the
-session-log commit (see git log).
+badges.
+
+**Adversarial review outcome (33 agents, find → refute):** 27 findings, 25
+confirmed, ALL FIXED in `5557007` (hotfix: degrade guards had to match
+PostgREST schema-cache codes PGRST205/204 — without this the homepage
+sidebars + /advertising could 500 pre-paste; hasRevealed now fails closed)
+and `835d45a` (batch: Stripe webhook 503s an unstorable paid package so
+Stripe retries until 9978 lands; member-delete refunds crash-safe + CAS'd
+against admin-reject races; dropped-paid-bump refund; web charge undo;
+grantFreeAd CAS; per-GROUP STOP footer; finalize consumes only DELIVERED
+ads; empty category set truly dark; stranger category/LIST texts no longer
+mint accounts; emptied-warning exempt from throttle; dispatchSms
+GSM-sanitizes at the choke point; chat nudge is an atomic claim; town-hall
++ photo-alt phone masking; sold-ad reveals allowed; search keeps the
+category filter; privacy copy matches the reveal reality). Unit suite ends
+at **401 checks**. ONE finding deliberately deferred: chat pictures live in
+the PUBLIC ad-photos bucket (unguessable URLs) — the private-bucket +
+authed-serving rework is the top backlog item.
 
 ## What shipped in session 008 (committed DIRECTLY to `main`, per user)
 

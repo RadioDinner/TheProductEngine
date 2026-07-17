@@ -104,10 +104,19 @@ in the follow-up commit / HANDOFF).
    blast (item 18 phase 2).
 4. Carried from 008: verify photos@ inbound (Resend) + review-alert emails.
 
-## Open questions / next session
+## Adversarial review outcome (post-wrap addendum)
 
-- Adversarial-review findings and their fixes: see the follow-up commit
-  after this file (review was running at wrap time).
+33-agent find→refute sweep over the whole session diff: 27 findings, 25
+confirmed, all fixed in `5557007` + `835d45a` (see HANDOFF for the list;
+headline: pre-paste degrade guards needed PostgREST schema-cache codes,
+Stripe must retry unstorable paid packages, refund paths made crash/race
+safe, per-group STOP footers, delivered-only broadcast consumption, empty
+category sets truly dark, stranger texts don't mint accounts, GSM sanitize
+at the outbound choke point, phone-number masking on town hall + photo
+alts). Suite: 391 → **401 checks**. Deferred by choice: chat pictures'
+public-bucket storage (top backlog item).
+
+## Open questions / next session
 - Hardening backlog (carried + new): retry-swallow inbound trap; Telnyx DLR
   badges; NO web-lane rate limiter (posting/events/reveal actions beyond
   the quota); chat + all images live in the PUBLIC ad-photos bucket
