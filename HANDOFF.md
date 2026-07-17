@@ -21,7 +21,8 @@ ascending = newest-first under this scheme); hand-paste only.
 **THE ENTIRE FEATURES LIST RAN TO COMPLETION** — items 9, 11–25 all built
 (item 10 stays on hold by user decision), via parallel worktree lanes each
 verified (unit tests, tsc, build, Playwright walk) before merge. Unit suite
-181 → **391 checks**. Full detail: `Session log/009_2026-07-17/session_log.md`.
+181 → 391 → **401 checks** (last +10 from the adversarial-review fixes, see
+below). Full detail: `Session log/009_2026-07-17/session_log.md`.
 Headlines:
 
 - **Migrations renumbered descending** (see the note above). 9980 (chat

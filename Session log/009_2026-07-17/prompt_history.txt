@@ -230,3 +230,6 @@ I want a category browser somewhere on the homepage when they're browsing ads. I
 
 --- 2026-07-17 21:20 ---
 what happens if someone sends a random work to the SMS number
+
+--- 2026-07-17 22:30 ---
+write the handoff, commit it to main and wrap this session
