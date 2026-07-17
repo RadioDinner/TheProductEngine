@@ -56,11 +56,27 @@ itself — never a 500) and `/api/health` (CRON_SECRET) probes
     (reset now, per user): "Plain Exchange No. 3 Jul 16 morning:"; email
     edition mirrors it; /admin/digests history shows it.
 
+**Post-wrap additions (Jul 17, same session):**
+- **User applied migrations 0013–0018** ✓.
+- `b605caf` **inbound-photos fix:** Resend's `email.received` webhook carries
+  attachment METADATA only — the handler now pulls the real files via
+  `GET api.resend.com/emails/receiving/{email_id}/attachments`
+  (RESEND_API_KEY; short-lived download_urls). Without this every live photo
+  email saved nothing. Resend setup fact: inbound is DOMAIN-wide (one MX +
+  one email.received webhook — photos@ needs NO separate config; our handler
+  routes by recipient local part).
+- `be80bab` **Verified members (FEATURES item 7) — ⚠️ NEW MIGRATION 0019**
+  (users.verified_at): operator-granted green check, grant/revoke on
+  /admin/users only (no self-serve, by design); ✓ shows on the ad page
+  ("✓ Verified seller"), the member's account page, and in chat. Perks
+  deliberately later, off `getVerifiedAt`. **User must paste 0019.**
+
 **VERIFY EARLY NEXT SESSION (couldn't reach prod from the session
-container):** (1) health shows `migration0012` AND `migration0013`–`0018`
-all applied + digests composing (carried from 007); (2) review-alert emails
-arrive post-ADMIN_EMAIL-fix (carried); (3) after the user adds photos@ in
-Resend, a real photo email lands as a submission.
+container):** (1) health shows `migration0012`–`migration0019` all applied +
+digests composing (carried from 007); (2) review-alert emails arrive
+post-ADMIN_EMAIL-fix (carried); (3) a real photo email to photos@ lands as a
+submission on /admin/ads (needs the b605caf deploy + MX/webhook verified in
+Resend).
 
 **Recommended-but-unbuilt (carried + new):** (1) the retry-swallow inbound
 trap (any throw after `recordInboundOnce` still permanently eats that

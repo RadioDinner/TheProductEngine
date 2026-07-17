@@ -132,3 +132,22 @@ Playwright before its push (75 walk checks total across 6 walks).
 - Server-action redirects to a DIFFERENT URL still paint late — wait for a
   selector on the destination, not just waitForURL; same-URL redirects need
   a fresh goto (both already in HANDOFF, still bite).
+
+## Post-wrap (Jul 17): migrations applied + two more builds
+
+- User applied 0013–0018 and asked for help wiring photos@ in Resend. Key
+  facts learned (docs): Resend inbound is DOMAIN-wide — one MX record + one
+  `email.received` webhook covers every address; nothing per-address to add.
+  The webhook carries attachment METADATA only, so `b605caf` teaches the
+  handler to fetch real files via the Attachments API
+  (`/emails/receiving/{email_id}/attachments`, RESEND_API_KEY, short-lived
+  download_urls). Without it every live photo email saved nothing.
+- `be80bab` **Verified members (FEATURES item 7, user request) — MIGRATION
+  0019** (`users.verified_at`): operator-granted green check ("Mark verified
+  ✓" / "Remove verified status" on /admin/users; no self-serve path by
+  design). Shows on the ad page ("✓ Verified seller"), the member's account
+  page ("✓ Verified member"), and beside member numbers in chat (list +
+  thread). Perks intentionally deferred — hang them off `getVerifiedAt`.
+  9/9 walk checks. **0019 still needs the user's paste.**
+- Item 6 (chat nudge once per day) added to FEATURES.md earlier — still not
+  started, per the user's "for later".
