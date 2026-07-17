@@ -11,7 +11,7 @@ export default function TermsAndConditions() {
   return (
     <div className="container prose">
       <h1>Terms and conditions</h1>
-      <p className="fine">Effective July 7, 2026</p>
+      <p className="fine">Effective July 7, 2026 · Updated July 17, 2026</p>
       <p>
         These are the rules for using {site.name}, the classified ads service for{" "}
         {site.region} that runs by text message and on this website. By subscribing,
@@ -118,7 +118,9 @@ export default function TermsAndConditions() {
       <p>
         You can stop using the service any time — reply STOP to leave the digests, or ask
         us to close your account. We may suspend or close accounts that break these
-        terms, abuse the service, or put other members at risk.
+        terms, abuse the service, or put other members at risk — immediately and without
+        notice when we judge that necessary to protect the service or its members. When
+        an account ends, its right to use the service ends with it.
       </p>
 
       <h2>Disclaimers</h2>
@@ -137,17 +139,36 @@ export default function TermsAndConditions() {
         Nothing here limits liability that the law does not allow to be limited.
       </p>
 
+      <h2>Disagreements</h2>
+      <p>
+        If you have a problem with the service, tell us first — call{" "}
+        <strong>{site.supportPhone}</strong> or text <strong>{site.smsNumber}</strong> —
+        and we will try to sort it out plainly and quickly before anything formal.
+      </p>
+
       <h2>Governing law</h2>
       <p>
         These terms are governed by the laws of the State of Ohio. Disputes will be
         handled in the courts of Holmes County, Ohio, unless the law requires otherwise.
       </p>
 
+      <h2>Odds and ends</h2>
+      <p>
+        If part of these terms turns out to be unenforceable, the rest still stands, and
+        the unenforceable part is read as close to its intent as the law allows. If we
+        don&rsquo;t enforce a rule right away, we haven&rsquo;t given it up. You may use
+        the service only where and as the law allows. These terms, with the{" "}
+        <Link href="/privacy">privacy policy</Link> and the{" "}
+        <Link href="/refund-policy">refund policy</Link>, are the whole agreement between
+        you and {site.name} about the service.
+      </p>
+
       <h2>Changes to these terms</h2>
       <p>
         If we change these terms, we will post the new version here with a new effective
-        date. A meaningful change will be announced in the digest or by email. Using the
-        service after a change means you accept it.
+        date. A meaningful change will be announced in the digest or by email — where
+        practical, before it takes effect. Using the service after a change means you
+        accept it.
       </p>
 
       <h2>Contact</h2>
