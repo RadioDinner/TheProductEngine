@@ -1031,6 +1031,96 @@ a.btn-sm:hover {
   margin-top: var(--space-md);
 }
 
+/* ---------- Chat threads (FEATURES item 13) ----------
+   Proper conversation bubbles: what YOU sent sits right in ledger blue,
+   what you received sits left on surface — two inks on honest paper. */
+
+.chat-thread {
+  list-style: none;
+  margin: var(--space-md) 0;
+  padding: var(--space-sm);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  max-height: 30rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.chat-msg {
+  max-width: 80%;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: 10px;
+}
+
+.chat-sent {
+  align-self: flex-end;
+  background: var(--blue);
+  color: var(--paper);
+  border-bottom-right-radius: 2px;
+}
+
+.chat-received {
+  align-self: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-bottom-left-radius: 2px;
+}
+
+.chat-meta {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.chat-sent .chat-meta {
+  color: oklch(0.88 0.03 210);
+}
+
+.chat-body {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.chat-photo {
+  display: block;
+  max-width: 100%;
+  max-height: 20rem;
+  border-radius: 6px;
+  margin-top: var(--space-2xs);
+}
+
+.chat-report {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.chat-reported {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* Optimistically appended sends, before the server confirms (item 15). */
+.chat-pending {
+  opacity: 0.55;
+}
+
+/* Picture-message composer (item 14). */
+.chat-photo-form {
+  margin-top: var(--space-sm);
+}
+
+.chat-photo-form input[type="file"] {
+  font-size: var(--text-sm);
+}
+
 /* ---------- Footer ---------- */
 
 .footer {

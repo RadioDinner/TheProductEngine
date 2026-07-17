@@ -16,6 +16,7 @@ const SUITES = [
   "email-photos",
   "unread",
   "post-ad",
+  "chat",
 ];
 
 let totalPass = 0;

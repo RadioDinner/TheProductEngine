@@ -79,7 +79,9 @@ export interface BumpRecord {
 export interface MessageRecord {
   id: number;
   direction: "inbound" | "outbound";
-  channel: "sms" | "mms" | "email";
+  /** 'chat' = the audit copy of an on-platform chat message (item 13; the
+   * Postgres enum value ships with migration 9980). */
+  channel: "sms" | "mms" | "email" | "chat";
   address: string; // 10-digit phone, or email address
   body: string;
   media?: string[];
@@ -824,8 +826,21 @@ const file = {
   listInboundSince(sinceIso: string): InsightMessage[] {
     const since = Date.parse(sinceIso);
     return load()
-      .messages.filter((m) => m.direction === "inbound" && Date.parse(m.createdAt) >= since)
-      .map((m) => ({ address: m.address, body: m.body, channel: m.channel, createdAt: m.createdAt }));
+      .messages.filter(
+        (m) =>
+          m.direction === "inbound" &&
+          // Chat audit copies (item 13) aren't inbound SMS commands — keep
+          // them out of the command/keyword insights.
+          m.channel !== "chat" &&
+          Date.parse(m.createdAt) >= since,
+      )
+      .map((m) => ({
+        address: m.address,
+        body: m.body,
+        // Safe: 'chat' rows are filtered out above.
+        channel: m.channel as InsightMessage["channel"],
+        createdAt: m.createdAt,
+      }));
   },
 
   listBumpsSince(sinceIso: string | null): InsightBump[] {

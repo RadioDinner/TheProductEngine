@@ -8,6 +8,7 @@ import {
   ensureAccount,
   getAccount,
   mergeAccounts,
+  resolveChatReport,
   setOffenseCount,
   setPostingBanned,
   setVerified,
@@ -107,6 +108,17 @@ export async function adminDeleteAd(formData: FormData): Promise<void> {
   const outcome = await deleteAdRecord(id);
   if (outcome === "unsupported") redirect("/admin/ads?error=migration9987");
   redirect(outcome === "deleted" ? `/admin/ads?deleted=${id}` : "/admin/ads");
+}
+
+/** Clear a member's chat-message report from the Review queue (item 13).
+ * Resolve vs dismiss is just the recorded outcome — any real action (a word
+ * with the sender, a posting ban) stays admin judgement on the Users page. */
+export async function adminResolveChatReport(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  const resolution = formData.get("decision") === "resolved" ? "resolved" : "dismissed";
+  if (Number.isInteger(id)) await resolveChatReport(id, resolution);
+  redirect("/admin");
 }
 
 /** Approve (→ website gallery) or discard an emailed-in extra picture. */

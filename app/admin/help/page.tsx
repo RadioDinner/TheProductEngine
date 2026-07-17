@@ -229,6 +229,21 @@ export default async function AdminHelp() {
         number printed in the ad, as always — chat is an extra lane, not a replacement.
       </p>
 
+      <h2 className="section-h">Chat moderation: reports and the message log</h2>
+      <p>
+        Conversations are part of the platform record: every chat message —
+        pictures included — is copied into the <strong>Messages</strong> audit log, so you can
+        read a conversation when a dispute or a safety question comes up. (An earlier build
+        deliberately kept chat out of the log; that stance was reversed when reporting
+        shipped — an operator asked to act on a reported message has to be able to read the
+        conversation.) Members can press <strong>Report this message</strong> on anything they
+        receive; reports queue at the bottom of the <strong>Review</strong> tab with the
+        message, both parties, and a resolve/dismiss choice. Two more chat rules enforce the
+        walled garden: <strong>links can&apos;t be sent in chat</strong> at all (the send is
+        refused with a note), and chat pictures live on the <em>website only</em> — they are
+        never sent by text, so chat can&apos;t create MMS cost.
+      </p>
+
       <h2 className="section-h">The green check (verified members)</h2>
       <p>
         The <strong>✓ Verified</strong> mark is yours to give and take, one account at a time,

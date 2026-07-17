@@ -1120,6 +1120,11 @@ export async function listInboundSince(sinceIso: string): Promise<InsightMessage
       .range(offset, offset + PAGE - 1);
     if (error) throw error;
     for (const r of data ?? []) {
+      // Chat audit copies (item 13) aren't inbound SMS commands — keep them
+      // out of the command/keyword insights. Filtered here (not with .neq)
+      // because 'chat' isn't a valid enum value until migration 9980 lands,
+      // and an enum comparison against an unknown value errors the query.
+      if (r.channel === "chat") continue;
       rows.push({
         address: r.address as string,
         body: (r.body as string | null) ?? "",

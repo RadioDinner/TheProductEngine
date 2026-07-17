@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import { adminApprove, adminReject } from "@/lib/admin-actions";
+import Link from "next/link";
+import { adminApprove, adminReject, adminResolveChatReport } from "@/lib/admin-actions";
 import { getPendingAds } from "@/lib/engine-store";
+import { listChatReports } from "@/lib/store";
 import { findLinks } from "@/lib/content-filter";
 import { formatPhone } from "@/lib/phone";
 import { site } from "@/lib/config";
@@ -22,6 +24,8 @@ function submitted(iso: string): string {
 
 export default async function AdminReview() {
   const pending = await getPendingAds();
+  // Member-reported chat messages (item 13) — empty until migration 9980.
+  const reports = await listChatReports();
 
   return (
     <>
@@ -89,6 +93,61 @@ export default async function AdminReview() {
           );
         })}
       </ul>
+      {reports.length > 0 && (
+        <>
+          <h2 className="section-h">Reported chat messages</h2>
+          <p className="fine">
+            A member pressed &ldquo;Report this message&rdquo; in their conversation. The full
+            thread is in the <Link href="/admin/messages">message log</Link> (filter by the
+            sender&apos;s number). Resolving or dismissing only clears the report — any real
+            action stays yours on the sender&apos;s user page.
+          </p>
+          <ul className="sim-pending">
+            {reports.map((r) => (
+              <li key={r.messageId} className="myad-row">
+                <p className="myad-title">
+                  Chat #{r.chatId}
+                  {r.adId ? <> · about ad #{r.adId}</> : null} · from{" "}
+                  <Link href={`/admin/users?phone=${r.senderPhone}`}>
+                    {r.senderMemberId ? `Member ${r.senderMemberId}` : formatPhone(r.senderPhone)}
+                  </Link>{" "}
+                  ({formatPhone(r.senderPhone)})
+                  <span className="status-muted">
+                    {" "}
+                    · sent {submitted(r.at)} · reported {submitted(r.reportedAt)} by{" "}
+                    {formatPhone(r.reporterPhone)}
+                  </span>
+                </p>
+                {r.photo && (
+                  <a href={r.photo} target="_blank" rel="noreferrer" title="Open full-size photo">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={r.photo}
+                      alt={`Reported picture in chat #${r.chatId}`}
+                      style={{ maxWidth: 160, maxHeight: 120, border: "1px solid #ccc" }}
+                    />
+                  </a>
+                )}
+                <p className="sim-body">{r.body || "(picture only)"}</p>
+                <form action={adminResolveChatReport} className="sim-actions">
+                  <input type="hidden" name="id" value={r.messageId} />
+                  <button className="btn btn-sm" name="decision" value="resolved" type="submit">
+                    Resolved — clear it
+                  </button>
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    name="decision"
+                    value="dismissed"
+                    type="submit"
+                  >
+                    Dismiss report
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </>
   );
 }

@@ -16,6 +16,7 @@ import {
 } from "node:crypto";
 import { supabaseConfigured } from "@/lib/db";
 import * as remote from "@/lib/store-supabase";
+import { CHAT_PHOTO_CAP } from "@/lib/chat";
 import { accruePicQuota } from "@/lib/pic-quota";
 import { unreadChatCount } from "@/lib/unread";
 import { normalizePhone } from "@/lib/phone";
@@ -60,6 +61,9 @@ export interface Account {
   /** When the operator verified this member (FEATURES item 7) — file store
    * only; Supabase reads it via getVerifiedAt (migration 9981). */
   verifiedAt?: string | null;
+  /** Last you-have-a-chat-message SMS (item 15, migration 9980) — the nudge
+   * dedup watermark that replaced the audit-log body scan. */
+  chatNudgedAt?: string | null;
 }
 
 /** Result of an atomic PIC-quota reservation. remaining = -1 when the quota is off. */
@@ -113,7 +117,50 @@ export interface ChatMessageView {
   id: number;
   mine: boolean;
   body: string;
+  /** Web-uploaded picture URL (item 14, migration 9980) — website only. */
+  photo?: string | null;
+  /** True once a member reported this message (item 13, migration 9980). */
+  reported?: boolean;
   at: string;
+}
+
+/** Everything the thread page needs, fetched (and marked read) in one call. */
+export interface ChatThreadView {
+  summary: ChatSummary;
+  messages: ChatMessageView[];
+}
+
+/** Result of sending into a thread (item 15 shape). */
+export type SendChatResult =
+  | {
+      outcome: "sent";
+      /** The stored message, for optimistic/confirmed append in the UI. */
+      message: ChatMessageView;
+      /** So the caller can nudge them by SMS — never shown in the chat UI. */
+      otherPhone: string;
+      /** When the other party last got the nudge SMS; null = never;
+       * undefined = unknown (pre-9980 — caller falls back to the log scan). */
+      otherNudgedAt?: string | null;
+      /** True when the audit copy already happened inside the send_chat RPC. */
+      audited: boolean;
+      /** Which implementation ran — for the send-timing logs. */
+      path: "rpc" | "fallback" | "file";
+    }
+  | { outcome: "denied" | "unsupported" | "photocap" };
+
+/** One open member report, for the operator queue (item 13, migration 9980). */
+export interface ReportedChatMessage {
+  messageId: number;
+  chatId: number;
+  adId: number | null;
+  body: string;
+  photo: string | null;
+  /** When the message was sent. */
+  at: string;
+  reportedAt: string;
+  senderPhone: string;
+  senderMemberId: string | null;
+  reporterPhone: string;
 }
 
 /** Email-only subscriber (no phone account) — spec Q11. */
@@ -224,7 +271,20 @@ interface StoreShape {
     createdAt: string;
     lastMessageAt: string;
   }[];
-  chatMessages?: { id: number; chatId: number; fromPhone: string; body: string; at: string }[];
+  chatMessages?: {
+    id: number;
+    chatId: number;
+    fromPhone: string;
+    body: string;
+    at: string;
+    /** Web-uploaded picture URL (item 14) — website only, never rides SMS. */
+    photo?: string | null;
+    /** Report-a-message state (item 13). */
+    reportedAt?: string;
+    reportedBy?: string;
+    reportResolvedAt?: string;
+    reportResolution?: "resolved" | "dismissed";
+  }[];
   chatReads?: Record<string, number>; // `${chatId}#${phone}` -> last read message id
   nextChatId?: number;
 }
@@ -487,27 +547,148 @@ const file = {
     return (store.chatMessages ?? [])
       .filter((m) => m.chatId === chatId)
       .sort((a, b) => a.id - b.id)
-      .map((m) => ({ id: m.id, mine: m.fromPhone === phone, body: m.body, at: m.at }));
+      .map((m) => ({
+        id: m.id,
+        mine: m.fromPhone === phone,
+        body: m.body,
+        photo: m.photo ?? null,
+        reported: Boolean(m.reportedAt),
+        at: m.at,
+      }));
+  },
+
+  flagChatMessage(
+    chatId: number,
+    messageId: number,
+    byPhone: string,
+  ): "reported" | "denied" | "unsupported" {
+    const store = load();
+    if (!file.chatMember(chatId, byPhone)) return "denied";
+    const message = (store.chatMessages ?? []).find(
+      (m) => m.id === messageId && m.chatId === chatId,
+    );
+    // You can only report the other party's messages, not your own.
+    if (!message || message.fromPhone === byPhone) return "denied";
+    message.reportedAt = new Date().toISOString();
+    message.reportedBy = byPhone;
+    // A re-report reopens a previously resolved one.
+    delete message.reportResolvedAt;
+    delete message.reportResolution;
+    save(store);
+    return "reported";
+  },
+
+  listChatReports(): ReportedChatMessage[] {
+    const store = load();
+    return (store.chatMessages ?? [])
+      .filter((m) => m.reportedAt && !m.reportResolvedAt)
+      .sort((a, b) => Date.parse(b.reportedAt!) - Date.parse(a.reportedAt!))
+      .map((m) => {
+        const chat = (store.chats ?? []).find((c) => c.id === m.chatId);
+        return {
+          messageId: m.id,
+          chatId: m.chatId,
+          adId: chat?.adId ?? null,
+          body: m.body,
+          photo: m.photo ?? null,
+          at: m.at,
+          reportedAt: m.reportedAt!,
+          senderPhone: m.fromPhone,
+          senderMemberId: store.accounts[m.fromPhone]?.userId ?? null,
+          reporterPhone: m.reportedBy ?? "",
+        };
+      });
+  },
+
+  resolveChatReport(
+    messageId: number,
+    resolution: "resolved" | "dismissed",
+  ): "resolved" | "unsupported" {
+    const store = load();
+    const message = (store.chatMessages ?? []).find((m) => m.id === messageId);
+    if (!message?.reportedAt) return "resolved"; // nothing open — idempotent
+    message.reportResolvedAt = new Date().toISOString();
+    message.reportResolution = resolution;
+    save(store);
+    return "resolved";
   },
 
   sendChatMessage(
     chatId: number,
     fromPhone: string,
     body: string,
-  ): { outcome: "sent"; otherPhone: string } | { outcome: "denied" | "unsupported" } {
+    photo?: string | null,
+  ): SendChatResult {
     const store = load();
     const chat = (store.chats ?? []).find((c) => c.id === chatId);
     if (!chat || (chat.aPhone !== fromPhone && chat.bPhone !== fromPhone)) {
       return { outcome: "denied" };
     }
     const messages = (store.chatMessages ??= []);
+    // Per-thread picture cap (item 14).
+    if (photo && messages.filter((m) => m.chatId === chatId && m.photo).length >= CHAT_PHOTO_CAP) {
+      return { outcome: "photocap" };
+    }
     const id = (messages[messages.length - 1]?.id ?? 0) + 1;
-    messages.push({ id, chatId, fromPhone, body, at: new Date().toISOString() });
-    chat.lastMessageAt = new Date().toISOString();
+    const at = new Date().toISOString();
+    messages.push({ id, chatId, fromPhone, body, at, ...(photo ? { photo } : {}) });
+    chat.lastMessageAt = at;
     // Your own send marks the thread read for you.
     (store.chatReads ??= {})[`${chatId}#${fromPhone}`] = id;
     save(store);
-    return { outcome: "sent", otherPhone: chat.aPhone === fromPhone ? chat.bPhone : chat.aPhone };
+    const otherPhone = chat.aPhone === fromPhone ? chat.bPhone : chat.aPhone;
+    return {
+      outcome: "sent",
+      message: { id, mine: true, body, photo: photo ?? null, reported: false, at },
+      otherPhone,
+      otherNudgedAt: store.accounts[otherPhone]?.chatNudgedAt ?? null,
+      audited: false,
+      path: "file",
+    };
+  },
+
+  /** The thread page's one-stop read: summary + messages, marking it read. */
+  openChatThread(chatId: number, phone: string): ChatThreadView | null {
+    const store = load();
+    const chat = (store.chats ?? []).find((c) => c.id === chatId);
+    if (!chat || (chat.aPhone !== phone && chat.bPhone !== phone)) return null;
+    const otherPhone = chat.aPhone === phone ? chat.bPhone : chat.aPhone;
+    const other = store.accounts[otherPhone];
+    const messages = (store.chatMessages ?? [])
+      .filter((m) => m.chatId === chatId)
+      .sort((a, b) => a.id - b.id);
+    const last = messages[messages.length - 1];
+    if (last) {
+      (store.chatReads ??= {})[`${chatId}#${phone}`] = last.id;
+      save(store);
+    }
+    return {
+      summary: {
+        id: chat.id,
+        adId: chat.adId,
+        otherMemberId: other?.userId ?? null,
+        otherPhoto: other?.profilePhoto ?? null,
+        otherVerified: Boolean(other?.verifiedAt),
+        lastMessageAt: chat.lastMessageAt,
+        unread: false, // you're reading it right now
+      },
+      messages: messages.map((m) => ({
+        id: m.id,
+        mine: m.fromPhone === phone,
+        body: m.body,
+        photo: m.photo ?? null,
+        reported: Boolean(m.reportedAt),
+        at: m.at,
+      })),
+    };
+  },
+
+  setChatNudgedAt(phone: string): void {
+    const store = load();
+    const account = store.accounts[phone];
+    if (!account) return;
+    account.chatNudgedAt = new Date().toISOString();
+    save(store);
   },
 
   markChatRead(chatId: number, phone: string): void {
@@ -1059,16 +1240,39 @@ export async function listChatMessages(
     : file.listChatMessages(chatId, phone);
 }
 
-/** Send into a thread (members only). Returns the other party's phone so the
- * caller can nudge them by SMS — the phone is never shown in the chat UI. */
+/** Send into a thread (members only). `photo` (item 14) is an already-
+ * re-hosted storage URL; "photocap" = the thread is at its picture limit
+ * (CHAT_PHOTO_CAP). In prod this is ONE round trip via the send_chat RPC
+ * (migration 9980), falling back to the multi-query path until it's pasted. */
 export async function sendChatMessage(
   chatId: number,
   fromPhone: string,
   body: string,
-): Promise<{ outcome: "sent"; otherPhone: string } | { outcome: "denied" | "unsupported" }> {
+  photo?: string | null,
+): Promise<SendChatResult> {
   return supabaseConfigured
-    ? remote.sendChatMessage(chatId, fromPhone, body)
-    : file.sendChatMessage(chatId, fromPhone, body);
+    ? remote.sendChatMessage(chatId, fromPhone, body, photo)
+    : file.sendChatMessage(chatId, fromPhone, body, photo);
+}
+
+/**
+ * Everything the thread page needs in one call: the single chat's summary
+ * (no listChatsFor scan) plus its messages — and it marks the thread read,
+ * since rendering it IS reading it. Null = not a member / no such chat.
+ */
+export async function openChatThread(
+  chatId: number,
+  phone: string,
+): Promise<ChatThreadView | null> {
+  return supabaseConfigured
+    ? remote.openChatThread(chatId, phone)
+    : file.openChatThread(chatId, phone);
+}
+
+/** Record that the you-have-a-message SMS just went to this phone (item 15).
+ * Best-effort: a no-op before migration 9980. */
+export async function setChatNudgedAt(phone: string): Promise<void> {
+  return supabaseConfigured ? remote.setChatNudgedAt(phone) : file.setChatNudgedAt(phone);
 }
 
 export async function markChatRead(chatId: number, phone: string): Promise<void> {
@@ -1082,6 +1286,36 @@ export async function markChatRead(chatId: number, phone: string): Promise<void>
  * other-member profile lookup. 0 when the chat schema (9983) is missing. */
 export async function countUnreadChats(phone: string): Promise<number> {
   return supabaseConfigured ? remote.countUnreadChats(phone) : file.countUnreadChats(phone);
+}
+
+/**
+ * Report a message in a thread the reporter belongs to (FEATURES item 13).
+ * "denied" = not a member, no such message, or it's their own message;
+ * "unsupported" = migration 9980 pending (the report UI stays quiet).
+ */
+export async function flagChatMessage(
+  chatId: number,
+  messageId: number,
+  byPhone: string,
+): Promise<"reported" | "denied" | "unsupported"> {
+  return supabaseConfigured
+    ? remote.flagChatMessage(chatId, messageId, byPhone)
+    : file.flagChatMessage(chatId, messageId, byPhone);
+}
+
+/** Open (unresolved) member reports for the operator queue; [] pre-9980. */
+export async function listChatReports(): Promise<ReportedChatMessage[]> {
+  return supabaseConfigured ? remote.listChatReports() : file.listChatReports();
+}
+
+/** Operator: clear a report from the queue, recording the outcome. */
+export async function resolveChatReport(
+  messageId: number,
+  resolution: "resolved" | "dismissed",
+): Promise<"resolved" | "unsupported"> {
+  return supabaseConfigured
+    ? remote.resolveChatReport(messageId, resolution)
+    : file.resolveChatReport(messageId, resolution);
 }
 
 /** When the operator verified this member (FEATURES item 7); null = not
