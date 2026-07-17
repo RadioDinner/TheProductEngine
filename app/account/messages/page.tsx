@@ -57,6 +57,12 @@ export default async function MessagesPage() {
               )}
               <Link href={`/account/messages/${chat.id}`}>
                 Member {chat.otherMemberId ?? "(new)"}
+                {chat.otherVerified && (
+                  <span className="verified-badge" title="Verified member">
+                    {" "}
+                    ✓
+                  </span>
+                )}
                 {chat.adId ? ` · about ad #${chat.adId}` : ""}
               </Link>
               {chat.unread && <span className="ad-sold"> New</span>}

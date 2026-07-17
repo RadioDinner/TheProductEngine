@@ -1121,3 +1121,10 @@ a.btn-sm:hover {
   height: auto;
   border: 1px solid var(--rule-strong);
 }
+
+/* The operator-granted green check (FEATURES item 7). */
+.verified-badge {
+  color: oklch(0.52 0.14 150);
+  font-weight: 700;
+  white-space: nowrap;
+}

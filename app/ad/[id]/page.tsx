@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deriveRest, deriveTitle, getAd } from "@/lib/ads";
-import { getRatingSummary } from "@/lib/store";
+import { getRatingSummary, getVerifiedAt } from "@/lib/store";
 import { startChat } from "@/lib/account-actions";
 import { MaskedText, maskPhonesPlain } from "@/components/MaskedText";
 import { readSession } from "@/lib/session";
@@ -95,6 +95,8 @@ export default async function AdPage({
   const sold = ad.status === "sold";
   // Confirmed-buyer ratings of this seller (FEATURES item 2).
   const sellerRating = (await getRatingSummary(ad.ownerPhone)).asSeller;
+  // Operator-granted green check (FEATURES item 7).
+  const sellerVerified = Boolean(await getVerifiedAt(ad.ownerPhone));
   // Mask a phone number in the heading for signed-out visitors (the body below
   // is already masked via MaskedText).
   const rawTitle = deriveTitle(ad.body);
@@ -115,6 +117,12 @@ export default async function AdPage({
             <span className="status-available">Available</span>
           )}{" "}
           · Posted {postedLine(ad.approvedAt)} · Ad #{ad.id}
+          {sellerVerified && (
+            <>
+              {" "}
+              · <span className="verified-badge">✓ Verified seller</span>
+            </>
+          )}
           {sellerRating.count > 0 && (
             <>
               {" "}

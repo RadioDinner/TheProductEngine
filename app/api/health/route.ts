@@ -161,6 +161,17 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/0018_digest_numbers.sql in the SQL editor",
           }
         : { applied: true };
+      const verified = await db()
+        .from("users")
+        .select("verified_at", { count: "exact", head: true });
+      report.migration0019 = verified.error
+        ? {
+            applied: false,
+            code: verified.error.code,
+            error: verified.error.message,
+            fix: "run supabase/migrations/0019_verified_members.sql in the SQL editor",
+          }
+        : { applied: true };
     } catch (e) {
       report.db = { ok: false, thrown: e instanceof Error ? e.message : String(e) };
     }

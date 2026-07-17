@@ -14,6 +14,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 4 | **Chat** — on-platform messages between buyers and sellers, keyed on user ids, so nobody's phone number is exposed | session 008 | **built** (migration 0017) |
 | 5 | **Digest numbers** — every digest carries a number, incrementing by 1 from 1; counter reset at build time | session 008 | **built** (migration 0018) |
 | 6 | **Chat nudge cap** — no party gets a "message waiting" text more than once a day (item 4 shipped with a 3-hour dedup; tighten it to 24 h) | session 008 | not started |
+| 7 | **Verified members** — a green check mark, granted and revoked manually by the operator as they verify real buyers/sellers; verified members get perks in the long run | session 008 | **built** (migration 0019) |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -49,3 +50,9 @@ itself; build details live in the session logs and HANDOFF.md.
   renumbered.
 - **6 · chat nudge cap**: one-line change when built — the dedup window in
   `nudgeBySms` (lib/account-actions.ts) goes from 3 h to 24 h. No migration.
+- **7 · verified members**: `users.verified_at` (migration 0019) doubles as
+  flag + audit stamp. Grant/revoke lives on /admin/users ("Mark verified ✓")
+  — no self-serve path anywhere, by design. Shown as a green ✓ on the ad
+  page ("Verified seller"), the member's account page, and beside member
+  numbers in chat. Perks are deliberately NOT implemented yet — the flag is
+  the foundation; hang perks off `getVerifiedAt` when decided.

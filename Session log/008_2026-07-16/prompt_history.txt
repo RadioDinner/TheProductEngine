@@ -26,3 +26,6 @@ one change on chats, no parties should get a "message waiting" text more than on
 
 --- 2026-07-16 21:44 ---
 I ran all the migrations but i need help with the photos@theplainexchange.com as a second resend inbound address
+
+--- 2026-07-17 12:00 ---
+ok I will work on that while you build a "verified" seller/buyer feature for profiles. I want the verification to be a green check mark and I want to manually review and add it to accounts as I verify them. Verified sellers and buyers will get perks in the long run

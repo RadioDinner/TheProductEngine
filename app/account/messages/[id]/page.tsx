@@ -50,6 +50,12 @@ export default async function ChatPage({
       </p>
       <h1>
         Member {summary?.otherMemberId ?? "(new)"}
+        {summary?.otherVerified && (
+          <span className="verified-badge" title="Verified member">
+            {" "}
+            ✓
+          </span>
+        )}
         {summary?.adId ? (
           <>
             {" "}

@@ -56,6 +56,9 @@ export interface Account {
   profilePhoto?: string | null;
   /** PRIVATE pickup address (FEATURES item 3) — same storage note as above. */
   pickupAddress?: string | null;
+  /** When the operator verified this member (FEATURES item 7) — file store
+   * only; Supabase reads it via getVerifiedAt (migration 0019). */
+  verifiedAt?: string | null;
 }
 
 /** Result of an atomic PIC-quota reservation. remaining = -1 when the quota is off. */
@@ -99,6 +102,8 @@ export interface ChatSummary {
   /** The other party's public member id (never their phone). */
   otherMemberId: string | null;
   otherPhoto: string | null;
+  /** The other party carries the operator-granted green check (item 7). */
+  otherVerified: boolean;
   lastMessageAt: string;
   unread: boolean;
 }
@@ -438,10 +443,24 @@ const file = {
           adId: c.adId,
           otherMemberId: other?.userId ?? null,
           otherPhoto: other?.profilePhoto ?? null,
+          otherVerified: Boolean(other?.verifiedAt),
           lastMessageAt: c.lastMessageAt,
           unread,
         };
       });
+  },
+
+  getVerifiedAt(phone: string): string | null {
+    return load().accounts[phone]?.verifiedAt ?? null;
+  },
+
+  setVerified(phone: string, on: boolean): "saved" | "unsupported" {
+    const store = load();
+    const account = store.accounts[phone];
+    if (!account) return "unsupported";
+    account.verifiedAt = on ? new Date().toISOString() : null;
+    save(store);
+    return "saved";
   },
 
   listChatMessages(chatId: number, phone: string): ChatMessageView[] | null {
@@ -1038,6 +1057,20 @@ export async function markChatRead(chatId: number, phone: string): Promise<void>
   return supabaseConfigured
     ? remote.markChatRead(chatId, phone)
     : file.markChatRead(chatId, phone);
+}
+
+/** When the operator verified this member (FEATURES item 7); null = not
+ * verified (or no account, or migration 0019 pending). */
+export async function getVerifiedAt(phone: string): Promise<string | null> {
+  return supabaseConfigured ? remote.getVerifiedAt(phone) : file.getVerifiedAt(phone);
+}
+
+/** Operator-only: grant or revoke the green check. */
+export async function setVerified(
+  phone: string,
+  on: boolean,
+): Promise<"saved" | "unsupported"> {
+  return supabaseConfigured ? remote.setVerified(phone, on) : file.setVerified(phone, on);
 }
 
 /** Spend one starter pass if any remain. */

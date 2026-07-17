@@ -229,6 +229,17 @@ export default async function AdminHelp() {
         number printed in the ad, as always — chat is an extra lane, not a replacement.
       </p>
 
+      <h2 className="section-h">The green check (verified members)</h2>
+      <p>
+        The <strong>✓ Verified</strong> mark is yours to give and take, one account at a time,
+        from the user&apos;s page (&ldquo;Mark verified&rdquo;) — there is deliberately no
+        self-serve path, so the check means a human vouched for a real, known buyer or seller.
+        It shows in green on the ad page (&ldquo;✓ Verified seller&rdquo;), on the member&apos;s
+        account page, and next to their member number in chat. Perks for verified members
+        (posting privileges, discounts, whatever earns trust its reward) come later — the mark
+        itself is the foundation.
+      </p>
+
       <h2 className="section-h">Why credits are a ledger</h2>
       <p>
         Credit balances aren&rsquo;t a single number that gets edited. Every grant, purchase,

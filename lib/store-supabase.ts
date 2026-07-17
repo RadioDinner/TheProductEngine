@@ -464,16 +464,25 @@ export async function listChatsFor(phone: string): Promise<ChatSummary[]> {
   if (!chats.length) return [];
 
   const otherIds = [...new Set(chats.map((c) => (c.a_user_id === user.id ? c.b_user_id : c.a_user_id)))];
-  const others = new Map<string, { memberId: string | null; photo: string | null }>();
-  const { data: otherRows, error: othersError } = await db()
-    .from("users")
-    .select("id, user_id, profile_photo")
-    .in("id", otherIds);
+  const others = new Map<
+    string,
+    { memberId: string | null; photo: string | null; verified: boolean }
+  >();
+  // verified_at is migration 0019 — retry without it so the chat list keeps
+  // its member ids/photos while that paste is pending.
+  const fetchOthers = (columns: string) => db().from("users").select(columns).in("id", otherIds);
+  let { data: otherRows, error: othersError } = await fetchOthers(
+    "id, user_id, profile_photo, verified_at",
+  );
+  if (othersError?.code === "42703") {
+    ({ data: otherRows, error: othersError } = await fetchOthers("id, user_id, profile_photo"));
+  }
   if (!othersError) {
-    for (const row of otherRows ?? []) {
+    for (const row of (otherRows ?? []) as unknown as Record<string, unknown>[]) {
       others.set(row.id as string, {
         memberId: (row.user_id as string | null) ?? null,
         photo: (row.profile_photo as string | null) ?? null,
+        verified: Boolean(row.verified_at),
       });
     }
   }
@@ -509,10 +518,40 @@ export async function listChatsFor(phone: string): Promise<ChatSummary[]> {
       adId: c.ad_id,
       otherMemberId: other?.memberId ?? null,
       otherPhoto: other?.photo ?? null,
+      otherVerified: other?.verified ?? false,
       lastMessageAt: c.last_message_at,
       unread: unreadSet.has(c.id),
     };
   });
+}
+
+export async function getVerifiedAt(phone: string): Promise<string | null> {
+  const { data, error } = await db()
+    .from("users")
+    .select("verified_at")
+    .eq("phone", phone)
+    .maybeSingle();
+  if (error) {
+    if (error.code === "42703") return null; // migration 0019 pending
+    throw error;
+  }
+  return (data?.verified_at as string | null) ?? null;
+}
+
+export async function setVerified(
+  phone: string,
+  on: boolean,
+): Promise<"saved" | "unsupported"> {
+  const { data, error } = await db()
+    .from("users")
+    .update({ verified_at: on ? new Date().toISOString() : null })
+    .eq("phone", phone)
+    .select("id");
+  if (error) {
+    if (error.code === "42703") return "unsupported";
+    throw error;
+  }
+  return data?.length ? "saved" : "unsupported";
 }
 
 export async function listChatMessages(

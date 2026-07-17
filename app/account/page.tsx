@@ -11,6 +11,7 @@ import {
   getCreditBalance,
   getLedger,
   getProfile,
+  getVerifiedAt,
   listChatsFor,
 } from "@/lib/store";
 import { adExpiresAt, deriveTitle, listAdsByOwner, type Ad } from "@/lib/ads";
@@ -94,6 +95,14 @@ export default async function AccountPage({
           <div>
             <dt>Member ID</dt>
             <dd>{memberId}</dd>
+          </div>
+        )}
+        {Boolean(await getVerifiedAt(session.phone)) && (
+          <div>
+            <dt>Standing</dt>
+            <dd>
+              <span className="verified-badge">✓ Verified member</span>
+            </dd>
           </div>
         )}
         {memberSince && (

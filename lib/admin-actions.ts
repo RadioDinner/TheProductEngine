@@ -3,7 +3,13 @@
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { approveAd, rejectAd } from "@/lib/moderation";
-import { addLedgerEntry, mergeAccounts, setOffenseCount, setPostingBanned } from "@/lib/store";
+import {
+  addLedgerEntry,
+  mergeAccounts,
+  setOffenseCount,
+  setPostingBanned,
+  setVerified,
+} from "@/lib/store";
 import {
   addWordRule,
   getEngineSettings,
@@ -204,6 +210,18 @@ export async function adminMergeUsers(formData: FormData): Promise<void> {
     detail = `Linked ${outcome.email} — this member now gets both the text and email digests.`;
   }
   redirect(`/admin/users?phone=${phone}&saved=merge&detail=${encodeURIComponent(detail)}`);
+}
+
+/** Grant or revoke the green check (FEATURES item 7) — a manual, human
+ * decision only; there is no self-serve path anywhere. */
+export async function adminSetVerified(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const phone = normalizePhone(String(formData.get("phone") ?? ""));
+  if (!phone) redirect("/admin/users");
+  const outcome = await setVerified(phone, formData.get("on") === "yes");
+  redirect(
+    `/admin/users?phone=${phone}${outcome === "saved" ? "&saved=verify" : "&error=verify"}`,
+  );
 }
 
 export async function adminSetStrikes(formData: FormData): Promise<void> {

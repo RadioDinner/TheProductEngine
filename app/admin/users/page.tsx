@@ -5,6 +5,7 @@ import {
   adminMergeUsers,
   adminSetBan,
   adminSetStrikes,
+  adminSetVerified,
 } from "@/lib/admin-actions";
 import {
   ensureUserId,
@@ -12,6 +13,7 @@ import {
   getCreditBalance,
   getLedger,
   getRatingSummary,
+  getVerifiedAt,
   searchAccounts,
 } from "@/lib/store";
 import { listAdsByOwner } from "@/lib/ads";
@@ -105,11 +107,36 @@ export default async function AdminUsers({
               Merge failed: {params.reason}
             </p>
           )}
+          {params.saved === "verify" && (
+            <p className="notice" role="status">
+              Verified status updated.
+            </p>
+          )}
+          {params.error === "verify" && (
+            <p className="form-error" role="alert">
+              Couldn&apos;t update verified status — is migration 0019 applied?
+            </p>
+          )}
           <dl className="account-facts">
             <div>
               <dt>Member ID</dt>
               <dd>{(await ensureUserId(phone)) ?? "— (needs migration 0014)"}</dd>
             </div>
+            {await getVerifiedAt(phone).then((verifiedAt) => (
+              <div>
+                <dt>Verified</dt>
+                <dd>
+                  {verifiedAt ? (
+                    <>
+                      <span className="verified-badge">✓ Verified</span> since{" "}
+                      {shortDate(verifiedAt)}
+                    </>
+                  ) : (
+                    "No"
+                  )}
+                </dd>
+              </div>
+            ))}
             <div>
               <dt>Member since</dt>
               <dd>{shortDate(account.createdAt)}</dd>
@@ -192,6 +219,24 @@ export default async function AdminUsers({
               </button>
             </div>
           </form>
+
+          <h3 className="subsection-h">Verification</h3>
+          <p className="fine">
+            The green check means YOU vouched for this person after checking them out — there is
+            no self-serve path. Verified members will earn perks over time.
+          </p>
+          {await getVerifiedAt(phone).then((verifiedAt) => (
+            <form action={adminSetVerified} className="sim-actions">
+              <input type="hidden" name="phone" value={phone} />
+              <input type="hidden" name="on" value={verifiedAt ? "no" : "yes"} />
+              <button
+                className={`btn btn-sm${verifiedAt ? " btn-secondary" : ""}`}
+                type="submit"
+              >
+                {verifiedAt ? "Remove verified status" : "Mark verified ✓"}
+              </button>
+            </form>
+          ))}
 
           <h3 className="subsection-h">Moderation</h3>
           <div className="sim-actions">
