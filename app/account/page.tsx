@@ -208,6 +208,11 @@ export default async function AccountPage({
           </Link>{" "}
           — right here on the website. It costs the same as texting one in.
         </p>
+        <p>
+          <Link href="/account/ads">
+            Manage your ads — mark sold, bump, change pictures, or delete →
+          </Link>
+        </p>
         {myAds.length || pendingAds.length ? (
           <ul className="myads">
             {pendingAds.map((ad) => (

@@ -5,6 +5,7 @@
  */
 import { db } from "@/lib/db";
 import { AD_TTL_DAYS } from "@/lib/ads";
+import { isPicReplaceSubmission } from "@/lib/myads";
 import { removeHostedPhotos } from "@/lib/photos";
 import type {
   BumpRecord,
@@ -447,6 +448,34 @@ export async function listPhotoSubmissions(): Promise<PhotoSubmission[]> {
   }));
 }
 
+/** broadcast_at for one ad — the member-delete refund matrix's input. A
+ * missing column (migration 9993 unapplied) means no digest ever marked
+ * anything broadcast, so it truthfully reads as "never". */
+export async function adEverBroadcast(id: number): Promise<boolean> {
+  const { data, error } = await db()
+    .from("ads")
+    .select("broadcast_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    if (error.code === "42703") return false;
+    throw error;
+  }
+  return Boolean((data as { broadcast_at?: string | null } | null)?.broadcast_at);
+}
+
+/** Migration-9985 probe: false hides the picture actions instead of 500ing. */
+export async function photoSubmissionsSupported(): Promise<boolean> {
+  const { error } = await db()
+    .from("ad_photo_submissions")
+    .select("id", { count: "exact", head: true });
+  if (error) {
+    if (submissionsSchemaMissing(error)) return false;
+    throw error;
+  }
+  return true;
+}
+
 export async function countAdPhotos(adId: number): Promise<number> {
   const { count: live, error: liveError } = await db()
     .from("ad_photos")
@@ -492,6 +521,39 @@ export async function resolvePhotoSubmission(
   if (!deleted?.length) return null;
   if (!approve) {
     await removeHostedPhotos([submission.src]);
+    return submission;
+  }
+  if (isPicReplaceSubmission(submission.fromEmail)) {
+    // FEATURES item 16: an approved REPLACEMENT swaps the position-0
+    // (digest/PIC) picture in place; the old storage object is removed after
+    // the row points at the new one, so a crash never leaves a broken image.
+    const { data: existing, error: existingError } = await db()
+      .from("ad_photos")
+      .select("id, src")
+      .eq("ad_id", submission.adId)
+      .eq("position", 0)
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (existing) {
+      const { error: updateError } = await db()
+        .from("ad_photos")
+        .update({ src: submission.src })
+        .eq("id", existing.id);
+      if (updateError) throw updateError;
+      if (existing.src !== submission.src) {
+        await removeHostedPhotos([existing.src as string]);
+      }
+    } else {
+      // The paid picture disappeared meanwhile (rare); the admin still
+      // explicitly approved this image as THE listing picture — install it.
+      const { error: insertError } = await db().from("ad_photos").insert({
+        ad_id: submission.adId,
+        src: submission.src,
+        alt: `Ad #${submission.adId}`,
+        position: 0,
+      });
+      if (insertError) throw insertError;
+    }
     return submission;
   }
   // Approved extras live at position 1+ — position 0 stays reserved for the

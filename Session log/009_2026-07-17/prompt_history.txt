@@ -206,3 +206,6 @@ I think I'm running a risk by allowing numbers to be exposed via the web login. 
 
 --- 2026-07-17 20:04 --- (AskUserQuestion answer, number-scraping mitigation)
 Reveal policy: "Metered click-to-reveal (Recommended)"
+
+--- 2026-07-17 20:31 ---
+what is the status of the feature list? Are things still being built

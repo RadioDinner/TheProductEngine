@@ -16,6 +16,7 @@ import {
   type StoredAdStatus,
 } from "@/lib/engine-store";
 import { getLedger } from "@/lib/store";
+import { isPicReplaceSubmission } from "@/lib/myads";
 import { formatPhone } from "@/lib/phone";
 import { site } from "@/lib/config";
 
@@ -187,37 +188,50 @@ export default async function AdminAds({
                 </form>
               </details>
             )}
-            {(submissionsByAd.get(ad.id) ?? []).map((submission) => (
-              <div key={submission.id} className="dev-notice">
-                <p className="fine">
-                  Emailed-in picture awaiting review — from {submission.fromEmail}.
-                  {!ad.photo &&
-                    " This ad has no MMS picture (text price paid); approving shows this on the website only — it never rides SMS/PIC."}
-                </p>
-                <a href={submission.src} target="_blank" rel="noreferrer">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={submission.src}
-                    alt={`Submitted for ad #${ad.id}`}
-                    style={{ maxWidth: 160, maxHeight: 120, border: "1px solid #ccc" }}
-                  />
-                </a>
-                <form action={adminResolvePhotoSubmission} className="sim-actions">
-                  <input type="hidden" name="id" value={submission.id} />
-                  <button className="btn btn-sm" name="decision" value="approve" type="submit">
-                    Approve — show on website
-                  </button>
-                  <button
-                    className="btn btn-sm btn-secondary"
-                    name="decision"
-                    value="discard"
-                    type="submit"
-                  >
-                    Discard
-                  </button>
-                </form>
-              </div>
-            ))}
+            {(submissionsByAd.get(ad.id) ?? []).map((submission) => {
+              const replaces = isPicReplaceSubmission(submission.fromEmail);
+              return (
+                <div key={submission.id} className="dev-notice">
+                  <p className="fine">
+                    {replaces ? (
+                      <>
+                        <strong>Replacement listing picture</strong> awaiting review —{" "}
+                        {submission.fromEmail}. Approving REPLACES the position-0 picture
+                        that rides the digest and PIC replies (the old picture is removed).
+                      </>
+                    ) : (
+                      <>
+                        Submitted picture awaiting review — from {submission.fromEmail}.
+                        {!ad.photo &&
+                          " This ad has no MMS picture (text price paid); approving shows this on the website only — it never rides SMS/PIC."}
+                      </>
+                    )}
+                  </p>
+                  <a href={submission.src} target="_blank" rel="noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={submission.src}
+                      alt={`Submitted for ad #${ad.id}`}
+                      style={{ maxWidth: 160, maxHeight: 120, border: "1px solid #ccc" }}
+                    />
+                  </a>
+                  <form action={adminResolvePhotoSubmission} className="sim-actions">
+                    <input type="hidden" name="id" value={submission.id} />
+                    <button className="btn btn-sm" name="decision" value="approve" type="submit">
+                      {replaces ? "Approve — replace the listing picture" : "Approve — show on website"}
+                    </button>
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      name="decision"
+                      value="discard"
+                      type="submit"
+                    >
+                      Discard
+                    </button>
+                  </form>
+                </div>
+              );
+            })}
             {ad.status !== "deleted" && (
               <p className="fine">
                 <Link href={deleteHref(ad.id)}>Delete this ad…</Link>

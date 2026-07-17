@@ -17,6 +17,7 @@ const SUITES = [
   "unread",
   "post-ad",
   "chat",
+  "myads",
 ];
 
 let totalPass = 0;
