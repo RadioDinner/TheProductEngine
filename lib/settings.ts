@@ -36,6 +36,9 @@ export interface EngineSettings {
   revealBankCap: number;
   /** Insights: flag members revealing more than this many numbers per 24h. */
   revealAbusePerDay: number;
+  /** Category/LIST confirmations per number per hour before the one throttle
+   * notice + silence (item 24; toggles still apply). 0 = unthrottled. */
+  categoryConfirmsPerHour: number;
   /** Percent off a credit pack bought by text with a saved card (BUYCREDIT). */
   savedCardDiscountPercent: number;
   /** Master outbound kill switch: "off" | "bulk" (partial) | "all" (full). */
@@ -70,6 +73,7 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   revealsPerDay: "reveals_per_day",
   revealBankCap: "reveal_bank_cap",
   revealAbusePerDay: "reveal_abuse_per_day",
+  categoryConfirmsPerHour: "category_confirms_per_hour",
   savedCardDiscountPercent: "saved_card_discount_percent",
   pauseMode: "pause_mode",
   underAttack: "under_attack",
@@ -123,6 +127,7 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     revealsPerDay: engineDefaults.revealsPerDay,
     revealBankCap: engineDefaults.revealBankCap,
     revealAbusePerDay: engineDefaults.revealAbusePerDay,
+    categoryConfirmsPerHour: engineDefaults.categoryConfirmsPerHour,
     savedCardDiscountPercent: engineDefaults.savedCardDiscountPercent,
     pauseMode: engineDefaults.pauseMode,
     underAttack: engineDefaults.underAttack,

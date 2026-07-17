@@ -229,6 +229,44 @@ export async function updateAdBody(id: number, body: string): Promise<boolean> {
   return (data?.length ?? 0) > 0;
 }
 
+/** Missing ads.category column = migration 9976 not applied — the category
+ * system stays dormant instead of erroring. */
+function adCategorySchemaMissing(error: { code?: string } | null): boolean {
+  return error?.code === "42703";
+}
+
+export async function setAdCategory(
+  id: number,
+  category: string | null,
+): Promise<"saved" | "unsupported"> {
+  const { error } = await db().from("ads").update({ category }).eq("id", id);
+  if (error) {
+    if (adCategorySchemaMissing(error)) return "unsupported";
+    throw error;
+  }
+  return "saved";
+}
+
+export async function getAdCategories(ids: number[]): Promise<Map<number, string | null>> {
+  const out = new Map<number, string | null>();
+  // Chunked so a big review backlog can't build an over-long .in() URL.
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await db()
+      .from("ads")
+      .select("id, category")
+      .in("id", ids.slice(i, i + 200));
+    if (error) {
+      // Pre-9976 every ad truthfully reads uncategorized (rides everything).
+      if (adCategorySchemaMissing(error)) return new Map();
+      throw error;
+    }
+    for (const row of data ?? []) {
+      out.set(row.id as number, (row.category as string | null) ?? null);
+    }
+  }
+  return out;
+}
+
 export async function markAdSold(id: number): Promise<void> {
   // Defense in depth: only a live listing can be sold, so SOLD can never
   // publish a pending/unreviewed (or resurrect a rejected) ad even if a

@@ -13,6 +13,7 @@ import {
   STARTER_FREE_ADS,
   type Account,
   type CreateCodeResult,
+  type EmailRecipientCategories,
   type EmailSubscriberEntry,
   type ChatMessageView,
   type ChatSummary,
@@ -28,8 +29,10 @@ import {
   type ReportedChatMessage,
   type SmsContext,
   type SmsSubscriberEntry,
+  type SubscriberCategories,
   type VerifyCodeResult,
 } from "@/lib/store";
+import { decideCategoryConfirm, type ConfirmAction } from "@/lib/categories";
 import { normalizePhone } from "@/lib/phone";
 import { unreadChatCount } from "@/lib/unread";
 import { CHAT_PHOTO_CAP } from "@/lib/chat";
@@ -1463,6 +1466,156 @@ export async function listSubscriberPhones(): Promise<string[]> {
     if ((data?.length ?? 0) < PAGE) break;
   }
   return phones;
+}
+
+// ---------- categories (items 22/24, migration 9976) ----------
+
+/** Missing categories / throttle columns = migration 9976 not applied yet —
+ * the category system stays dormant instead of 500ing (the 9989/9988 lesson). */
+function categoriesSchemaMissing(error: { code?: string } | null): boolean {
+  return error?.code === "42703";
+}
+
+export async function getSubscriberCategories(
+  phone: string,
+): Promise<string[] | null | "unsupported"> {
+  const { data, error } = await db()
+    .from("users")
+    .select("categories")
+    .eq("phone", phone)
+    .maybeSingle();
+  if (error) {
+    if (categoriesSchemaMissing(error)) return "unsupported";
+    throw error;
+  }
+  return ((data?.categories as string[] | null | undefined) ?? null);
+}
+
+export async function setSubscriberCategories(
+  phone: string,
+  categories: string[] | null,
+): Promise<"saved" | "unsupported"> {
+  const { error } = await db().from("users").update({ categories }).eq("phone", phone);
+  if (error) {
+    if (categoriesSchemaMissing(error)) return "unsupported";
+    throw error;
+  }
+  return "saved";
+}
+
+export async function reserveCategoryConfirm(
+  phone: string,
+  limit: number,
+): Promise<ConfirmAction> {
+  // Read-modify-write on the watermark + counter columns (migration 9976).
+  // A lost race costs at most one extra confirmation SMS, still bounded by
+  // reserve_sms — never a wrong toggle (state is written elsewhere).
+  const { data, error } = await db()
+    .from("users")
+    .select("id, category_confirm_window_start, category_confirm_count")
+    .eq("phone", phone)
+    .maybeSingle();
+  if (error) {
+    if (categoriesSchemaMissing(error)) return "confirm";
+    throw error;
+  }
+  if (!data) return "confirm";
+  const decided = decideCategoryConfirm(
+    {
+      windowStartMs: data.category_confirm_window_start
+        ? Date.parse(data.category_confirm_window_start as string)
+        : null,
+      count: (data.category_confirm_count as number | null) ?? 0,
+    },
+    Date.now(),
+    limit,
+  );
+  const { error: writeError } = await db()
+    .from("users")
+    .update({
+      category_confirm_window_start:
+        decided.state.windowStartMs === null
+          ? null
+          : new Date(decided.state.windowStartMs).toISOString(),
+      category_confirm_count: decided.state.count,
+    })
+    .eq("id", data.id as string);
+  if (writeError) throw writeError;
+  return decided.action;
+}
+
+export async function listSubscribersWithCategories(): Promise<SubscriberCategories[]> {
+  const rows: SubscriberCategories[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db()
+      .from("users")
+      .select("phone, categories")
+      .not("subscribed_at", "is", null)
+      .not("phone", "is", null)
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) {
+      // Pre-9976: every subscriber reads as ALL — digests exactly as today.
+      if (categoriesSchemaMissing(error)) {
+        return (await listSubscriberPhones()).map((phone) => ({ phone, categories: null }));
+      }
+      throw error;
+    }
+    for (const row of data ?? []) {
+      rows.push({
+        phone: row.phone as string,
+        categories: (row.categories as string[] | null) ?? null,
+      });
+    }
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  return rows;
+}
+
+export async function listEmailRecipientsWithCategories(): Promise<
+  EmailRecipientCategories[]
+> {
+  const rows = new Map<string, EmailRecipientCategories>();
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db()
+      .from("users")
+      .select("email, categories")
+      .not("email", "is", null)
+      .not("email_subscribed_at", "is", null)
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) {
+      if (categoriesSchemaMissing(error)) {
+        return (await listEmailRecipients()).map((email) => ({ email, categories: null }));
+      }
+      throw error;
+    }
+    for (const row of data ?? []) {
+      const email = (row.email as string).toLowerCase();
+      if (!rows.has(email)) {
+        rows.set(email, { email, categories: (row.categories as string[] | null) ?? null });
+      }
+    }
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  return [...rows.values()];
+}
+
+// Once the migration is seen applied it can't un-apply — cache the positive
+// probe so per-request UI gating (homepage, /account) costs one query ever.
+let categoriesProbedTrue = false;
+
+export async function categoriesSupported(): Promise<boolean> {
+  if (categoriesProbedTrue) return true;
+  const { error } = await db()
+    .from("users")
+    .select("categories", { count: "exact", head: true });
+  if (error) {
+    if (categoriesSchemaMissing(error)) return false;
+    throw error;
+  }
+  categoriesProbedTrue = true;
+  return true;
 }
 
 /** Returns false when the email is already on another account. */

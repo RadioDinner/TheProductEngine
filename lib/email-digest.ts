@@ -15,13 +15,15 @@ import {
   createDigestIfAbsent,
   enqueueDigestOutbox,
   finalizeDigest,
+  getAdCategories,
   getAdRecord,
   getSmsDigestAdIds,
   getSmsDigestNumber,
   type OutboxInsert,
   type StoredAd,
 } from "@/lib/engine-store";
-import { listEmailRecipients } from "@/lib/store";
+import { listEmailRecipientsWithCategories } from "@/lib/store";
+import { adMatchesCategories } from "@/lib/categories";
 import { getEngineSettings } from "@/lib/settings";
 import { site } from "@/lib/config";
 import { listSponsorsRanWithKey } from "@/lib/business";
@@ -182,28 +184,37 @@ export async function runDueEmailDigests(now = new Date()): Promise<SlotResult[]
         day: "numeric",
         timeZone: "America/New_York",
       }) + (digestNo ? ` · Digest No. ${digestNo}` : "");
-    const subject = composeEmailSubject(site.name, ads, day);
-    const recipients = await listEmailRecipients();
-    const rows: OutboxInsert[] = recipients.map((to) => {
-      const unsub = unsubscribeUrl(to); // personalized (signed) per recipient
-      return {
+    const recipients = await listEmailRecipientsWithCategories();
+    // Per-recipient category filtering (item 22) — the email edition carries
+    // only the recipient's categories' ads, plus every uncategorized ad; the
+    // sponsor lines ride every edition regardless. Pre-9976 the category map
+    // is empty and prefs read ALL, so every recipient gets the full mirror.
+    const categoriesByAd = await getAdCategories(ads.map((a) => a.id));
+    const rows: OutboxInsert[] = [];
+    for (const r of recipients) {
+      const filtered = ads.filter((ad) =>
+        adMatchesCategories(categoriesByAd.get(ad.id) ?? null, r.categories),
+      );
+      if (!filtered.length && !sponsors.length) continue;
+      const unsub = unsubscribeUrl(r.email); // personalized (signed) per recipient
+      rows.push({
         digestId,
         channel: "email" as const,
-        address: to,
+        address: r.email,
         part: 1,
         parts: 1,
-        subject,
-        body: composeEmailText(ads, dateLabel, unsub, sponsors),
-        html: composeEmailHtml(ads, dateLabel, unsub, sponsors),
+        subject: composeEmailSubject(site.name, filtered, day),
+        body: composeEmailText(filtered, dateLabel, unsub, sponsors),
+        html: composeEmailHtml(filtered, dateLabel, unsub, sponsors),
         segments: 0, // email costs no SMS segments — exempt from the budget
-      };
-    });
+      });
+    }
     const queued = await enqueueDigestOutbox(rows);
     await finalizeDigest(digestId, [], [], ads.length);
     results.push({
       slotKey,
       items: ads.length,
-      recipients: recipients.length,
+      recipients: rows.length,
       queued,
       skipped: false,
     });

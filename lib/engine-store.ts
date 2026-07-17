@@ -35,6 +35,11 @@ export interface StoredAd {
   holdUntil?: string | null;
   /** Admin deletion (soft — migration 9987): when the ad was removed. */
   deletedAt?: string;
+  /** Category key (items 22/25, migration 9976); null/undefined =
+   * uncategorized — rides EVERY digest, shows under All on the site. NOT part
+   * of the shared Supabase AD_SELECT (so nothing hard-depends on 9976); the
+   * digest composer and pages read it via getAdCategories. */
+  category?: string | null;
   flagged: boolean;
   rejectedReason?: string;
   rejectionKind?: "benign" | "violation";
@@ -262,7 +267,12 @@ function toSiteAd(ad: StoredAd): Ad {
 
 // --- site reads (fixtures mode only; Supabase mode reads via ads-supabase) ---
 
-export async function fileListAds({ q, page = 1, perPage = 15 }: AdQuery = {}): Promise<AdPage> {
+export async function fileListAds({
+  q,
+  category,
+  page = 1,
+  perPage = 15,
+}: AdQuery = {}): Promise<AdPage> {
   const store = load();
   sweep(store);
   let ads = store.ads
@@ -273,6 +283,11 @@ export async function fileListAds({ q, page = 1, perPage = 15 }: AdQuery = {}): 
         Date.parse(b.approvedAt ?? b.createdAt) - Date.parse(a.approvedAt ?? a.createdAt) ||
         b.id - a.id,
     );
+  if (category) {
+    // Homepage browse filter (item 25): a category shows ITS ads only;
+    // uncategorized ads appear under All (the default view).
+    ads = ads.filter((ad) => ad.category === category);
+  }
   if (q?.trim()) {
     const needle = q.trim().toLowerCase();
     ads = ads.filter((ad) => ad.body.toLowerCase().includes(needle));
@@ -298,6 +313,20 @@ export async function fileGetAd(id: number): Promise<Ad | null> {
       (a.status === "approved" || a.status === "sold" || a.status === "expired"),
   );
   return ad ? toSiteAd(ad) : null;
+}
+
+/** Live (broadcast, approved/sold) ad count per category — the homepage
+ * category row grays the zero-ad ones. Uncategorized ads count toward none. */
+export async function fileCountLiveAdsByCategory(): Promise<Map<string, number>> {
+  const store = load();
+  sweep(store);
+  const counts = new Map<string, number>();
+  for (const ad of store.ads) {
+    if ((ad.status === "approved" || ad.status === "sold") && ad.broadcastAt && ad.category) {
+      counts.set(ad.category, (counts.get(ad.category) ?? 0) + 1);
+    }
+  }
+  return counts;
 }
 
 export async function fileListAdsByOwner(phone: string): Promise<Ad[]> {
@@ -436,6 +465,25 @@ const file = {
     ad.body = body;
     save(store);
     return true;
+  },
+
+  setAdCategory(id: number, category: string | null): "saved" {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === id);
+    if (ad) {
+      ad.category = category;
+      save(store);
+    }
+    return "saved";
+  },
+
+  getAdCategories(ids: number[]): Map<number, string | null> {
+    const wanted = new Set(ids);
+    const out = new Map<number, string | null>();
+    for (const ad of load().ads) {
+      if (wanted.has(ad.id)) out.set(ad.id, ad.category ?? null);
+    }
+    return out;
   },
 
   listRecentDigests(limit: number): DigestRecord[] {
@@ -994,6 +1042,29 @@ export async function markAdSold(id: number): Promise<void> {
 /** Admin edit of an ad's public text; the raw submission stays in originalBody. */
 export async function updateAdBody(id: number, body: string): Promise<boolean> {
   return supabaseConfigured ? remote.updateAdBody(id, body) : file.updateAdBody(id, body);
+}
+
+/**
+ * Assign (or clear, with null) an ad's category (item 22 — the operator's
+ * dropdown; web posting's optional picker). "unsupported" = migration 9976
+ * not applied — callers treat it as best-effort and move on (the ad itself is
+ * never blocked on a category).
+ */
+export async function setAdCategory(
+  id: number,
+  category: string | null,
+): Promise<"saved" | "unsupported"> {
+  return supabaseConfigured ? remote.setAdCategory(id, category) : file.setAdCategory(id, category);
+}
+
+/**
+ * Categories for a set of ads (null = uncategorized). Deliberately separate
+ * from the shared AD_SELECT so nothing hard-depends on migration 9976: before
+ * the paste this returns an empty map — every ad reads uncategorized and
+ * digests/pages behave exactly as today.
+ */
+export async function getAdCategories(ids: number[]): Promise<Map<number, string | null>> {
+  return supabaseConfigured ? remote.getAdCategories(ids) : file.getAdCategories(ids);
 }
 
 /** Account-merge helper: move all of a phone's ads to another phone. The file

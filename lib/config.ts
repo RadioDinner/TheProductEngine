@@ -108,6 +108,14 @@ export const engineDefaults = {
    */
   revealAbusePerDay: 25,
   /**
+   * Category-confirmation throttle (item 24 spam guard): category toggles and
+   * LIST checks a number can have CONFIRMED per hour. Past it, ONE "changes
+   * still apply" notice goes out and further confirmations are silent for the
+   * hour — toggles still apply, they just cost nothing outbound. The hourly
+   * reserve_sms reply cap stays on top as the hard backstop. 0 = unthrottled.
+   */
+  categoryConfirmsPerHour: 5,
+  /**
    * Percent off a credit pack when it's bought with a saved card by text
    * (BUYCREDIT) — the incentive to keep a card on file. 0 = no discount.
    */

@@ -3,6 +3,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deriveRest, deriveTitle, getAd } from "@/lib/ads";
+import { getAdCategories } from "@/lib/engine-store";
+import { categoryLabel } from "@/lib/categories";
 import { getRatingSummary, getVerifiedAt, hasRevealed } from "@/lib/store";
 import { startChat } from "@/lib/account-actions";
 import { revealNumber } from "@/lib/reveal-actions";
@@ -97,6 +99,9 @@ export default async function AdPage({
 
   const session = await readSession();
   const sold = ad.status === "sold";
+  // The ad's category (item 25) — read via getAdCategories (not the site
+  // SELECT) so this page never depends on migration 9976; null hides the link.
+  const adCategory = (await getAdCategories([ad.id])).get(ad.id) ?? null;
   // Confirmed-buyer ratings of this seller (FEATURES item 2).
   const sellerRating = (await getRatingSummary(ad.ownerPhone)).asSeller;
   // Operator-granted green check (FEATURES item 7).
@@ -135,6 +140,12 @@ export default async function AdPage({
             <span className="status-available">Available</span>
           )}{" "}
           · Posted {postedLine(ad.approvedAt)} · Ad #{ad.id}
+          {adCategory && (
+            <>
+              {" "}
+              · <Link href={`/?category=${adCategory}`}>{categoryLabel(adCategory)}</Link>
+            </>
+          )}
           {sellerVerified && (
             <>
               {" "}

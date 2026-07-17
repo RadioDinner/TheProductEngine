@@ -7,6 +7,7 @@ import {
   adminResolvePhotoSubmission,
 } from "@/lib/admin-actions";
 import {
+  getAdCategories,
   getAdRecord,
   getAllAds,
   getQueuedBumps,
@@ -15,7 +16,8 @@ import {
   type StoredAd,
   type StoredAdStatus,
 } from "@/lib/engine-store";
-import { getLedger } from "@/lib/store";
+import { categoriesSupported, getLedger } from "@/lib/store";
+import { CATEGORIES, categoryLabel } from "@/lib/categories";
 import { isPicReplaceSubmission } from "@/lib/myads";
 import { formatPhone } from "@/lib/phone";
 import { site } from "@/lib/config";
@@ -37,6 +39,11 @@ export default async function AdminAds({
     : undefined;
   const ads = await getAllAds(params.q, status);
   const bumpQueued = new Set((await getQueuedBumps()).map((b) => b.adId));
+  // Inline category editing (item 22) — hidden until migration 9976.
+  const withCategories = await categoriesSupported();
+  const adCategories = withCategories
+    ? await getAdCategories(ads.map((ad) => ad.id))
+    : new Map<number, string | null>();
   // Emailed-in extra pictures awaiting review, grouped per ad (FEATURES item 1).
   const submissionsByAd = new Map<number, PhotoSubmission[]>();
   for (const submission of await listPhotoSubmissions()) {
@@ -155,6 +162,12 @@ export default async function AdminAds({
               {ad.flagged && <span className="ad-sold"> Flagged</span>}
               {ad.photo && <span className="ad-sold"> 📷 Picture</span>} ·{" "}
               <Link href={`/admin/users?phone=${ad.ownerPhone}`}>{formatPhone(ad.ownerPhone)}</Link>
+              {withCategories && (
+                <span className="status-muted">
+                  {" "}
+                  · {adCategories.get(ad.id) ? categoryLabel(adCategories.get(ad.id)!) : "Uncategorized"}
+                </span>
+              )}
               {bumpQueued.has(ad.id) && <span className="status-muted"> · bump queued</span>}
             </p>
             <p className="sim-body">{ad.body}</p>
@@ -174,7 +187,7 @@ export default async function AdminAds({
             )}
             {(ad.status === "pending" || ad.status === "approved" || ad.status === "expired") && (
               <details>
-                <summary className="fine">Edit text</summary>
+                <summary className="fine">Edit text{withCategories ? " / category" : ""}</summary>
                 <form action={adminEditAd} className="review-form">
                   <input type="hidden" name="id" value={ad.id} />
                   <input type="hidden" name="back" value="/admin/ads" />
@@ -182,8 +195,26 @@ export default async function AdminAds({
                     Ad text (editable)
                   </label>
                   <textarea id={`edit-body-${ad.id}`} name="body" rows={3} defaultValue={ad.body} />
+                  {withCategories && (
+                    <p className="fine">
+                      <label htmlFor={`edit-category-${ad.id}`}>Category </label>
+                      <select
+                        id={`edit-category-${ad.id}`}
+                        name="category"
+                        defaultValue={adCategories.get(ad.id) ?? ""}
+                        className="admin-select"
+                      >
+                        <option value="">Uncategorized — rides every digest</option>
+                        {CATEGORIES.map((c) => (
+                          <option key={c.key} value={c.key}>
+                            {c.label} — {c.menu}
+                          </option>
+                        ))}
+                      </select>
+                    </p>
+                  )}
                   <button className="btn btn-sm" type="submit">
-                    Save text
+                    Save
                   </button>
                 </form>
               </details>

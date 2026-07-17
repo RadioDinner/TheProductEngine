@@ -49,7 +49,12 @@ function toAd(row: AdRowDb): Ad {
   };
 }
 
-export async function listAds({ q, page = 1, perPage = 15 }: AdQuery = {}): Promise<AdPage> {
+export async function listAds({
+  q,
+  category,
+  page = 1,
+  perPage = 15,
+}: AdQuery = {}): Promise<AdPage> {
   const buildQuery = () => {
     let query = db()
       .from("ads")
@@ -59,6 +64,9 @@ export async function listAds({ q, page = 1, perPage = 15 }: AdQuery = {}): Prom
       .not("broadcast_at", "is", null)
       .order("approved_at", { ascending: false })
       .order("id", { ascending: false });
+    // Homepage browse filter (item 25). Callers gate on categoriesSupported(),
+    // so the column exists whenever this arrives.
+    if (category) query = query.eq("category", category);
     if (q?.trim()) query = query.ilike("body", `%${q.trim()}%`);
     return query;
   };
@@ -103,6 +111,33 @@ export async function getAd(id: number): Promise<Ad | null> {
     throw error;
   }
   return data ? toAd(data as unknown as AdRowDb) : null;
+}
+
+/** Live ad count per category (homepage row graying). One paged column scan —
+ * the listed-ad population is small; no aggregate RPC needed. */
+export async function countLiveAdsByCategory(): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  const PAGE = 1000;
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db()
+      .from("ads")
+      .select("category")
+      .in("status", ["approved", "sold"])
+      .not("broadcast_at", "is", null)
+      .not("category", "is", null)
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) {
+      if (error.code === "42703") return counts; // pre-9976 — caller hides the row anyway
+      throw error;
+    }
+    for (const row of data ?? []) {
+      const key = row.category as string;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    if ((data?.length ?? 0) < PAGE) break;
+  }
+  return counts;
 }
 
 export async function listAdsByOwner(phone: string): Promise<Ad[]> {

@@ -2,7 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signOut } from "@/lib/auth-actions";
-import { saveEmail, saveProfile, toggleEmailEdition, toggleSubscription } from "@/lib/account-actions";
+import {
+  saveCategories,
+  saveEmail,
+  saveProfile,
+  toggleEmailEdition,
+  toggleSubscription,
+} from "@/lib/account-actions";
 import { formatPhone } from "@/lib/phone";
 import { readSession } from "@/lib/session";
 import {
@@ -11,9 +17,11 @@ import {
   getCreditBalance,
   getLedger,
   getProfile,
+  getSubscriberCategories,
   getVerifiedAt,
   listChatsFor,
 } from "@/lib/store";
+import { CATEGORIES } from "@/lib/categories";
 import { adExpiresAt, deriveTitle, listAdsByOwner, type Ad } from "@/lib/ads";
 import { getPendingAds } from "@/lib/engine-store";
 import { formatPrice, packs, site } from "@/lib/config";
@@ -77,6 +85,9 @@ export default async function AccountPage({
   // number so a just-posted ad is visible (same as the SMS MYADS reply).
   const pendingAds = (await getPendingAds()).filter((ad) => ad.ownerPhone === session.phone);
   const subscribed = Boolean(account?.subscribedAt);
+  // Category prefs (item 24): null = ALL, [] = none. "unsupported" =
+  // migration 9976 pending — the whole section hides itself.
+  const categoryPrefs = await getSubscriberCategories(session.phone);
 
   const memberSince = account
     ? new Date(account.createdAt).toLocaleDateString("en-US", {
@@ -319,6 +330,60 @@ export default async function AccountPage({
           <p className="fine">Profile settings aren&apos;t available just yet.</p>
         )}
       </section>
+
+      {categoryPrefs !== "unsupported" && (
+        <section id="categories" aria-labelledby="categories-h">
+          <h2 id="categories-h" className="section-h">
+            Ad categories
+          </h2>
+          {params.saved === "categories" && (
+            <p className="notice" role="status">
+              Categories saved.
+            </p>
+          )}
+          <p>
+            Pick what you want ads for. This is the same setting as texting a category word
+            (like HORSES) to {site.smsNumber} — a change here shows there, and the other way
+            around.
+          </p>
+          {categoryPrefs !== null && categoryPrefs.length === 0 && (
+            <p className="form-error" role="alert">
+              You&rsquo;re not getting any ads right now — check All or a category below (or
+              reply ALL or a category name by text).
+            </p>
+          )}
+          <form action={saveCategories}>
+            <ul className="category-checks">
+              <li>
+                <label>
+                  <input type="checkbox" name="all" defaultChecked={categoryPrefs === null} />{" "}
+                  <strong>All</strong> — every ad
+                </label>
+              </li>
+              {CATEGORIES.map((c) => (
+                <li key={c.key}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      name="category"
+                      value={c.key}
+                      defaultChecked={categoryPrefs !== null && categoryPrefs.includes(c.key)}
+                    />{" "}
+                    {c.label} — {c.menu}
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <button className="btn btn-sm" type="submit">
+              Save categories
+            </button>
+          </form>
+          <p className="fine">
+            Checking All overrides the single categories. Saving confirms right here on the
+            page — no text message is sent for web changes.
+          </p>
+        </section>
+      )}
 
       <section id="settings" aria-labelledby="settings-h">
         <h2 id="settings-h" className="section-h">

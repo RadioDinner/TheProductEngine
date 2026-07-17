@@ -32,14 +32,27 @@ import {
   getAccount,
   getCreditBalance,
   getSmsContext,
+  getSubscriberCategories,
   grantStarterAdsIfFirst,
   hasLedgerRef,
   recordSale,
+  reserveCategoryConfirm,
   reservePicQuota,
   setSmsContext,
+  setSubscriberCategories,
   setSubscribed,
   spendCredits,
 } from "@/lib/store";
+import {
+  ALL_CATEGORIES_SMS,
+  EMPTY_CATEGORIES_SMS,
+  THROTTLE_NOTICE_SMS,
+  categoryToggleSms,
+  listSms,
+  toggleCategory,
+  welcomeMenu,
+} from "@/lib/categories";
+import { gsmSanitize } from "@/lib/sms-segments";
 import { normalizePhone } from "@/lib/phone";
 import { discountedCents, formatPrice, packs, site } from "@/lib/config";
 import { getEngineSettings, getWordRules, matchWordRules, effectiveSmsCaps } from "@/lib/settings";
@@ -98,6 +111,17 @@ function welcomeMessage(settings: EngineSettings): string {
     `To place your own ad, text AD NEW and your ad - for example: ` +
     `AD NEW Hay for sale, $5/bale. Call 330-555-0142. Text HELP for all commands.`
   );
+}
+
+/**
+ * The SUBSCRIBE/START welcome: the approved category menu (item 22) once
+ * migration 9976 is live; before it, the pre-category welcome stands — a menu
+ * whose words don't work yet would strand people on unknown-word replies.
+ */
+async function welcomeFor(from: string, settings: EngineSettings): Promise<string> {
+  const categories = await getSubscriberCategories(from);
+  if (categories === "unsupported") return welcomeMessage(settings);
+  return gsmSanitize(welcomeMenu(site.name));
 }
 
 function fmtDate(d: Date): string {
@@ -516,7 +540,7 @@ async function route(
           console.error("[engine] catch-up digest failed:", e);
         }
       }
-      return { body: welcomeMessage(settings) };
+      return { body: await welcomeFor(from, settings) };
     }
     case "stop": {
       // No ensureAccount here: a STOP from an unknown number shouldn't mint an
@@ -543,7 +567,7 @@ async function route(
           console.error("[engine] catch-up digest failed:", e);
         }
       }
-      return { body: welcomeMessage(settings) };
+      return { body: await welcomeFor(from, settings) };
     }
     case "help":
       return {
@@ -702,18 +726,63 @@ async function route(
       await clearSmsContext(from);
       return { body: `No problem.` };
     }
-    case "unknown": {
-      // No ensureAccount: gibberish from a spoofed number shouldn't mint an
-      // account. While UNDER ATTACK we don't even send the one-per-day redirect
-      // — no spend on unknown/gibberish traffic at all.
-      if (settings.underAttack) return null;
-      const recent = await countRecentOutboundContaining(from, REDIRECT_MARKER, 24 * 60 * 60 * 1000);
-      if (recent > 0) return null; // logged, no reply — one redirect per day
-      return {
-        body: `This is ${site.name}'s automated system. To reach a seller, use the contact info in their ad. Text HELP for a list of commands.`,
-      };
+    case "category": {
+      // Category words behave like any unknown word until migration 9976 is
+      // pasted — the graceful pre-paste degrade (never a 500, never a promise
+      // the store can't keep).
+      const current = await getSubscriberCategories(from);
+      if (current === "unsupported") return unknownReply(from, settings);
+      await ensureAccount(from);
+      let body: string;
+      if (command.category === "all") {
+        await setSubscriberCategories(from, null);
+        body = ALL_CATEGORIES_SMS;
+      } else {
+        const toggled = toggleCategory(current, command.category);
+        await setSubscriberCategories(from, toggled.next);
+        // Removing the LAST category is allowed but warned — never silently
+        // dark (user decision, item 24).
+        body = toggled.emptied
+          ? EMPTY_CATEGORIES_SMS
+          : categoryToggleSms(command.category, toggled.on);
+      }
+      // Spam guard: the state change above ALWAYS stands; only the outbound
+      // confirmation is throttled (one notice past the limit, then silence for
+      // the hour). Rides on top of the reserveSms reservation handleInbound
+      // already took for this inbound.
+      const throttle = await reserveCategoryConfirm(from, settings.categoryConfirmsPerHour);
+      if (throttle === "silent") return null;
+      if (throttle === "notice") return { body: THROTTLE_NOTICE_SMS };
+      return { body };
     }
+    case "list": {
+      const current = await getSubscriberCategories(from);
+      if (current === "unsupported") return unknownReply(from, settings);
+      // LIST is a free-form status check in the same throttle class as the
+      // toggle confirmations (item 24) — hammering LIST goes quiet too.
+      const throttle = await reserveCategoryConfirm(from, settings.categoryConfirmsPerHour);
+      if (throttle === "silent") return null;
+      if (throttle === "notice") return { body: THROTTLE_NOTICE_SMS };
+      return { body: listSms(current) };
+    }
+    case "unknown":
+      return unknownReply(from, settings);
   }
+}
+
+/**
+ * The unknown-keyword reply: no ensureAccount (gibberish from a spoofed
+ * number shouldn't mint an account), one redirect per number per day, and
+ * nothing at all while UNDER ATTACK. Shared with the pre-migration category
+ * degrade so an unpasted 9976 changes nothing about unknown-word behavior.
+ */
+async function unknownReply(from: string, settings: EngineSettings): Promise<Reply | null> {
+  if (settings.underAttack) return null;
+  const recent = await countRecentOutboundContaining(from, REDIRECT_MARKER, 24 * 60 * 60 * 1000);
+  if (recent > 0) return null; // logged, no reply — one redirect per day
+  return {
+    body: `This is ${site.name}'s automated system. To reach a seller, use the contact info in their ad. Text HELP for a list of commands.`,
+  };
 }
 
 async function sendReply(to: string, reply: Reply, settings?: EngineSettings): Promise<Reply> {

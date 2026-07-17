@@ -418,6 +418,42 @@ export default async function AdminHelp() {
         reports the missing migration.
       </p>
 
+      <h2 className="section-h">Categories (the digest picker)</h2>
+      <p>
+        The SUBSCRIBE/START welcome is a menu: ALL plus nine categories (buggies, dogs,
+        garden, horses, household, hunting, livestock, machinery, wanted). Subscribers text
+        one category word per message to toggle it on or off, reply{" "}
+        <span className="cmd">ALL</span> to go back to everything, and{" "}
+        <span className="cmd">LIST</span> to hear their current picks. The same choices live
+        as checkboxes on each member&rsquo;s <span className="cmd">/account</span> page —
+        one store behind both, so a web change shows up in LIST and the other way around
+        (web saves confirm on the page only; they never send a text). Every subscriber
+        starts as ALL, including everyone subscribed before categories existed.
+      </p>
+      <p>
+        <strong>You assign the category — at review.</strong> The Review queue has a
+        category dropdown on every pending ad (web posters may suggest one; it just
+        pre-fills your dropdown), and the Ads tab can change it later.{" "}
+        <strong>&ldquo;Uncategorized&rdquo; is safe:</strong> an uncategorized ad rides{" "}
+        <em>every</em> subscriber&rsquo;s digest and shows under All on the website — an ad
+        can never become unsendable because a dropdown was skipped. Each subscriber gets ONE
+        combined digest per send-time with just their categories&rsquo; ads (plus every
+        uncategorized ad); business sponsor lines ride every edition regardless of
+        categories. A member who toggles everything off is warned (&ldquo;You&rsquo;re not
+        getting any ads now&rdquo;) but the choice is honored.
+      </p>
+      <p>
+        <strong>The confirmation throttle</strong> keeps &ldquo;HORSES HORSES HORSES&rdquo;
+        from running up the SMS bill: after {s.categoryConfirmsPerHour} confirmed category
+        toggles/LIST checks in an hour, the member gets one &ldquo;Changes still apply. Text
+        LIST anytime to see your categories.&rdquo; and further confirmations go silent for
+        the hour — <em>the toggles still apply</em>, they just cost nothing outbound. The
+        hourly reply cap above stays on top as the hard backstop, and gibberish still gets
+        the ordinary unknown-word handling. Tunable on Settings (0 = unthrottled). The
+        homepage category row is just a browse filter (works signed-out) — it has nothing
+        to do with anyone&rsquo;s subscription.
+      </p>
+
       <h2 className="section-h">Current tunable numbers</h2>
       <p>All editable on the Settings page; changes take effect immediately.</p>
       <table className="cmd-table">
@@ -430,6 +466,7 @@ export default async function AdminHelp() {
           <tr><td>Ad run time</td><td>{s.expiryDays} days</td></tr>
           <tr><td>Number look-ups (Show number) per day / bank</td><td>{s.revealsPerDay} / {s.revealBankCap}</td></tr>
           <tr><td>Excessive-reveal flag (per 24h)</td><td>{s.revealAbusePerDay}</td></tr>
+          <tr><td>Category confirmations per number per hour</td><td>{s.categoryConfirmsPerHour}</td></tr>
           <tr><td>Digest send-times, SMS + email (ET)</td><td>{s.slots.join(", ")}</td></tr>
         </tbody>
       </table>

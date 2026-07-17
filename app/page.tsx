@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { listAds, type Ad } from "@/lib/ads";
+import { countLiveAdsByCategory, listAds, type Ad } from "@/lib/ads";
 import { readSession } from "@/lib/session";
+import { categoriesSupported } from "@/lib/store";
+import { CATEGORIES, categoryLabel, isCategoryKey } from "@/lib/categories";
 import { recordVisit } from "@/lib/analytics";
 import { site } from "@/lib/config";
 import { etParts } from "@/lib/et";
@@ -37,9 +39,10 @@ function groupByDay(ads: Ad[]): { label: string; ads: Ad[] }[] {
   return groups;
 }
 
-function pageHref(q: string | undefined, page: number): string {
+function pageHref(q: string | undefined, category: string | undefined, page: number): string {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
+  if (category) params.set("category", category);
   if (page > 1) params.set("page", String(page));
   const qs = params.toString();
   return qs ? `/?${qs}` : "/";
@@ -48,17 +51,26 @@ function pageHref(q: string | undefined, page: number): string {
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; category?: string }>;
 }) {
   const params = await searchParams;
   const session = await readSession();
   await recordVisit("/");
   const q = params.q?.trim() || undefined;
+  // Category browse filter (item 25): server-rendered, works signed-out.
+  // Hidden (and the param ignored) until migration 9976 — never a 500.
+  const withCategories = await categoriesSupported();
+  const category =
+    withCategories && params.category && isCategoryKey(params.category)
+      ? params.category
+      : undefined;
   const { ads, total, page, totalPages } = await listAds({
     q,
+    category,
     page: Number(params.page) || 1,
     perPage: site.adsPerPage,
   });
+  const categoryCounts = withCategories ? await countLiveAdsByCategory() : null;
   const groups = groupByDay(ads);
   // Town hall sidebar (item 18) — null until migration 9977 (sidebar hides).
   const events = await listUpcomingEvents(etParts(new Date()).day, SIDEBAR_EVENTS);
@@ -142,10 +154,38 @@ export default async function Home({
           </p>
         )}
 
+        {withCategories && (
+          <nav className="category-row" aria-label="Browse by category">
+            {category ? (
+              <Link href={pageHref(q, undefined, 1)}>All</Link>
+            ) : (
+              <span className="category-active" aria-current="page">
+                All
+              </span>
+            )}
+            {CATEGORIES.map((c) => {
+              const empty = (categoryCounts?.get(c.key) ?? 0) === 0;
+              return category === c.key ? (
+                <span key={c.key} className="category-active" aria-current="page">
+                  {c.label}
+                </span>
+              ) : (
+                <Link
+                  key={c.key}
+                  className={empty ? "category-empty" : undefined}
+                  href={pageHref(q, c.key, 1)}
+                >
+                  {c.label}
+                </Link>
+              );
+            })}
+          </nav>
+        )}
+
         {q && total > 0 && (
           <p className="result-line">
             {total} {total === 1 ? "ad matches" : "ads match"} “{q}”.{" "}
-            <Link href="/">Clear search</Link>
+            <Link href={pageHref(undefined, category, 1)}>Clear search</Link>
           </p>
         )}
 
@@ -158,7 +198,18 @@ export default async function Home({
           </div>
         )}
 
-        {total === 0 && !q && (
+        {total === 0 && !q && category && (
+          <div className="empty-state">
+            <h2>No {categoryLabel(category)} ads right now.</h2>
+            <p>
+              New ads land here as they run — <Link href="/">see all the ads</Link>, or text{" "}
+              <strong>{category.toUpperCase()}</strong> to <strong>{site.smsNumber}</strong>{" "}
+              and they’ll come to you.
+            </p>
+          </div>
+        )}
+
+        {total === 0 && !q && !category && (
           <div className="empty-state">
             <h2>The first ads run soon.</h2>
             <p>
@@ -182,14 +233,14 @@ export default async function Home({
         {totalPages > 1 && (
           <nav className="pagination" aria-label="Pages">
             {page > 1 ? (
-              <Link href={pageHref(q, page - 1)}>← Newer ads</Link>
+              <Link href={pageHref(q, category, page - 1)}>← Newer ads</Link>
             ) : (
               <span className="spacer" aria-hidden="true">
                 ← Newer ads
               </span>
             )}
             {page < totalPages ? (
-              <Link href={pageHref(q, page + 1)}>Older ads →</Link>
+              <Link href={pageHref(q, category, page + 1)}>Older ads →</Link>
             ) : (
               <span className="spacer" aria-hidden="true">
                 Older ads →

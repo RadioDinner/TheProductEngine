@@ -11,7 +11,9 @@ import {
   setEmailEdition,
   setProfile,
   setSubscribed,
+  setSubscriberCategories,
 } from "@/lib/store";
+import { isCategoryKey } from "@/lib/categories";
 import { formatPrice, getPack } from "@/lib/config";
 import { createCheckoutSession, paymentsDevMode } from "@/lib/payments";
 import { devToolsEnabled } from "@/lib/env";
@@ -92,6 +94,24 @@ export async function toggleSubscription(formData: FormData): Promise<void> {
   const phone = await requirePhone();
   await setSubscribed(phone, formData.get("subscribe") === "yes");
   redirect("/account#settings");
+}
+
+/**
+ * Save the /account category checkboxes (item 24) — the SAME store the SMS
+ * toggles write, so either side's change shows on the other. "All" wins over
+ * any individual boxes (it means null = every category, the default). Web
+ * saves confirm ON-PAGE only: no SMS is ever sent for a web change.
+ */
+export async function saveCategories(formData: FormData): Promise<void> {
+  const phone = await requirePhone();
+  await ensureAccount(phone);
+  if (formData.get("all") === "on") {
+    await setSubscriberCategories(phone, null);
+  } else {
+    const keys = formData.getAll("category").map(String).filter(isCategoryKey);
+    await setSubscriberCategories(phone, [...new Set(keys)].sort());
+  }
+  redirect("/account?saved=categories#categories");
 }
 
 export async function toggleEmailEdition(formData: FormData): Promise<void> {

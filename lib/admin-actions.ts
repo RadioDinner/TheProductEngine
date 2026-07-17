@@ -34,10 +34,12 @@ import {
   resolvePhotoSubmission,
   revertAdToPending,
   reviveAd,
+  setAdCategory,
   setAdHold,
   swapAdApprovalOrder,
   updateAdBody,
 } from "@/lib/engine-store";
+import { isCategoryKey } from "@/lib/categories";
 import { nextSlotOccurrence, selectDigestItems, sendDigestNow } from "@/lib/digest-engine";
 import {
   approveBusinessPackage,
@@ -66,7 +68,17 @@ export async function adminApprove(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = Number(formData.get("id"));
   const body = String(formData.get("body") ?? "");
-  if (Number.isInteger(id)) await approveAd(id, body);
+  // Category (item 22): the operator assigns it at review. No form field
+  // (pre-9976 the dropdown is hidden) = undefined = leave the ad's category
+  // alone; "" or junk = explicit Uncategorized (rides every digest).
+  const rawCategory = formData.get("category");
+  const category =
+    rawCategory === null
+      ? undefined
+      : isCategoryKey(String(rawCategory))
+        ? String(rawCategory)
+        : null;
+  if (Number.isInteger(id)) await approveAd(id, body, category);
   redirect("/admin");
 }
 
@@ -83,7 +95,8 @@ export async function adminReject(formData: FormData): Promise<void> {
   redirect("/admin");
 }
 
-/** Edit an ad's public text from the Ads or Digests tab. */
+/** Edit an ad's public text (and, where the form offers it, its category)
+ * from the Ads or Digests tab. */
 export async function adminEditAd(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = Number(formData.get("id"));
@@ -91,6 +104,12 @@ export async function adminEditAd(formData: FormData): Promise<void> {
   // able to balloon a digest.
   const body = String(formData.get("body") ?? "").trim().slice(0, 300);
   if (Number.isInteger(id) && body) await updateAdBody(id, body);
+  // Inline category (item 22): only forms that rendered the select send it
+  // (it's hidden pre-9976), so a missing field never clears a category.
+  const rawCategory = formData.get("category");
+  if (Number.isInteger(id) && rawCategory !== null) {
+    await setAdCategory(id, isCategoryKey(String(rawCategory)) ? String(rawCategory) : null);
+  }
   redirect(backTarget(formData));
 }
 
@@ -377,6 +396,7 @@ const SETTING_MAX: Record<string, number> = {
   revealsPerDay: 1000,
   revealBankCap: 10000,
   revealAbusePerDay: 1000,
+  categoryConfirmsPerHour: 100,
   savedCardDiscountPercent: 100,
   outboundThrottlePerMin: 10000,
 };
@@ -425,6 +445,7 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
     "revealsPerDay",
     "revealBankCap",
     "revealAbusePerDay",
+    "categoryConfirmsPerHour",
     "savedCardDiscountPercent",
     "outboundThrottlePerMin",
   ]) {
