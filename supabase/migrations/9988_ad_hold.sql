@@ -1,4 +1,4 @@
--- 0012_ad_hold.sql
+-- 9988_ad_hold.sql
 -- Admin digest-queue control (session 007): "skip the next digest" holds an
 -- approved ad past the upcoming slot. The digest builder only selects ads
 -- whose hold has passed (or was never set).

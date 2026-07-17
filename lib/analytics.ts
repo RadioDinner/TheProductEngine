@@ -2,7 +2,7 @@
  * Built-in page-view analytics. Server-side and cookie-free, so it counts
  * visitors even without JavaScript (this audience often has it disabled).
  * Supabase-backed (page_views table + bump_page_view/visit_stats functions,
- * migration 0002); a no-op with zero counts when Supabase isn't configured.
+ * migration 9998); a no-op with zero counts when Supabase isn't configured.
  */
 import { db, supabaseConfigured } from "@/lib/db";
 import { etParts } from "@/lib/et";

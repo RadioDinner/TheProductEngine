@@ -1,5 +1,5 @@
 -- ============================================================
--- 0014 — USER_ID (FEATURES.md item 0, session 008)
+-- 9986 — USER_ID (FEATURES.md item 0, session 008)
 --
 -- Every member gets a public 6-digit id (random digits, leading zeros
 -- allowed, unique) identifying them beyond phone/email. When an account

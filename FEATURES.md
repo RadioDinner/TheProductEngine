@@ -7,14 +7,14 @@ itself; build details live in the session logs and HANDOFF.md.
 
 | # | Feature | Added | Status |
 |---|---------|-------|--------|
-| 0 | **USER_ID** — a way of identifying people beyond phone/email: unique, random, 6-digit, never duplicated; ids freed by an account merge are not reused for a whole year | session 008 | **built** (migration 0014) |
-| 1 | **Email-in extra ad pictures** — sellers email more pictures for an ad; the website listing shows them all; the email digest and SMS still carry only the one picture | session 008 | **built** (migration 0015) |
-| 2 | **Profiles: confirmed buyer/seller ratings** — only confirmed parties can rate. `SOLD 1040` replies asking for the buyer's phone number; then invites `RATE 1–5`; the named buyer gets the same invitation to rate the seller | session 008 | **built** (migration 0016) |
-| 3 | **Profile picture + pickup address** — settable by the member; the address is private to them, optionally shareable with a buyer they're in conversation with | session 008 | **built** (migration 0017) |
-| 4 | **Chat** — on-platform messages between buyers and sellers, keyed on user ids, so nobody's phone number is exposed | session 008 | **built** (migration 0017) |
-| 5 | **Digest numbers** — every digest carries a number, incrementing by 1 from 1; counter reset at build time | session 008 | **built** (migration 0018) |
+| 0 | **USER_ID** — a way of identifying people beyond phone/email: unique, random, 6-digit, never duplicated; ids freed by an account merge are not reused for a whole year | session 008 | **built** (migration 9986) |
+| 1 | **Email-in extra ad pictures** — sellers email more pictures for an ad; the website listing shows them all; the email digest and SMS still carry only the one picture | session 008 | **built** (migration 9985) |
+| 2 | **Profiles: confirmed buyer/seller ratings** — only confirmed parties can rate. `SOLD 1040` replies asking for the buyer's phone number; then invites `RATE 1–5`; the named buyer gets the same invitation to rate the seller | session 008 | **built** (migration 9984) |
+| 3 | **Profile picture + pickup address** — settable by the member; the address is private to them, optionally shareable with a buyer they're in conversation with | session 008 | **built** (migration 9983) |
+| 4 | **Chat** — on-platform messages between buyers and sellers, keyed on user ids, so nobody's phone number is exposed | session 008 | **built** (migration 9983) |
+| 5 | **Digest numbers** — every digest carries a number, incrementing by 1 from 1; counter reset at build time | session 008 | **built** (migration 9982) |
 | 6 | **Chat nudge cap** — no party gets a "message waiting" text more than once a day (item 4 shipped with a 3-hour dedup; tighten it to 24 h) | session 008 | **built** (no migration) |
-| 7 | **Verified members** — a green check mark, granted and revoked manually by the operator as they verify real buyers/sellers; verified members get perks in the long run | session 008 | **built** (migration 0019) |
+| 7 | **Verified members** — a green check mark, granted and revoked manually by the operator as they verify real buyers/sellers; verified members get perks in the long run | session 008 | **built** (migration 9981) |
 | 8 | **Admin "add a member"** — from /admin/users: a button that texts an invite ("to sign up, reply START", with opt-out + instructions), and the ability to set their starting credits right there | session 008 | **built** (no migration) |
 | 9 | **Web ad posting** — LOGGED-IN members can post ads from the website; it spends credits exactly like texting one in (and says so clearly); the picture rules stay explicit: ONE picture rides the ad listing, any additional pictures are WEB ONLY | session 008 | not started |
 | 10 | **Mixed SMS + chat messaging** — chat messages are copied to the recipient's SMS (a real copy of the message, not "you have a message waiting"); an SMS reply routes back into the chat thread on the site AND to the other party's SMS if they have one | session 008 | **on hold** (user decision: chat stays web-only with once-a-day nudges for now) |
@@ -27,7 +27,7 @@ itself; build details live in the session logs and HANDOFF.md.
 ## Item notes (decisions made while building — flag anything to change)
 
 - **0 · USER_ID**: 6 random digits, leading zeros allowed (stored as text,
-  `000000`–`999999`). Existing accounts are backfilled by migration 0014; new
+  `000000`–`999999`). Existing accounts are backfilled by migration 9986; new
   accounts get an id at creation. A merge retires the losing account's id
   into `retired_user_ids` with a timestamp; generation refuses ids retired
   less than a year ago (older tombstones are reaped lazily).
@@ -54,12 +54,12 @@ itself; build details live in the session logs and HANDOFF.md.
   the other party they have a message waiting on the website.
 - **5 · digest numbers**: the number is assigned when a digest composes
   (SMS edition; its email mirror shows the same number). Numbering starts at
-  1 for the first digest composed after migration 0018 — past digests are not
+  1 for the first digest composed after migration 9982 — past digests are not
   renumbered.
 - **6 · chat nudge cap**: built with the item-10 decision — the dedup window
   in `nudgeBySms` (lib/account-actions.ts) went from 3 h to 24 h. No
   migration.
-- **7 · verified members**: `users.verified_at` (migration 0019) doubles as
+- **7 · verified members**: `users.verified_at` (migration 9981) doubles as
   flag + audit stamp. Grant/revoke lives on /admin/users ("Mark verified ✓")
   — no self-serve path anywhere, by design. Shown as a green ✓ on the ad
   page ("Verified seller"), the member's account page, and beside member

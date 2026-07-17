@@ -48,7 +48,7 @@ measured damage.
   hammering PIC is held to **3 MMS/day** no matter how hard it tries. Scenario 19:
   banked pulls stop accruing at the cap, so a saved-up user gets a cushion but not
   infinity. Atomic accrue-then-spend (advisory lock, `reserve_pic_quota`, migration
-  0011) so a concurrent burst can't overspend the bank. Admin-tunable on Settings;
+  9989) so a concurrent burst can't overspend the bank. Admin-tunable on Settings;
   set the daily number to 0 to turn it off.
 - **Per-number reply cap (20/hr)** bounds any single-number command flood
   (STATUS, BUMP, SOLD, gibberish) to ~20 cheap replies/hr regardless of how hard

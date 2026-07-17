@@ -1,4 +1,4 @@
--- 0011_pic_quota.sql
+-- 9989_pic_quota.sql
 -- PIC (picture pull) daily allowance + rolling/sinking bank — the real MMS cost
 -- control. Every number gets `pic_daily_allowance` photo pulls per ET calendar
 -- day; unused pulls bank up to `pic_bank_cap`. The per-number hourly PIC cap
@@ -16,7 +16,7 @@ alter table users add column if not exists pic_accrual_day date;
 
 -- 2) Atomic accrue-then-spend, serialized per user so a burst of concurrent PIC
 --    requests can't overspend the bank (same advisory-lock pattern as
---    reserve_sms / spend_credits, migration 0005). Returns
+--    reserve_sms / spend_credits, migration 9995). Returns
 --    { allowed: bool, remaining: int }.
 --      - p_daily <= 0            -> quota OFF: always allowed, remaining -1.
 --      - no such user            -> fail-open (allowed, -1); the engine

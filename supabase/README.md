@@ -11,11 +11,16 @@ SUPABASE_SERVICE_ROLE_KEY=<service role key — Settings → API. Server-only se
 ## Applying the schema
 
 1. Create a project at https://database.new
-2. Open the project's **SQL Editor**, paste and run `migrations/0001_init.sql`
+2. Open the project's **SQL Editor**, paste and run every file under
+   `migrations/` in numerically **descending** order — `9999_init.sql` first,
+   then `9998_*`, … down to the lowest number (the newest). Numbering counts
+   *down* from 9999; see `migrations/README.md` for the convention and the
+   old→new renumbering map.
 3. Then paste and run `seed.sql` (optional — the demo sellers, ads, config, and packs)
 
-Or with the CLI: `npx supabase link --project-ref <ref>` then `npx supabase db push`,
-and run `seed.sql` in the SQL editor.
+Do **not** use `supabase db push`: the CLI applies migrations in ascending
+version order, which under the descending scheme would run newest-first.
+Hand-paste in the SQL Editor only (every file is written re-runnable).
 
 ## Notes
 

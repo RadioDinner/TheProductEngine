@@ -192,7 +192,7 @@ async function handlePhotoEmail(
     saved++;
   }
   if (unsupported) {
-    console.error("[email:photos] migration 0015 not applied — submission dropped");
+    console.error("[email:photos] migration 9985 not applied — submission dropped");
     return NextResponse.json({ ok: true });
   }
   if (saved > 0) {

@@ -259,7 +259,7 @@ async function handleOwnerCommand(
     await markAdSold(id);
     // Ratings flow (FEATURES item 2): ask who bought it, so buyer and seller
     // become CONFIRMED parties who may rate each other. If contexts aren't
-    // available yet (migration 0016), the plain confirmation stands alone.
+    // available yet (migration 9984), the plain confirmation stands alone.
     const opened = await setSmsContext(from, {
       kind: "buyer_phone",
       adId: id,

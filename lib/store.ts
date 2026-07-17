@@ -24,7 +24,7 @@ import { USER_ID_MAX_ATTEMPTS, isRetirementActive, randomUserId } from "@/lib/us
 
 export interface Account {
   phone: string; // 10 digits
-  /** Public 6-digit member id (FEATURES item 0, migration 0014). Populated
+  /** Public 6-digit member id (FEATURES item 0, migration 9986). Populated
    * lazily via ensureUserId — most account reads leave it undefined so the
    * core lookup path never depends on the migration. */
   userId?: string | null;
@@ -52,12 +52,12 @@ export interface Account {
   /** ET day (YYYY-MM-DD) the PIC bank was last accrued to; null/undefined = never. */
   picAccrualDay?: string | null;
   /** Profile picture URL (FEATURES item 3) — file store only; Supabase reads
-   * it via getProfile so core lookups never depend on migration 0017. */
+   * it via getProfile so core lookups never depend on migration 9983. */
   profilePhoto?: string | null;
   /** PRIVATE pickup address (FEATURES item 3) — same storage note as above. */
   pickupAddress?: string | null;
   /** When the operator verified this member (FEATURES item 7) — file store
-   * only; Supabase reads it via getVerifiedAt (migration 0019). */
+   * only; Supabase reads it via getVerifiedAt (migration 9981). */
   verifiedAt?: string | null;
 }
 
@@ -935,7 +935,7 @@ export async function ensureAccount(phone: string): Promise<Account> {
 /**
  * The member's public 6-digit id (FEATURES item 0) — assigned lazily when the
  * account doesn't have one yet. Null when the account doesn't exist or when
- * migration 0014 isn't applied (the feature stays dormant; never a 500).
+ * migration 9986 isn't applied (the feature stays dormant; never a 500).
  */
 export async function ensureUserId(phone: string): Promise<string | null> {
   return supabaseConfigured ? remote.ensureUserId(phone) : file.ensureUserId(phone);
@@ -948,7 +948,7 @@ export async function getAccountByUserId(userId: string): Promise<Account | null
 
 /**
  * Open a conversational prompt for a phone (FEATURES item 2). "unsupported" =
- * migration 0016 missing — the caller keeps its plain reply and moves on.
+ * migration 9984 missing — the caller keeps its plain reply and moves on.
  */
 export async function setSmsContext(
   phone: string,
@@ -1002,7 +1002,7 @@ export async function getRatingSummary(phone: string): Promise<RatingSummary> {
 }
 
 /** Profile picture + private pickup address. Null = no account, or the
- * profile columns aren't there yet (migration 0017) — the UI hides itself. */
+ * profile columns aren't there yet (migration 9983) — the UI hides itself. */
 export async function getProfile(phone: string): Promise<Profile | null> {
   return supabaseConfigured ? remote.getProfile(phone) : file.getProfile(phone);
 }
@@ -1015,7 +1015,7 @@ export async function setProfile(
 }
 
 /** Open (or find) the thread between two members about an ad (FEATURES item
- * 4). Null = chat isn't available (migration 0017 missing). */
+ * 4). Null = chat isn't available (migration 9983 missing). */
 export async function ensureChat(
   adId: number | null,
   phoneA: string,
@@ -1060,7 +1060,7 @@ export async function markChatRead(chatId: number, phone: string): Promise<void>
 }
 
 /** When the operator verified this member (FEATURES item 7); null = not
- * verified (or no account, or migration 0019 pending). */
+ * verified (or no account, or migration 9981 pending). */
 export async function getVerifiedAt(phone: string): Promise<string | null> {
   return supabaseConfigured ? remote.getVerifiedAt(phone) : file.getVerifiedAt(phone);
 }

@@ -125,9 +125,9 @@ export async function ensureAccount(phone: string): Promise<Account> {
   return toAccount(data as UserRow);
 }
 
-/** Missing user_id column / retired_user_ids table = migration 0014 not
+/** Missing user_id column / retired_user_ids table = migration 9986 not
  * applied yet. The member-id feature stays dormant instead of 500ing (the
- * 0011/0012 drift lesson) — every caller treats null as "no id yet". */
+ * 9989/9988 drift lesson) — every caller treats null as "no id yet". */
 function userIdSchemaMissing(error: { code?: string } | null): boolean {
   return error?.code === "42703" || error?.code === "42P01";
 }
@@ -203,7 +203,7 @@ export async function getAccountByUserId(userId: string): Promise<Account | null
   return account;
 }
 
-/** Missing 0016 tables (sms_contexts / sales / ratings) → feature dormant. */
+/** Missing 9984 tables (sms_contexts / sales / ratings) → feature dormant. */
 function ratingsSchemaMissing(error: { code?: string } | null): boolean {
   return error?.code === "42P01";
 }
@@ -342,7 +342,7 @@ export async function getRatingSummary(phone: string): Promise<RatingSummary> {
   return { asSeller: roll("seller"), asBuyer: roll("buyer") };
 }
 
-/** Missing 0017 schema (profile columns / chat tables) → feature dormant. */
+/** Missing 9983 schema (profile columns / chat tables) → feature dormant. */
 function chatSchemaMissing(error: { code?: string } | null): boolean {
   return error?.code === "42P01" || error?.code === "42703";
 }
@@ -468,7 +468,7 @@ export async function listChatsFor(phone: string): Promise<ChatSummary[]> {
     string,
     { memberId: string | null; photo: string | null; verified: boolean }
   >();
-  // verified_at is migration 0019 — retry without it so the chat list keeps
+  // verified_at is migration 9981 — retry without it so the chat list keeps
   // its member ids/photos while that paste is pending.
   const fetchOthers = (columns: string) => db().from("users").select(columns).in("id", otherIds);
   let { data: otherRows, error: othersError } = await fetchOthers(
@@ -532,7 +532,7 @@ export async function getVerifiedAt(phone: string): Promise<string | null> {
     .eq("phone", phone)
     .maybeSingle();
   if (error) {
-    if (error.code === "42703") return null; // migration 0019 pending
+    if (error.code === "42703") return null; // migration 9981 pending
     throw error;
   }
   return (data?.verified_at as string | null) ?? null;
@@ -679,7 +679,7 @@ export async function grantFreeAd(phone: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Atomically accrue + spend one PIC pull (migration 0011 reserve_pic_quota). */
+/** Atomically accrue + spend one PIC pull (migration 9989 reserve_pic_quota). */
 export async function reservePicQuota(
   phone: string,
   dailyAllowance: number,
@@ -812,7 +812,7 @@ async function reassignUserRows(fromId: string, toId: string): Promise<void> {
     const { error } = await db().from(table).update({ user_id: toId }).eq("user_id", fromId);
     if (error) throw error;
   }
-  // Ratings/sales (migration 0016) reference users too — they must follow the
+  // Ratings/sales (migration 9984) reference users too — they must follow the
   // merge or the loser's delete hits their FKs. Absent pre-migration: skipped.
   for (const [table, column] of [
     ["sales", "seller_user_id"],
@@ -898,7 +898,7 @@ export async function mergeAccounts(survivorPhone: string, source: string): Prom
     if (updateError) throw updateError;
     // The merged-away member id retires for a year (FEATURES item 0). Read it
     // with a dedicated query so the merge itself never depends on migration
-    // 0014 — pre-migration this select errors and the retirement is skipped.
+    // 9986 — pre-migration this select errors and the retirement is skipped.
     const { data: loserIdRow } = await db()
       .from("users")
       .select("user_id")
@@ -1150,13 +1150,13 @@ export async function addLedgerEntry(
     note: entry.note,
     ref: entry.ref ?? null,
   });
-  // A duplicate ref (unique index, migration 0003) means this grant was
+  // A duplicate ref (unique index, migration 9997) means this grant was
   // already recorded by a concurrent/replayed webhook — idempotent, not an
   // error.
   if (error && error.code !== "23505") throw error;
 }
 
-/** Atomically debit credits if the balance covers it (migration 0005). */
+/** Atomically debit credits if the balance covers it (migration 9995). */
 export async function spendCredits(
   phone: string,
   amount: number,
@@ -1255,7 +1255,7 @@ export async function peekDevEcho(phone: string): Promise<string | null> {
 }
 
 export async function verifyCode(phone: string, code: string): Promise<VerifyCodeResult> {
-  // Atomic check-and-burn under a row lock (migration 0009). The old
+  // Atomic check-and-burn under a row lock (migration 9991). The old
   // read-then-write was a TOCTOU: concurrent wrong-code guesses all read
   // attempts < max and proceeded, amplifying brute-force of the 6-digit code.
   const { data, error } = await db().rpc("verify_login_code", {

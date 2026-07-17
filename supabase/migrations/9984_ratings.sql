@@ -1,5 +1,5 @@
 -- ============================================================
--- 0016 — confirmed buyer/seller ratings (FEATURES.md item 2, session 008)
+-- 9984 — confirmed buyer/seller ratings (FEATURES.md item 2, session 008)
 --
 -- Only CONFIRMED parties can rate: after SOLD, the seller is asked for the
 -- buyer's phone number; that answer records the sale (sales), and each side

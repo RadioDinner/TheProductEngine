@@ -57,7 +57,7 @@ export async function isBlockedNumber(phone: string): Promise<boolean> {
     return Boolean(data);
   } catch (e) {
     // Fail OPEN: this runs on EVERY inbound and outbound send, so a missing
-    // blocked_numbers table (migration 0008 not applied) or a transient DB
+    // blocked_numbers table (migration 9992 not applied) or a transient DB
     // error must never take down the message path — the blocklist is an added
     // protection, not a gate the whole system depends on.
     console.error("[blocklist] isBlockedNumber failed (treating as not-blocked):", e instanceof Error ? e.message : e);
@@ -130,7 +130,7 @@ export async function listBlocked(): Promise<BlockedNumber[]> {
     return out;
   } catch (e) {
     // Empty (not an error) if the table isn't there yet — the digest drain and
-    // admin pages must keep working before migration 0008 is applied.
+    // admin pages must keep working before migration 9992 is applied.
     console.error("[blocklist] listBlocked failed (treating as empty):", e instanceof Error ? e.message : e);
     return [];
   }

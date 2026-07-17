@@ -93,7 +93,7 @@ export default async function AdminInsights({
       {failed || !data ? (
         <p className="notice" role="status">
           Insights couldn&rsquo;t load. If you just deployed, the database may still need
-          migrations <strong>0006</strong> and <strong>0007</strong> — run them in the Supabase
+          migrations <strong>9994</strong> and <strong>9993</strong> — run them in the Supabase
           SQL editor, then reload. The exact error is in the server logs.
         </p>
       ) : (

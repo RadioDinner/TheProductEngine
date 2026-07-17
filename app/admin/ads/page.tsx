@@ -88,9 +88,9 @@ export default async function AdminAds({
           out of the digests; past digests and the message log keep its number.
         </p>
       )}
-      {params.error === "migration0013" && (
+      {params.error === "migration9987" && (
         <p className="form-error" role="alert">
-          Deleting needs migration 0013 — paste supabase/migrations/0013_ad_delete.sql into the
+          Deleting needs migration 9987 — paste supabase/migrations/9987_ad_delete.sql into the
           Supabase SQL editor, then try again. (Nothing was changed.)
         </p>
       )}

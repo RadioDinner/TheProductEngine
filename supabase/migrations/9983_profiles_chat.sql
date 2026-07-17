@@ -1,5 +1,5 @@
 -- ============================================================
--- 0017 — profiles + chat (FEATURES.md items 3 & 4, session 008)
+-- 9983 — profiles + chat (FEATURES.md items 3 & 4, session 008)
 --
 -- Item 3: members can set a profile picture (public) and a pickup address
 -- (PRIVATE — it leaves the account only when the member explicitly shares

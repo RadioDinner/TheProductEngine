@@ -1,6 +1,6 @@
 /**
  * Supabase implementation of the engine store (see lib/engine-store.ts).
- * Written against supabase/migrations/0001_init.sql; unexecuted until the
+ * Written against supabase/migrations/9999_init.sql; unexecuted until the
  * project exists.
  */
 import { db } from "@/lib/db";
@@ -48,7 +48,7 @@ interface AdRow {
 // broadcast_at is deliberately NOT selected here. It's only needed by the
 // digest builder (getNewDigestAds filters on it), and keeping it out of the
 // shared reader means the admin queue and SMS ad-reads don't hard-depend on
-// migration 0007 — a code deploy that lands before the migration degrades to
+// migration 9993 — a code deploy that lands before the migration degrades to
 // "digests wait" (the cron fails loudly) instead of taking down /admin.
 const AD_SELECT =
   "id, original_body, body, status, created_at, approved_at, expires_at, sold_at, flagged, rejected_reason, rejection_kind, users!inner(phone), ad_photos(src, alt, width, height, position)";
@@ -180,7 +180,7 @@ export async function getAllAds(
   }
   const { data, error } = await query;
   if (error) {
-    // The admin filtered by 'deleted' before migration 0013 was pasted: the
+    // The admin filtered by 'deleted' before migration 9987 was pasted: the
     // enum value doesn't exist yet (22P02). An empty list, not a 500.
     if (status === "deleted" && error.code === "22P02") return [];
     throw error;
@@ -280,10 +280,10 @@ export async function getQueuedBumps(): Promise<BumpRecord[]> {
 
 export async function getNewDigestAds(cap: number): Promise<StoredAd[]> {
   // Approved ads that have never ridden their included broadcast. Keyed on the
-  // broadcast_at column (migration 0007) so the queue is an O(cap) indexed
+  // broadcast_at column (migration 9993) so the queue is an O(cap) indexed
   // read — the old "cap*3 oldest, filter client-side" scan silently starved
   // new paid ads once already-broadcast approved ads outnumbered the window.
-  // Admin holds ("skip next digest", migration 0012) exclude an ad until the
+  // Admin holds ("skip next digest", migration 9988) exclude an ad until the
   // hold passes.
   const { data, error } = await db()
     .from("ads")
@@ -355,7 +355,7 @@ export async function revertAdToPending(id: number): Promise<boolean> {
 }
 
 /**
- * Admin deletion (soft, migration 0013). Order matters for crash-safety: the
+ * Admin deletion (soft, migration 9987). Order matters for crash-safety: the
  * status flip comes FIRST (the authoritative act — the ad is off the site the
  * moment it lands), then the child cleanup; a crash mid-cleanup leaves only
  * already-orphanable leftovers (a queued bump the digest selector skips, a
@@ -371,9 +371,9 @@ export async function deleteAdRecord(id: number): Promise<"deleted" | "noop" | "
     .neq("status", "deleted")
     .select("id");
   if (error) {
-    // 22P02 = 'deleted' isn't a valid ad_status value yet — migration 0013
+    // 22P02 = 'deleted' isn't a valid ad_status value yet — migration 9987
     // hasn't been pasted. Degrade to a report instead of 500ing the action
-    // (the 0011/0012 migration races both took down whole surfaces this way).
+    // (the 9989/9988 migration races both took down whole surfaces this way).
     if (error.code === "22P02" && /ad_status|enum/i.test(error.message)) return "unsupported";
     throw error;
   }
@@ -408,7 +408,7 @@ export async function deleteAdRecord(id: number): Promise<"deleted" | "noop" | "
   return "deleted";
 }
 
-/** Missing ad_photo_submissions table = migration 0015 not applied yet; the
+/** Missing ad_photo_submissions table = migration 9985 not applied yet; the
  * emailed-pictures feature stays dormant instead of erroring. */
 function submissionsSchemaMissing(error: { code?: string } | null): boolean {
   return error?.code === "42P01";
@@ -654,7 +654,7 @@ export async function finalizeDigest(
         .upsert(items, { onConflict: "digest_id,ad_id", ignoreDuplicates: true });
       if (error) throw error;
       // Mark these ads broadcast so getNewDigestAds never re-queues them
-      // (migration 0007). Guard on is-null so a bump re-broadcast can't
+      // (migration 9993). Guard on is-null so a bump re-broadcast can't
       // reset the original broadcast time.
       const { error: broadcastError } = await db()
         .from("ads")
@@ -682,7 +682,7 @@ export async function listRecentDigests(limit: number): Promise<DigestRecord[]> 
   // The table has no slot_key/slot_hour columns — the slot identity lives in
   // scheduled_for, written by createDigestIfAbsent as "<day>T<HH>:00:00Z"
   // (canonical ET identity, not a real instant). Derive both back from it.
-  // digest_no (migration 0018) is fetched with a fallback so this page never
+  // digest_no (migration 9982) is fetched with a fallback so this page never
   // 500s while the migration is pending (the e50f73d lesson).
   const fetchRecent = (columns: string) =>
     db()
@@ -723,7 +723,7 @@ export async function listRecentDigests(limit: number): Promise<DigestRecord[]> 
   });
 }
 
-/** Missing digest_no column = migration 0018 pending; numbering dormant. */
+/** Missing digest_no column = migration 9982 pending; numbering dormant. */
 function digestNoSchemaMissing(error: { code?: string } | null): boolean {
   return error?.code === "42703";
 }
@@ -817,7 +817,7 @@ export async function getRecentDigestAdIds(): Promise<number[]> {
 }
 
 export async function digestsSentOnDay(dayKey: string): Promise<number> {
-  // SMS digests with items only (item_count, migration 0006) — matches the
+  // SMS digests with items only (item_count, migration 9994) — matches the
   // file store, so an empty slot or the email edition can't suppress the
   // Reply-STOP footer on the day's first real SMS digest.
   const { count, error } = await db()
@@ -857,7 +857,7 @@ export async function seenInboundProviderId(providerId: string): Promise<boolean
 
 /**
  * Record an inbound message, returning false if it's a duplicate provider id.
- * The unique index (migration 0005) makes this race-safe: a concurrent retry
+ * The unique index (migration 9995) makes this race-safe: a concurrent retry
  * loses the INSERT with 23505, so the caller drops it before re-processing.
  */
 export async function recordInboundOnce(
@@ -945,7 +945,7 @@ export async function countRecentOutboundContaining(
   return count ?? 0;
 }
 
-// ---------- digest outbox (migration 0006) ----------
+// ---------- digest outbox (migration 9994) ----------
 
 interface OutboxRowDb {
   id: number;
@@ -1084,7 +1084,7 @@ export async function cancelQueuedOutboxFor(address: string): Promise<number> {
     return (data ?? []).length;
   } catch (e) {
     // This runs inside the STOP path (every unsubscribe) — a missing
-    // digest_outbox table (migration 0006 not applied) or transient error must
+    // digest_outbox table (migration 9994 not applied) or transient error must
     // not fail the opt-out itself (setSubscribed already committed).
     console.error("[outbox] cancelQueuedOutboxFor failed:", e instanceof Error ? e.message : e);
     return 0;

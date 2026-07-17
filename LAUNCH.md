@@ -42,14 +42,14 @@ Redeploy after any change — env edits never touch running deployments.
 ### A3. Database seeded + migrated
 - [x] Run `supabase/seed-production.sql` in the Supabase SQL editor
       (config, packs, word filter — no demo data; safe to re-run).
-- [x] **`0006_digest_outbox.sql`**, **`0007_ad_broadcast_at.sql`**,
-      **`0008_blocklist_and_controls.sql`** — all run 2026-07-08 (session 004).
-      (0006 = outbox delivery; 0007 = `ads.broadcast_at`; 0008 = blocklist +
+- [x] **`9994_digest_outbox.sql`**, **`9993_ad_broadcast_at.sql`**,
+      **`9992_blocklist_and_controls.sql`** — all run 2026-07-08 (session 004).
+      (9994 = outbox delivery; 9993 = `ads.broadcast_at`; 9992 = blocklist +
       operator-control config rows.)
-- [x] **`0009_verify_login_code.sql`** applied 2026-07-09, **`0010`** applied
-      2026-07-09, **`0011_pic_quota.sql`** applied 2026-07-16 (session 007 —
+- [x] **`9991_verify_login_code.sql`** applied 2026-07-09, **`9990`** applied
+      2026-07-09, **`9989_pic_quota.sql`** applied 2026-07-16 (session 007 —
       its absence was root cause #1 of the inbound-SMS outage). All
-      migrations 0001–0011 are now applied.
+      migrations 9999–9989 are now applied.
 
 ### A4. Telnyx
 - [x] Campaign fully accepted (TCR_ACCEPTED ✓ 2026-07-07; wait for carrier

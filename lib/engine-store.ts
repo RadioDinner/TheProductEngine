@@ -30,9 +30,9 @@ export interface StoredAd {
   /** Set when the ad rode its one included broadcast (new-ad slot). */
   broadcastAt?: string;
   /** Admin "skip the next digest": excluded from digest selection until this
-   * time passes (migration 0012). */
+   * time passes (migration 9988). */
   holdUntil?: string | null;
-  /** Admin deletion (soft — migration 0013): when the ad was removed. */
+  /** Admin deletion (soft — migration 9987): when the ad was removed. */
   deletedAt?: string;
   flagged: boolean;
   rejectedReason?: string;
@@ -980,7 +980,7 @@ export async function listRecentDigests(limit = 20): Promise<DigestRecord[]> {
 /**
  * Assign (or read back) a digest's public number (FEATURES item 5): 1, 2, 3…
  * in send order, counting from this feature's launch. Idempotent per digest;
- * null when migration 0018 isn't applied — the header simply omits the number.
+ * null when migration 9982 isn't applied — the header simply omits the number.
  */
 export async function allocateDigestNumber(digestId: number): Promise<number | null> {
   return supabaseConfigured
@@ -1034,12 +1034,12 @@ export async function revertAdToPending(id: number): Promise<boolean> {
 }
 
 /**
- * Admin deletion (soft, migration 0013): the ad's status flips to 'deleted' —
+ * Admin deletion (soft, migration 9987): the ad's status flips to 'deleted' —
  * every positive status filter (site, digests, My Ads, PIC) excludes it, while
  * digest history and the message audit log keep the ad number. Queued bumps
  * are dropped and the photo (row + storage object) is removed. No refund and
  * no seller notice — that's admin judgement, handled elsewhere if deserved.
- * "unsupported" = the store can't take the new status yet (migration 0013 not
+ * "unsupported" = the store can't take the new status yet (migration 9987 not
  * applied) — the caller surfaces that instead of 500ing.
  */
 export async function deleteAdRecord(id: number): Promise<"deleted" | "noop" | "unsupported"> {
@@ -1048,7 +1048,7 @@ export async function deleteAdRecord(id: number): Promise<"deleted" | "noop" | "
 
 /**
  * Record an emailed-in extra picture (already re-hosted) as awaiting review
- * (FEATURES item 1). "unsupported" = migration 0015 not applied — the caller
+ * (FEATURES item 1). "unsupported" = migration 9985 not applied — the caller
  * tells nobody and the feature stays dormant.
  */
 export async function addPhotoSubmission(

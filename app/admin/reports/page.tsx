@@ -53,7 +53,7 @@ export default async function AdminReports() {
       </dl>
       <p className="fine">
         Counted server-side on the homepage and ad pages — no cookies, and it counts visitors
-        even with JavaScript turned off. Requires migration 0002 to be applied.
+        even with JavaScript turned off. Requires migration 9998 to be applied.
       </p>
 
       <h2 className="section-h">Ads</h2>

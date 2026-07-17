@@ -76,100 +76,100 @@ export async function GET(req: NextRequest) {
         ? { ok: false, code: ads.error.code, error: ads.error.message }
         : { ok: true, rows: ads.count };
       // Migration probes: the deployed code depends on these columns; a
-      // missing one breaks a whole surface (0011: every inbound SMS command;
-      // 0012: digest composition + /admin/digests). Surface drift here instead
+      // missing one breaks a whole surface (9989: every inbound SMS command;
+      // 9988: digest composition + /admin/digests). Surface drift here instead
       // of leaving it to be inferred from 500s.
       const quota = await db()
         .from("users")
         .select("pic_balance", { count: "exact", head: true });
-      report.migration0011 = quota.error
+      report.migration9989 = quota.error
         ? {
             applied: false,
             code: quota.error.code,
             error: quota.error.message,
-            fix: "run supabase/migrations/0011_pic_quota.sql in the SQL editor",
+            fix: "run supabase/migrations/9989_pic_quota.sql in the SQL editor",
           }
         : { applied: true };
       const hold = await db().from("ads").select("hold_until", { count: "exact", head: true });
-      report.migration0012 = hold.error
+      report.migration9988 = hold.error
         ? {
             applied: false,
             code: hold.error.code,
             error: hold.error.message,
-            fix: "run supabase/migrations/0012_ad_hold.sql in the SQL editor",
+            fix: "run supabase/migrations/9988_ad_hold.sql in the SQL editor",
           }
         : { applied: true };
       // deleted_at ships in the same paste as the 'deleted' enum value, so
-      // this column probe stands in for the whole of 0013 (admin ad deletion).
+      // this column probe stands in for the whole of 9987 (admin ad deletion).
       const del = await db().from("ads").select("deleted_at", { count: "exact", head: true });
-      report.migration0013 = del.error
+      report.migration9987 = del.error
         ? {
             applied: false,
             code: del.error.code,
             error: del.error.message,
-            fix: "run supabase/migrations/0013_ad_delete.sql in the SQL editor",
+            fix: "run supabase/migrations/9987_ad_delete.sql in the SQL editor",
           }
         : { applied: true };
       const uid = await db().from("users").select("user_id", { count: "exact", head: true });
-      report.migration0014 = uid.error
+      report.migration9986 = uid.error
         ? {
             applied: false,
             code: uid.error.code,
             error: uid.error.message,
-            fix: "run supabase/migrations/0014_user_ids.sql in the SQL editor",
+            fix: "run supabase/migrations/9986_user_ids.sql in the SQL editor",
           }
         : { applied: true };
       const subs = await db()
         .from("ad_photo_submissions")
         .select("id", { count: "exact", head: true });
-      report.migration0015 = subs.error
+      report.migration9985 = subs.error
         ? {
             applied: false,
             code: subs.error.code,
             error: subs.error.message,
-            fix: "run supabase/migrations/0015_ad_photo_submissions.sql in the SQL editor",
+            fix: "run supabase/migrations/9985_ad_photo_submissions.sql in the SQL editor",
           }
         : { applied: true };
       const contexts = await db()
         .from("sms_contexts")
         .select("phone", { count: "exact", head: true });
-      report.migration0016 = contexts.error
+      report.migration9984 = contexts.error
         ? {
             applied: false,
             code: contexts.error.code,
             error: contexts.error.message,
-            fix: "run supabase/migrations/0016_ratings.sql in the SQL editor",
+            fix: "run supabase/migrations/9984_ratings.sql in the SQL editor",
           }
         : { applied: true };
       const chats = await db().from("chats").select("id", { count: "exact", head: true });
-      report.migration0017 = chats.error
+      report.migration9983 = chats.error
         ? {
             applied: false,
             code: chats.error.code,
             error: chats.error.message,
-            fix: "run supabase/migrations/0017_profiles_chat.sql in the SQL editor",
+            fix: "run supabase/migrations/9983_profiles_chat.sql in the SQL editor",
           }
         : { applied: true };
       const digestNo = await db()
         .from("digests")
         .select("digest_no", { count: "exact", head: true });
-      report.migration0018 = digestNo.error
+      report.migration9982 = digestNo.error
         ? {
             applied: false,
             code: digestNo.error.code,
             error: digestNo.error.message,
-            fix: "run supabase/migrations/0018_digest_numbers.sql in the SQL editor",
+            fix: "run supabase/migrations/9982_digest_numbers.sql in the SQL editor",
           }
         : { applied: true };
       const verified = await db()
         .from("users")
         .select("verified_at", { count: "exact", head: true });
-      report.migration0019 = verified.error
+      report.migration9981 = verified.error
         ? {
             applied: false,
             code: verified.error.code,
             error: verified.error.message,
-            fix: "run supabase/migrations/0019_verified_members.sql in the SQL editor",
+            fix: "run supabase/migrations/9981_verified_members.sql in the SQL editor",
           }
         : { applied: true };
     } catch (e) {

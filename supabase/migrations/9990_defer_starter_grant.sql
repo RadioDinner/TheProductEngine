@@ -1,4 +1,4 @@
--- 0010_defer_starter_grant.sql
+-- 9990_defer_starter_grant.sql
 -- Defer the starter free-ad grant from account creation to the seller's FIRST
 -- `AD NEW`. Previously ensureAccount / upsertAccountPassword granted
 -- STARTER_FREE_ADS (3) and wrote a "Welcome" ledger row the moment an account

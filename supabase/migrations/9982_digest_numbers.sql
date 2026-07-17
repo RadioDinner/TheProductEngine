@@ -1,5 +1,5 @@
 -- ============================================================
--- 0018 — digest numbers (FEATURES.md item 5, session 008)
+-- 9982 — digest numbers (FEATURES.md item 5, session 008)
 --
 -- Every SENT SMS digest (scheduled, early, or extra — anything with items)
 -- gets a number, incrementing by 1 from 1. The counter starts fresh with

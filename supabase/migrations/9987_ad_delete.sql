@@ -1,5 +1,5 @@
 -- ============================================================
--- 0013 — admin ad deletion (session 008)
+-- 9987 — admin ad deletion (session 008)
 --
 -- Ads are SOFT-deleted: status flips to the new 'deleted' enum value, so
 -- every positive status filter (public site, digest selection, My Ads,

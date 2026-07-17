@@ -3,7 +3,17 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-07-16 (session 008).
+**Last updated:** 2026-07-17 (session 009).
+
+⚠️ **MIGRATION NUMBERS RENAMED (session 009, user decision):** the repo now
+uses the descending scheme from `new_session_instructions.md` §4 —
+`9999_init.sql` counts down, lowest number = newest, **next migration =
+(lowest − 1)** (`9980_*` as of the rename). Old ascending names `0001`–`0019`
+were renamed with **new = 10000 − old** (0013 → 9987, etc.; full table in
+`supabase/migrations/README.md`); `/api/health` probe keys renamed to match
+(`migration0013` → `migration9987`). All 18 were applied to prod BEFORE the
+rename — nothing needs re-running. History sections below and `Session log/`
+keep the old numbers; decode with 10000 − old.
 
 ## What shipped in session 008 (committed DIRECTLY to `main`, per user)
 
@@ -667,11 +677,12 @@ name exactly per IRS CP-575, no LLC required.
   owns all GitHub/visibility decisions — **do not raise repo visibility
   again**; it was flagged and acknowledged.
 - `new_session_instructions.md` governs sessions (session log folder, live
-  prompt history, this file). Its sections 4–5 reference another project
-  (CoachAccountable API docs; migrations descending from `9999_`): this repo
-  has no CA code, and its applied migration is `0001_init.sql` (ascending).
-  **Ask the user** whether new migrations adopt the descending convention;
-  either way, write them re-runnable (they're pasted into the SQL editor).
+  prompt history, this file). §5 (CoachAccountable API docs) is another
+  project — no CA code here. §4 (descending migrations) **was adopted in
+  session 009 by user decision**: files renamed to descend from `9999_init.sql`
+  (map in `supabase/migrations/README.md`); the next migration takes
+  (lowest existing − 1). Write every migration re-runnable (hand-pasted into
+  the SQL editor; never `supabase db push`).
 - Commits end with `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
 - The `.agents/.claude/.codex` skills tooling is gitignored and reinstallable
   via `npx skills add mattpocock/skills` (`skills-lock.json` is committed).

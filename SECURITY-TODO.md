@@ -10,11 +10,11 @@ production — so one missing/forgotten env var silently disables it.
 
 ## Status (2026-07-08, session 003)
 
-**All prior migrations applied by the user (0001–0003, 0005)** — the P0
+**All prior migrations applied by the user (9999–9997, 9995)** — the P0
 fail-closed build, the money-race build, and the ledger-ref unique index are
 live end to end.
 
-**FIXED — digest delivery build (session 003, ⚠️ needs migration 0006 run
+**FIXED — digest delivery build (session 003, ⚠️ needs migration 9994 run
 BEFORE this code deploys):** the serial per-subscriber send loop is gone.
 Composing a due slot now enqueues one `digest_outbox` row per (subscriber,
 message part); the cron drains bounded batches in columnar order (every
@@ -34,7 +34,7 @@ outbox. Also fixed: PostgREST 1000-row truncation (`listSubscriberPhones`,
 ad-id parser full-integer match. Verified in dev: 27/27 scenario checks +
 breaker-trip alert walk.
 
-**OPS to activate:** run `supabase/migrations/0006_digest_outbox.sql` (also
+**OPS to activate:** run `supabase/migrations/9994_digest_outbox.sql` (also
 inserts the `digest_daily_segment_budget` config row); keep `ENABLE_DEV_TOOLS`
 UNSET in production; set `ADMIN_EMAIL` so breaker-trip alerts reach you.
 
@@ -55,7 +55,7 @@ marked done, now fixed (commits on `main`):
 - **Digest ad starvation (Supabase):** new PAID ads could silently never
   broadcast — `getNewDigestAds` scanned the cap×3 oldest approved ads, but
   Supabase never expires approved ads so already-broadcast ones fill the
-  window. Fixed with an `ads.broadcast_at` column (**migration 0007**).
+  window. Fixed with an `ads.broadcast_at` column (**migration 9993**).
 - **Open-redirect** had a surviving tab-character bypass
   (`/⇥/evil.com` → `//evil.com`); **SOLD/revive** lacked a store-level status
   guard (engine-only); **photo ingest** validated scheme but not host (a
@@ -70,7 +70,7 @@ marked done, now fixed (commits on `main`):
       RESOLVED: user chose to defer. Accounts are now created with ZERO passes
       (no "Welcome" ledger row at creation); the 3-ad grant is applied lazily on
       the seller's first real post via `grantStarterAdsIfFirst` (idempotent,
-      guarded by the new `users.starter_granted_at` — **migration 0010**), so a
+      guarded by the new `users.starter_granted_at` — **migration 9990**), so a
       number that only ever texts SUBSCRIBE/CREDITS/MYADS mints no passes. The
       race is closed by a conditional update on `starter_granted_at IS NULL`.
       Site copy ("your first 3 ads are free") updated. Dev-verified end to end.

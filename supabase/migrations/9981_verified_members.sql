@@ -1,5 +1,5 @@
 -- ============================================================
--- 0019 — verified members (FEATURES.md item 7, session 008)
+-- 9981 — verified members (FEATURES.md item 7, session 008)
 --
 -- The operator manually verifies real, known buyers/sellers and grants the
 -- green check from /admin/users. verified_at doubles as the flag and the

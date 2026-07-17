@@ -1,7 +1,7 @@
 -- ============================================================
 -- The Plain Exchange — analytics (page-view counter)
 -- Re-runnable: paste into the Supabase SQL editor. RLS on with no
--- policies (service role only), matching 0001_init.sql.
+-- policies (service role only), matching 9999_init.sql.
 -- ============================================================
 
 -- Day-bucketed page views. One row per (ET day, path); the app

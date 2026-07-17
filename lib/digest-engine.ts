@@ -90,7 +90,7 @@ export function composeDigestMessages(
       ? "extra edition"
       : `${SLOT_LABELS[slotHour] ?? `${slotHour}:00`}${edition === "early" ? " (sent early)" : ""}`;
   // Every sent digest carries its edition number (FEATURES item 5); omitted
-  // only while migration 0018 is pending.
+  // only while migration 9982 is pending.
   const header = gsmSanitize(
     `Plain Exchange${digestNo ? ` No. ${digestNo}` : ""} ${dateLabel} ${label}:`,
   );

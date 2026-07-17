@@ -157,13 +157,13 @@ export default async function AdminUsers({
           )}
           {params.error === "verify" && (
             <p className="form-error" role="alert">
-              Couldn&apos;t update verified status — is migration 0019 applied?
+              Couldn&apos;t update verified status — is migration 9981 applied?
             </p>
           )}
           <dl className="account-facts">
             <div>
               <dt>Member ID</dt>
-              <dd>{(await ensureUserId(phone)) ?? "— (needs migration 0014)"}</dd>
+              <dd>{(await ensureUserId(phone)) ?? "— (needs migration 9986)"}</dd>
             </div>
             {await getVerifiedAt(phone).then((verifiedAt) => (
               <div>
