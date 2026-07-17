@@ -75,7 +75,8 @@ export default async function PostAdPage({
       <p>
         Posting here costs <strong>exactly the same</strong> as texting AD NEW to{" "}
         {site.smsNumber}: a free ad pass covers it if you have one, otherwise credits — and
-        every ad goes to the same review before it runs.
+        every ad goes to the same review before it runs. Firearms are not allowed; see the{" "}
+        <Link href="/terms-and-conditions">posting rules</Link>.
       </p>
 
       {posted && (

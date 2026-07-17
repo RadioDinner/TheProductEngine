@@ -71,6 +71,10 @@ export default function TermsAndConditions() {
 
       <h2>What you may not post</h2>
       <ul>
+        <li>
+          <strong>Firearms are not allowed.</strong> No guns, ammunition, or other
+          weapons.
+        </li>
         <li>Anything illegal to sell or advertise, or anything you don&rsquo;t own or have the right to sell.</li>
         <li>Dishonest, misleading, or deliberately incomplete ads.</li>
         <li>Offensive or hateful content.</li>

@@ -215,3 +215,9 @@ keep working on the feature list until EVERYTHING on it is complete. you're on a
 
 --- 2026-07-17 20:52 ---
 also, an additional feature on the feature list, I want people to be able to manage their subscription categories from the web so you'll need to update it when they change categories. When you confrim their subscription to a certain category tell them that to stop getting that category, just reply with the category name. If they say "Horses" say something like "You will now receive ads in the Horses category. To stop receiving them, reply Horses" and so on. Also, if people just text gibberish, or say horses endlessly, it could spike our usage. I need a way of preventing that but still allowing legitimate use. Put this on the list to work on immediately.
+
+--- 2026-07-17 20:58 ---
+in the rules of things people can sell do not allow firearms
+
+--- 2026-07-17 20:59 ---
+im saying tell them that firearms are not allowed
