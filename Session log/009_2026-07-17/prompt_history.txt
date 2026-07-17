@@ -3,3 +3,9 @@ lets kick off a session and start working on the feature list as fast as possibl
 
 --- 2026-07-17 16:41 ---
 I applied all existing migrations prior to renaming them.
+
+--- 2026-07-17 16:55 ---
+start working on the feature log
+
+--- 2026-07-17 17:12 ---
+I want another feature added. When people are logged in, I want a "My ads" tab to be shown next to their message icon or their number/member email. I want people to be able to mark as sold, bump their ad, change the picture that gets sent with the /PIC command or add aditional pictures. Or delete it themselves (They do not get refunds if the ad was ever sent in any digest). If it is posted but not yet approved, refund the credit. If it was posted and approved, but not ever sent in a digest, refund the credit. Otherwise, it's game over.

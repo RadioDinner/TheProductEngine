@@ -23,6 +23,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 13 | **Modern chat threads** — sent messages bubble from the right, received from the left; a "report this message" path for review; links can't be sent; and every message on the TPE exchange is audit logged | session 008 | not started |
 | 14 | **Pictures in chat** — people in a conversation can send each other pictures; a picture NEVER rides the SMS copy (no MMS doubling) — the SMS side just gets "View image on the web" (or messages them directly) | session 008 | not started |
 | 15 | **Messaging performance overhaul** — sending a message has a distinct lag; overhaul the whole messaging system's speed | session 008 | not started |
+| 16 | **Member ad management ("My ads" tab)** — signed-in members get a "My ads" tab in the header next to the messages icon / their member link; from it they can mark an ad sold, bump it, change the picture that rides `PIC`, add additional pictures, or delete it themselves. Delete refund rules (user decision): posted but not yet approved → refund the credit; approved but never sent in any digest → refund the credit; ever sent in a digest → no refund ("game over") | session 009 | not started |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -135,3 +136,20 @@ itself; build details live in the session logs and HANDOFF.md.
   instead of `listChatsFor`; index or restructure the nudge-dedup check
   (e.g. a `last_nudged_at` column instead of scanning message bodies).
   Measure before/after with server timing logs.
+- **16 · member ad management** (arrived session 009, user words recorded in
+  the session prompt history): header tab "My ads" beside the messages icon /
+  member link. Per-ad actions for the owner: mark sold, bump (exact SMS BUMP
+  semantics — `bumpCost` charged when > 0, one queued per ad), change the
+  `PIC` picture (position 0), add additional pictures (web-only extras →
+  review-gated like item 1), delete. **Delete refund matrix (user decision,
+  verbatim intent): pending (not yet approved) → refund; approved but never
+  sent in ANY digest (`broadcast_at` null) → refund; ever sent in a digest →
+  no refund, "game over."** Delete reuses the soft-delete machinery from
+  migration 0013→9987 (status `deleted`, photos removed, queued bumps
+  dropped) — member-initiated this time, with the refund matrix on top;
+  refunds must be idempotent (ledger ref) and free-pass-paid ads refund the
+  pass the way benign rejection does. Build decisions to flag to the user:
+  (a) a REPLACEMENT position-0 picture goes through admin review before it
+  swaps in (manual-review-everything ethos; otherwise a swap bypasses
+  moderation); (b) web mark-sold offers an optional "buyer's phone" field so
+  the item-2 sale/ratings flow still gets fed (skippable).
