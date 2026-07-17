@@ -31,6 +31,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 21 | **Refund policy** — a footer page reflecting the system's actual refund rules: ordinary decline → auto refund; deleted before approval or before ever broadcasting → refund; ran in any digest → spent; violation → kept + strike; pack purchases discretionary per terms | session 009 | **built** (no migration) |
 | 22 | **Category subscriptions** — SUBSCRIBE/START answers with a category menu (alphabetical, reformatted from the user's competitor example); subscribers text one category word per message to pick what ads they get; digests filter accordingly | session 009 | not started |
 | 23 | **Metered click-to-reveal for phone numbers** (anti-scraping, user concern + decision session 009) — the website never renders seller numbers in HTML; a signed-in member clicks "Show number" per ad, metered ~10/day per account (admin-tunable, PIC-quota style), every reveal logged; excessive-reveal flags + one-click block in /admin/insights | session 009 | not started |
+| 24 | **Category management + toggle replies + spam guard** (extends item 22, builds with it) — members manage their categories from the web (/account), kept in sync with SMS; texting a category name TOGGLES it with a confirmation ("You will now receive ads in the Horses category. To stop receiving them, reply Horses"); gibberish or endless category texts must not spike outbound SMS cost — throttled while legitimate use keeps working | session 009 | not started |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -197,6 +198,29 @@ itself; build details live in the session logs and HANDOFF.md.
   (never one text per category); **the operator assigns the category at
   review** (dropdown on the review queue; web posting may offer a seller
   picker the operator can override).
+- **24 · category management + toggle + spam guard** (session 009, builds
+  WITH item 22 as one lane): (a) **Web management**: a Categories section on
+  /account with the ten checkboxes — same store as SMS, either side's change
+  shows on the other; web saves confirm ON-PAGE only (no SMS sent for web
+  changes — outbound texts cost money and the member is looking at the
+  answer). (b) **Toggle semantics** (user's copy pattern): texting a
+  category name flips it. ON: "You will now receive ads in the Horses
+  category. To stop receiving them, reply Horses." OFF: "You will no longer
+  receive Horses ads. To get them again, reply Horses." Default/grandfather
+  = ALL; picking a specific category switches to selective; replying ALL
+  returns to everything; removing the last category warns "you're not
+  getting any ads now — reply ALL or a category name" instead of going
+  silently dark. (c) **Spam/cost guard** (user: gibberish or "horses
+  endlessly" must not spike usage): category confirmations ride the
+  existing per-number reply reservation (reserve_sms, 9995) so the hourly
+  cap is the hard backstop; ON TOP, a category-specific confirmation
+  throttle — after N category toggles in an hour (default 5, tunable) the
+  member gets ONE "changes still apply; text LIST to see your categories"
+  notice and further confirmations go silent for the hour (state still
+  toggles; costs nothing outbound). Gibberish keeps the existing
+  unknown-command handling + its dedup; UNDER ATTACK mode already
+  suppresses unknown replies entirely. Add a LIST command (free-form
+  category status check, same throttle class).
 - **23 · metered click-to-reveal** (session 009; the user spotted the risk:
   one burner-phone account could scrape every seller number off the site).
   Decided posture: numbers NEVER render in page HTML (list rows or detail);

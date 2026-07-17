@@ -212,3 +212,6 @@ what is the status of the feature list? Are things still being built
 
 --- 2026-07-17 20:39 ---
 keep working on the feature list until EVERYTHING on it is complete. you're on auto, just keep plowing. I want this available asap.
+
+--- 2026-07-17 20:52 ---
+also, an additional feature on the feature list, I want people to be able to manage their subscription categories from the web so you'll need to update it when they change categories. When you confrim their subscription to a certain category tell them that to stop getting that category, just reply with the category name. If they say "Horses" say something like "You will now receive ads in the Horses category. To stop receiving them, reply Horses" and so on. Also, if people just text gibberish, or say horses endlessly, it could spike our usage. I need a way of preventing that but still allowing legitimate use. Put this on the list to work on immediately.
