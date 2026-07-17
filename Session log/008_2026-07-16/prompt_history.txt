@@ -23,3 +23,6 @@ Now, start on item zero and keep working through the items until you get to item
 
 --- 2026-07-16 21:25 ---
 one change on chats, no parties should get a "message waiting" text more than once a day. Add that to the feature list for later.
+
+--- 2026-07-16 21:44 ---
+I ran all the migrations but i need help with the photos@theplainexchange.com as a second resend inbound address

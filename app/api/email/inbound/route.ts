@@ -19,7 +19,12 @@ import { confirmUrl, siteUrl } from "@/lib/email";
 import { dispatchEmail } from "@/lib/outbound";
 import { isProduction } from "@/lib/env";
 import { site } from "@/lib/config";
-import { MAX_PHOTOS_PER_AD, normalizeAttachments, parseAdNumber } from "@/lib/email-photos";
+import {
+  MAX_PHOTOS_PER_AD,
+  normalizeAttachments,
+  parseAdNumber,
+  type InboundAttachment,
+} from "@/lib/email-photos";
 import { attachmentBytes, storeImageBytes } from "@/lib/photos";
 import { sniffImage, CONTENT_TYPE_BY_EXT } from "@/lib/image-sniff";
 import { supabaseConfigured } from "@/lib/db";
@@ -96,6 +101,33 @@ function confirmEmail(to: string): { subject: string; html: string; text: string
 }
 
 /**
+ * Resend's email.received webhook carries attachment METADATA only (no bytes,
+ * no body — a serverless-size-limit design choice). The real files live
+ * behind the Attachments API as short-lived download_urls; fetch those and
+ * let normalizeAttachments turn them into downloadable entries.
+ */
+async function resendAttachmentUrls(emailId: string): Promise<InboundAttachment[]> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return [];
+  try {
+    const response = await fetch(
+      `https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}/attachments`,
+      { headers: { Authorization: `Bearer ${key}` } },
+    );
+    if (!response.ok) {
+      console.error("[email:photos] attachments API returned HTTP", response.status);
+      return [];
+    }
+    const body = (await response.json()) as unknown;
+    const list = Array.isArray(body) ? body : ((body as { data?: unknown })?.data ?? []);
+    return normalizeAttachments(list);
+  } catch (e) {
+    console.error("[email:photos] attachments API fetch failed:", e);
+    return [];
+  }
+}
+
+/**
  * Emailed-in extra ad pictures (FEATURES item 1): a message to photos@ with
  * the ad number in the subject ("Ad 1042" / "#1042") and pictures attached.
  * Every image is byte-sniffed and re-hosted exactly like an MMS photo, then
@@ -121,7 +153,14 @@ async function handlePhotoEmail(
     console.log(`[email:photos] ad #${adId} not accepting pictures — ignored`);
     return NextResponse.json({ ok: true });
   }
-  const attachments = normalizeAttachments(data.attachments);
+  let attachments = normalizeAttachments(data.attachments);
+  // Live Resend webhooks list attachments without bytes or URLs — resolve
+  // them through the Attachments API. (Inline content/URLs, when present,
+  // are used directly: dev walks and any future provider shape.)
+  const emailId = typeof data.email_id === "string" ? data.email_id : null;
+  if (!attachments.length && emailId && Array.isArray(data.attachments) && data.attachments.length) {
+    attachments = await resendAttachmentUrls(emailId);
+  }
   if (!attachments.length) return NextResponse.json({ ok: true });
 
   const room = MAX_PHOTOS_PER_AD - (await countAdPhotos(adId));
