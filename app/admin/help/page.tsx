@@ -240,6 +240,19 @@ export default async function AdminHelp() {
         itself is the foundation.
       </p>
 
+      <h2 className="section-h">Adding a member yourself (invite by text)</h2>
+      <p>
+        On the Users tab, <strong>Add a member</strong> creates an account for a phone number
+        you type in and texts them a one-time invite: who we are, &ldquo;to sign up, reply
+        START,&rdquo; the message-frequency and rates disclosure, and HELP/STOP instructions —
+        the same compliance language as everything else we send. You can grant{" "}
+        <strong>starting credits</strong> in the same step (they land in the ledger
+        immediately, noted as an admin invite grant). The invite never repeats — one per
+        number per day, and already-subscribed numbers are refused — because it&apos;s
+        outreach to someone who hasn&apos;t texted us first: one polite knock, not a campaign.
+        Nothing else is ever sent unless they reply START.
+      </p>
+
       <h2 className="section-h">Why credits are a ledger</h2>
       <p>
         Credit balances aren&rsquo;t a single number that gets edited. Every grant, purchase,

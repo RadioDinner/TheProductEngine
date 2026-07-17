@@ -29,3 +29,10 @@ I ran all the migrations but i need help with the photos@theplainexchange.com as
 
 --- 2026-07-17 12:00 ---
 ok I will work on that while you build a "verified" seller/buyer feature for profiles. I want the verification to be a green check mark and I want to manually review and add it to accounts as I verify them. Verified sellers and buyers will get perks in the long run
+
+--- 2026-07-17 12:09 ---
+add to feature list, I want to be able to "add" a user from the /admin/users page. Can I have a button that sends them a text that says "To signup, reply START. Yada yada yada for opt out and instructions"? If so, I want that button added. I want to be able to edit their credits at the start too. 
+
+Also, another feature I want, I want LOGGED IN users to be able to post ads from the web page. I want to make sure it uses credits and I want the picture system to be very clear. You get ONE picture you can add to the ad listing, and any additional pictures are WEB ONLY. Also, make it clear that posting web ads still takes credits
+
+Another tweak to a feature for the list. I want the ability to mix messages with the messaging system on the plain exchange. For instance, if Joe messages Jacob about his wagon that is for sale, I want it to also instead of telling Joe he has a message waiting for him, send him a copy of the message. If Joe replies, send the message to Jacob's messaging profile on the plain exchange AND to his SMS if he has one.

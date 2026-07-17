@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   adminGrantCredits,
+  adminInviteUser,
   adminMergeUsers,
   adminSetBan,
   adminSetStrikes,
@@ -52,6 +53,48 @@ export default async function AdminUsers({
   return (
     <>
       <h1>Users</h1>
+      {params.saved === "invite" && (
+        <p className="notice" role="status">
+          {params.reason ?? "Invite sent."}
+        </p>
+      )}
+      {params.error === "invite" && (
+        <p className="form-error" role="alert">
+          {params.reason ?? "Invite failed."}
+        </p>
+      )}
+      <details className="dev-notice">
+        <summary className="fine">Add a member (send a signup invite by text)</summary>
+        <p className="fine">
+          Creates their account right away and texts them a one-time invite — &ldquo;To sign
+          up, reply START&rdquo; with opt-out instructions. Starting credits (optional) are
+          granted immediately, so they&apos;re ready the moment they reply. One invite per
+          number per day; numbers that are already subscribed are refused.
+        </p>
+        <form action={adminInviteUser} className="review-form">
+          <div className="inline-fields">
+            <input
+              name="phone"
+              type="tel"
+              placeholder="330-555-0142"
+              aria-label="Phone number to invite"
+              required
+            />
+            <input
+              name="credits"
+              type="number"
+              min={0}
+              max={1000}
+              placeholder="Starting credits (optional)"
+              aria-label="Starting credits"
+              className="admin-num"
+            />
+            <button className="btn btn-sm" type="submit">
+              Create account + send invite
+            </button>
+          </div>
+        </form>
+      </details>
       <form className="search" action="/admin/users" method="get">
         <label className="visually-hidden" htmlFor="q">
           Search users

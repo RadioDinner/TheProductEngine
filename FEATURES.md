@@ -15,6 +15,9 @@ itself; build details live in the session logs and HANDOFF.md.
 | 5 | **Digest numbers** — every digest carries a number, incrementing by 1 from 1; counter reset at build time | session 008 | **built** (migration 0018) |
 | 6 | **Chat nudge cap** — no party gets a "message waiting" text more than once a day (item 4 shipped with a 3-hour dedup; tighten it to 24 h) | session 008 | not started |
 | 7 | **Verified members** — a green check mark, granted and revoked manually by the operator as they verify real buyers/sellers; verified members get perks in the long run | session 008 | **built** (migration 0019) |
+| 8 | **Admin "add a member"** — from /admin/users: a button that texts an invite ("to sign up, reply START", with opt-out + instructions), and the ability to set their starting credits right there | session 008 | **built** (no migration) |
+| 9 | **Web ad posting** — LOGGED-IN members can post ads from the website; it spends credits exactly like texting one in (and says so clearly); the picture rules stay explicit: ONE picture rides the ad listing, any additional pictures are WEB ONLY | session 008 | not started |
+| 10 | **Mixed SMS + chat messaging** — chat messages are copied to the recipient's SMS (a real copy of the message, not "you have a message waiting"); an SMS reply routes back into the chat thread on the site AND to the other party's SMS if they have one | session 008 | not started |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -56,3 +59,24 @@ itself; build details live in the session logs and HANDOFF.md.
   page ("Verified seller"), the member's account page, and beside member
   numbers in chat. Perks are deliberately NOT implemented yet — the flag is
   the foundation; hang perks off `getVerifiedAt` when decided.
+- **8 · admin add-a-member**: creates the account on the spot, optionally
+  grants starting credits (ledger `grant` entry, note included), and texts a
+  compliant invite (identifies us, "reply START", up-to-4/day + msg&data
+  rates, HELP/STOP, the /sms link). Invite is deduped to one per number per
+  24 h and refuses already-subscribed numbers; reply-class, so pause/
+  blocklist/caps all apply. START then runs the normal subscribe flow
+  (welcome + carrier opt-in confirmation).
+- **9 · web ad posting**: reuse the SMS pricing path exactly (free pass →
+  credits; starter grant on first post) so web and text ads cost the same.
+  UI must say the price BEFORE posting. Picture rules on the form: one
+  "listing picture" slot (= the paid MMS/digest picture, photo price) vs
+  "extra pictures (web only)" — reusing the item-1 gallery. Ads still land
+  in the review queue like everything else.
+- **10 · mixed SMS+chat**: SUPERSEDES item 6's nudge-once-a-day — instead of
+  a nudge, the recipient's SMS gets the actual message text, and their SMS
+  reply routes back into the thread (and on to the other party's SMS).
+  ⚠️ Resolve before building: every chat message becomes a billed SMS (the
+  nudge was designed to cap exactly that), reply-routing needs a way to know
+  WHICH thread an inbound text answers (most-recent-thread heuristic or a
+  short reply code), and chat texts must respect STOP/pause/caps. Decide the
+  cost posture with the user at build time.

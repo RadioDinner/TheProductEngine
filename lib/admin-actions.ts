@@ -5,11 +5,15 @@ import { requireAdmin } from "@/lib/admin";
 import { approveAd, rejectAd } from "@/lib/moderation";
 import {
   addLedgerEntry,
+  ensureAccount,
+  getAccount,
   mergeAccounts,
   setOffenseCount,
   setPostingBanned,
   setVerified,
 } from "@/lib/store";
+import { dispatchSms } from "@/lib/outbound";
+import { site } from "@/lib/config";
 import {
   addWordRule,
   getEngineSettings,
@@ -20,8 +24,10 @@ import {
 import { blockNumber, unblockNumber } from "@/lib/blocklist";
 import {
   cancelQueuedOutboxFor,
+  countRecentOutboundContaining,
   deleteAdRecord,
   getAdRecord,
+  logMessage,
   queueBump,
   reassignAdOwnership,
   resolvePhotoSubmission,
@@ -210,6 +216,52 @@ export async function adminMergeUsers(formData: FormData): Promise<void> {
     detail = `Linked ${outcome.email} — this member now gets both the text and email digests.`;
   }
   redirect(`/admin/users?phone=${phone}&saved=merge&detail=${encodeURIComponent(detail)}`);
+}
+
+/** Exact phrase in the invite text — the once-per-day dedup key. */
+const INVITE_MARKER = "To sign up, reply START";
+
+/**
+ * Add a member from /admin/users (FEATURES item 8): create the account,
+ * optionally grant starting credits, and text a compliant invite. The invite
+ * is reply-class (pause/blocklist/caps apply), refused for already-subscribed
+ * numbers, and deduped to one per number per 24 h — an invite is outreach to
+ * someone who never texted us, so it stays polite and non-repeating. Their
+ * START then runs the normal subscribe flow (welcome + carrier opt-in text).
+ */
+export async function adminInviteUser(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const phone = normalizePhone(String(formData.get("phone") ?? ""));
+  if (!phone) {
+    redirect(`/admin/users?error=invite&reason=${encodeURIComponent("Enter a 10-digit phone number.")}`);
+  }
+  const back = (kind: "saved" | "error", detail: string) =>
+    redirect(`/admin/users?phone=${phone}&${kind}=invite&reason=${encodeURIComponent(detail)}`);
+
+  const existing = await getAccount(phone);
+  if (existing?.subscribedAt) back("error", "That number is already subscribed.");
+  const invited = await countRecentOutboundContaining(phone, INVITE_MARKER, 24 * 60 * 60 * 1000);
+  if (invited > 0) back("error", "That number was already invited in the last day.");
+
+  await ensureAccount(phone);
+  const rawCredits = Number(String(formData.get("credits") ?? "").trim() || 0);
+  const credits = Number.isInteger(rawCredits) ? Math.min(Math.max(rawCredits, 0), 1000) : 0;
+  if (credits > 0) {
+    await addLedgerEntry(phone, {
+      delta: credits,
+      kind: "grant",
+      note: "Starting credits — added with the admin invite",
+    });
+  }
+
+  const invite =
+    `${site.name}: you're invited to Holmes County's classifieds by text. ` +
+    `${INVITE_MARKER} (up to 4 msgs/day; msg&data rates may apply). ` +
+    `Reply HELP for help, STOP to opt out. Info: ThePlainExchange.com/sms or call ${site.supportPhone}.`;
+  const { sent, reason } = await dispatchSms(phone, invite, { cls: "reply" });
+  if (!sent) back("error", `Account created${credits ? ` with ${credits} credits` : ""}, but the text was not sent (${reason ?? "suppressed"}).`);
+  await logMessage({ direction: "outbound", channel: "sms", address: phone, body: invite });
+  back("saved", `Invite sent${credits ? ` and ${credits} credit${credits === 1 ? "" : "s"} granted` : ""}.`);
 }
 
 /** Grant or revoke the green check (FEATURES item 7) — a manual, human
