@@ -17,6 +17,7 @@ import {
 import { supabaseConfigured } from "@/lib/db";
 import * as remote from "@/lib/store-supabase";
 import { accruePicQuota } from "@/lib/pic-quota";
+import { unreadChatCount } from "@/lib/unread";
 import { normalizePhone } from "@/lib/phone";
 import { USER_ID_MAX_ATTEMPTS, isRetirementActive, randomUserId } from "@/lib/user-id";
 
@@ -448,6 +449,23 @@ const file = {
           unread,
         };
       });
+  },
+
+  countUnreadChats(phone: string): number {
+    const store = load();
+    const lastReadByChat = new Map<number, number>(
+      (store.chats ?? [])
+        .filter((c) => c.aPhone === phone || c.bPhone === phone)
+        .map((c) => [c.id, store.chatReads?.[`${c.id}#${phone}`] ?? 0]),
+    );
+    return unreadChatCount(
+      (store.chatMessages ?? []).map((m) => ({
+        chatId: m.chatId,
+        id: m.id,
+        fromOther: m.fromPhone !== phone,
+      })),
+      lastReadByChat,
+    );
   },
 
   getVerifiedAt(phone: string): string | null {
@@ -1057,6 +1075,13 @@ export async function markChatRead(chatId: number, phone: string): Promise<void>
   return supabaseConfigured
     ? remote.markChatRead(chatId, phone)
     : file.markChatRead(chatId, phone);
+}
+
+/** Number of chats with unread messages — the light count behind the header
+ * badge and its ~60s poll (item 12). Unlike listChatsFor it skips the
+ * other-member profile lookup. 0 when the chat schema (9983) is missing. */
+export async function countUnreadChats(phone: string): Promise<number> {
+  return supabaseConfigured ? remote.countUnreadChats(phone) : file.countUnreadChats(phone);
 }
 
 /** When the operator verified this member (FEATURES item 7); null = not

@@ -54,15 +54,20 @@ export default async function Home({
 
   return (
     <>
-      <div className="subscribe-strip">
-        <p className="container">
-          Get the ads by text — text <strong>SUBSCRIBE</strong> to{" "}
-          <strong className="tel">{site.smsNumber}</strong>. Free, up to 4 digests a day; msg
-          &amp; data rates may apply. Reply <strong>HELP</strong> for help,{" "}
-          <strong>STOP</strong> to cancel. <Link href="/sms">Text terms</Link> ·{" "}
-          <Link href="/privacy">Privacy</Link>.
-        </p>
-      </div>
+      {/* Visitor opt-in surface (10DLC CTA) — a signed-in member already
+          subscribed, so the pitch would just be noise for them (item 11).
+          The every-page HELP/STOP paragraph stays in the layout footer. */}
+      {!session && (
+        <div className="subscribe-strip">
+          <p className="container">
+            Get the ads by text — text <strong>SUBSCRIBE</strong> to{" "}
+            <strong className="tel">{site.smsNumber}</strong>. Free, up to 4 digests a day; msg
+            &amp; data rates may apply. Reply <strong>HELP</strong> for help,{" "}
+            <strong>STOP</strong> to cancel. <Link href="/sms">Text terms</Link> ·{" "}
+            <Link href="/privacy">Privacy</Link>.
+          </p>
+        </div>
+      )}
 
       <div className="container">
         <h1 className="visually-hidden">Latest classified ads</h1>

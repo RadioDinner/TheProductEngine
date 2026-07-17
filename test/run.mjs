@@ -14,6 +14,7 @@ const SUITES = [
   "email-subject",
   "user-id",
   "email-photos",
+  "unread",
 ];
 
 let totalPass = 0;

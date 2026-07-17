@@ -14,7 +14,7 @@
   --muted: oklch(0.45 0.015 210);
   --blue: oklch(0.4 0.09 210); /* the second ink — actions, links, meaning */
   --blue-deep: oklch(0.32 0.08 210);
-  --red: oklch(0.5 0.15 28); /* SOLD marks and errors only */
+  --red: oklch(0.5 0.15 28); /* SOLD marks, errors, and the unread badge only */
   --rule: oklch(0.875 0.006 210);
   --rule-strong: oklch(0.3 0.012 210);
   --border-input: oklch(0.55 0.012 210);
@@ -164,6 +164,24 @@ input:focus-visible {
 
 .folio a {
   font-weight: 500;
+}
+
+/* Messages icon + unread count in the folio nav (item 12). */
+.messages-link {
+  text-decoration: none;
+}
+
+.unread-badge {
+  display: inline-block;
+  min-width: 1.4em;
+  margin-left: 2px;
+  padding: 0 0.3em;
+  border-radius: 999px;
+  background: var(--red);
+  color: var(--paper);
+  font: 700 var(--text-xs) / 1.5 var(--font-sans);
+  text-align: center;
+  vertical-align: 0.15em;
 }
 
 .nameplate {

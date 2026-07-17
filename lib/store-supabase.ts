@@ -27,6 +27,7 @@ import {
   type VerifyCodeResult,
 } from "@/lib/store";
 import { normalizePhone } from "@/lib/phone";
+import { unreadChatCount } from "@/lib/unread";
 import { USER_ID_MAX_ATTEMPTS, isRetirementActive, randomUserId } from "@/lib/user-id";
 
 interface UserRow {
@@ -523,6 +524,63 @@ export async function listChatsFor(phone: string): Promise<ChatSummary[]> {
       unread: unreadSet.has(c.id),
     };
   });
+}
+
+/**
+ * Lean unread-chat count for the header badge and its ~60s poll (item 12).
+ * Deliberately NOT listChatsFor: no other-member profile lookup, chat ids
+ * only — userByPhone → chat ids → chat_reads → recent chat_messages.
+ * Degrades to 0 when the chat schema (migration 9983) is missing.
+ */
+export async function countUnreadChats(phone: string): Promise<number> {
+  const user = await userByPhone(phone);
+  if (!user) return 0;
+  const { data: chats, error: chatsError } = await db()
+    .from("chats")
+    .select("id")
+    .or(`a_user_id.eq.${user.id},b_user_id.eq.${user.id}`)
+    .order("last_message_at", { ascending: false })
+    .limit(200);
+  if (chatsError) {
+    if (chatSchemaMissing(chatsError)) return 0;
+    throw chatsError;
+  }
+  const chatIds = (chats ?? []).map((c) => c.id as number);
+  if (!chatIds.length) return 0;
+
+  // Watermark per chat; no chat_reads row = never read (0).
+  const lastReadByChat = new Map<number, number>(chatIds.map((id) => [id, 0]));
+  const { data: reads, error: readsError } = await db()
+    .from("chat_reads")
+    .select("chat_id, last_read_message_id")
+    .eq("user_id", user.id)
+    .in("chat_id", chatIds);
+  if (readsError) {
+    if (chatSchemaMissing(readsError)) return 0;
+    throw readsError;
+  }
+  for (const r of reads ?? []) {
+    lastReadByChat.set(r.chat_id as number, r.last_read_message_id as number);
+  }
+
+  const { data: msgs, error: msgsError } = await db()
+    .from("chat_messages")
+    .select("chat_id, id, from_user_id")
+    .in("chat_id", chatIds)
+    .order("id", { ascending: false })
+    .limit(500);
+  if (msgsError) {
+    if (chatSchemaMissing(msgsError)) return 0;
+    throw msgsError;
+  }
+  return unreadChatCount(
+    (msgs ?? []).map((m) => ({
+      chatId: m.chat_id as number,
+      id: m.id as number,
+      fromOther: m.from_user_id !== user.id,
+    })),
+    lastReadByChat,
+  );
 }
 
 export async function getVerifiedAt(phone: string): Promise<string | null> {
