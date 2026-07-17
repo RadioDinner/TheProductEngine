@@ -227,3 +227,6 @@ On the entire website, for support tell them to call or text 234-301-0048. I wan
 
 --- 2026-07-17 21:12 ---
 I want a category browser somewhere on the homepage when they're browsing ads. I want them to be able to select what category they see
+
+--- 2026-07-17 21:20 ---
+what happens if someone sends a random work to the SMS number
