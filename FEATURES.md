@@ -29,6 +29,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 19 | **"Featured" rotating sidebar spots** — LEFT of the homepage ads: two Featured slots stacked on top of each other, each rotating every 8 seconds through up to 3 ads (6 sellable spots total); operator posts them manually; they are image ads that may link to external websites | session 009 | not started |
 | 20 | **Accessibility statement** — a footer page adapted from the user's template with truthful Plain Exchange specifics (WCAG 2.1 AA aim, partial compliance declared for member-submitted photos, SMS as the accessible alternative channel) | session 009 | **built** (no migration) |
 | 21 | **Refund policy** — a footer page reflecting the system's actual refund rules: ordinary decline → auto refund; deleted before approval or before ever broadcasting → refund; ran in any digest → spent; violation → kept + strike; pack purchases discretionary per terms | session 009 | **built** (no migration) |
+| 22 | **Category subscriptions** — SUBSCRIBE/START answers with a category menu (alphabetical, reformatted from the user's competitor example); subscribers text one category word per message to pick what ads they get; digests filter accordingly | session 009 | not started |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -178,6 +179,28 @@ itself; build details live in the session logs and HANDOFF.md.
   ≈ 7 extra broadcasts of one sponsor line to the whole list).
   **Approval (user, session 009): business listings go through the SAME
   approval process as regular ads** — payment never skips the review queue.
+- **22 · category subscriptions** (arrived session 009; the user pasted a
+  competitor's menu and asked for better formatting, different examples,
+  alphabetical order). DRAFT welcome menu (GSM-7-safe, pending user OK):
+  "Welcome to The Plain Exchange! Pick what you want ads for - text one
+  word per message: / ALL - every ad / BUGGIES - buggies & bikes / DOGS -
+  dogs & puppies / GARDEN - lawn & garden / HORSES - horses & tack /
+  HOUSEHOLD - household, furniture, realty / HUNTING - hunting, fishing,
+  camping / LIVESTOCK - goats, ponies, small animals / MACHINERY -
+  machinery & equipment / WANTED - wanted & everything else / Text HELP for
+  help. Text STOP to end." Semantics: one word per text (per the user's
+  example); multiple categories allowed; category words become first-class
+  commands; existing subscribers grandfather to ALL. Open design forks
+  (AskUserQuestion pending at queue time): digest delivery for
+  multi-category subscribers (one combined digest with just their
+  categories vs one text per category) and who assigns an ad's category
+  (operator at review — recommended, review already touches every ad — vs
+  seller keyword at posting). Build notes: needs a migration (subscriber
+  category prefs + ads.category), commands.ts parsing, welcome rewrite in
+  engine.ts, digest composer filtering + outbox interaction, admin review
+  dropdown + web-posting field, /admin/help doc. The digest cost model
+  changes with per-category filtering — fewer segments per subscriber on
+  average (people get less), worth noting in profitability.
 - **18 · Town hall** (arrived session 009): an events board on the main
   website — people post upcoming events; optionally pay to push the event as
   an SMS or email blast. Pricing NOT settled (user: "probably just $19.99 a

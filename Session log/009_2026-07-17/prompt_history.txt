@@ -176,3 +176,22 @@ Add to the footer of our website, a copyright statement @2028 by The Plain Excha
 
 --- 2026-07-17 19:02 ---
 make the copyright 2026
+
+--- 2026-07-17 19:15 ---
+I want a categories system like this to be sent out when people send "SUBSCRIBE" or "START" to my number
+
+Please choose your categories with words that are in (). 
+Please txt each one separately.
+Reply(All)-All Ads
+Reply(Horses)-Horses
+Reply(Livestock)-Ponies, goats, small animals
+Reply(Dogs)-Dogs
+Reply(Lawn)-Lawn & garden
+Reply(Buggies)-Buggies, Bikes
+Reply(Machinery)-Machinery, equipment
+Reply(Fishing)-Fishing, Camping
+Reply(Household)-Household, Solar, Realty
+Reply (Wanted)-Wanted, miscellaneous
+TxtSTOPtoEnd
+
+However, make it look better in terms of format and use different examples. Vary the list of categories or put it in alphabetical order
