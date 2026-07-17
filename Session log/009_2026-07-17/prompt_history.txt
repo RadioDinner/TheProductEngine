@@ -195,3 +195,8 @@ Reply (Wanted)-Wanted, miscellaneous
 TxtSTOPtoEnd
 
 However, make it look better in terms of format and use different examples. Vary the list of categories or put it in alphabetical order
+
+--- 2026-07-17 19:22 --- (AskUserQuestion answers, item 22)
+Delivery: "One combined digest (Recommended)"
+Categorizing: "You, at review (Recommended)"
+Menu copy: "Yes, use the draft"

@@ -190,12 +190,12 @@ itself; build details live in the session logs and HANDOFF.md.
   machinery & equipment / WANTED - wanted & everything else / Text HELP for
   help. Text STOP to end." Semantics: one word per text (per the user's
   example); multiple categories allowed; category words become first-class
-  commands; existing subscribers grandfather to ALL. Open design forks
-  (AskUserQuestion pending at queue time): digest delivery for
-  multi-category subscribers (one combined digest with just their
-  categories vs one text per category) and who assigns an ad's category
-  (operator at review — recommended, review already touches every ad — vs
-  seller keyword at posting). Build notes: needs a migration (subscriber
+  commands; existing subscribers grandfather to ALL. DECIDED (user, session
+  009 AskUserQuestion): **menu draft approved as-is**; **delivery = ONE
+  COMBINED digest per slot** containing only the subscriber's categories
+  (never one text per category); **the operator assigns the category at
+  review** (dropdown on the review queue; web posting may offer a seller
+  picker the operator can override). Build notes: needs a migration (subscriber
   category prefs + ads.category), commands.ts parsing, welcome rewrite in
   engine.ts, digest composer filtering + outbox interaction, admin review
   dropdown + web-posting field, /admin/help doc. The digest cost model
