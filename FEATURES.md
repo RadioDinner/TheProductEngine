@@ -13,6 +13,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 3 | **Profile picture + pickup address** — settable by the member; the address is private to them, optionally shareable with a buyer they're in conversation with | session 008 | **built** (migration 0017) |
 | 4 | **Chat** — on-platform messages between buyers and sellers, keyed on user ids, so nobody's phone number is exposed | session 008 | **built** (migration 0017) |
 | 5 | **Digest numbers** — every digest carries a number, incrementing by 1 from 1; counter reset at build time | session 008 | **built** (migration 0018) |
+| 6 | **Chat nudge cap** — no party gets a "message waiting" text more than once a day (item 4 shipped with a 3-hour dedup; tighten it to 24 h) | session 008 | not started |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -46,3 +47,5 @@ itself; build details live in the session logs and HANDOFF.md.
   (SMS edition; its email mirror shows the same number). Numbering starts at
   1 for the first digest composed after migration 0018 — past digests are not
   renumbered.
+- **6 · chat nudge cap**: one-line change when built — the dedup window in
+  `nudgeBySms` (lib/account-actions.ts) goes from 3 h to 24 h. No migration.

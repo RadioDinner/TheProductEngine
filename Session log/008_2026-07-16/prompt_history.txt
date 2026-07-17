@@ -20,3 +20,6 @@ Fourth item, I want to add a "chat" feature. This would be between buyers and se
 Fifth item, I want each digest to have a digest number, incrementing up by 1, starting at 1. Reset the number now for digests to start sending out. 
 
 Now, start on item zero and keep working through the items until you get to item 5, then write the handoff, commit it to main and end the session
+
+--- 2026-07-16 21:25 ---
+one change on chats, no parties should get a "message waiting" text more than once a day. Add that to the feature list for later.
