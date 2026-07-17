@@ -3,10 +3,12 @@
 // is pure date math (no more ILIKE scans over the message log).
 import { hasLink } from "../lib/content-filter.ts";
 import {
+  CHAT_NUDGE_WINDOW_MS,
   CHAT_PHOTO_CAP,
   CHAT_SEND_NOTES,
   MAX_CHAT_PHOTO_BYTES,
   chatSendNote,
+  nudgeWindowOpen,
 } from "../lib/chat.ts";
 
 export const name = "chat";
@@ -29,4 +31,17 @@ export function run(t) {
   // Pictures in chat (item 14).
   t.eq("per-thread photo cap is a positive integer", Number.isInteger(CHAT_PHOTO_CAP) && CHAT_PHOTO_CAP > 0, true);
   t.eq("photo byte cap matches the shared 8 MB ingest limit", MAX_CHAT_PHOTO_BYTES, 8 * 1024 * 1024);
+
+  // Nudge dedup window math (item 15 — replaces the ILIKE scan).
+  const now = Date.parse("2026-07-17T12:00:00Z");
+  const hours = (n) => n * 60 * 60 * 1000;
+  t.eq("window is one day", CHAT_NUDGE_WINDOW_MS, hours(24));
+  t.eq("never nudged → open", nudgeWindowOpen(null, now), true);
+  t.eq("nudged 1h ago → closed", nudgeWindowOpen(new Date(now - hours(1)).toISOString(), now), false);
+  t.eq("nudged 23h59m ago → closed", nudgeWindowOpen(new Date(now - hours(24) + 60_000).toISOString(), now), false);
+  t.eq("nudged exactly 24h ago → open", nudgeWindowOpen(new Date(now - hours(24)).toISOString(), now), true);
+  t.eq("nudged 3 days ago → open", nudgeWindowOpen(new Date(now - hours(72)).toISOString(), now), true);
+  t.eq("garbage timestamp fails open", nudgeWindowOpen("not-a-date", now), true);
+  t.eq("future timestamp (clock skew) → closed", nudgeWindowOpen(new Date(now + hours(1)).toISOString(), now), false);
+  t.eq("custom window honored", nudgeWindowOpen(new Date(now - hours(2)).toISOString(), now, hours(1)), true);
 }

@@ -60,6 +60,9 @@ export interface Account {
   /** When the operator verified this member (FEATURES item 7) — file store
    * only; Supabase reads it via getVerifiedAt (migration 9981). */
   verifiedAt?: string | null;
+  /** Last you-have-a-chat-message SMS (item 15, migration 9980) — the nudge
+   * dedup watermark that replaced the audit-log body scan. */
+  chatNudgedAt?: string | null;
 }
 
 /** Result of an atomic PIC-quota reservation. remaining = -1 when the quota is off. */
@@ -119,6 +122,30 @@ export interface ChatMessageView {
   reported?: boolean;
   at: string;
 }
+
+/** Everything the thread page needs, fetched (and marked read) in one call. */
+export interface ChatThreadView {
+  summary: ChatSummary;
+  messages: ChatMessageView[];
+}
+
+/** Result of sending into a thread (item 15 shape). */
+export type SendChatResult =
+  | {
+      outcome: "sent";
+      /** The stored message, for optimistic/confirmed append in the UI. */
+      message: ChatMessageView;
+      /** So the caller can nudge them by SMS — never shown in the chat UI. */
+      otherPhone: string;
+      /** When the other party last got the nudge SMS; null = never;
+       * undefined = unknown (pre-9980 — caller falls back to the log scan). */
+      otherNudgedAt?: string | null;
+      /** True when the audit copy already happened inside the send_chat RPC. */
+      audited: boolean;
+      /** Which implementation ran — for the send-timing logs. */
+      path: "rpc" | "fallback" | "file";
+    }
+  | { outcome: "denied" | "unsupported" | "photocap" };
 
 /** One open member report, for the operator queue (item 13, migration 9980). */
 export interface ReportedChatMessage {
@@ -573,9 +600,7 @@ const file = {
     fromPhone: string,
     body: string,
     photo?: string | null,
-  ):
-    | { outcome: "sent"; otherPhone: string }
-    | { outcome: "denied" | "unsupported" | "photocap" } {
+  ): SendChatResult {
     const store = load();
     const chat = (store.chats ?? []).find((c) => c.id === chatId);
     if (!chat || (chat.aPhone !== fromPhone && chat.bPhone !== fromPhone)) {
@@ -587,19 +612,65 @@ const file = {
       return { outcome: "photocap" };
     }
     const id = (messages[messages.length - 1]?.id ?? 0) + 1;
-    messages.push({
-      id,
-      chatId,
-      fromPhone,
-      body,
-      at: new Date().toISOString(),
-      ...(photo ? { photo } : {}),
-    });
-    chat.lastMessageAt = new Date().toISOString();
+    const at = new Date().toISOString();
+    messages.push({ id, chatId, fromPhone, body, at, ...(photo ? { photo } : {}) });
+    chat.lastMessageAt = at;
     // Your own send marks the thread read for you.
     (store.chatReads ??= {})[`${chatId}#${fromPhone}`] = id;
     save(store);
-    return { outcome: "sent", otherPhone: chat.aPhone === fromPhone ? chat.bPhone : chat.aPhone };
+    const otherPhone = chat.aPhone === fromPhone ? chat.bPhone : chat.aPhone;
+    return {
+      outcome: "sent",
+      message: { id, mine: true, body, photo: photo ?? null, reported: false, at },
+      otherPhone,
+      otherNudgedAt: store.accounts[otherPhone]?.chatNudgedAt ?? null,
+      audited: false,
+      path: "file",
+    };
+  },
+
+  /** The thread page's one-stop read: summary + messages, marking it read. */
+  openChatThread(chatId: number, phone: string): ChatThreadView | null {
+    const store = load();
+    const chat = (store.chats ?? []).find((c) => c.id === chatId);
+    if (!chat || (chat.aPhone !== phone && chat.bPhone !== phone)) return null;
+    const otherPhone = chat.aPhone === phone ? chat.bPhone : chat.aPhone;
+    const other = store.accounts[otherPhone];
+    const messages = (store.chatMessages ?? [])
+      .filter((m) => m.chatId === chatId)
+      .sort((a, b) => a.id - b.id);
+    const last = messages[messages.length - 1];
+    if (last) {
+      (store.chatReads ??= {})[`${chatId}#${phone}`] = last.id;
+      save(store);
+    }
+    return {
+      summary: {
+        id: chat.id,
+        adId: chat.adId,
+        otherMemberId: other?.userId ?? null,
+        otherPhoto: other?.profilePhoto ?? null,
+        otherVerified: Boolean(other?.verifiedAt),
+        lastMessageAt: chat.lastMessageAt,
+        unread: false, // you're reading it right now
+      },
+      messages: messages.map((m) => ({
+        id: m.id,
+        mine: m.fromPhone === phone,
+        body: m.body,
+        photo: m.photo ?? null,
+        reported: Boolean(m.reportedAt),
+        at: m.at,
+      })),
+    };
+  },
+
+  setChatNudgedAt(phone: string): void {
+    const store = load();
+    const account = store.accounts[phone];
+    if (!account) return;
+    account.chatNudgedAt = new Date().toISOString();
+    save(store);
   },
 
   markChatRead(chatId: number, phone: string): void {
@@ -1151,22 +1222,39 @@ export async function listChatMessages(
     : file.listChatMessages(chatId, phone);
 }
 
-/** Send into a thread (members only). Returns the other party's phone so the
- * caller can nudge them by SMS — the phone is never shown in the chat UI.
- * `photo` (item 14) is an already-re-hosted storage URL; "photocap" = the
- * thread is at its per-thread picture limit (CHAT_PHOTO_CAP). */
+/** Send into a thread (members only). `photo` (item 14) is an already-
+ * re-hosted storage URL; "photocap" = the thread is at its picture limit
+ * (CHAT_PHOTO_CAP). In prod this is ONE round trip via the send_chat RPC
+ * (migration 9980), falling back to the multi-query path until it's pasted. */
 export async function sendChatMessage(
   chatId: number,
   fromPhone: string,
   body: string,
   photo?: string | null,
-): Promise<
-  | { outcome: "sent"; otherPhone: string }
-  | { outcome: "denied" | "unsupported" | "photocap" }
-> {
+): Promise<SendChatResult> {
   return supabaseConfigured
     ? remote.sendChatMessage(chatId, fromPhone, body, photo)
     : file.sendChatMessage(chatId, fromPhone, body, photo);
+}
+
+/**
+ * Everything the thread page needs in one call: the single chat's summary
+ * (no listChatsFor scan) plus its messages — and it marks the thread read,
+ * since rendering it IS reading it. Null = not a member / no such chat.
+ */
+export async function openChatThread(
+  chatId: number,
+  phone: string,
+): Promise<ChatThreadView | null> {
+  return supabaseConfigured
+    ? remote.openChatThread(chatId, phone)
+    : file.openChatThread(chatId, phone);
+}
+
+/** Record that the you-have-a-message SMS just went to this phone (item 15).
+ * Best-effort: a no-op before migration 9980. */
+export async function setChatNudgedAt(phone: string): Promise<void> {
+  return supabaseConfigured ? remote.setChatNudgedAt(phone) : file.setChatNudgedAt(phone);
 }
 
 export async function markChatRead(chatId: number, phone: string): Promise<void> {
