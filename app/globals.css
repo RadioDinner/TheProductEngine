@@ -1060,6 +1060,15 @@ a.btn-sm:hover {
   opacity: 0.55;
 }
 
+/* Picture-message composer (item 14). */
+.chat-photo-form {
+  margin-top: var(--space-sm);
+}
+
+.chat-photo-form input[type="file"] {
+  font-size: var(--text-sm);
+}
+
 /* ---------- Footer ---------- */
 
 .footer {

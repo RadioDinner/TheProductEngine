@@ -28,6 +28,7 @@ import {
   type VerifyCodeResult,
 } from "@/lib/store";
 import { normalizePhone } from "@/lib/phone";
+import { CHAT_PHOTO_CAP } from "@/lib/chat";
 import { USER_ID_MAX_ATTEMPTS, isRetirementActive, randomUserId } from "@/lib/user-id";
 
 interface UserRow {
@@ -706,13 +707,31 @@ export async function sendChatMessage(
   chatId: number,
   fromPhone: string,
   body: string,
-): Promise<{ outcome: "sent"; otherPhone: string } | { outcome: "denied" | "unsupported" }> {
+  photo?: string | null,
+): Promise<
+  | { outcome: "sent"; otherPhone: string }
+  | { outcome: "denied" | "unsupported" | "photocap" }
+> {
   const membership = await chatForMember(chatId, fromPhone);
   if (!membership) return { outcome: "denied" };
   const { chat, userId } = membership;
+  if (photo) {
+    // Per-thread picture cap (item 14). Pre-9980 the photo column doesn't
+    // exist — picture sends degrade to "unsupported", text keeps working.
+    const { count, error: capError } = await db()
+      .from("chat_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("chat_id", chatId)
+      .not("photo", "is", null);
+    if (capError) {
+      if (chatSchemaMissing(capError)) return { outcome: "unsupported" };
+      throw capError;
+    }
+    if ((count ?? 0) >= CHAT_PHOTO_CAP) return { outcome: "photocap" };
+  }
   const { data: inserted, error } = await db()
     .from("chat_messages")
-    .insert({ chat_id: chatId, from_user_id: userId, body })
+    .insert({ chat_id: chatId, from_user_id: userId, body, ...(photo ? { photo } : {}) })
     .select("id")
     .single();
   if (error) {

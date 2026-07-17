@@ -2,7 +2,12 @@
 // filter, every refusal has a friendly note, and the SMS nudge dedup window
 // is pure date math (no more ILIKE scans over the message log).
 import { hasLink } from "../lib/content-filter.ts";
-import { CHAT_SEND_NOTES, chatSendNote } from "../lib/chat.ts";
+import {
+  CHAT_PHOTO_CAP,
+  CHAT_SEND_NOTES,
+  MAX_CHAT_PHOTO_BYTES,
+  chatSendNote,
+} from "../lib/chat.ts";
 
 export const name = "chat";
 
@@ -20,4 +25,8 @@ export function run(t) {
     t.eq(`note for '${code}' exists`, typeof CHAT_SEND_NOTES[code] === "string" && CHAT_SEND_NOTES[code].length > 0, true);
   }
   t.eq("unknown code falls back", chatSendNote("nonsense"), CHAT_SEND_NOTES.unsupported);
+
+  // Pictures in chat (item 14).
+  t.eq("per-thread photo cap is a positive integer", Number.isInteger(CHAT_PHOTO_CAP) && CHAT_PHOTO_CAP > 0, true);
+  t.eq("photo byte cap matches the shared 8 MB ingest limit", MAX_CHAT_PHOTO_BYTES, 8 * 1024 * 1024);
 }

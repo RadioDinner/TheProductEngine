@@ -9,9 +9,11 @@ import { redirect } from "next/navigation";
 import { readSession } from "@/lib/session";
 import { flagChatMessage, getProfile, sendChatMessage } from "@/lib/store";
 import { hasLink } from "@/lib/content-filter";
-import { CHAT_MAX_BODY } from "@/lib/chat";
+import { CHAT_MAX_BODY, MAX_CHAT_PHOTO_BYTES } from "@/lib/chat";
 import { countRecentOutboundContaining, logMessage } from "@/lib/engine-store";
 import { dispatchSms } from "@/lib/outbound";
+import { storeImageBytes } from "@/lib/photos";
+import { supabaseConfigured } from "@/lib/db";
 import { site } from "@/lib/config";
 import { siteUrl } from "@/lib/email";
 
@@ -76,6 +78,36 @@ export async function sendChat(formData: FormData): Promise<void> {
     await nudgeBySms(result.otherPhone);
   }
   redirect(`/account/messages/${chatId}`);
+}
+
+/**
+ * Send a picture into a thread (item 14): byte-sniffed and re-hosted exactly
+ * like every other image (storeImageBytes, 8 MB), stored on the chat message.
+ * ABSOLUTE RULE: chat media NEVER rides an outbound SMS — the nudge below
+ * stays a plain-text pointer to the website, and nothing here touches MMS.
+ */
+export async function sendChatPhoto(formData: FormData): Promise<void> {
+  const phone = await requirePhone();
+  const chatId = Number(formData.get("chatId"));
+  if (!Number.isInteger(chatId)) redirect("/account/messages");
+  const back = (note = "") => `/account/messages/${chatId}${note}`;
+  const caption = String(formData.get("body") ?? "").trim().slice(0, CHAT_MAX_BODY);
+  if (caption && hasLink(caption)) redirect(back("?send=link"));
+  const photo = formData.get("photo");
+  if (!(photo instanceof File) || photo.size === 0) redirect(back("?send=badphoto"));
+  if (photo.size > MAX_CHAT_PHOTO_BYTES) redirect(back("?send=badphoto"));
+  // Dev mode has no storage bucket — a friendly note, never a 500.
+  if (!supabaseConfigured) redirect(back("?send=devphotos"));
+  const bytes = Buffer.from(await photo.arrayBuffer());
+  const stored = await storeImageBytes(bytes);
+  if (!stored.ok) redirect(back("?send=badphoto"));
+  const result = await sendChatMessage(chatId, phone, caption, stored.url);
+  if (result.outcome === "sent") {
+    await auditChat(phone, caption, stored.url);
+    await nudgeBySms(result.otherPhone);
+    redirect(back());
+  }
+  redirect(back(result.outcome === "denied" ? "" : `?send=${result.outcome}`));
 }
 
 /** The EXPLICIT act that shares the private pickup address into one chat. */

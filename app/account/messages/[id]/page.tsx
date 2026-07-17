@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { readSession } from "@/lib/session";
 import { listChatMessages, listChatsFor, markChatRead } from "@/lib/store";
-import { reportChatMessage, sendChat, sharePickupAddress } from "@/lib/chat-actions";
+import { reportChatMessage, sendChat, sendChatPhoto, sharePickupAddress } from "@/lib/chat-actions";
 import { chatSendNote } from "@/lib/chat";
 import { site } from "@/lib/config";
 
@@ -119,6 +119,18 @@ export default async function ChatPage({
         <button className="btn" type="submit">
           Send message
         </button>
+      </form>
+      <form action={sendChatPhoto} className="chat-photo-form">
+        <input type="hidden" name="chatId" value={chatId} />
+        <label className="fine" htmlFor="chat-photo">
+          Send a picture — it shows here on the website only, never by text.
+        </label>
+        <div className="inline-fields">
+          <input id="chat-photo" name="photo" type="file" accept="image/*" required />
+          <button className="btn btn-sm btn-secondary" type="submit">
+            Send picture
+          </button>
+        </div>
       </form>
       {share === "noaddress" && (
         <p className="form-error" role="alert">

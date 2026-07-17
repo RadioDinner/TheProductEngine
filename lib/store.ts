@@ -16,6 +16,7 @@ import {
 } from "node:crypto";
 import { supabaseConfigured } from "@/lib/db";
 import * as remote from "@/lib/store-supabase";
+import { CHAT_PHOTO_CAP } from "@/lib/chat";
 import { accruePicQuota } from "@/lib/pic-quota";
 import { normalizePhone } from "@/lib/phone";
 import { USER_ID_MAX_ATTEMPTS, isRetirementActive, randomUserId } from "@/lib/user-id";
@@ -571,15 +572,29 @@ const file = {
     chatId: number,
     fromPhone: string,
     body: string,
-  ): { outcome: "sent"; otherPhone: string } | { outcome: "denied" | "unsupported" } {
+    photo?: string | null,
+  ):
+    | { outcome: "sent"; otherPhone: string }
+    | { outcome: "denied" | "unsupported" | "photocap" } {
     const store = load();
     const chat = (store.chats ?? []).find((c) => c.id === chatId);
     if (!chat || (chat.aPhone !== fromPhone && chat.bPhone !== fromPhone)) {
       return { outcome: "denied" };
     }
     const messages = (store.chatMessages ??= []);
+    // Per-thread picture cap (item 14).
+    if (photo && messages.filter((m) => m.chatId === chatId && m.photo).length >= CHAT_PHOTO_CAP) {
+      return { outcome: "photocap" };
+    }
     const id = (messages[messages.length - 1]?.id ?? 0) + 1;
-    messages.push({ id, chatId, fromPhone, body, at: new Date().toISOString() });
+    messages.push({
+      id,
+      chatId,
+      fromPhone,
+      body,
+      at: new Date().toISOString(),
+      ...(photo ? { photo } : {}),
+    });
     chat.lastMessageAt = new Date().toISOString();
     // Your own send marks the thread read for you.
     (store.chatReads ??= {})[`${chatId}#${fromPhone}`] = id;
@@ -1137,15 +1152,21 @@ export async function listChatMessages(
 }
 
 /** Send into a thread (members only). Returns the other party's phone so the
- * caller can nudge them by SMS — the phone is never shown in the chat UI. */
+ * caller can nudge them by SMS — the phone is never shown in the chat UI.
+ * `photo` (item 14) is an already-re-hosted storage URL; "photocap" = the
+ * thread is at its per-thread picture limit (CHAT_PHOTO_CAP). */
 export async function sendChatMessage(
   chatId: number,
   fromPhone: string,
   body: string,
-): Promise<{ outcome: "sent"; otherPhone: string } | { outcome: "denied" | "unsupported" }> {
+  photo?: string | null,
+): Promise<
+  | { outcome: "sent"; otherPhone: string }
+  | { outcome: "denied" | "unsupported" | "photocap" }
+> {
   return supabaseConfigured
-    ? remote.sendChatMessage(chatId, fromPhone, body)
-    : file.sendChatMessage(chatId, fromPhone, body);
+    ? remote.sendChatMessage(chatId, fromPhone, body, photo)
+    : file.sendChatMessage(chatId, fromPhone, body, photo);
 }
 
 export async function markChatRead(chatId: number, phone: string): Promise<void> {
