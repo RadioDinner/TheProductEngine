@@ -553,6 +553,35 @@ input:focus-visible {
   outline-offset: 0;
 }
 
+/* Web ad posting (FEATURES item 9): the ad-text box + live character count. */
+.field textarea {
+  width: 100%;
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--border-input);
+  border-radius: 2px;
+  padding: 0.5rem 0.75rem;
+  resize: vertical;
+}
+
+.field textarea:focus-visible {
+  border-color: var(--blue);
+  outline-offset: 0;
+}
+
+.char-count {
+  margin-top: var(--space-2xs);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.char-count-over {
+  color: var(--red);
+  font-weight: 600;
+}
+
 .btn {
   display: inline-block;
   font: 600 var(--text-base) / 1.55 var(--font-sans);
@@ -679,6 +708,11 @@ input:focus-visible {
   background: var(--surface);
   padding: var(--space-sm) var(--space-md);
   font-weight: 500;
+}
+
+/* Multi-paragraph notices (the post-an-ad confirmation) keep their air. */
+.notice p + p {
+  margin-top: var(--space-xs);
 }
 
 .pack-list {

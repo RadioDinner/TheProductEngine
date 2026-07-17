@@ -15,6 +15,7 @@ import {
   listChatsFor,
 } from "@/lib/store";
 import { adExpiresAt, deriveTitle, listAdsByOwner, type Ad } from "@/lib/ads";
+import { getPendingAds } from "@/lib/engine-store";
 import { formatPrice, packs, site } from "@/lib/config";
 import { checkoutUrl } from "@/lib/payments";
 
@@ -72,6 +73,9 @@ export default async function AccountPage({
   const balance = await getCreditBalance(session.phone);
   const ledger = await getLedger(session.phone);
   const myAds = await listAdsByOwner(session.phone);
+  // listAdsByOwner excludes pending — merge the review queue's rows for this
+  // number so a just-posted ad is visible (same as the SMS MYADS reply).
+  const pendingAds = (await getPendingAds()).filter((ad) => ad.ownerPhone === session.phone);
   const subscribed = Boolean(account?.subscribedAt);
 
   const memberSince = account
@@ -198,8 +202,26 @@ export default async function AccountPage({
         <h2 id="myads-h" className="section-h">
           My ads
         </h2>
-        {myAds.length ? (
+        <p>
+          <Link className="btn btn-sm" href="/account/post">
+            Post an ad
+          </Link>{" "}
+          — right here on the website. It costs the same as texting one in.
+        </p>
+        {myAds.length || pendingAds.length ? (
           <ul className="myads">
+            {pendingAds.map((ad) => (
+              <li key={`pending-${ad.id}`} className="myad-row">
+                <p className="myad-title">
+                  #{ad.id} — {deriveTitle(ad.body)}{" "}
+                  <span className="status-muted">Waiting for review</span>
+                </p>
+                <p className="myad-dates">
+                  Submitted {shortDate(ad.createdAt)} — you&rsquo;ll get a text when
+                  it&rsquo;s approved for an upcoming digest.
+                </p>
+              </li>
+            ))}
             {myAds.map((ad) => {
               const status = adStatusLine(ad);
               return (
@@ -217,8 +239,9 @@ export default async function AccountPage({
           </ul>
         ) : (
           <p>
-            Ads you post by text will show up here. To post one, text{" "}
-            <strong>AD NEW</strong> and your ad to <strong>{site.smsNumber}</strong> — see{" "}
+            Ads you post will show up here. <Link href="/account/post">Post one on the
+            website</Link>, or text <strong>AD NEW</strong> and your ad to{" "}
+            <strong>{site.smsNumber}</strong> — see{" "}
             <Link href="/how-it-works">how it works</Link>.
           </p>
         )}
