@@ -209,3 +209,6 @@ Reveal policy: "Metered click-to-reveal (Recommended)"
 
 --- 2026-07-17 20:31 ---
 what is the status of the feature list? Are things still being built
+
+--- 2026-07-17 20:39 ---
+keep working on the feature list until EVERYTHING on it is complete. you're on auto, just keep plowing. I want this available asap.
