@@ -1,0 +1,25 @@
+[Editor's note: competitor identifiers redacted throughout this file by
+explicit user instruction (third prompt below). [REDACTED] replaces the
+competitor's business name / email / domain wherever they appeared.]
+
+--- 2026-07-17 17:15 ---
+The competitors help message is "[REDACTED]: For help, email [REDACTED]. Reply STOP to CANCEL" is that 10dlc compliant? It says nothing about msg rates
+
+--- 2026-07-17 17:19 ---
+wrap this session
+
+--- 2026-07-17 17:26 ---
+actually, go through the whole repo with a fine tooth comb. REMOVE antyhing referring to [REDACTED]. Even in the prompt logs. Just redact anything that references them
+
+--- 2026-07-17 17:30 ---
+[AskUserQuestion answers] Git history: Squash + force-push. Branch name: Push clean branch (authorize new branch + delete old).
+
+
+--- 2026-07-17 17:36 ---
+bump
+
+--- 2026-07-17 20:18 ---
+Re-evalute this and see if it ready to merge to main. I have 3 branches; the two non-main branches both have commits ahead of main. Want to be sure I can safely delete those two extra branches.
+
+--- 2026-07-17 20:23 ---
+[AskUserQuestion answers] Finish redaction: fresh branch off main, redact all 5, carry Session log/010, push. Code strings: yes, redact the featured-page placeholder and test domain too.

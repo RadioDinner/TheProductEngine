@@ -48,7 +48,7 @@ export function run(t) {
   t.eq("NaN tick stays 0", rotationIndex(Number.NaN, 3), 0);
 
   // Operator link rule: absolute http(s) only — never script/data schemes.
-  t.eq("https ok", acceptableSpotLink("https://troyersharness.com/sale"), true);
+  t.eq("https ok", acceptableSpotLink("https://millersharness.com/sale"), true);
   t.eq("http ok", acceptableSpotLink("http://example.com"), true);
   t.eq("javascript: refused", acceptableSpotLink("javascript:alert(1)"), false);
   t.eq("data: refused", acceptableSpotLink("data:text/html,<b>x</b>"), false);

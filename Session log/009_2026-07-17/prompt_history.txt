@@ -1,3 +1,5 @@
+[Editor's note (added session 010, 2026-07-17): competitor identifiers (business name, email, domain) that appeared in pasted reference text below were redacted to [REDACTED] by explicit user instruction.]
+
 --- 2026-07-17 (session start) ---
 lets kick off a session and start working on the feature list as fast as possible. Always commit to main for this session. All migrations up to 0019 have been applied. Also I noticed the migration scheme doesn't match the session instructions of beginning the first migration at 9999 and working down in stead of up. Rename all the migrations so that the most recent number is the lowest number so far
 
@@ -119,7 +121,7 @@ If you have any questions about this Privacy Policy, You can contact us:
 * By email: support@theplainexchange.com
 SMS Privacy Policy
 
-* Troyer Advertising values the privacy of your communication and is committed to safeguarding your SMS contact and content data. We do not sell or share SMS contact or content data with third parties.
+* [REDACTED] values the privacy of your communication and is committed to safeguarding your SMS contact and content data. We do not sell or share SMS contact or content data with third parties.
 
 --- 2026-07-17 18:05 ---
 On the feature list. Add an "Accessibility statement" to my website footer. Follow this template, updating it with the information regarding the plain exchange
@@ -163,13 +165,13 @@ Add to the feature list. Build a "Refund Policy" on the footer of our website, m
 
 --- 2026-07-17 18:14 ---
 Below is a copy of our competitors terms and conditions, make sure our terms and conditions dont miss anything they may have included. Don't reduce the robustness of our existing terms and conditions if it is already likely better than theirs
-[Troyer Advertising](https://www.troyeradvertising.com)
+[[REDACTED]]([REDACTED])
 Get
 Terms & Conditions
 
 Please read these terms and conditions carefully before using Our Service.
 Interpretation and Definitions
-[... full TermsFeed-template terms as pasted: Interpretation/Definitions (Affiliate, Country=Ohio US, Company=Troyer Advertising, Device, Service, Terms, Third-party Social Media Service, Website, You); Acknowledgment (terms govern use; 18+ representation; privacy policy incorporated); Termination (immediate, without notice, for any reason incl. breach); Limitation of Liability (capped at amount paid or $100; no special/incidental/indirect/consequential damages; state carve-outs); "AS IS"/"AS AVAILABLE" Disclaimer (all warranties disclaimed; no uninterrupted/error-free/virus-free representations; jurisdiction carve-outs); Disputes Resolution (informal contact first); United States Legal Compliance (embargo/prohibited-parties representation); Severability and Waiver; Changes to Terms (30 days' notice for material changes, continued use = acceptance); Contact (business@troyeradvertising.support); SMS Terms (opt-in only, Customer Care messages, frequency varies, msg&data rates, HELP, STOP).]
+[... full TermsFeed-template terms as pasted: Interpretation/Definitions (Affiliate, Country=Ohio US, Company=[REDACTED], Device, Service, Terms, Third-party Social Media Service, Website, You); Acknowledgment (terms govern use; 18+ representation; privacy policy incorporated); Termination (immediate, without notice, for any reason incl. breach); Limitation of Liability (capped at amount paid or $100; no special/incidental/indirect/consequential damages; state carve-outs); "AS IS"/"AS AVAILABLE" Disclaimer (all warranties disclaimed; no uninterrupted/error-free/virus-free representations; jurisdiction carve-outs); Disputes Resolution (informal contact first); United States Legal Compliance (embargo/prohibited-parties representation); Severability and Waiver; Changes to Terms (30 days' notice for material changes, continued use = acceptance); Contact ([REDACTED]); SMS Terms (opt-in only, Customer Care messages, frequency varies, msg&data rates, HELP, STOP).]
 
 --- 2026-07-17 18:20 ---
 Add to the footer of our website, a copyright statement @2028 by The Plain Exchange. Powered and secured by CodeFuseSolutions

@@ -3,7 +3,25 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-07-17 (session 009, end).
+**Last updated:** 2026-07-17 (session 010).
+
+## Session 010 (2026-07-17) — competitor-reference redaction on `main`
+
+A 10DLC compliance question about a competitor became a repo-wide order to
+**remove every reference to that competitor**. Key finding at re-eval: the
+redaction (done earlier on a feature branch) had **never reached `main`** —
+`main` had advanced independently with session 009's fuller work and still
+exposed the competitor name in 5 files (incl. two new session-009 files:
+`app/admin/featured/page.tsx` placeholder + `test/featured.test.mjs`
+domain). Fixed on a fresh branch **`claude/session-010-compliance`** cut from
+current `main`: all 5 redacted (log text + fixture/seed surname →
+"Yoder family" + featured placeholder → "Miller's Harness Shop" + test
+domain → `millersharness.com`), `Session log/010/` added. `git grep` clean,
+`npm test` 401/401. ⚠️ **USER: merge this branch, then delete BOTH old
+branches on GitHub** (the old competitor-named branch (suffix `…-l1pj8m`) and, after
+merge, this one) — the session's git proxy 403s deletion pushes. Only after
+the merge does `main` lose the name. Detail:
+`Session log/010_2026-07-17/session_log.md`.
 
 ⚠️ **MIGRATION NUMBERS RENAMED (session 009, user decision):** the repo now
 uses the descending scheme from `new_session_instructions.md` §4 —

@@ -26,7 +26,7 @@ select v.id, u.id, v.body, v.body, v.status::ad_status,
             then date_trunc('day', now()) - (v.days_ago || ' days')::interval + (v.slot_hour || ' hours')::interval + interval '1 day'
        end
 from (values
-  (1042, '3305550190', 'Sweet corn by the dozen or bushel. Ready now at the produce stand, CR 77 south of Berlin. Troyer family.', 'approved', 0, 12),
+  (1042, '3305550190', 'Sweet corn by the dozen or bushel. Ready now at the produce stand, CR 77 south of Berlin. Yoder family.', 'approved', 0, 12),
   (1041, '3305550171', 'Driving horse, $2,800. Standardbred gelding, 9 years, traffic safe and sound. Jonas S., 330-555-0171, Fredericksburg.', 'approved', 0, 7),
   (1040, '3305550177', 'Laying hens, $8 each. Two dozen Rhode Island Reds, laying steady. Katie H., 330-555-0177, New Bedford.', 'approved', 0, 7),
   (1039, '3305550163', 'First cutting hay, $5.50 a bale. About 400 bales, stored dry in the barn. Mervin Y., 330-555-0163, Walnut Creek.', 'approved', 1, 20),
