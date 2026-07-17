@@ -510,6 +510,8 @@ export async function adminMarkBusinessRefunded(formData: FormData): Promise<voi
   const id = Number(formData.get("id"));
   if (Number.isInteger(id)) await markBusinessRefunded(id);
   redirect("/admin/business");
+}
+
 // ---------- Featured sidebar spots (item 19 — operator-posted only) ----------
 
 /** Same 8 MB ceiling as every other image ingest path. */
