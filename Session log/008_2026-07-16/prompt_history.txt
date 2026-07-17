@@ -46,3 +46,6 @@ Also, make the conversation threads look a bit more like a modern day messagging
 
 --- 2026-07-17 12:13 ---
 Also, I want people messaging to be able to send pictures to the other buyer, BUT if they reply with a picture, only send it to the messaging platform, don't double it up and send it to the person via SMS. Say something like "View image on the web" or message them directly.
+
+--- 2026-07-17 12:14 ---
+When placing an ad online, limit them to the number of characters that would fit well in a digest. Remind them to keep it brief for the sms part. I think that is the right call?

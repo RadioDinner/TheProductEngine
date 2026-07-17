@@ -75,7 +75,13 @@ itself; build details live in the session logs and HANDOFF.md.
   UI must say the price BEFORE posting. Picture rules on the form: one
   "listing picture" slot (= the paid MMS/digest picture, photo price) vs
   "extra pictures (web only)" — reusing the item-1 gallery. Ads still land
-  in the review queue like everything else.
+  in the review queue like everything else. **Length (user decision,
+  session 008): web ads get the SAME character cap the SMS path enforces —
+  the `maxChars` setting (default 300, tunable on /admin/settings) — with a
+  live character counter and a reminder that the exact text rides the SMS
+  digest, so keep it brief.** One number governs both lanes; the digest
+  packer already fits ads that size cleanly, and the emoji/link content
+  filter applies the same.
 - **10 · mixed SMS+chat**: SUPERSEDES item 6's nudge-once-a-day — instead of
   a nudge, the recipient's SMS gets the actual message text, and their SMS
   reply routes back into the thread (and on to the other party's SMS).
