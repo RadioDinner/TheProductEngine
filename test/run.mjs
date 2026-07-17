@@ -16,6 +16,7 @@ const SUITES = [
   "email-photos",
   "unread",
   "post-ad",
+  "myads",
 ];
 
 let totalPass = 0;

@@ -10,6 +10,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { supabaseConfigured } from "@/lib/db";
 import * as remote from "@/lib/engine-store-supabase";
+import { isPicReplaceSubmission } from "@/lib/myads";
 import { FIXTURE_ADS, fixtureDate } from "@/lib/fixtures";
 import { AD_TTL_DAYS, type Ad, type AdPage, type AdQuery, type AdStatus } from "@/lib/ads";
 
@@ -584,16 +585,31 @@ const file = {
     if (approve) {
       const ad = store.ads.find((a) => a.id === submission.adId);
       if (ad) {
-        (ad.morePhotos ??= []).push({
-          src: submission.src,
-          alt: `More of ad #${ad.id}`,
-          width: 800,
-          height: 600,
-        });
+        if (isPicReplaceSubmission(submission.fromEmail)) {
+          // FEATURES item 16: an approved REPLACEMENT swaps the position-0
+          // (digest/PIC) picture instead of joining the website gallery.
+          ad.photo = {
+            src: submission.src,
+            alt: ad.photo?.alt ?? `Ad #${ad.id}`,
+            width: 800,
+            height: 600,
+          };
+        } else {
+          (ad.morePhotos ??= []).push({
+            src: submission.src,
+            alt: `More of ad #${ad.id}`,
+            width: 800,
+            height: 600,
+          });
+        }
       }
     }
     save(store);
     return submission;
+  },
+
+  adEverBroadcast(id: number): boolean {
+    return Boolean(load().ads.find((a) => a.id === id)?.broadcastAt);
   },
 
   createExtraDigest(channel: "sms" | "email", now: Date): number {
@@ -1072,8 +1088,11 @@ export async function countAdPhotos(adId: number): Promise<number> {
 }
 
 /**
- * Approve (→ live website gallery) or discard an emailed-in picture. Returns
- * the resolved submission, or null if it no longer exists (double-submit).
+ * Approve or discard a submitted picture. An ordinary (gallery) submission
+ * lands in the live website gallery; a replacement submission (FEATURES item
+ * 16, marked via lib/myads isPicReplaceSubmission) REPLACES the position-0
+ * digest/PIC picture instead. Returns the resolved submission, or null if it
+ * no longer exists (double-submit).
  */
 export async function resolvePhotoSubmission(
   id: number,
@@ -1082,6 +1101,25 @@ export async function resolvePhotoSubmission(
   return supabaseConfigured
     ? remote.resolvePhotoSubmission(id, approve)
     : file.resolvePhotoSubmission(id, approve);
+}
+
+/**
+ * True when a digest has ever carried this ad (broadcast_at set) — the
+ * refund-matrix input for member deletes (FEATURES item 16). A missing
+ * broadcast_at column (migration 9993 unapplied) reads as false: if the
+ * column doesn't exist, no digest ever marked anything broadcast.
+ */
+export async function adEverBroadcast(id: number): Promise<boolean> {
+  return supabaseConfigured ? remote.adEverBroadcast(id) : file.adEverBroadcast(id);
+}
+
+/**
+ * Whether picture submissions are available (migration 9985 applied). Pages
+ * use this to HIDE the picture actions instead of failing on submit; the
+ * file store always supports them.
+ */
+export async function photoSubmissionsSupported(): Promise<boolean> {
+  return supabaseConfigured ? remote.photoSubmissionsSupported() : true;
 }
 
 /** A digest row OUTSIDE the slot system (the admin "Send extra" edition). */

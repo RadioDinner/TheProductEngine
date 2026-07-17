@@ -65,6 +65,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     )}
                     <MessagesBadge initialUnread={unread} />
                     {" · "}
+                    <Link href="/account/ads">My ads</Link>
+                    {" · "}
                     <Link href="/account">{formatPhone(session.phone)}</Link>
                     {" · "}
                     <form action={signOut} className="inline-form">
