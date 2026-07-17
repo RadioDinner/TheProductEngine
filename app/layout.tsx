@@ -106,7 +106,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <p>
               <Link href="/sms">Text message program</Link> ·{" "}
               <Link href="/privacy">Privacy policy</Link> ·{" "}
-              <Link href="/terms-and-conditions">Terms and conditions</Link>
+              <Link href="/terms-and-conditions">Terms and conditions</Link> ·{" "}
+              <Link href="/refund-policy">Refund policy</Link> ·{" "}
+              <Link href="/accessibility">Accessibility statement</Link>
+            </p>
+            <p>
+              © 2028 by {site.name}. Powered and secured by CodeFuseSolutions
             </p>
           </div>
         </footer>

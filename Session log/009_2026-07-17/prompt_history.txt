@@ -170,3 +170,6 @@ Terms & Conditions
 Please read these terms and conditions carefully before using Our Service.
 Interpretation and Definitions
 [... full TermsFeed-template terms as pasted: Interpretation/Definitions (Affiliate, Country=Ohio US, Company=Troyer Advertising, Device, Service, Terms, Third-party Social Media Service, Website, You); Acknowledgment (terms govern use; 18+ representation; privacy policy incorporated); Termination (immediate, without notice, for any reason incl. breach); Limitation of Liability (capped at amount paid or $100; no special/incidental/indirect/consequential damages; state carve-outs); "AS IS"/"AS AVAILABLE" Disclaimer (all warranties disclaimed; no uninterrupted/error-free/virus-free representations; jurisdiction carve-outs); Disputes Resolution (informal contact first); United States Legal Compliance (embargo/prohibited-parties representation); Severability and Waiver; Changes to Terms (30 days' notice for material changes, continued use = acceptance); Contact (business@troyeradvertising.support); SMS Terms (opt-in only, Customer Care messages, frequency varies, msg&data rates, HELP, STOP).]
+
+--- 2026-07-17 18:20 ---
+Add to the footer of our website, a copyright statement @2028 by The Plain Exchange. Powered and secured by CodeFuseSolutions
