@@ -24,6 +24,17 @@ import {
 import { listEmailRecipients } from "@/lib/store";
 import { getEngineSettings } from "@/lib/settings";
 import { site } from "@/lib/config";
+import { listSponsorsRanWithKey } from "@/lib/business";
+import { formatPhone } from "@/lib/phone";
+
+/** A business sponsor riding this edition (FEATURES item 17) — the fields the
+ * email needs; lib/business's BusinessPackage satisfies it. */
+export interface SponsorAd {
+  businessName: string;
+  adText: string;
+  link: string | null;
+  phone: string | null;
+}
 
 /** CAN-SPAM requires a physical mailing address in every message. */
 const BUSINESS_ADDRESS = "The Plain Exchange · PO Box 000 · Millersburg, OH 44654";
@@ -32,7 +43,31 @@ function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export function composeEmailHtml(ads: StoredAd[], dateLabel: string, unsubHref: string): string {
+export function composeEmailHtml(
+  ads: StoredAd[],
+  dateLabel: string,
+  unsubHref: string,
+  sponsors: SponsorAd[] = [],
+): string {
+  // The email edition mirrors the SMS digest's sponsor line (item 17) —
+  // clearly labeled, above the member ads, with the link clickable here.
+  const sponsorRows = sponsors
+    .map((s) => {
+      const contact = [
+        s.phone ? esc(formatPhone(s.phone)) : "",
+        s.link
+          ? `<a href="${esc(s.link.startsWith("http") ? s.link : `https://${s.link}`)}" style="color:#2d5570;">${esc(s.link)}</a>`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return `<div style="padding:10px 12px;margin:10px 0 0;border:1px solid #c9b458;background:#fdf9ec;">
+        <p style="margin:0;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#8a7a2e;">Sponsor</p>
+        <p style="margin:2px 0 0;font-size:16px;color:#20262b;"><strong>${esc(s.businessName)}</strong> — ${esc(s.adText)}</p>
+        ${contact ? `<p style="margin:4px 0 0;font-size:13px;color:#5b6670;">${contact}</p>` : ""}
+      </div>`;
+    })
+    .join("");
   const rows = ads
     .map((ad) => {
       // Re-hosted photos carry an absolute URL (Supabase Storage); only
@@ -64,6 +99,7 @@ export function composeEmailHtml(ads: StoredAd[], dateLabel: string, unsubHref: 
     <p style="margin:0;text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:600;color:#20262b;">${site.name}</p>
     <p style="margin:2px 0 12px;text-align:center;font-size:13px;color:#5b6670;">${esc(dateLabel)} · ${site.region}</p>
     <div style="border-top:3px solid #3a4550;border-bottom:1px solid #3a4550;height:2px;margin-bottom:4px;"></div>
+    ${sponsorRows}
     ${rows}
     <p style="margin:16px 0 4px;font-size:13px;color:#5b6670;">
       Get the ads by text too — text SUBSCRIBE to ${site.smsNumber}.
@@ -74,10 +110,21 @@ export function composeEmailHtml(ads: StoredAd[], dateLabel: string, unsubHref: 
   </div>`;
 }
 
-export function composeEmailText(ads: StoredAd[], dateLabel: string, unsubHref: string): string {
+export function composeEmailText(
+  ads: StoredAd[],
+  dateLabel: string,
+  unsubHref: string,
+  sponsors: SponsorAd[] = [],
+): string {
   const lines = [
     `${site.name} — ${dateLabel}`,
     "",
+    ...sponsors.map(
+      (s) =>
+        `Sponsor: ${s.businessName} - ${s.adText}` +
+        `${s.phone ? ` ${formatPhone(s.phone)}` : ""}${s.link ? ` ${s.link}` : ""}`,
+    ),
+    ...(sponsors.length ? [""] : []),
     ...ads.map((ad) => `#${ad.id} ${ad.body}\n${siteUrl}/ad/${ad.id}`),
     "",
     `Get the ads by text too — text SUBSCRIBE to ${site.smsNumber}.`,
@@ -122,7 +169,11 @@ export async function runDueEmailDigests(now = new Date()): Promise<SlotResult[]
       continue;
     }
 
-    // The email edition mirrors its SMS digest's number (FEATURES item 5).
+    // The email edition mirrors its SMS digest's number (FEATURES item 5)
+    // and its sponsor lines (item 17): whatever sponsors rode THIS slot's SMS
+    // digest (recorded by slot key at markSponsorRan) appear here too, with
+    // the link clickable. [] pre-migration or on sponsor-free days.
+    const sponsors = await listSponsorsRanWithKey(`${day}#${slot}`);
     const digestNo = await getSmsDigestNumber(`${day}#${slot}`);
     const dateLabel =
       now.toLocaleDateString("en-US", {
@@ -142,8 +193,8 @@ export async function runDueEmailDigests(now = new Date()): Promise<SlotResult[]
         part: 1,
         parts: 1,
         subject,
-        body: composeEmailText(ads, dateLabel, unsub),
-        html: composeEmailHtml(ads, dateLabel, unsub),
+        body: composeEmailText(ads, dateLabel, unsub, sponsors),
+        html: composeEmailHtml(ads, dateLabel, unsub, sponsors),
         segments: 0, // email costs no SMS segments — exempt from the budget
       };
     });

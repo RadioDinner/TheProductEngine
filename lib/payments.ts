@@ -57,6 +57,55 @@ export async function createCheckoutSession(args: {
   return session.url;
 }
 
+/**
+ * Hosted Checkout for a business advertising package (FEATURES item 17).
+ * Same raw-fetch seam as credit packs, but: no card saved (one-off purchase),
+ * and the ad's fields ride in the session metadata so the WEBHOOK — the only
+ * writer — can store the paid package. The webhook keys idempotency on the
+ * payment-intent id (business_packages.stripe_ref unique), so retries and
+ * replays can never create two packages for one payment.
+ */
+export async function createBusinessCheckoutSession(args: {
+  tierId: string;
+  tierLabel: string;
+  priceCents: number;
+  businessName: string;
+  adText: string;
+  link: string | null;
+  phone: string | null;
+  origin: string;
+}): Promise<string> {
+  const params = new URLSearchParams({
+    mode: "payment",
+    success_url: `${args.origin}/advertising/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${args.origin}/advertising?checkout=cancelled`,
+    "line_items[0][quantity]": "1",
+    "line_items[0][price_data][currency]": "usd",
+    "line_items[0][price_data][unit_amount]": String(args.priceCents),
+    "line_items[0][price_data][product_data][name]": `Business advertising — ${args.tierLabel} — ${site.name}`,
+    "metadata[kind]": "business_package",
+    "metadata[tier]": args.tierId,
+    "metadata[business_name]": args.businessName,
+    "metadata[ad_text]": args.adText,
+    ...(args.link && { "metadata[link]": args.link }),
+    ...(args.phone && { "metadata[phone]": args.phone }),
+  });
+  const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: params,
+  });
+  if (!response.ok) {
+    throw new Error(`Stripe session create failed (${response.status}): ${await response.text()}`);
+  }
+  const session = (await response.json()) as { url?: string };
+  if (!session.url) throw new Error("Stripe session response had no redirect URL");
+  return session.url;
+}
+
 export interface ChargeResult {
   ok: boolean;
   paymentIntentId?: string;

@@ -46,6 +46,8 @@ import { listBlocked } from "@/lib/blocklist";
 import { etParts } from "@/lib/et";
 import { composeEmailSubject } from "@/lib/ad-display";
 import { gsmSanitize, packMessages, segmentation } from "@/lib/sms-segments";
+import { listDueSponsors, markSponsorRan } from "@/lib/business";
+import { sponsorLine } from "@/lib/business-packages";
 
 const SLOT_LABELS: Record<number, string> = {
   7: "morning",
@@ -77,6 +79,7 @@ export function composeDigestMessages(
   firstOfDay: boolean,
   edition?: DigestEdition,
   digestNo?: number | null,
+  sponsorLines?: string[],
 ): string[] {
   const dateLabel = now.toLocaleDateString("en-US", {
     month: "short",
@@ -97,9 +100,14 @@ export function composeDigestMessages(
   const adLines = items.map((ad) =>
     gsmSanitize(`#${ad.id} ${ad.body}${ad.photo ? ` Pic? Reply PIC ${ad.id}` : ""}`),
   );
+  // Business sponsor lines (item 17) ride FIRST, right under the header —
+  // clearly labeled ("Sponsor: …"), OUTSIDE the cap-10 member ads (they are
+  // extra lines, never one of the FIFO slots), and GSM-sanitized through the
+  // same packer so a sponsor's text can't flip the broadcast to UCS-2 pricing.
+  const sponsors = (sponsorLines ?? []).map((line) => gsmSanitize(line));
   return packMessages({
     header,
-    adLines,
+    adLines: [...sponsors, ...adLines],
     footer: firstOfDay ? "Reply STOP to end" : undefined,
     maxGsm: DIGEST_MSG_MAX_GSM,
   });
@@ -269,7 +277,18 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   const { day } = etParts(now);
   const firstOfDay = (await digestsSentOnDay(day)) === 0;
   const digestNo = await allocateDigestNumber(smsDigestId);
-  const messages = composeDigestMessages(now, slotHour, items, firstOfDay, edition, digestNo);
+  // Sponsor lines (item 17) ride the first digest of the day — an early/extra
+  // edition counts (and a later scheduled slot then skips them for the day).
+  const sponsors = await listDueSponsors(day);
+  const messages = composeDigestMessages(
+    now,
+    slotHour,
+    items,
+    firstOfDay,
+    edition,
+    digestNo,
+    sponsors.map((s) => sponsorLine(s)),
+  );
   const partSegments = messages.map((m) => segmentation(m).segments);
   const blocked = new Set((await listBlocked()).map((b) => b.phone));
   const subscribers = (await listSubscriberPhones()).filter((p) => !blocked.has(p));
@@ -311,8 +330,8 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
       part: 1,
       parts: 1,
       subject,
-      body: composeEmailText(sorted, emailDateLabel, unsub),
-      html: composeEmailHtml(sorted, emailDateLabel, unsub),
+      body: composeEmailText(sorted, emailDateLabel, unsub, sponsors),
+      html: composeEmailHtml(sorted, emailDateLabel, unsub, sponsors),
       segments: 0,
     };
   });
@@ -332,6 +351,14 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   } else {
     await finalizeExtraDigest(smsDigestId, items.map((a) => a.id), items.length);
     await finalizeExtraDigest(emailDigestId, [], items.length);
+  }
+
+  // Sponsor days consumed after the bookkeeping (crash-safe, same as the
+  // scheduled run). The email mirror was composed above with the sponsors in
+  // hand, so the recorded key just needs to be unique — the slot-key lookup in
+  // runDueEmailDigests never applies here (its email digest is already final).
+  for (const s of sponsors) {
+    await markSponsorRan(s.id, day, `sent-now#${smsDigestId}`);
   }
 
   // Deliver now — don't make "send early" wait for the next cron tick.
@@ -371,7 +398,19 @@ export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {
 
     const firstOfDay = (await digestsSentOnDay(day)) === 0;
     const digestNo = await allocateDigestNumber(digestId);
-    const messages = composeDigestMessages(now, slot, items, firstOfDay, undefined, digestNo);
+    // Business sponsor lines (item 17): every active package rides the first
+    // digest that composes each ET day (listDueSponsors excludes ones that
+    // already rode today), as labeled extra lines outside the cap-10.
+    const sponsors = await listDueSponsors(day);
+    const messages = composeDigestMessages(
+      now,
+      slot,
+      items,
+      firstOfDay,
+      undefined,
+      digestNo,
+      sponsors.map((s) => sponsorLine(s)),
+    );
     const parts = messages.length;
     const partSegments = messages.map((m) => segmentation(m).segments);
     // Blocked numbers get no broadcast (the drain sends via the raw transport,
@@ -401,6 +440,13 @@ export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {
       items.length,
       items.map((a) => a.id),
     );
+    // Consume each sponsor's paid day only after the digest is enqueued and
+    // finalized: a crash mid-compose leaves the day uncounted, the redo picks
+    // the sponsors up again, and the outbox unique key dedups the rows. The
+    // slot key is remembered so the email edition mirrors the same sponsors.
+    for (const s of sponsors) {
+      await markSponsorRan(s.id, day, slotKey);
+    }
     results.push({
       slotKey,
       items: items.length,

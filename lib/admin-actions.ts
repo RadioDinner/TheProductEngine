@@ -39,6 +39,11 @@ import {
   updateAdBody,
 } from "@/lib/engine-store";
 import { nextSlotOccurrence, selectDigestItems, sendDigestNow } from "@/lib/digest-engine";
+import {
+  approveBusinessPackage,
+  declineBusinessPackage,
+  markBusinessRefunded,
+} from "@/lib/business";
 import { normalizePhone } from "@/lib/phone";
 
 /** Whitelisted return targets for shared ad actions — never trust a form string. */
@@ -438,4 +443,36 @@ export async function adminUnblockNumber(formData: FormData): Promise<void> {
   const phone = normalizePhone(String(formData.get("phone") ?? ""));
   if (phone) await unblockNumber(phone);
   redirect("/admin/settings?saved=unblock");
+}
+
+// ---------- business advertising packages (FEATURES item 17) ----------
+
+/** Approve a paid business package: it goes ACTIVE and the run clock starts
+ * NOW (user decision: approval, not payment, starts the 7/14/30 days). The
+ * sponsor line rides the first digest of each day from here. */
+export async function adminApproveBusiness(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (Number.isInteger(id)) await approveBusinessPackage(id);
+  redirect("/admin/business");
+}
+
+/** Decline a paid business package. NOTHING is auto-refunded (v1 is manual by
+ * design): the package never ran, so the money goes back per the refund
+ * policy — the Business page flags it "refund due" with the amount and the
+ * Stripe payment ref until the operator does the refund in the Stripe
+ * dashboard and marks it done here. */
+export async function adminDeclineBusiness(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (Number.isInteger(id)) await declineBusinessPackage(id);
+  redirect("/admin/business?declined=1");
+}
+
+/** Operator confirms the manual Stripe refund of a declined package is done. */
+export async function adminMarkBusinessRefunded(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (Number.isInteger(id)) await markBusinessRefunded(id);
+  redirect("/admin/business");
 }

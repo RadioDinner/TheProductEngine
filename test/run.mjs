@@ -18,6 +18,7 @@ const SUITES = [
   "post-ad",
   "chat",
   "myads",
+  "business",
 ];
 
 let totalPass = 0;
