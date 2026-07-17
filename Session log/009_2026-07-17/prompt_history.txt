@@ -173,3 +173,6 @@ Interpretation and Definitions
 
 --- 2026-07-17 18:20 ---
 Add to the footer of our website, a copyright statement @2028 by The Plain Exchange. Powered and secured by CodeFuseSolutions
+
+--- 2026-07-17 19:02 ---
+make the copyright 2026
