@@ -1,2 +1,5 @@
 --- 2026-07-17 (session start) ---
 lets kick off a session and start working on the feature list as fast as possible. Always commit to main for this session. All migrations up to 0019 have been applied. Also I noticed the migration scheme doesn't match the session instructions of beginning the first migration at 9999 and working down in stead of up. Rename all the migrations so that the most recent number is the lowest number so far
+
+--- 2026-07-17 16:41 ---
+I applied all existing migrations prior to renaming them.
