@@ -20,6 +20,8 @@ const SUITES = [
   "myads",
   "reveal-quota",
   "business",
+  "town-hall",
+  "featured",
 ];
 
 let totalPass = 0;

@@ -1207,6 +1207,229 @@ a.btn-sm:hover {
   padding: var(--space-xs) var(--space-sm) var(--space-xs) 0;
 }
 
+/* ---------- Homepage broadsheet layout (items 18/19) ----------
+   Featured-left / ads-center / town-hall-right on wide screens; a single
+   column on narrow ones, where DOM order is the stack (Featured above the
+   ads, Town hall below). The center track keeps the 46rem reading measure
+   and may shrink (minmax 0) — the page NEVER scrolls horizontally. Both
+   side tracks are reserved even when one sidebar is absent, so the ads
+   column stays centered under the nameplate. */
+
+.home-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "featured"
+    "center"
+    "townhall";
+}
+
+.home-featured {
+  grid-area: featured;
+}
+
+.home-center {
+  grid-area: center;
+  min-width: 0;
+  /* Explicit width: .container's auto inline margins would otherwise turn
+     off grid stretch and let fit-content sizing overflow the track by a
+     couple of pixels at phone widths (horizontal scroll — forbidden). */
+  width: 100%;
+  max-width: 46rem;
+  margin-inline: auto;
+}
+
+.home-townhall {
+  grid-area: townhall;
+}
+
+/* Narrow: the sidebars read as compact sections aligned with the ads. */
+.home-side {
+  width: 100%;
+  max-width: 46rem;
+  margin-inline: auto;
+  padding-inline: var(--space-md);
+  min-width: 0;
+}
+
+@media (min-width: 64rem) {
+  .home-layout {
+    grid-template-columns: minmax(11rem, 14rem) minmax(0, 46rem) minmax(11rem, 14rem);
+    grid-template-areas: "featured center townhall";
+    justify-content: center;
+    align-items: start;
+    column-gap: var(--space-lg);
+    max-width: 80rem;
+    margin-inline: auto;
+    padding-inline: var(--space-md);
+  }
+
+  .home-side {
+    max-width: none;
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+}
+
+/* Newspaper side-column header: small caps over a strong rule. */
+.side-h {
+  margin-top: var(--space-xl);
+  border-top: 3px solid var(--rule-strong);
+  padding-top: var(--space-2xs);
+  font: 700 var(--text-xs) / 1.4 var(--font-sans);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.side-h a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.side-h a:hover {
+  color: var(--blue);
+}
+
+.side-note {
+  margin-top: var(--space-sm);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* ---------- Town hall (item 18) ---------- */
+
+/* Homepage sidebar list. */
+.side-events {
+  list-style: none;
+  margin: var(--space-sm) 0 0;
+  padding: 0;
+  font-size: var(--text-sm);
+}
+
+.side-events li + li {
+  margin-top: var(--space-sm);
+  border-top: 1px solid var(--rule);
+  padding-top: var(--space-sm);
+}
+
+.side-event-when {
+  font: 600 var(--text-xs) / 1.4 var(--font-sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--blue);
+}
+
+.side-event-title a {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.side-event-title a:hover {
+  color: var(--blue);
+  text-decoration: underline;
+}
+
+.side-event-place {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* ---------- Featured spots (item 19) ---------- */
+
+.featured-slot {
+  margin-top: var(--space-sm);
+}
+
+.featured-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--rule);
+}
+
+.featured-caption {
+  margin-top: var(--space-2xs);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* Manual rotation dots — also the only navigation under reduced motion. */
+.featured-dots {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-xs);
+  margin-top: var(--space-2xs);
+}
+
+.featured-dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  padding: 0;
+  border: 1px solid var(--border-input);
+  border-radius: 50%;
+  background: var(--paper);
+  cursor: pointer;
+}
+
+.featured-dot[aria-current="true"] {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+/* Narrow screens keep the Featured section compact: one slot only. */
+.featured-secondary {
+  display: none;
+}
+
+@media (min-width: 64rem) {
+  .featured-secondary {
+    display: block;
+    margin-top: var(--space-lg);
+  }
+}
+
+/* Admin thumbnails on /admin/featured. */
+.featured-admin-thumb {
+  max-width: 10rem;
+  height: auto;
+  border: 1px solid var(--rule);
+}
+
+/* The full board on /town-hall. */
+.event-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.event-item {
+  border-top: 1px solid var(--rule);
+  padding-block: var(--space-md);
+}
+
+.event-when {
+  font: 600 var(--text-xs) / 1.4 var(--font-sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--blue);
+}
+
+.event-title {
+  font: 600 var(--text-lg) / 1.25 var(--font-serif);
+}
+
+.event-place {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.event-body {
+  margin-top: var(--space-2xs);
+  white-space: pre-line;
+}
+
 /* ---------- Motion preferences ---------- */
 
 @media (prefers-reduced-motion: reduce) {
@@ -1229,6 +1452,8 @@ a.btn-sm:hover {
   .pagination,
   .backlink,
   .contact-gate,
+  .home-featured,
+  .home-townhall,
   .subscribe-strip {
     display: none;
   }

@@ -264,6 +264,32 @@ export default async function AdminHelp() {
         owners always see their own numbers; digests and texting are untouched (numbers are
         the product there, and SMS is bulk-limited by nature). All three numbers are on{" "}
         <Link href="/admin/settings">Settings</Link>.
+      <h2 className="section-h">Town hall events (the free board)</h2>
+      <p>
+        Members list upcoming community events free at <span className="cmd">/town-hall</span>{" "}
+        (there&apos;s an &ldquo;Add your event&rdquo; form on the board). Every submission
+        waits in the <strong>Review</strong> tab — same posture as an ad — with an
+        approve/decline choice; declining is simple because nothing was charged. Approved
+        events show on the board and in the homepage <strong>Town hall</strong> sidebar,
+        nearest date first, and <strong>drop off by themselves</strong> the day after the
+        event — no cleanup needed. Event text follows the walled garden: emoji are stripped
+        and links are refused outright at submission. The paid text/email event blast is a
+        later phase — nothing about events sends messages today.
+      </p>
+
+      <h2 className="section-h">Featured spots (the rotating left sidebar)</h2>
+      <p>
+        The homepage&apos;s left column carries two <strong>Featured</strong> slots, each
+        rotating every 8 seconds through up to three image ads you post by hand on the{" "}
+        <strong>Featured</strong> tab — six sellable spots total, though selling them has
+        no flow yet (pricing isn&apos;t set; today you place them for whoever you&apos;ve
+        arranged it with). A spot may link out to an external website — the one sanctioned
+        exception to the no-links rule, safe because only you can post there — and the
+        link is marked as a paid placement (<span className="cmd">rel=&quot;sponsored&quot;</span>)
+        so search engines treat it honestly. Images go through the same 8&nbsp;MB
+        byte-checked upload as everything else. When nothing is active the sidebar
+        disappears entirely, and for visitors who prefer reduced motion the rotation
+        stops — they page through with the dots instead.
       </p>
 
       <h2 className="section-h">The green check (verified members)</h2>
