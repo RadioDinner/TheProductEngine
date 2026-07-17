@@ -86,7 +86,12 @@ function save(shape: BusinessShape): void {
 
 /** Table/column absent — migration 9978 not applied yet. */
 function schemaMissing(error: { code?: string } | null): boolean {
-  return error?.code === "42P01" || error?.code === "42703";
+  return (
+    error?.code === "42P01" ||
+    error?.code === "42703" ||
+    error?.code === "PGRST205" || // PostgREST: table not in schema cache (pre-paste)
+    error?.code === "PGRST204" // PostgREST: payload column not in schema cache
+  );
 }
 
 const ROW_SELECT =

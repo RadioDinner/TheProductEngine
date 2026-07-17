@@ -56,7 +56,12 @@ function save(shape: TownHallShape): void {
 
 /** Missing 9977 schema → the whole town-hall surface is dormant. */
 function schemaMissing(error: { code?: string } | null): boolean {
-  return error?.code === "42P01" || error?.code === "42703";
+  return (
+    error?.code === "42P01" ||
+    error?.code === "42703" ||
+    error?.code === "PGRST205" || // PostgREST: table not in schema cache (pre-paste)
+    error?.code === "PGRST204" // PostgREST: payload column not in schema cache
+  );
 }
 
 const EVENT_SELECT = "id, owner_phone, title, event_date, time_text, place_text, body, status, created_at";

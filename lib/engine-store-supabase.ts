@@ -232,7 +232,9 @@ export async function updateAdBody(id: number, body: string): Promise<boolean> {
 /** Missing ads.category column = migration 9976 not applied — the category
  * system stays dormant instead of erroring. */
 function adCategorySchemaMissing(error: { code?: string } | null): boolean {
-  return error?.code === "42703";
+  // 42703 = SELECT of the missing column; PGRST204 = UPDATE/INSERT payload
+  // column rejected by PostgREST's schema cache before reaching Postgres.
+  return error?.code === "42703" || error?.code === "PGRST204";
 }
 
 export async function setAdCategory(

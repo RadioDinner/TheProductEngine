@@ -1077,7 +1077,17 @@ export async function hasRevealed(
     .eq("phone", phone)
     .eq("ad_id", adId)
     .limit(1);
-  if (error) return "unsupported";
+  if (error) {
+    // Only true schema drift means "unmetered until pasted". Any OTHER error
+    // (network blip, timeout) fails CLOSED — the member sees the masked
+    // number + Show-number button and a retry goes through the metered path;
+    // returning "unsupported" here would let a transient error bypass the
+    // meter entirely.
+    if (error.code === "42P01" || error.code === "42703" || error.code === "PGRST205") {
+      return "unsupported";
+    }
+    return false;
+  }
   return (data ?? []).length > 0;
 }
 
@@ -1473,7 +1483,9 @@ export async function listSubscriberPhones(): Promise<string[]> {
 /** Missing categories / throttle columns = migration 9976 not applied yet —
  * the category system stays dormant instead of 500ing (the 9989/9988 lesson). */
 function categoriesSchemaMissing(error: { code?: string } | null): boolean {
-  return error?.code === "42703";
+  // 42703 = SELECT of the missing column; PGRST204 = UPDATE/INSERT payload
+  // column rejected by PostgREST's schema cache before reaching Postgres.
+  return error?.code === "42703" || error?.code === "PGRST204";
 }
 
 export async function getSubscriberCategories(
