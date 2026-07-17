@@ -5,7 +5,9 @@ import { isAdminPhone } from "@/lib/admin";
 import { signOut } from "@/lib/auth-actions";
 import { formatPhone } from "@/lib/phone";
 import { readSession } from "@/lib/session";
+import { countUnreadChats } from "@/lib/store";
 import { site } from "@/lib/config";
+import { MessagesBadge } from "@/components/MessagesBadge";
 import "./globals.css";
 
 const newsreader = Newsreader({
@@ -39,6 +41,9 @@ function todayLine(): string {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const session = await readSession();
+  // Initial badge count, server-rendered cheap (item 12); the client badge
+  // polls /api/unread from there.
+  const unread = session ? await countUnreadChats(session.phone) : 0;
   return (
     <html lang="en" className={`${newsreader.variable} ${publicSans.variable}`}>
       <body>
@@ -58,6 +63,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                         {" · "}
                       </>
                     )}
+                    <MessagesBadge initialUnread={unread} />
+                    {" · "}
                     <Link href="/account">{formatPhone(session.phone)}</Link>
                     {" · "}
                     <form action={signOut} className="inline-form">
