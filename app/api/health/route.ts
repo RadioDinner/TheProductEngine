@@ -186,6 +186,17 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/9980_chat_upgrade.sql in the SQL editor",
           }
         : { applied: true };
+      // events + featured_spots ship in the same 9977 paste, so this table
+      // probe stands in for both homepage sidebars (town hall + featured).
+      const townHall = await db().from("events").select("id", { count: "exact", head: true });
+      report.migration9977 = townHall.error
+        ? {
+            applied: false,
+            code: townHall.error.code,
+            error: townHall.error.message,
+            fix: "run supabase/migrations/9977_town_hall_featured.sql in the SQL editor",
+          }
+        : { applied: true };
     } catch (e) {
       report.db = { ok: false, thrown: e instanceof Error ? e.message : String(e) };
     }

@@ -1,12 +1,21 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { adminApprove, adminReject, adminResolveChatReport } from "@/lib/admin-actions";
+import {
+  adminApprove,
+  adminApproveEvent,
+  adminDeclineEvent,
+  adminReject,
+  adminResolveChatReport,
+} from "@/lib/admin-actions";
 import { getPendingAds } from "@/lib/engine-store";
 import { listChatReports } from "@/lib/store";
 import { findLinks } from "@/lib/content-filter";
 import { formatPhone } from "@/lib/phone";
 import { site } from "@/lib/config";
+import { etParts } from "@/lib/et";
+import { formatEventDay } from "@/lib/town-hall";
+import { listPendingEvents } from "@/lib/town-hall-store";
 
 export const metadata: Metadata = {
   title: `Review queue — ${site.name} admin`,
@@ -26,6 +35,9 @@ export default async function AdminReview() {
   const pending = await getPendingAds();
   // Member-reported chat messages (item 13) — empty until migration 9980.
   const reports = await listChatReports();
+  // Town hall submissions (item 18) — empty until migration 9977.
+  const pendingEvents = await listPendingEvents();
+  const todayDay = etParts(new Date()).day;
 
   return (
     <>
@@ -143,6 +155,54 @@ export default async function AdminReview() {
                     Dismiss report
                   </button>
                 </form>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {pendingEvents.length > 0 && (
+        <>
+          <h2 className="section-h">Town hall events</h2>
+          <p className="fine">
+            Community events for the <Link href="/town-hall">town hall board</Link>.
+            Listings are free in v1, so declining charges nothing and refunds nothing.
+            Approved events show on the homepage sidebar and /town-hall until their date
+            passes, then drop off by themselves.
+          </p>
+          <ul className="sim-pending">
+            {pendingEvents.map((event) => (
+              <li key={event.id} className="myad-row">
+                <p className="myad-title">
+                  {event.title}
+                  <span className="status-muted">
+                    {" "}
+                    · from {formatPhone(event.ownerPhone)} · submitted{" "}
+                    {submitted(event.createdAt)}
+                  </span>
+                </p>
+                <p className="myad-dates">
+                  {formatEventDay(event.eventDate)}
+                  {event.timeText ? ` · ${event.timeText}` : ""}
+                  {event.placeText ? ` · ${event.placeText}` : ""}
+                  {event.eventDate < todayDay && (
+                    <span className="ad-sold"> Date already passed</span>
+                  )}
+                </p>
+                <p className="sim-body">{event.body}</p>
+                <div className="sim-actions">
+                  <form action={adminApproveEvent}>
+                    <input type="hidden" name="id" value={event.id} />
+                    <button className="btn btn-sm" type="submit">
+                      Approve
+                    </button>
+                  </form>
+                  <form action={adminDeclineEvent}>
+                    <input type="hidden" name="id" value={event.id} />
+                    <button className="btn btn-sm btn-secondary" type="submit">
+                      Decline
+                    </button>
+                  </form>
+                </div>
               </li>
             ))}
           </ul>

@@ -244,6 +244,19 @@ export default async function AdminHelp() {
         never sent by text, so chat can&apos;t create MMS cost.
       </p>
 
+      <h2 className="section-h">Town hall events (the free board)</h2>
+      <p>
+        Members list upcoming community events free at <span className="cmd">/town-hall</span>{" "}
+        (there&apos;s an &ldquo;Add your event&rdquo; form on the board). Every submission
+        waits in the <strong>Review</strong> tab — same posture as an ad — with an
+        approve/decline choice; declining is simple because nothing was charged. Approved
+        events show on the board and in the homepage <strong>Town hall</strong> sidebar,
+        nearest date first, and <strong>drop off by themselves</strong> the day after the
+        event — no cleanup needed. Event text follows the walled garden: emoji are stripped
+        and links are refused outright at submission. The paid text/email event blast is a
+        later phase — nothing about events sends messages today.
+      </p>
+
       <h2 className="section-h">The green check (verified members)</h2>
       <p>
         The <strong>✓ Verified</strong> mark is yours to give and take, one account at a time,

@@ -39,6 +39,7 @@ import {
   updateAdBody,
 } from "@/lib/engine-store";
 import { nextSlotOccurrence, selectDigestItems, sendDigestNow } from "@/lib/digest-engine";
+import { resolveEvent } from "@/lib/town-hall-store";
 import { normalizePhone } from "@/lib/phone";
 
 /** Whitelisted return targets for shared ad actions — never trust a form string. */
@@ -118,6 +119,24 @@ export async function adminResolveChatReport(formData: FormData): Promise<void> 
   const id = Number(formData.get("id"));
   const resolution = formData.get("decision") === "resolved" ? "resolved" : "dismissed";
   if (Number.isInteger(id)) await resolveChatReport(id, resolution);
+  redirect("/admin");
+}
+
+/** Approve a pending town-hall event (item 18): it appears on the homepage
+ * sidebar and /town-hall until its date passes, then drops off by itself. */
+export async function adminApproveEvent(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (Number.isInteger(id)) await resolveEvent(id, "approved");
+  redirect("/admin");
+}
+
+/** Decline a pending town-hall event — simple by design: listings are FREE
+ * in v1, so there is nothing to refund and no strike machinery. */
+export async function adminDeclineEvent(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (Number.isInteger(id)) await resolveEvent(id, "declined");
   redirect("/admin");
 }
 

@@ -3,7 +3,13 @@ import { listAds, type Ad } from "@/lib/ads";
 import { readSession } from "@/lib/session";
 import { recordVisit } from "@/lib/analytics";
 import { site } from "@/lib/config";
+import { etParts } from "@/lib/et";
+import { formatEventDay } from "@/lib/town-hall";
+import { listUpcomingEvents } from "@/lib/town-hall-store";
 import { AdRow } from "@/components/AdRow";
+
+/** Upcoming events shown in the homepage sidebar (the full board is /town-hall). */
+const SIDEBAR_EVENTS = 5;
 
 function dayLabel(date: Date): string {
   return date.toLocaleDateString("en-US", {
@@ -51,6 +57,8 @@ export default async function Home({
     perPage: site.adsPerPage,
   });
   const groups = groupByDay(ads);
+  // Town hall sidebar (item 18) — null until migration 9977 (sidebar hides).
+  const events = await listUpcomingEvents(etParts(new Date()).day, SIDEBAR_EVENTS);
 
   return (
     <>
@@ -69,7 +77,12 @@ export default async function Home({
         </div>
       )}
 
-      <div className="container">
+      {/* Broadsheet layout (items 18/19): featured-left / ads-center /
+          town-hall-right on wide screens; on narrow screens the DOM order IS
+          the stack — Featured above the ads, Town hall below. Either sidebar
+          hides entirely when it has nothing to show (no empty scaffolding). */}
+      <div className="home-layout">
+      <div className="home-center container">
         <h1 className="visually-hidden">Latest classified ads</h1>
 
         <form className="search" action="/" method="get" role="search">
@@ -147,6 +160,38 @@ export default async function Home({
             )}
           </nav>
         )}
+      </div>
+
+      {/* Town hall sidebar (item 18) — hides until migration 9977 is pasted. */}
+      {events !== null && (
+        <aside className="home-side home-townhall" aria-labelledby="townhall-h">
+          <h2 id="townhall-h" className="side-h">
+            <Link href="/town-hall">Town hall</Link>
+          </h2>
+          {events.length === 0 ? (
+            <p className="side-note">Nothing on the calendar yet.</p>
+          ) : (
+            <ul className="side-events">
+              {events.map((event) => (
+                <li key={event.id}>
+                  <p className="side-event-when">
+                    {formatEventDay(event.eventDate)}
+                    {event.timeText ? ` · ${event.timeText}` : ""}
+                  </p>
+                  <p className="side-event-title">
+                    <Link href="/town-hall">{event.title}</Link>
+                  </p>
+                  {event.placeText && <p className="side-event-place">{event.placeText}</p>}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="side-note">
+            <Link href="/town-hall">See the board</Link> ·{" "}
+            <Link href="/town-hall#add">Add your event</Link>
+          </p>
+        </aside>
+      )}
       </div>
     </>
   );
