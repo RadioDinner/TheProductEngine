@@ -3,17 +3,74 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-07-17 (session 009).
+**Last updated:** 2026-07-17 (session 009, end).
 
 ⚠️ **MIGRATION NUMBERS RENAMED (session 009, user decision):** the repo now
 uses the descending scheme from `new_session_instructions.md` §4 —
 `9999_init.sql` counts down, lowest number = newest, **next migration =
-(lowest − 1)** (`9980_*` as of the rename). Old ascending names `0001`–`0019`
-were renamed with **new = 10000 − old** (0013 → 9987, etc.; full table in
-`supabase/migrations/README.md`); `/api/health` probe keys renamed to match
-(`migration0013` → `migration9987`). All 18 were applied to prod BEFORE the
-rename — nothing needs re-running. History sections below and `Session log/`
-keep the old numbers; decode with 10000 − old.
+(lowest − 1)** — after this session that means `9975_*`. Old ascending names
+`0001`–`0019` were renamed with **new = 10000 − old** (0013 → 9987, etc.;
+full table in `supabase/migrations/README.md`); `/api/health` probe keys
+renamed to match. All 18 were applied to prod BEFORE the rename — nothing
+needs re-running. History sections below and `Session log/` keep the old
+numbers; decode with 10000 − old. Never `supabase db push` (CLI order is
+ascending = newest-first under this scheme); hand-paste only.
+
+## What shipped in session 009 (2026-07-17, committed DIRECTLY to `main`, per user)
+
+**THE ENTIRE FEATURES LIST RAN TO COMPLETION** — items 9, 11–25 all built
+(item 10 stays on hold by user decision), via parallel worktree lanes each
+verified (unit tests, tsc, build, Playwright walk) before merge. Unit suite
+181 → **391 checks**. Full detail: `Session log/009_2026-07-17/session_log.md`.
+Headlines:
+
+- **Migrations renumbered descending** (see the note above). 9980 (chat
+  upgrade) was pasted by the user mid-session.
+- ⚠️ **FOUR MIGRATIONS WRITTEN, NOT YET APPLIED at wrap: 9979 (reveal
+  metering), 9978 (business packages), 9977 (town hall + featured), 9976
+  (categories).** Independent — paste in any order; `/api/health` probes
+  each. Everything degrades gracefully until pasted (reveal unmetered,
+  business purchases refuse, sidebars hidden, categories dormant — never a
+  500).
+- **Item 9** web ad posting (SMS-exact pricing) · **11/12** strip hiding +
+  header unread badge (`/api/unread`) · **13/14/15** chat rebuild: bubbles,
+  report queue, link block, full audit logging (stance reversal documented
+  on /admin/help), pictures (30/thread, never on SMS), one-RPC send +
+  optimistic UI + `chat_nudged_at` · **16** My ads tab with the delete
+  refund matrix (pending → refund; approved-never-broadcast → refund; ever
+  digested → none; idempotent ledger refs) · **23** metered click-to-reveal
+  (numbers never in HTML, 10/day + bank 30, insights flags + block) ·
+  **17** business advertising ($39.99/59.99/89.99 wk/2wk/mo, Stripe
+  self-serve, review-gated, labeled Sponsor line OUTSIDE the cap-10,
+  missed days extend, declines = manual Stripe refund flow) · **18/19**
+  homepage featured-left/ads-center/townhall-right; free events board with
+  review + auto-expiry; two rotating Featured slots (operator-only, image
+  ads, external links rel=sponsored) · **22/24/25** category system:
+  approved SUBSCRIBE menu, toggle replies with exact user copy + 5/hr
+  confirmation throttle, ONE combined filtered digest per subscriber
+  (composed once per distinct category set; ALL byte-identical to before;
+  uncategorized rides everything; sponsors ride all groups), operator
+  categorizes at review, /account checkboxes, homepage ?category browser.
+- **Site/policy batch:** privacy + terms competitor audits (ours kept
+  stronger stances; real gaps filled); accessibility statement + refund
+  policy footer pages; © 2026 footer line ("Powered and secured by
+  CodeFuseSolutions"); **firearms banned** in the stated rules + post form;
+  **support = (234) 301-0048 everywhere, (330) 960-7170 exclusively the
+  ads line**.
+
+**User ops queue:** paste 9979/9978/9977/9976 → check health; optionally add
+firearm word-rule flags; set prices when ready (Featured slots, event
+listing/blast — deliberately unwired); carried from 008: verify photos@
+inbound + review-alert emails.
+
+**Recommended-but-unbuilt (new + carried):** web-lane rate limiter (none on
+posting/events/reveal-clicks beyond quotas); private bucket + signed URLs
+for chat images (currently the public ad-photos bucket, unguessable URLs
+only — user informed); abuse-suite pass over the new surfaces; HELP/FAQ
+don't mention category commands yet; retry-swallow inbound trap; Telnyx DLR
+badges. An adversarial review workflow swept the merged session diff at
+wrap — its confirmed findings + fixes land in the commits right after the
+session-log commit (see git log).
 
 ## What shipped in session 008 (committed DIRECTLY to `main`, per user)
 
