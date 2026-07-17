@@ -9,8 +9,9 @@
  *   member is warned, never silently dark), else lowercase category keys in
  *   canonical sorted order.
  * - An ad's category is `string | null`: null = uncategorized, and an
- *   uncategorized ad rides EVERY digest (pre-migration ads and skipped
- *   dropdowns are never silently unsendable).
+ *   uncategorized ad rides every ALL/selective digest (pre-migration ads and
+ *   skipped dropdowns are never silently unsendable) — but an EMPTY prefs set
+ *   gets nothing at all, so the "not getting any ads now" warning stays true.
  * - Texting a category word TOGGLES it; the first specific pick switches the
  *   member from ALL to selective; replying ALL returns to everything.
  */
@@ -86,13 +87,18 @@ export function toggleCategory(current: string[] | null, key: string): ToggleRes
 
 // ---------- digest filter partition ----------
 
-/** Does an ad belong in this member's digest? Uncategorized ads ride every
- * digest; null prefs = ALL. An empty prefs array gets uncategorized only. */
+/** Does an ad belong in this member's digest? null prefs = ALL; an EMPTY
+ * prefs array matches NOTHING — the member removed every category and was
+ * warned "You're not getting any ads now", and that copy must be true (an
+ * uncategorized ad riding an empty set would contradict it); uncategorized
+ * ads ride every null/non-empty set (pre-migration ads and skipped dropdowns
+ * are never silently unsendable). */
 export function adMatchesCategories(
   adCategory: string | null | undefined,
   categories: string[] | null,
 ): boolean {
   if (categories === null) return true;
+  if (categories.length === 0) return false;
   if (!adCategory) return true;
   return categories.includes(adCategory);
 }

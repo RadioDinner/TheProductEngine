@@ -25,6 +25,7 @@ import { getEngineSettings } from "@/lib/settings";
 import {
   deleteRefundDecision,
   findAdCharge,
+  findUnrefundedBumpCharge,
   hasBenignRejectRefund,
   isPicReplaceSubmission,
 } from "@/lib/myads";
@@ -54,6 +55,7 @@ export default async function MyAdsPage({
     deleted?: string;
     refund?: string;
     amount?: string;
+    bumprefund?: string;
     why?: string;
     sold?: string;
     buyer?: string;
@@ -123,6 +125,14 @@ export default async function MyAdsPage({
       } else {
         confirmMoney = "No charge is on record for this ad, so there's nothing to refund.";
       }
+      // A still-queued PAID bump is refunded on delete regardless of the ad
+      // matrix — the re-broadcast never happens (deleteMine mirrors this).
+      const bumpCharge = bumpQueued.has(target.id)
+        ? findUnrefundedBumpCharge(ledger, target.id)
+        : undefined;
+      if (bumpCharge) {
+        confirmMoney += ` Your scheduled bump hasn't run yet either, so its ${credits(-bumpCharge.delta)} come${-bumpCharge.delta === 1 ? "s" : ""} back too.`;
+      }
     }
   }
 
@@ -155,6 +165,13 @@ export default async function MyAdsPage({
             (params.why === "ran"
               ? "It had already run in a digest, so there's no refund."
               : "It was already closed, so there's no refund.")}
+          {Number(params.bumprefund) > 0 && (
+            <>
+              {" "}
+              Its scheduled bump never ran, so those {credits(Number(params.bumprefund))} came
+              back too.
+            </>
+          )}
         </p>
       )}
       {params.sold === "done" && (
@@ -304,8 +321,9 @@ export default async function MyAdsPage({
           </p>
           <p>{confirmMoney}</p>
           <p className="fine">
-            Deleting also removes the ad&rsquo;s pictures and drops any scheduled bump. Past
-            digests keep the ad number. This can&rsquo;t be undone.
+            Deleting also removes the ad&rsquo;s pictures and drops any scheduled bump (a
+            paid bump that never ran is refunded). Past digests keep the ad number. This
+            can&rsquo;t be undone.
           </p>
           <form action={deleteMine} className="sim-actions">
             <input type="hidden" name="id" value={confirmAd.id} />

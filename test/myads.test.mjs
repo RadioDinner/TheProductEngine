@@ -3,9 +3,12 @@
 // pages share. The matrix: pending → refund; approved and never in any digest
 // → refund; ever broadcast → NO refund; rejected/sold/expired/deleted → no.
 import {
+  deleteBumpRefundNote,
+  deleteBumpRefundRef,
   deleteRefundDecision,
   deleteRefundRef,
   findAdCharge,
+  findUnrefundedBumpCharge,
   hasBenignRejectRefund,
   isPicReplaceSubmission,
   picReplaceFrom,
@@ -98,6 +101,68 @@ export function run(t) {
   t.eq("a bump refund does NOT block the delete refund", hasBenignRejectRefund(ledger, 1042), false);
   t.eq("#104 does not match #1042's refund", hasBenignRejectRefund(refunded, 104), false);
   t.eq("clean ledger → no block", hasBenignRejectRefund(ledger, 12), false);
+
+  // ---- the dropped-queued-bump refund (delete gives a paid bump back) ----
+  t.eq("bump refund ref shape", deleteBumpRefundRef(1042), "member-delete-bump-refund-ad-1042");
+  t.eq(
+    "bump refund note shape",
+    deleteBumpRefundNote(1042),
+    "Bump refunded — ad #1042 deleted before it ran",
+  );
+  t.eq(
+    "bump refund note never reads as a benign-reject refund",
+    hasBenignRejectRefund([{ kind: "refund", delta: 1, note: deleteBumpRefundNote(1042) }], 1042),
+    false,
+  );
+  // Ledgers are newest-first (getLedger in both stores).
+  const bumpLedger = [
+    { kind: "spend", delta: -2, note: "Bump — ad #1042" },
+    { kind: "refund", delta: 1, note: "Bump not applied — ad #1042" },
+    { kind: "spend", delta: -1, note: "Bump — ad #1042" },
+    { kind: "spend", delta: -1, note: "Ad #1042 (text)" },
+  ];
+  t.eq(
+    "finds the newest uncompensated bump spend (recorded amount, not settings)",
+    findUnrefundedBumpCharge(bumpLedger, 1042)?.delta,
+    -2,
+  );
+  t.eq(
+    "a fully compensated history finds nothing",
+    findUnrefundedBumpCharge(
+      [
+        { kind: "spend", delta: -2, note: "Bump — ad #1042" },
+        { kind: "refund", delta: 2, note: deleteBumpRefundNote(1042) },
+      ],
+      1042,
+    ),
+    undefined,
+  );
+  t.eq(
+    "queue-failure refund also compensates",
+    findUnrefundedBumpCharge(
+      [
+        { kind: "refund", delta: 1, note: "Bump not applied — ad #1042" },
+        { kind: "spend", delta: -1, note: "Bump — ad #1042" },
+      ],
+      1042,
+    ),
+    undefined,
+  );
+  t.eq(
+    "free bumps (no spend) refund nothing",
+    findUnrefundedBumpCharge([{ kind: "spend", delta: -1, note: "Ad #1042 (text)" }], 1042),
+    undefined,
+  );
+  t.eq(
+    "#104's bump spend does not match #1042",
+    findUnrefundedBumpCharge([{ kind: "spend", delta: -1, note: "Bump — ad #104" }], 1042),
+    undefined,
+  );
+  t.eq(
+    "the ad submission charge is never mistaken for a bump",
+    findUnrefundedBumpCharge([{ kind: "spend", delta: -5, note: "Ad #1042 (picture)" }], 1042),
+    undefined,
+  );
 
   // ---- the replacement-picture marker ----
   const from = picReplaceFrom("(330) 555-0142");

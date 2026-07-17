@@ -68,8 +68,15 @@ interface CheckoutSessionPayload {
  * unique), so retries/replays never create two packages. The package lands as
  * pending_review — payment never skips the human review (user decision) —
  * and its run clock starts at APPROVAL, not here.
+ *
+ * Returns the outcome so POST can answer Stripe accordingly: "unsupported"
+ * (migration 9978 not pasted — the package could not be stored) must become a
+ * 5xx so Stripe RETRIES the delivery; everything else is terminal and gets a
+ * 200 ("unprocessable" = bad/underpaid metadata a retry can never fix).
  */
-async function handleBusinessPackage(session: CheckoutSessionPayload): Promise<void> {
+async function handleBusinessPackage(
+  session: CheckoutSessionPayload,
+): Promise<"created" | "duplicate" | "unsupported" | "unprocessable"> {
   const meta = session.metadata ?? {};
   const tier = getBusinessTier(meta.tier ?? "");
   const ref = session.payment_intent ?? session.id ?? "";
@@ -77,14 +84,14 @@ async function handleBusinessPackage(session: CheckoutSessionPayload): Promise<v
   const adText = (meta.ad_text ?? "").trim();
   if (!tier || !ref || !businessName || !adText) {
     console.error("[business] completed session missing metadata:", session.id, meta);
-    return;
+    return "unprocessable";
   }
   if (session.amount_total != null && session.amount_total < tier.priceCents) {
     // Defense in depth: never accept a package for less than its price.
     console.error(
       `[business] amount ${session.amount_total} < tier ${tier.id} price ${tier.priceCents}; not storing`,
     );
-    return;
+    return "unprocessable";
   }
   const result = await createBusinessPackage({
     businessName,
@@ -98,10 +105,12 @@ async function handleBusinessPackage(session: CheckoutSessionPayload): Promise<v
   });
   if (result.outcome === "unsupported") {
     // Migration 9978 isn't applied but the business HAS PAID. Nothing can be
-    // stored, so shout: this log line is the only record — the operator must
-    // paste the migration and re-enter the package (details below) or refund
-    // ref in Stripe. Stripe will also retry the webhook, and once the table
-    // exists the retry stores it (stripe_ref keeps that idempotent).
+    // stored, so shout — and POST answers 503 so Stripe RETRIES this delivery
+    // (with backoff, up to ~72h): once the table exists, a retry stores the
+    // package (stripe_ref keeps that idempotent), and until then the failing
+    // webhook is a durable signal in the Stripe dashboard, not just this
+    // rolling log line. The operator can also re-enter the details below or
+    // refund ref in Stripe.
     console.error(
       `[business] PAID PACKAGE COULD NOT BE STORED — migration 9978 not applied. ` +
         `MANUAL ACTION NEEDED. ref=${ref} tier=${tier.id} (${formatPrice(tier.priceCents)}) ` +
@@ -110,6 +119,7 @@ async function handleBusinessPackage(session: CheckoutSessionPayload): Promise<v
     );
   }
   // "duplicate" = Stripe retry of an already-stored payment: correctly ignored.
+  return result.outcome;
 }
 
 export async function POST(req: NextRequest) {
@@ -132,7 +142,15 @@ export async function POST(req: NextRequest) {
   if (event.type === "checkout.session.completed") {
     const session = event.data?.object ?? {};
     if (session.payment_status === "paid" && session.metadata?.kind === "business_package") {
-      await handleBusinessPackage(session);
+      const outcome = await handleBusinessPackage(session);
+      if (outcome === "unsupported") {
+        // Non-2xx = Stripe retries. Only the storage-unavailable case retries;
+        // created/duplicate/unprocessable are terminal and fall through to 200.
+        return NextResponse.json(
+          { error: "business package not storable — migration 9978 pending" },
+          { status: 503 },
+        );
+      }
     } else if (session.payment_status === "paid") {
       const phone = normalizePhone(session.metadata?.phone ?? "");
       const pack = getPack(session.metadata?.pack ?? "");

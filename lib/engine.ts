@@ -227,17 +227,25 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   // Charge atomically. Free pass first (its decrement is race-safe); else an
   // atomic credit debit. If both fail — the balance was spent by a concurrent
   // AD NEW between the check and here — undo the ad instead of posting unpaid.
-  let chargeNote: string;
-  if (canPass && (await consumeFreeAd(from))) {
-    await addLedgerEntry(from, {
-      delta: 0,
-      kind: "spend",
-      note: `Free ad used — ad #${id} (${kind})`,
-    });
-    chargeNote = `Used 1 free ad — ${Math.max(0, posting.freeAds - 1)} left.`;
-  } else if (await spendCredits(from, cost, `Ad #${id} (${kind})`)) {
-    chargeNote = `${cost} credit${cost === 1 ? "" : "s"} — ${Math.max(0, balance - cost)} left.`;
-  } else {
+  // A THROWN charge (store hiccup) gets the same undo, then rethrows: an
+  // unpaid `pending` ad must never sit in the review queue looking payable.
+  let chargeNote = "";
+  try {
+    if (canPass && (await consumeFreeAd(from))) {
+      await addLedgerEntry(from, {
+        delta: 0,
+        kind: "spend",
+        note: `Free ad used — ad #${id} (${kind})`,
+      });
+      chargeNote = `Used 1 free ad — ${Math.max(0, posting.freeAds - 1)} left.`;
+    } else if (await spendCredits(from, cost, `Ad #${id} (${kind})`)) {
+      chargeNote = `${cost} credit${cost === 1 ? "" : "s"} — ${Math.max(0, balance - cost)} left.`;
+    }
+  } catch (e) {
+    await rejectAdRecord(id, "Charge failed at submission.", "benign").catch(() => {});
+    throw e;
+  }
+  if (!chargeNote) {
     await rejectAdRecord(id, "Not enough credits at submission.", "benign");
     return {
       body: `That ad needs ${cost} credit${cost === 1 ? "" : "s"} and you don't have enough right now. Buy credits at ThePlainExchange.com, or call ${site.supportPhone}.`,
@@ -732,8 +740,16 @@ async function route(
       // the store can't keep).
       const current = await getSubscriberCategories(from);
       if (current === "unsupported") return unknownReply(from, settings);
-      await ensureAccount(from);
+      // Non-subscribers (strangers, STOPped numbers) get the unknown-word
+      // treatment: they have no digest for these words to steer, the toggle
+      // copy ("You will now receive…") would be a false promise (digests
+      // filter on subscribed_at), and minting an account here was the cheap
+      // flood vector the STOP/unknown paths deliberately avoid. getAccount
+      // never mints; every subscriber already has a row (SUBSCRIBE/START).
+      const account = await getAccount(from);
+      if (!account?.subscribedAt) return unknownReply(from, settings);
       let body: string;
+      let emptied = false;
       if (command.category === "all") {
         await setSubscriberCategories(from, null);
         body = ALL_CATEGORIES_SMS;
@@ -742,6 +758,7 @@ async function route(
         await setSubscriberCategories(from, toggled.next);
         // Removing the LAST category is allowed but warned — never silently
         // dark (user decision, item 24).
+        emptied = toggled.emptied;
         body = toggled.emptied
           ? EMPTY_CATEGORIES_SMS
           : categoryToggleSms(command.category, toggled.on);
@@ -751,6 +768,11 @@ async function route(
       // the hour). Rides on top of the reserveSms reservation handleInbound
       // already took for this inbound.
       const throttle = await reserveCategoryConfirm(from, settings.categoryConfirmsPerHour);
+      // The emptied-last-category warning is EXEMPT from the silencing —
+      // "allowed but never silent" is unconditional (user decision, item 24).
+      // It still counted toward the window above, and the reserveSms hourly
+      // cap remains the backstop on total outbound.
+      if (emptied) return { body };
       if (throttle === "silent") return null;
       if (throttle === "notice") return { body: THROTTLE_NOTICE_SMS };
       return { body };
@@ -758,6 +780,12 @@ async function route(
     case "list": {
       const current = await getSubscriberCategories(from);
       if (current === "unsupported") return unknownReply(from, settings);
+      // Same non-subscriber gate as the toggles: a stranger has no categories
+      // to list and "every category (ALL)" would be false for them — and the
+      // accountless path had no throttle row, making LIST a cheaper reply-
+      // extraction vector than gibberish.
+      const account = await getAccount(from);
+      if (!account?.subscribedAt) return unknownReply(from, settings);
       // LIST is a free-form status check in the same throttle class as the
       // toggle confirmations (item 24) — hammering LIST goes quiet too.
       const throttle = await reserveCategoryConfirm(from, settings.categoryConfirmsPerHour);

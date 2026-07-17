@@ -434,22 +434,26 @@ export default async function AdminHelp() {
         <strong>You assign the category — at review.</strong> The Review queue has a
         category dropdown on every pending ad (web posters may suggest one; it just
         pre-fills your dropdown), and the Ads tab can change it later.{" "}
-        <strong>&ldquo;Uncategorized&rdquo; is safe:</strong> an uncategorized ad rides{" "}
-        <em>every</em> subscriber&rsquo;s digest and shows under All on the website — an ad
-        can never become unsendable because a dropdown was skipped. Each subscriber gets ONE
-        combined digest per send-time with just their categories&rsquo; ads (plus every
-        uncategorized ad); business sponsor lines ride every edition regardless of
-        categories. A member who toggles everything off is warned (&ldquo;You&rsquo;re not
-        getting any ads now&rdquo;) but the choice is honored.
+        <strong>&ldquo;Uncategorized&rdquo; is safe:</strong> an uncategorized ad rides
+        every ALL and selective subscriber&rsquo;s digest and shows under All on the
+        website — an ad can never become unsendable because a dropdown was skipped. Each
+        subscriber gets ONE combined digest per send-time with just their
+        categories&rsquo; ads (plus every uncategorized ad); business sponsor lines ride
+        every edition regardless of categories. A member who toggles everything off is
+        warned (&ldquo;You&rsquo;re not getting any ads now&rdquo;) and the choice is
+        honored literally: they get nothing — no uncategorized ads and no sponsor lines —
+        until they reply ALL or a category name.
       </p>
       <p>
         <strong>The confirmation throttle</strong> keeps &ldquo;HORSES HORSES HORSES&rdquo;
         from running up the SMS bill: after {s.categoryConfirmsPerHour} confirmed category
         toggles/LIST checks in an hour, the member gets one &ldquo;Changes still apply. Text
         LIST anytime to see your categories.&rdquo; and further confirmations go silent for
-        the hour — <em>the toggles still apply</em>, they just cost nothing outbound. The
-        hourly reply cap above stays on top as the hard backstop, and gibberish still gets
-        the ordinary unknown-word handling. Tunable on Settings (0 = unthrottled). The
+        the hour — <em>the toggles still apply</em>, they just cost nothing outbound. One
+        exception: the &ldquo;You&rsquo;re not getting any ads now&rdquo; warning for
+        removing the last category is never silenced (it still counts toward the window).
+        The hourly reply cap above stays on top as the hard backstop, and gibberish still
+        gets the ordinary unknown-word handling. Tunable on Settings (0 = unthrottled). The
         homepage category row is just a browse filter (works signed-out) — it has nothing
         to do with anyone&rsquo;s subscription.
       </p>

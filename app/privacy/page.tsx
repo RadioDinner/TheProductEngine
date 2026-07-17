@@ -73,6 +73,11 @@ export default function PrivacyPolicy() {
         <strong>Sign-in basics.</strong> A password (stored scrambled, never as plain text)
         and a cookie that keeps you signed in on this website.
       </p>
+      <p>
+        <strong>Number look-ups.</strong> When you press &ldquo;Show number&rdquo; on an ad,
+        we record which ad&rsquo;s number you looked up and when. That record is what stops
+        someone from harvesting members&rsquo; phone numbers in bulk.
+      </p>
 
       <h2>How we use it</h2>
       <ul>
@@ -140,9 +145,12 @@ export default function PrivacyPolicy() {
       <h2>What&rsquo;s public</h2>
       <p>
         Ads are public — that is the point of an ad. The ad text and picture you submit
-        appear in the digests, in the email edition, and on this website. Your contact
-        details inside an ad are masked on the website until a visitor signs in. Keep in
-        mind that anything you put in an ad can be seen by the people who get the ads.
+        appear in the digests, in the email edition, and on this website. On the website
+        your contact details inside an ad are masked: a signed-in member presses
+        &ldquo;Show number&rdquo; to see a seller&rsquo;s number one ad at a time, and
+        there is a daily limit on look-ups. Town hall event listings are public the same
+        way, with phone numbers masked until a member signs in. Keep in mind that anything
+        you put in an ad can be seen by the people who get the ads.
       </p>
 
       <h2>Cookies</h2>

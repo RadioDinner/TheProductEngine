@@ -12,6 +12,7 @@ import { slotRotation } from "@/lib/featured";
 import { listActiveFeaturedSpots } from "@/lib/featured-store";
 import { AdRow } from "@/components/AdRow";
 import { FeaturedRotator, type RotatorSpot } from "@/components/FeaturedRotator";
+import { maskPhonesPlain } from "@/components/MaskedText";
 
 /** Upcoming events shown in the homepage sidebar (the full board is /town-hall). */
 const SIDEBAR_EVENTS = 5;
@@ -139,6 +140,11 @@ export default async function Home({
             defaultValue={q ?? ""}
             placeholder="Search the ads — hay, stove, horse…"
           />
+          {/* A GET form replaces the whole query string on submit — carry the
+              active category so searching within a category doesn't silently
+              drop the filter (category is undefined pre-9976, so nothing
+              renders before the migration). */}
+          {category && <input type="hidden" name="category" value={category} />}
           <button type="submit">Search</button>
         </form>
         {session ? (
@@ -149,8 +155,8 @@ export default async function Home({
           </p>
         ) : (
           <p className="search-note">
-            Phone numbers are shown to signed-in members.{" "}
-            <Link href="/login">Sign in</Link>
+            <Link href="/login">Sign in</Link>, then press &ldquo;Show number&rdquo; on an ad
+            to see the seller&rsquo;s number.
           </p>
         )}
 
@@ -260,16 +266,27 @@ export default async function Home({
             <p className="side-note">Nothing on the calendar yet.</p>
           ) : (
             <ul className="side-events">
+              {/* Visitors get masked numbers here too — same posture as the
+                  full /town-hall board (numbers land in these free-text
+                  fields by the board's own instruction). */}
               {events.map((event) => (
                 <li key={event.id}>
                   <p className="side-event-when">
                     {formatEventDay(event.eventDate)}
-                    {event.timeText ? ` · ${event.timeText}` : ""}
+                    {event.timeText
+                      ? ` · ${session ? event.timeText : maskPhonesPlain(event.timeText)}`
+                      : ""}
                   </p>
                   <p className="side-event-title">
-                    <Link href="/town-hall">{event.title}</Link>
+                    <Link href="/town-hall">
+                      {session ? event.title : maskPhonesPlain(event.title)}
+                    </Link>
                   </p>
-                  {event.placeText && <p className="side-event-place">{event.placeText}</p>}
+                  {event.placeText && (
+                    <p className="side-event-place">
+                      {session ? event.placeText : maskPhonesPlain(event.placeText)}
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>

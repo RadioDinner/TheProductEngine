@@ -31,6 +31,7 @@ import {
   queuedOutboxCount,
   requeueOutbox,
   reserveSms,
+  smsDigestOutboxPhonesOnDay,
   type OutboxInsert,
   type OutboxRow,
   type StoredAd,
@@ -138,8 +139,16 @@ export interface SlotResult {
  * that whole group — composition cost is O(distinct sets), not O(subscribers),
  * and the ALL group's edition is byte-identical to the pre-category digest.
  * A subscriber whose filtered edition is empty (and no sponsors ride) gets
- * nothing this slot. Pre-9976 every ad reads uncategorized and every
- * subscriber reads ALL, so exactly one group forms: today's behavior.
+ * nothing this slot, and an EMPTY-SET subscriber gets nothing at all — not
+ * even sponsor lines ("You're not getting any ads now" must stay true).
+ *
+ * The Reply-STOP footer is decided PER GROUP: the slot-global firstOfDay, or
+ * — when `phonesTextedToday` is supplied — a group none of whose phones has
+ * had a digest enqueued yet today (a selective group's first digest of the
+ * day carries the opt-out notice even when the ALL group's ran hours ago).
+ *
+ * Returns the ad ids that landed in ≥1 group's edition (`deliveredAdIds`) so
+ * the caller can finalize/consume ONLY what was actually delivered.
  */
 export function buildCategorizedSmsRows(params: {
   digestId: number;
@@ -149,11 +158,15 @@ export function buildCategorizedSmsRows(params: {
   /** Ad id → category (getAdCategories); missing ids read uncategorized. */
   categoriesByAd: Map<number, string | null>;
   firstOfDay: boolean;
+  /** Phones already enqueued an SMS digest today — the per-group footer
+   * signal. Only consulted when firstOfDay is false (undefined = day-global
+   * behavior: no footer past the first slot). */
+  phonesTextedToday?: Set<string>;
   edition?: DigestEdition;
   digestNo: number | null;
   sponsorLines: string[];
   recipients: { phone: string; categories: string[] | null }[];
-}): { rows: OutboxInsert[]; recipients: number } {
+}): { rows: OutboxInsert[]; recipients: number; deliveredAdIds: Set<number> } {
   const groups = new Map<string, { categories: string[] | null; phones: string[] }>();
   for (const r of params.recipients) {
     const key = partitionKey(r.categories);
@@ -162,19 +175,27 @@ export function buildCategorizedSmsRows(params: {
     else groups.set(key, { categories: r.categories, phones: [r.phone] });
   }
   const rows: OutboxInsert[] = [];
+  const deliveredAdIds = new Set<number>();
   let recipients = 0;
   for (const group of groups.values()) {
+    // The warned-dark empty set gets NOTHING this slot — including sponsors.
+    if (group.categories && group.categories.length === 0) continue;
     const filtered = params.items.filter((ad) =>
       adMatchesCategories(params.categoriesByAd.get(ad.id) ?? null, group.categories),
     );
     // Nothing in their categories and no sponsor lines riding — no digest for
-    // this group this slot (an empty-set subscriber was already warned).
+    // this group this slot.
     if (!filtered.length && !params.sponsorLines.length) continue;
+    for (const ad of filtered) deliveredAdIds.add(ad.id);
+    const groupFirstOfDay =
+      params.firstOfDay ||
+      (params.phonesTextedToday !== undefined &&
+        group.phones.every((p) => !params.phonesTextedToday!.has(p)));
     const messages = composeDigestMessages(
       params.now,
       params.slotHour,
       filtered,
-      params.firstOfDay,
+      groupFirstOfDay,
       params.edition,
       params.digestNo,
       params.sponsorLines,
@@ -195,7 +216,7 @@ export function buildCategorizedSmsRows(params: {
       }
     }
   }
-  return { rows, recipients };
+  return { rows, recipients, deliveredAdIds };
 }
 
 /** Catch-up messages for a brand-new subscriber: the most recent digest's ads. */
@@ -288,10 +309,10 @@ export function nextSlotOccurrence(
 export async function selectDigestItems(cap: number): Promise<{
   newAds: StoredAd[];
   bumpAds: StoredAd[];
-  bumpRecords: { id: number }[];
+  bumpRecords: { id: number; adId: number }[];
 }> {
   const newAds = await getNewDigestAds(cap);
-  const bumpRecords: { id: number }[] = [];
+  const bumpRecords: { id: number; adId: number }[] = [];
   const bumpAds: StoredAd[] = [];
   const remaining = cap - newAds.length;
   if (remaining > 0) {
@@ -359,6 +380,11 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   // Compose + enqueue the SMS edition.
   const { day } = etParts(now);
   const firstOfDay = (await digestsSentOnDay(day)) === 0;
+  // Per-group STOP-footer signal: which phones already had an SMS digest
+  // enqueued today (only needed once the day-global firstOfDay has passed).
+  const phonesTextedToday = firstOfDay
+    ? undefined
+    : new Set(await smsDigestOutboxPhonesOnDay(day));
   const digestNo = await allocateDigestNumber(smsDigestId);
   // Sponsor lines (item 17) ride the first digest of the day — an early/extra
   // edition counts (and a later scheduled slot then skips them for the day).
@@ -370,13 +396,14 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   );
   // Per-category-set composition — same machinery as the scheduled run.
   const categoriesByAd = await getAdCategories(items.map((a) => a.id));
-  const { rows, recipients: smsRecipients } = buildCategorizedSmsRows({
+  const { rows, recipients: smsRecipients, deliveredAdIds } = buildCategorizedSmsRows({
     digestId: smsDigestId,
     now,
     slotHour,
     items,
     categoriesByAd,
     firstOfDay,
+    phonesTextedToday,
     edition,
     digestNo,
     sponsorLines: sponsors.map((s) => sponsorLine(s)),
@@ -399,6 +426,8 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   const emailDateLabel = `${dateLabel}${editionTag}${digestNo ? ` · Digest No. ${digestNo}` : ""}`;
   const emailRows: OutboxInsert[] = [];
   for (const r of recipients) {
+    // The warned-dark empty set gets nothing — not even a sponsor-only edition.
+    if (r.categories && r.categories.length === 0) continue;
     const filtered = sorted.filter((ad) =>
       adMatchesCategories(categoriesByAd.get(ad.id) ?? null, r.categories),
     );
@@ -418,28 +447,43 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   }
   await enqueueDigestOutbox(emailRows);
 
-  // Bookkeeping: early consumes the queue exactly like the scheduled run;
-  // extra records its contents and consumes nothing.
+  // Bookkeeping: early consumes the queue exactly like the scheduled run —
+  // but ONLY what was actually delivered: ads that landed in ≥1 SMS group's
+  // edition, plus ads the email edition (composed above) carries. Anything
+  // undelivered keeps broadcast_at null / bumps queued and rides the next
+  // slot. extra records its contents and consumes nothing.
   if (edition === "early") {
+    const consumed = new Set(deliveredAdIds);
+    for (const ad of items) {
+      if (consumed.has(ad.id)) continue;
+      const adCategory = categoriesByAd.get(ad.id) ?? null;
+      if (recipients.some((r) => adMatchesCategories(adCategory, r.categories))) {
+        consumed.add(ad.id);
+      }
+    }
     await finalizeDigest(
       smsDigestId,
-      newAds.map((a) => a.id),
-      bumpRecords.map((b) => b.id),
-      items.length,
-      items.map((a) => a.id),
+      newAds.filter((a) => consumed.has(a.id)).map((a) => a.id),
+      bumpRecords.filter((b) => consumed.has(b.adId)).map((b) => b.id),
+      consumed.size,
+      items.filter((a) => consumed.has(a.id)).map((a) => a.id),
     );
-    await finalizeDigest(emailDigestId, [], [], items.length);
+    await finalizeDigest(emailDigestId, [], [], consumed.size);
   } else {
     await finalizeExtraDigest(smsDigestId, items.map((a) => a.id), items.length);
     await finalizeExtraDigest(emailDigestId, [], items.length);
   }
 
   // Sponsor days consumed after the bookkeeping (crash-safe, same as the
-  // scheduled run). The email mirror was composed above with the sponsors in
-  // hand, so the recorded key just needs to be unique — the slot-key lookup in
-  // runDueEmailDigests never applies here (its email digest is already final).
-  for (const s of sponsors) {
-    await markSponsorRan(s.id, day, `sent-now#${smsDigestId}`);
+  // scheduled run) — and only when SOME edition actually went out, so a paid
+  // sponsor day is never burned on a slot nobody received. The email mirror
+  // was composed above with the sponsors in hand, so the recorded key just
+  // needs to be unique — the slot-key lookup in runDueEmailDigests never
+  // applies here (its email digest is already final).
+  if (rows.length || emailRows.length) {
+    for (const s of sponsors) {
+      await markSponsorRan(s.id, day, `sent-now#${smsDigestId}`);
+    }
   }
 
   // Deliver now — don't make "send early" wait for the next cron tick.
@@ -478,6 +522,13 @@ export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {
     }
 
     const firstOfDay = (await digestsSentOnDay(day)) === 0;
+    // Per-group STOP-footer signal (item 22): which phones already had an SMS
+    // digest enqueued today. A selective group whose first digest of the day
+    // composes at a LATER slot still gets the opt-out footer, while the ALL
+    // group (texted at the first slot) doesn't get it twice.
+    const phonesTextedToday = firstOfDay
+      ? undefined
+      : new Set(await smsDigestOutboxPhonesOnDay(day));
     const digestNo = await allocateDigestNumber(digestId);
     // Business sponsor lines (item 17): every active package rides the first
     // digest that composes each ET day (listDueSponsors excludes ones that
@@ -494,35 +545,55 @@ export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {
     // subscriber, packed once per distinct category set. Pre-9976 this map is
     // empty (all ads uncategorized) and prefs read ALL — unfiltered as today.
     const categoriesByAd = await getAdCategories(items.map((a) => a.id));
-    const { rows, recipients } = buildCategorizedSmsRows({
+    const { rows, recipients, deliveredAdIds } = buildCategorizedSmsRows({
       digestId,
       now,
       slotHour: slot,
       items,
       categoriesByAd,
       firstOfDay,
+      phonesTextedToday,
       digestNo,
       sponsorLines: sponsors.map((s) => sponsorLine(s)),
       recipients: subscribers,
     });
     const queued = await enqueueDigestOutbox(rows);
+    // Consume ONLY delivered ads: an ad every SMS group filtered out keeps
+    // broadcast_at null / its bump queued and rides the next slot instead of
+    // being silently marked sent. Ads that reach no SMS group but DO match an
+    // email recipient still count as delivered — the email edition mirrors
+    // this digest's recorded item list (runDueEmailDigests), so restricting
+    // to SMS groups alone would starve an email-only audience forever.
+    const emailRecipients = await listEmailRecipientsWithCategories();
+    const consumed = new Set(deliveredAdIds);
+    for (const ad of items) {
+      if (consumed.has(ad.id)) continue;
+      const adCategory = categoriesByAd.get(ad.id) ?? null;
+      if (emailRecipients.some((r) => adMatchesCategories(adCategory, r.categories))) {
+        consumed.add(ad.id);
+      }
+    }
     await finalizeDigest(
       digestId,
-      newAds.map((a) => a.id),
-      bumpRecords.map((b) => b.id),
-      items.length,
-      items.map((a) => a.id),
+      newAds.filter((a) => consumed.has(a.id)).map((a) => a.id),
+      bumpRecords.filter((b) => consumed.has(b.adId)).map((b) => b.id),
+      consumed.size,
+      items.filter((a) => consumed.has(a.id)).map((a) => a.id),
     );
     // Consume each sponsor's paid day only after the digest is enqueued and
     // finalized: a crash mid-compose leaves the day uncounted, the redo picks
     // the sponsors up again, and the outbox unique key dedups the rows. The
     // slot key is remembered so the email edition mirrors the same sponsors.
-    for (const s of sponsors) {
-      await markSponsorRan(s.id, day, slotKey);
+    // Skipped entirely when nothing was delivered anywhere (rows empty and no
+    // ad consumed) — a paid sponsor day must not burn on an undelivered slot.
+    if (rows.length || consumed.size) {
+      for (const s of sponsors) {
+        await markSponsorRan(s.id, day, slotKey);
+      }
     }
     results.push({
       slotKey,
-      items: items.length,
+      items: consumed.size,
       recipients,
       queued,
       skipped: false,

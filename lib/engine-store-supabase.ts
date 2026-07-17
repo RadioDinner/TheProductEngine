@@ -403,14 +403,23 @@ export async function revertAdToPending(id: number): Promise<boolean> {
  * storage object nothing links to), never a live ad in a broken state.
  * A hard DELETE is impossible anyway: digest_items references ads(id) with no
  * cascade — past digests are history and stay intact.
+ *
+ * `expectedStatus` makes the flip a compare-and-swap: the update only lands if
+ * the ad still has that exact status, so a caller whose refund decision was
+ * computed from an observed status is guaranteed the decision matches the
+ * status that actually transitioned (kills the admin-reject-vs-member-delete
+ * double-refund race). Omitted = the admin's blind delete (any non-deleted).
  */
-export async function deleteAdRecord(id: number): Promise<"deleted" | "noop" | "unsupported"> {
-  const { data, error } = await db()
+export async function deleteAdRecord(
+  id: number,
+  expectedStatus?: StoredAdStatus,
+): Promise<"deleted" | "noop" | "unsupported"> {
+  let query = db()
     .from("ads")
     .update({ status: "deleted", deleted_at: new Date().toISOString(), hold_until: null })
-    .eq("id", id)
-    .neq("status", "deleted")
-    .select("id");
+    .eq("id", id);
+  query = expectedStatus ? query.eq("status", expectedStatus) : query.neq("status", "deleted");
+  const { data, error } = await query.select("id");
   if (error) {
     // 22P02 = 'deleted' isn't a valid ad_status value yet — migration 9987
     // hasn't been pasted. Degrade to a report instead of 500ing the action
@@ -420,31 +429,45 @@ export async function deleteAdRecord(id: number): Promise<"deleted" | "noop" | "
   }
   if ((data?.length ?? 0) === 0) return "noop";
 
+  // Child cleanup is BEST-EFFORT, matching the crash-safety comment above: the
+  // status flip already committed, so a failure here must not abort the caller
+  // (the member-delete refund lives downstream) — it only leaves orphanable
+  // leftovers (a queued bump the digest selector skips, unlinked rows/objects).
   const { error: bumpError } = await db()
     .from("bumps")
     .delete()
     .eq("ad_id", id)
     .eq("status", "queued");
-  if (bumpError) throw bumpError;
+  if (bumpError) {
+    console.error(`[ads] delete #${id}: queued-bump cleanup failed (orphan is harmless):`, bumpError);
+  }
 
-  const { data: photos, error: photoReadError } = await db()
-    .from("ad_photos")
-    .select("src")
-    .eq("ad_id", id);
-  if (photoReadError) throw photoReadError;
-  if (photos?.length) {
-    await removeHostedPhotos(photos.map((p) => p.src as string));
-    const { error: photoDeleteError } = await db().from("ad_photos").delete().eq("ad_id", id);
-    if (photoDeleteError) throw photoDeleteError;
+  try {
+    const { data: photos, error: photoReadError } = await db()
+      .from("ad_photos")
+      .select("src")
+      .eq("ad_id", id);
+    if (photoReadError) throw photoReadError;
+    if (photos?.length) {
+      await removeHostedPhotos(photos.map((p) => p.src as string));
+      const { error: photoDeleteError } = await db().from("ad_photos").delete().eq("ad_id", id);
+      if (photoDeleteError) throw photoDeleteError;
+    }
+  } catch (e) {
+    console.error(`[ads] delete #${id}: photo cleanup failed (orphan is harmless):`, e);
   }
   // Pending emailed-in pictures for the ad go too (row + storage object).
-  const { data: submissions, error: subError } = await db()
-    .from("ad_photo_submissions")
-    .select("src")
-    .eq("ad_id", id);
-  if (!subError && submissions?.length) {
-    await removeHostedPhotos(submissions.map((s) => s.src as string));
-    await db().from("ad_photo_submissions").delete().eq("ad_id", id);
+  try {
+    const { data: submissions, error: subError } = await db()
+      .from("ad_photo_submissions")
+      .select("src")
+      .eq("ad_id", id);
+    if (!subError && submissions?.length) {
+      await removeHostedPhotos(submissions.map((s) => s.src as string));
+      await db().from("ad_photo_submissions").delete().eq("ad_id", id);
+    }
+  } catch (e) {
+    console.error(`[ads] delete #${id}: photo-submission cleanup failed (orphan is harmless):`, e);
   }
   return "deleted";
 }
@@ -932,6 +955,37 @@ export async function digestsSentOnDay(dayKey: string): Promise<number> {
     .gt("item_count", 0);
   if (error) throw error;
   return count ?? 0;
+}
+
+export async function smsDigestOutboxPhonesOnDay(dayKey: string): Promise<string[]> {
+  // Distinct phones with an SMS digest outbox row for any of this ET day's
+  // digests (part 1 only — one row per recipient per digest). This is the
+  // per-GROUP Reply-STOP-footer signal: a phone enqueued earlier today has
+  // seen (or will see) the day's footer already. Enqueued counts even before
+  // delivery — the queued row carries its own footer state.
+  const { data: digests, error } = await db()
+    .from("digests")
+    .select("id")
+    .eq("channel", "sms")
+    .gte("scheduled_for", `${dayKey}T00:00:00Z`)
+    .lte("scheduled_for", `${dayKey}T23:59:59Z`);
+  if (error) throw error;
+  const ids = (digests ?? []).map((d) => d.id as number);
+  if (!ids.length) return [];
+  const phones = new Set<string>();
+  for (let offset = 0; ; offset += PAGE) {
+    const { data: rows, error: rowsError } = await db()
+      .from("digest_outbox")
+      .select("address")
+      .in("digest_id", ids)
+      .eq("part", 1)
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (rowsError) throw rowsError;
+    for (const r of rows ?? []) phones.add(r.address as string);
+    if ((rows?.length ?? 0) < PAGE) break;
+  }
+  return [...phones];
 }
 
 export async function logMessage(rec: Omit<MessageRecord, "id" | "createdAt">): Promise<void> {

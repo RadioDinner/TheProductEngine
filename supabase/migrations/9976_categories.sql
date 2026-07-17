@@ -8,13 +8,17 @@
 -- machinery, wanted (lib/categories.ts is the authority).
 --
 -- Semantics (user decisions, session 009):
---   * ads.category NULL   = uncategorized — rides EVERY digest (pre-migration
---     ads and operator-skipped dropdowns are never silently unsendable).
+--   * ads.category NULL   = uncategorized — rides every ALL/selective digest
+--     (pre-migration ads and operator-skipped dropdowns are never silently
+--     unsendable).
 --   * users.categories NULL = ALL (default/grandfathered: every existing
 --     subscriber keeps getting everything without a backfill).
 --   * users.categories '{}' = the member removed their last category — they
---     get only uncategorized ads until they reply ALL or a category name
---     (the engine warns them; the state is allowed but never silent).
+--     get NOTHING (not even uncategorized ads or sponsor lines) until they
+--     reply ALL or a category name. The engine warns them, and that warning
+--     is exempt from the confirmation throttle's silencing (it still counts
+--     toward the window) — the state is allowed but never silent, and the
+--     "you're not getting any ads now" copy is literally true.
 --
 -- Spam/cost guard (item 24): category/LIST confirmations are throttled per
 -- number — after N confirmations in an hour (config category_confirms_per_hour,

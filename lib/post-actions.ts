@@ -137,18 +137,28 @@ export async function postAd(formData: FormData): Promise<void> {
 
   // Charge atomically — free pass first, else atomic credit debit. The ledger
   // note strings are an API (refunds and the admin delete view match on them):
-  // they MUST stay byte-identical to the SMS lane's.
-  let charge: string;
-  if (canPass && (await consumeFreeAd(phone))) {
-    await addLedgerEntry(phone, {
-      delta: 0,
-      kind: "spend",
-      note: `Free ad used — ad #${id} (${kind})`,
-    });
-    charge = `charge=free&left=${Math.max(0, posting.freeAds - 1)}`;
-  } else if (await spendCredits(phone, cost, `Ad #${id} (${kind})`)) {
-    charge = `charge=credits&cost=${cost}&left=${Math.max(0, balance - cost)}`;
-  } else {
+  // they MUST stay byte-identical to the SMS lane's. A THROWN charge (store
+  // hiccup — spendCredits/consumeFreeAd throw on any RPC error in prod) must
+  // not strand an unpaid `pending` ad in the review queue for the admin to
+  // approve and broadcast free: undo via benign rejection, then rethrow. The
+  // redirect()s stay OUTSIDE the try — NEXT_REDIRECT throws by design.
+  let charge = "";
+  try {
+    if (canPass && (await consumeFreeAd(phone))) {
+      await addLedgerEntry(phone, {
+        delta: 0,
+        kind: "spend",
+        note: `Free ad used — ad #${id} (${kind})`,
+      });
+      charge = `charge=free&left=${Math.max(0, posting.freeAds - 1)}`;
+    } else if (await spendCredits(phone, cost, `Ad #${id} (${kind})`)) {
+      charge = `charge=credits&cost=${cost}&left=${Math.max(0, balance - cost)}`;
+    }
+  } catch (e) {
+    await rejectAdRecord(id, "Charge failed at submission.", "benign").catch(() => {});
+    throw e;
+  }
+  if (!charge) {
     // The balance was spent between the check and here — undo the ad instead
     // of leaving an unpaid pending record in the review queue.
     await rejectAdRecord(id, "Not enough credits at submission.", "benign");

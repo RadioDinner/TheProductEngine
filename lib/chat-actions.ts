@@ -17,10 +17,12 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { readSession } from "@/lib/session";
 import {
+  claimChatNudge,
   flagChatMessage,
   getProfile,
   sendChatMessage,
   setChatNudgedAt,
+  unclaimChatNudge,
   type ChatMessageView,
 } from "@/lib/store";
 import { hasLink } from "@/lib/content-filter";
@@ -28,8 +30,8 @@ import {
   CHAT_MAX_BODY,
   CHAT_NUDGE_WINDOW_MS,
   MAX_CHAT_PHOTO_BYTES,
-  nudgeWindowOpen,
 } from "@/lib/chat";
+import { gsmSanitize } from "@/lib/sms-segments";
 import { countRecentOutboundContaining, logMessage } from "@/lib/engine-store";
 import { dispatchSms } from "@/lib/outbound";
 import { storeImageBytes } from "@/lib/photos";
@@ -77,6 +79,13 @@ async function auditChat(fromPhone: string, body: string, photo?: string | null)
  * outbound SMS, picture messages get the same website pointer.
  * `lastNudgedAt` comes back from the send itself (9980); `undefined` means
  * the column isn't there yet, so fall back to the audit-log scan.
+ *
+ * Post-9980 the watermark is a CLAIM, not a log: claimChatNudge atomically
+ * stamps it (only when null/older than the window) BEFORE the dispatch, and
+ * we send only on a won claim — so a rapid burst of sends (or both parties'
+ * deferred after() callbacks racing) produces exactly one text, and a crash
+ * after the send can't repeat it tomorrow-minus-a-day. A dispatch that never
+ * went out gives the claim back (fail toward fewer texts, never more).
  */
 async function nudgeOtherParty(
   phone: string,
@@ -84,17 +93,37 @@ async function nudgeOtherParty(
 ): Promise<void> {
   if (!phone) return;
   try {
+    // Sanitized at composition (dispatchSms re-sanitizes; idempotent) so the
+    // audit log below records exactly the bytes that went to the carrier.
+    const text = gsmSanitize(
+      `${site.name}: you have a message waiting for you on the website. Read and reply at ${siteUrl}/account/messages — sign in with your phone number.`,
+    );
     if (lastNudgedAt !== undefined) {
-      if (!nudgeWindowOpen(lastNudgedAt, Date.now())) return;
-    } else {
-      const recent = await countRecentOutboundContaining(
-        phone,
-        CHAT_NUDGE_MARKER,
-        CHAT_NUDGE_WINDOW_MS,
-      );
-      if (recent > 0) return;
+      const stamped = await claimChatNudge(phone, CHAT_NUDGE_WINDOW_MS);
+      if (!stamped) return; // window closed, or a concurrent nudge won it
+      let sent = false;
+      try {
+        ({ sent } = await dispatchSms(phone, text, { cls: "reply" }));
+      } finally {
+        if (!sent) {
+          // Suppressed (pause/blocklist/throttle) or thrown — no text went
+          // out, so give the window back. Best-effort: only our own stamp is
+          // ever rolled back.
+          await unclaimChatNudge(phone, stamped, lastNudgedAt).catch(() => {});
+        }
+      }
+      if (sent) {
+        await logMessage({ direction: "outbound", channel: "sms", address: phone, body: text });
+      }
+      return;
     }
-    const text = `${site.name}: you have a message waiting for you on the website. Read and reply at ${siteUrl}/account/messages — sign in with your phone number.`;
+    // Pre-9980: no watermark column yet — the audit-log scan is the dedup.
+    const recent = await countRecentOutboundContaining(
+      phone,
+      CHAT_NUDGE_MARKER,
+      CHAT_NUDGE_WINDOW_MS,
+    );
+    if (recent > 0) return;
     const { sent } = await dispatchSms(phone, text, { cls: "reply" });
     if (sent) {
       await setChatNudgedAt(phone); // no-op pre-9980; the scan covers that era

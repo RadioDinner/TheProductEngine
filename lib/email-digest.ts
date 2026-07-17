@@ -192,6 +192,9 @@ export async function runDueEmailDigests(now = new Date()): Promise<SlotResult[]
     const categoriesByAd = await getAdCategories(ads.map((a) => a.id));
     const rows: OutboxInsert[] = [];
     for (const r of recipients) {
+      // The warned-dark empty set gets nothing — not even sponsor lines
+      // ("You're not getting any ads now" must stay true on email too).
+      if (r.categories && r.categories.length === 0) continue;
       const filtered = ads.filter((ad) =>
         adMatchesCategories(categoriesByAd.get(ad.id) ?? null, r.categories),
       );

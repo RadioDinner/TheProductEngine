@@ -64,6 +64,18 @@ export function deleteRefundRef(adId: number): string {
   return `member-delete-refund-ad-${adId}`;
 }
 
+/** Deterministic ref for refunding a PAID queued bump the delete dropped. */
+export function deleteBumpRefundRef(adId: number): string {
+  return `member-delete-bump-refund-ad-${adId}`;
+}
+
+/** Ledger note for that bump refund — the ` deleted` tail keeps it from ever
+ * matching the benign-reject matcher, and the exact `Bump — ad #N` spend note
+ * (an API, byte-identical in both lanes) is what it compensates. */
+export function deleteBumpRefundNote(adId: number): string {
+  return `Bump refunded — ad #${adId} deleted before it ran`;
+}
+
 /** The minimal ledger-entry shape the matchers below need. */
 export interface LedgerLike {
   kind: string;
@@ -97,6 +109,33 @@ export function hasBenignRejectRefund(ledger: LedgerLike[], adId: number): boole
   return ledger.some(
     (entry) => entry.kind === "refund" && entry.note.includes(`ad #${adId} not accepted`),
   );
+}
+
+/**
+ * The most recent CHARGED bump spend (`Bump — ad #N`, delta < 0) that no bump
+ * compensation has refunded yet — the spend a member delete must give back
+ * when it drops a still-queued paid bump (the re-run service never happened).
+ * Compensations counted against spends: the queue-failure refund ("Bump not
+ * applied — ad #N", lib/engine.ts / bumpMine) and this feature's own refund
+ * (deleteBumpRefundNote). `ledger` is newest-first (getLedger in both stores),
+ * so the first matching spend is the most recent — its recorded amount is what
+ * comes back, NOT the current bumpCost setting (the operator may have
+ * re-priced since). The exact-note match keeps #12 clear of #125.
+ */
+export function findUnrefundedBumpCharge<T extends LedgerLike>(
+  ledger: T[],
+  adId: number,
+): T | undefined {
+  const spends = ledger.filter(
+    (entry) => entry.kind === "spend" && entry.delta < 0 && entry.note === `Bump — ad #${adId}`,
+  );
+  const compensations = ledger.filter(
+    (entry) =>
+      entry.kind === "refund" &&
+      (entry.note === `Bump not applied — ad #${adId}` ||
+        entry.note === deleteBumpRefundNote(adId)),
+  ).length;
+  return spends.length > compensations ? spends[0] : undefined;
 }
 
 // ---------- replacement listing picture (position 0) ----------

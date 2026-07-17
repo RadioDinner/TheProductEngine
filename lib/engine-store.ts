@@ -586,10 +586,13 @@ const file = {
     return true;
   },
 
-  deleteAd(id: number): "deleted" | "noop" {
+  deleteAd(id: number, expectedStatus?: StoredAdStatus): "deleted" | "noop" {
     const store = load();
     const ad = store.ads.find((a) => a.id === id);
     if (!ad || ad.status === "deleted") return "noop";
+    // Compare-and-swap parity with the Supabase twin: when the caller names the
+    // status it observed, only that exact status may transition.
+    if (expectedStatus && ad.status !== expectedStatus) return "noop";
     ad.status = "deleted";
     ad.deletedAt = new Date().toISOString();
     ad.holdUntil = null;
@@ -771,6 +774,23 @@ const file = {
         d.sentAt &&
         d.itemCount > 0,
     ).length;
+  },
+
+  smsDigestOutboxPhonesOnDay(dayKey: string): string[] {
+    // Distinct phones with an SMS digest outbox row for any of this ET day's
+    // digests — the per-group Reply-STOP-footer signal (enqueued counts:
+    // a queued row carries its own footer state).
+    const store = load();
+    const ids = new Set(
+      store.digests
+        .filter((d) => d.channel === "sms" && d.slotKey.startsWith(`${dayKey}#`))
+        .map((d) => d.id),
+    );
+    const phones = new Set<string>();
+    for (const row of store.outbox ?? []) {
+      if (row.channel === "sms" && ids.has(row.digestId)) phones.add(row.address);
+    }
+    return [...phones];
   },
 
   logMessage(rec: Omit<MessageRecord, "id" | "createdAt">): void {
@@ -1143,9 +1163,18 @@ export async function revertAdToPending(id: number): Promise<boolean> {
  * no seller notice — that's admin judgement, handled elsewhere if deserved.
  * "unsupported" = the store can't take the new status yet (migration 9987 not
  * applied) — the caller surfaces that instead of 500ing.
+ *
+ * `expectedStatus` (member delete) makes the flip a compare-and-swap on the
+ * status the caller observed — "noop" when the ad moved on in the meantime, so
+ * a refund decision can never be applied to a status that didn't transition.
  */
-export async function deleteAdRecord(id: number): Promise<"deleted" | "noop" | "unsupported"> {
-  return supabaseConfigured ? remote.deleteAdRecord(id) : file.deleteAd(id);
+export async function deleteAdRecord(
+  id: number,
+  expectedStatus?: StoredAdStatus,
+): Promise<"deleted" | "noop" | "unsupported"> {
+  return supabaseConfigured
+    ? remote.deleteAdRecord(id, expectedStatus)
+    : file.deleteAd(id, expectedStatus);
 }
 
 /**
@@ -1263,6 +1292,14 @@ export async function finalizeDigest(
  * composed — the email edition mirrors it 1:1 and waits on null. */
 export async function getSmsDigestAdIds(slotKey: string): Promise<number[] | null> {
   return supabaseConfigured ? remote.getSmsDigestAdIds(slotKey) : file.getSmsDigestAdIds(slotKey);
+}
+
+/** Distinct phones already enqueued an SMS digest today (ET day) — the
+ * per-group Reply-STOP-footer signal for category-partitioned digests. */
+export async function smsDigestOutboxPhonesOnDay(dayKey: string): Promise<string[]> {
+  return supabaseConfigured
+    ? remote.smsDigestOutboxPhonesOnDay(dayKey)
+    : file.smsDigestOutboxPhonesOnDay(dayKey);
 }
 
 export async function digestsSentOnDay(dayKey: string): Promise<number> {

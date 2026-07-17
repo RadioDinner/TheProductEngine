@@ -932,7 +932,52 @@ export async function setChatNudgedAt(phone: string): Promise<void> {
     .from("users")
     .update({ chat_nudged_at: new Date().toISOString() })
     .eq("phone", phone);
-  if (error && error.code !== "42703") throw error;
+  if (error && error.code !== "42703" && error.code !== "PGRST204") throw error;
+}
+
+/**
+ * Atomically CLAIM the chat-nudge watermark BEFORE dispatching (item 15):
+ * conditional UPDATE that stamps chat_nudged_at = now only when it's null or
+ * older than the window. Returns the stamp written when the claim won, null
+ * when someone else holds the window — the caller dispatches ONLY on a win,
+ * which closes both the concurrent double-nudge (two sends racing) and the
+ * crash-window repeat (stamp-then-send instead of send-then-stamp).
+ * Pre-9980 (no column) the claim trivially "wins" — the caller's log-scan era
+ * dedup path never reaches here, so this is just defensive.
+ */
+export async function claimChatNudge(phone: string, windowMs: number): Promise<string | null> {
+  const now = new Date();
+  const stamped = now.toISOString();
+  const cutoff = new Date(now.getTime() - windowMs).toISOString();
+  const { data, error } = await db()
+    .from("users")
+    .update({ chat_nudged_at: stamped })
+    .eq("phone", phone)
+    .or(`chat_nudged_at.is.null,chat_nudged_at.lt.${cutoff}`)
+    .select("id");
+  if (error) {
+    if (error.code === "42703" || error.code === "PGRST204") return stamped;
+    throw error;
+  }
+  return (data?.length ?? 0) > 0 ? stamped : null;
+}
+
+/**
+ * Best-effort undo of claimChatNudge when the dispatch didn't happen: restore
+ * the previous watermark, but only while OUR stamp is still on the row (a
+ * competitor's fresh claim is never clobbered).
+ */
+export async function unclaimChatNudge(
+  phone: string,
+  stampedAt: string,
+  previous: string | null,
+): Promise<void> {
+  const { error } = await db()
+    .from("users")
+    .update({ chat_nudged_at: previous })
+    .eq("phone", phone)
+    .eq("chat_nudged_at", stampedAt);
+  if (error && error.code !== "42703" && error.code !== "PGRST204") throw error;
 }
 
 export async function markChatRead(chatId: number, phone: string): Promise<void> {
@@ -999,13 +1044,24 @@ export async function grantStarterAdsIfFirst(phone: string): Promise<Account> {
 }
 
 export async function grantFreeAd(phone: string): Promise<void> {
-  const user = await userByPhone(phone);
-  if (!user) return;
-  const { error } = await db()
-    .from("users")
-    .update({ free_ads: user.free_ads + 1 })
-    .eq("id", user.id);
-  if (error) throw error;
+  // CAS retry loop, mirroring consumeFreeAd: an unconditional read-modify-write
+  // here raced consumeFreeAd (grant reads 1; consume CAS 1→0; grant writes 2 —
+  // a minted pass). The eq(free_ads) guard makes the loser re-read and retry.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const user = await userByPhone(phone);
+    if (!user) return;
+    const { data, error } = await db()
+      .from("users")
+      .update({ free_ads: user.free_ads + 1 })
+      .eq("id", user.id)
+      .eq("free_ads", user.free_ads)
+      .select("id");
+    if (error) throw error;
+    if ((data?.length ?? 0) > 0) return;
+  }
+  // Three lost races in a row is pathological — surface it rather than mint
+  // or silently drop; the caller's ledger note still records the intent.
+  console.error(`[store] grantFreeAd: free_ads CAS lost 3 attempts for ${phone} — pass NOT granted`);
 }
 
 /** Atomically accrue + spend one PIC pull (migration 9989 reserve_pic_quota). */

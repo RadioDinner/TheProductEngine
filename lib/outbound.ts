@@ -16,6 +16,7 @@
 import { sms } from "@/lib/sms";
 import { email, type EmailMessage } from "@/lib/email";
 import { getEngineSettings, type EngineSettings } from "@/lib/settings";
+import { gsmSanitize } from "@/lib/sms-segments";
 import { isBlockedNumber } from "@/lib/blocklist";
 import { countRecentOutbound } from "@/lib/engine-store";
 
@@ -76,7 +77,11 @@ export async function dispatchSms(
     return { sent: false, reason: g.reason };
   }
   try {
-    await sms.send(to, body, opts.media);
+    // GSM-sanitize at the choke point (idempotent): one em dash or curly quote
+    // in a reply-class body would flip the whole message to UCS-2 — billed at
+    // 70/67 chars per segment and mangled on flip phones. The digest outbox
+    // doesn't pass through here and already sanitizes at composition.
+    await sms.send(to, gsmSanitize(body), opts.media);
   } catch (e) {
     console.error(`[outbound] ${opts.cls} SMS to ${to} send failed:`, e);
     throw e;

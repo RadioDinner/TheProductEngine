@@ -22,6 +22,7 @@ import {
   countAdPhotos,
   deleteAdRecord,
   getAdRecord,
+  getQueuedBumps,
   listPhotoSubmissions,
   logMessage,
   markAdSold,
@@ -41,6 +42,7 @@ import {
 } from "@/lib/store";
 import { getEngineSettings } from "@/lib/settings";
 import { deriveTitle } from "@/lib/ads";
+import { gsmSanitize } from "@/lib/sms-segments";
 import { dispatchSms } from "@/lib/outbound";
 import { formatPhone, normalizePhone } from "@/lib/phone";
 import { storeImageBytes } from "@/lib/photos";
@@ -48,9 +50,12 @@ import { CONTENT_TYPE_BY_EXT, sniffImage } from "@/lib/image-sniff";
 import { supabaseConfigured } from "@/lib/db";
 import { MAX_PHOTOS_PER_AD } from "@/lib/email-photos";
 import {
+  deleteBumpRefundNote,
+  deleteBumpRefundRef,
   deleteRefundDecision,
   deleteRefundRef,
   findAdCharge,
+  findUnrefundedBumpCharge,
   hasBenignRejectRefund,
   isPicReplaceSubmission,
   picReplaceFrom,
@@ -130,7 +135,12 @@ export async function markMineSold(formData: FormData): Promise<void> {
     ratedRole: "seller",
     expiresAt: rateExpiry,
   });
-  const invite = `The seller of ad #${ad.id} (${deriveTitle(ad.body)}) marked it sold to you. Want to rate the seller? Reply RATE 1-5 (5 = best), or SKIP.`;
+  // gsmSanitize at composition (dispatchSms re-sanitizes at the choke point;
+  // it's idempotent) so the logged body matches the wire body byte for byte —
+  // deriveTitle can inject a U+2026 ellipsis that would flip this to UCS-2.
+  const invite = gsmSanitize(
+    `The seller of ad #${ad.id} (${deriveTitle(ad.body)}) marked it sold to you. Want to rate the seller? Reply RATE 1-5 (5 = best), or SKIP.`,
+  );
   const { sent } = await dispatchSms(buyer, invite, { cls: "reply" });
   if (sent) {
     await logMessage({ direction: "outbound", channel: "sms", address: buyer, body: invite });
@@ -273,30 +283,85 @@ export async function addMyExtras(formData: FormData): Promise<void> {
 }
 
 /**
+ * An ad that reads 'deleted' on the member's delete path may be (a) a benign
+ * retry after a completed delete+refund, (b) a member delete that crashed
+ * AFTER the status flip but BEFORE its refund insert, or (c) an admin delete —
+ * which deliberately never auto-refunds (the manual remedy is Grant credits).
+ * (b) and (c) are indistinguishable from the ad row alone, so NEVER auto-
+ * refund here: when the charge looks recoverable (never broadcast, no
+ * compensation on record) leave a loud operator signal instead.
+ */
+async function warnIfRefundMayBeDue(phone: string, adId: number): Promise<void> {
+  try {
+    if (await adEverBroadcast(adId)) return; // ran — no refund was due
+    if (await hasLedgerRef(deleteRefundRef(adId))) return; // already refunded
+    const ledger = await getLedger(phone);
+    if (hasBenignRejectRefund(ledger, adId)) return; // refunded at rejection
+    const charge = findAdCharge(ledger, adId);
+    if (!charge) return; // nothing was ever charged
+    console.warn(
+      `[myads] ad #${adId} (${phone}) is already deleted but its never-run charge ` +
+        `(${JSON.stringify(charge.note)}) has no refund on record. If a member delete ` +
+        `died mid-flight this refund is DUE (ledger ref ${deleteRefundRef(adId)} is ` +
+        `unused — settle it with Grant credits); an admin no-refund delete looks ` +
+        `identical, which is why this is a signal, not an auto-refund.`,
+    );
+  } catch (e) {
+    console.warn(`[myads] due-refund check for ad #${adId} failed:`, e);
+  }
+}
+
+/**
  * Delete one of my ads (two-step: the page's ?delete=<id> confirm box POSTs
  * here). Soft-delete exactly like the admin path — status 'deleted', photos
  * removed from storage, queued bumps dropped — with THE REFUND MATRIX (user
  * decision) on top: pending → refund; approved and never in any digest →
  * refund; ever broadcast → no refund. Refund mechanics mirror benign
  * rejection (free-pass-paid ads get the pass back, credit-paid the credits),
- * idempotent three ways: only the call that actually flips the status gets
- * past deleteAdRecord, the deterministic ledger ref can't insert twice, and
- * an earlier benign-rejection refund blocks a second payout for good.
+ * idempotent three ways: the status flip is a COMPARE-AND-SWAP on the exact
+ * status the refund decision was computed from (a lost race re-reads and
+ * re-decides, so an admin benign-reject landing mid-flight can never make
+ * both paths pay), the deterministic ledger ref can't insert twice, and an
+ * earlier benign-rejection refund blocks a second payout for good. A dropped
+ * QUEUED bump that was CHARGED is refunded on top, independent of the ad
+ * matrix — that re-broadcast will now never run.
  */
 export async function deleteMine(formData: FormData): Promise<void> {
   const { phone, ad } = await requireMyAd(formData);
-  if (ad.status === "deleted") redirect(`${BACK}?error=gone&id=${ad.id}`);
+  if (ad.status === "deleted") {
+    // Serial retry of a crashed/raced delete — signal, never auto-refund.
+    await warnIfRefundMayBeDue(phone, ad.id);
+    redirect(`${BACK}?error=gone&id=${ad.id}`);
+  }
 
-  const decision = deleteRefundDecision(ad.status, await adEverBroadcast(ad.id));
+  // Capture BEFORE the delete drops it: a still-queued bump that was charged
+  // gets its money back below whatever the ad-charge decision says.
+  const hadQueuedBump = (await getQueuedBumps()).some((b) => b.adId === ad.id);
 
-  const outcome = await deleteAdRecord(ad.id);
+  let current: StoredAd = ad;
+  let decision = deleteRefundDecision(current.status, await adEverBroadcast(current.id));
+  let outcome: "deleted" | "noop" | "unsupported" = "noop";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // CAS: only the observed status may transition. "noop" = the ad moved on
+    // (admin approve/reject/delete won the race) — re-read, re-decide, retry.
+    outcome = await deleteAdRecord(ad.id, current.status);
+    if (outcome !== "noop") break;
+    const fresh = await getAdRecord(ad.id);
+    if (!fresh || fresh.status === "deleted") {
+      await warnIfRefundMayBeDue(phone, ad.id);
+      redirect(`${BACK}?error=gone&id=${ad.id}`);
+      return; // unreachable (redirect throws) — keeps the flow explicit
+    }
+    current = fresh;
+    decision = deleteRefundDecision(current.status, await adEverBroadcast(current.id));
+  }
   if (outcome === "unsupported") redirect(`${BACK}?error=unsupported&id=${ad.id}`);
-  if (outcome === "noop") redirect(`${BACK}?error=gone&id=${ad.id}`);
+  if (outcome !== "deleted") redirect(`${BACK}?error=gone&id=${ad.id}`);
 
+  const ledger = decision.refund || hadQueuedBump ? await getLedger(phone) : [];
   let refundParam = "no";
   if (decision.refund) {
     const ref = deleteRefundRef(ad.id);
-    const ledger = await getLedger(phone);
     if ((await hasLedgerRef(ref)) || hasBenignRejectRefund(ledger, ad.id)) {
       refundParam = "none"; // refunded once already — never twice
     } else {
@@ -324,5 +389,22 @@ export async function deleteMine(formData: FormData): Promise<void> {
       }
     }
   }
-  redirect(`${BACK}?deleted=${ad.id}&refund=${refundParam}&why=${decision.reason}`);
+
+  // The dropped queued bump: if a `Bump — ad #N` spend has no compensation on
+  // record (queue-failure refund or an earlier run of this one), give the
+  // RECORDED amount back — idempotent via the deterministic ref.
+  let bumpParam = "";
+  if (hadQueuedBump && !(await hasLedgerRef(deleteBumpRefundRef(ad.id)))) {
+    const bumpCharge = findUnrefundedBumpCharge(ledger, ad.id);
+    if (bumpCharge) {
+      await addLedgerEntry(phone, {
+        delta: -bumpCharge.delta,
+        kind: "refund",
+        note: deleteBumpRefundNote(ad.id),
+        ref: deleteBumpRefundRef(ad.id),
+      });
+      bumpParam = `&bumprefund=${-bumpCharge.delta}`;
+    }
+  }
+  redirect(`${BACK}?deleted=${ad.id}&refund=${refundParam}&why=${decision.reason}${bumpParam}`);
 }

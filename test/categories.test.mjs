@@ -84,13 +84,16 @@ export function run(t) {
     emptied: false,
   });
 
-  // ---- filter partition (uncategorized rides everything) ----
+  // ---- filter partition (uncategorized rides ALL/selective; empty = dark) ----
   t.eq("ALL member gets categorized ad", adMatchesCategories("horses", null), true);
   t.eq("ALL member gets uncategorized ad", adMatchesCategories(null, null), true);
   t.eq("match", adMatchesCategories("horses", ["garden", "horses"]), true);
   t.eq("no match", adMatchesCategories("dogs", ["garden", "horses"]), false);
   t.eq("uncategorized rides selective", adMatchesCategories(null, ["horses"]), true);
-  t.eq("uncategorized rides EMPTY set", adMatchesCategories(null, []), true);
+  // The EMPTY set matches NOTHING: the member was told "You're not getting any
+  // ads now" and that copy must be literally true (uncategorized included).
+  t.eq("EMPTY set matches nothing — uncategorized", adMatchesCategories(null, []), false);
+  t.eq("EMPTY set matches nothing — undefined category", adMatchesCategories(undefined, []), false);
   t.eq("categorized skips empty set", adMatchesCategories("horses", []), false);
   t.eq("partition key ALL", partitionKey(null), "*");
   t.eq("partition key none", partitionKey([]), "");

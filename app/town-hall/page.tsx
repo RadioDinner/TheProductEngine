@@ -13,6 +13,7 @@ import {
 } from "@/lib/town-hall";
 import { listUpcomingEvents } from "@/lib/town-hall-store";
 import { submitTownHallEvent } from "@/lib/town-hall-actions";
+import { MaskedText, maskPhonesPlain } from "@/components/MaskedText";
 
 export const metadata: Metadata = {
   title: `Town hall — ${site.name}`,
@@ -112,15 +113,29 @@ export default async function TownHallPage({
           <p>Nothing on the board right now — add the first one below.</p>
         ) : (
           <ul className="event-list">
+            {/* The page's own copy invites phone numbers into events ("put the
+                place and a phone number instead"), so every free-text field is
+                masked for visitors — same anti-scraping posture as ad bodies
+                (item 23); signed-in members see the numbers plain. */}
             {events.map((event) => (
               <li key={event.id} className="event-item">
                 <p className="event-when">
                   {formatEventDay(event.eventDate)}
-                  {event.timeText ? ` · ${event.timeText}` : ""}
+                  {event.timeText
+                    ? ` · ${session ? event.timeText : maskPhonesPlain(event.timeText)}`
+                    : ""}
                 </p>
-                <h3 className="event-title">{event.title}</h3>
-                {event.placeText && <p className="event-place">{event.placeText}</p>}
-                <p className="event-body">{event.body}</p>
+                <h3 className="event-title">
+                  {session ? event.title : maskPhonesPlain(event.title)}
+                </h3>
+                {event.placeText && (
+                  <p className="event-place">
+                    {session ? event.placeText : maskPhonesPlain(event.placeText)}
+                  </p>
+                )}
+                <p className="event-body">
+                  <MaskedText text={event.body} revealed={Boolean(session)} />
+                </p>
               </li>
             ))}
           </ul>

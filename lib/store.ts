@@ -16,7 +16,7 @@ import {
 } from "node:crypto";
 import { supabaseConfigured } from "@/lib/db";
 import * as remote from "@/lib/store-supabase";
-import { CHAT_PHOTO_CAP } from "@/lib/chat";
+import { CHAT_PHOTO_CAP, nudgeWindowOpen } from "@/lib/chat";
 import { accruePicQuota } from "@/lib/pic-quota";
 import { decideReveal } from "@/lib/reveal-quota";
 import { unreadChatCount } from "@/lib/unread";
@@ -728,6 +728,28 @@ const file = {
     save(store);
   },
 
+  /** Claim-before-send twin of the Supabase conditional UPDATE: stamp the
+   * watermark only when the window is open; the stamp is the win token. */
+  claimChatNudge(phone: string, windowMs: number): string | null {
+    const store = load();
+    const account = store.accounts[phone];
+    if (!account) return null;
+    if (!nudgeWindowOpen(account.chatNudgedAt ?? null, Date.now(), windowMs)) return null;
+    const stamped = new Date().toISOString();
+    account.chatNudgedAt = stamped;
+    save(store);
+    return stamped;
+  },
+
+  unclaimChatNudge(phone: string, stampedAt: string, previous: string | null): void {
+    const store = load();
+    const account = store.accounts[phone];
+    // Only OUR stamp may be rolled back — a fresh competing claim stands.
+    if (!account || account.chatNudgedAt !== stampedAt) return;
+    account.chatNudgedAt = previous ?? undefined;
+    save(store);
+  },
+
   markChatRead(chatId: number, phone: string): void {
     const store = load();
     if (!file.chatMember(chatId, phone)) return;
@@ -1423,6 +1445,25 @@ export async function openChatThread(
  * Best-effort: a no-op before migration 9980. */
 export async function setChatNudgedAt(phone: string): Promise<void> {
   return supabaseConfigured ? remote.setChatNudgedAt(phone) : file.setChatNudgedAt(phone);
+}
+
+/** Atomically claim the nudge watermark BEFORE dispatching (stamp = win token;
+ * null = window closed / lost the race). See lib/chat-actions nudgeOtherParty. */
+export async function claimChatNudge(phone: string, windowMs: number): Promise<string | null> {
+  return supabaseConfigured
+    ? remote.claimChatNudge(phone, windowMs)
+    : file.claimChatNudge(phone, windowMs);
+}
+
+/** Best-effort rollback of a claim whose dispatch never happened. */
+export async function unclaimChatNudge(
+  phone: string,
+  stampedAt: string,
+  previous: string | null,
+): Promise<void> {
+  return supabaseConfigured
+    ? remote.unclaimChatNudge(phone, stampedAt, previous)
+    : file.unclaimChatNudge(phone, stampedAt, previous);
 }
 
 export async function markChatRead(chatId: number, phone: string): Promise<void> {

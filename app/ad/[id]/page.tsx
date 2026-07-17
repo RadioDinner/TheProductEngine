@@ -56,7 +56,9 @@ export async function generateMetadata({
             url: ad.photo.src,
             width: ad.photo.width,
             height: ad.photo.height,
-            alt: ad.photo.alt,
+            // The stored alt is deriveTitle(body) — it can carry the seller's
+            // number, and og metadata is crawlable. Mask like title/description.
+            alt: maskPhonesPlain(ad.photo.alt),
           },
         ],
       }),
@@ -162,9 +164,12 @@ export default async function AdPage({
         </p>
         {ad.photo && (
           <figure className="ad-photo">
+            {/* alt is masked UNCONDITIONALLY: it's derived from the ad's lead
+                clause (numbers included), it renders in HTML with no reveal
+                UI, and nobody needs to phone a seller via alt text. */}
             <Image
               src={ad.photo.src}
-              alt={ad.photo.alt}
+              alt={maskPhonesPlain(ad.photo.alt)}
               width={ad.photo.width}
               height={ad.photo.height}
               sizes="(max-width: 46rem) 100vw, 688px"
@@ -181,7 +186,7 @@ export default async function AdPage({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={photo.src}
-                  alt={photo.alt || `More of ad #${ad.id} (${i + 2})`}
+                  alt={maskPhonesPlain(photo.alt || `More of ad #${ad.id} (${i + 2})`)}
                   loading="lazy"
                   style={{ maxWidth: "100%", height: "auto" }}
                 />
@@ -193,7 +198,11 @@ export default async function AdPage({
           <MaskedText text={rest || ad.body} revealed={revealed} />
         </p>
       </article>
-      {session && !sold && !revealed && (
+      {/* No `!sold` here: a signed-in member may still reveal on a sold ad
+          (the body stays masked until then and the metering still applies) —
+          otherwise a member with no prior thread has no contact path at all,
+          and MaskedText's tooltip points at a button that doesn't exist. */}
+      {session && !revealed && (
         <aside className="contact-gate" aria-label="Seller’s number">
           <h2>Seller&rsquo;s number</h2>
           {outOfReveals && revealSettings ? (
@@ -250,12 +259,11 @@ export default async function AdPage({
           <aside className="contact-gate" aria-label="Reaching the seller">
             <h2>Reaching the seller</h2>
             <p>
-              The seller’s contact is in the ad above. Phone numbers are shown to signed-in
-              members —{" "}
+              The seller’s contact is in the ad above.{" "}
               <Link href={`/login?next=${encodeURIComponent(`/ad/${ad.id}`)}`}>
-                sign in with your phone number
-              </Link>{" "}
-              to see it. It takes about a minute.
+                Sign in with your phone number
+              </Link>
+              , then press &ldquo;Show number&rdquo; to see it. It takes about a minute.
             </p>
           </aside>
         )
