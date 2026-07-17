@@ -12,3 +12,13 @@ I want another feature added. When people are logged in, I want a "My ads" tab t
 
 --- 2026-07-17 17:31 ---
 Something else for the main website. I want to add a few features to the list. If they are a business wanting to advertise, I want to setup a special system for them. Put a link on the website with the title of "Adveristing for Businesses" and then I will offer them a package of running in a digest once a day for 1 week, 2 weeks or a month. $39.99 for a week, $59.99 for two. $89.99 for a month
+
+--- 2026-07-17 17:36 --- (AskUserQuestion answers, item 17)
+Purchase flow: "Stripe self-serve now"
+Digest slot: "Labeled sponsor line (Recommended)"
+Links policy: "Yes, after review (Recommended)"
+
+--- 2026-07-17 17:40 ---
+I want another feature added to the main website. I want a "Town hall" feature built, where eventually, people will be able to add upcoming events with the option to advertise via an SMS or email blast. I'm not sure yet how the pricing will work, probably just $19.99 a listing for an event. 
+
+For this feature and for business listings, I want an approval process same as the regular ads

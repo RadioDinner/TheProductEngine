@@ -24,7 +24,8 @@ itself; build details live in the session logs and HANDOFF.md.
 | 14 | **Pictures in chat** — people in a conversation can send each other pictures; a picture NEVER rides the SMS copy (no MMS doubling) — the SMS side just gets "View image on the web" (or messages them directly) | session 008 | not started |
 | 15 | **Messaging performance overhaul** — sending a message has a distinct lag; overhaul the whole messaging system's speed | session 008 | not started |
 | 16 | **Member ad management ("My ads" tab)** — signed-in members get a "My ads" tab in the header next to the messages icon / their member link; from it they can mark an ad sold, bump it, change the picture that rides `PIC`, add additional pictures, or delete it themselves. Delete refund rules (user decision): posted but not yet approved → refund the credit; approved but never sent in any digest → refund the credit; ever sent in a digest → no refund ("game over") | session 009 | not started |
-| 17 | **Business advertising packages** — a website link titled "Advertising for Businesses"; businesses buy a package that runs their ad in a digest once a day: 1 week $39.99, 2 weeks $59.99, 1 month $89.99 | session 009 | not started |
+| 17 | **Business advertising packages** — a website link titled "Advertising for Businesses"; businesses buy a package that runs their ad in a digest once a day: 1 week $39.99, 2 weeks $59.99, 1 month $89.99; same approval process as regular ads | session 009 | not started |
+| 18 | **Town hall** — a main-website feature where (eventually) people add upcoming events, with the option to advertise the event via an SMS or email blast; pricing not settled — probably $19.99 per event listing; same approval process as regular ads | session 009 | not started |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -159,18 +160,31 @@ itself; build details live in the session logs and HANDOFF.md.
   user's spelling; the rendered link uses the corrected spelling). Recorded
   pricing: $39.99 / 1 week, $59.99 / 2 weeks, $89.99 / 1 month — the package
   runs the business's ad in a digest once a day for the duration.
-  Open design questions to settle at build time (not yet decided with the
-  user): (a) purchase flow — presumably the existing Stripe hosted-Checkout
-  seam with a new product type, vs "call/contact us" v1 where the operator
-  sets it up manually; (b) does a daily business ad consume one of the cap-10
-  FIFO digest slots or ride as a labeled extra line ("Sponsor"), and should
-  it be marked as business/sponsored in the digest and on the site; (c) does
-  it still pass manual review (presumably yes) and does the emoji/link filter
-  apply the same (businesses likely WANT a link — mayPostLinks() was built as
-  exactly this seam); (d) mechanically this is a scheduled daily re-broadcast
-  for N days — closest existing machinery is the bump path + `broadcast_at`,
-  likely needs a small migration for package/expiry tracking; (e) segment-
-  budget interaction: a guaranteed-daily ad must not silently die when the
-  digest breaker trips. Cost sanity note for the pricing conversation: at
-  ~150 subscribers a 1-week package ≈ 7 extra ad-broadcasts; current digest
-  cost math (docs/profitability.md) should confirm margin at each tier.
+  DECIDED (user, session 009 AskUserQuestion): (a) purchase flow = **Stripe
+  self-serve now** — businesses pick a tier and pay via hosted Checkout; the
+  ad still lands in the review queue before it ever runs; (b) digest
+  placement = **labeled sponsor line** — rides as a clearly-labeled extra
+  line (e.g. "Sponsor:") that does NOT consume one of the 10 member FIFO
+  slots; (c) links = **allowed after review** — business ads may carry a
+  link via the mayPostLinks() seam; manual review is the safety valve.
+  Still to design at build time: scheduling machinery (daily re-broadcast
+  for the package duration — likely a small migration for package/expiry
+  tracking), breaker interaction (a guaranteed-daily sponsor line must not
+  silently die when the segment budget trips — surface it to the operator),
+  and margin check per tier against docs/profitability.md (a 1-week package
+  ≈ 7 extra broadcasts of one sponsor line to the whole list).
+  **Approval (user, session 009): business listings go through the SAME
+  approval process as regular ads** — payment never skips the review queue.
+- **18 · Town hall** (arrived session 009): an events board on the main
+  website — people post upcoming events; optionally pay to push the event as
+  an SMS or email blast. Pricing NOT settled (user: "probably just $19.99 a
+  listing for an event") — confirm before wiring Stripe amounts. **Approval
+  (user decision): same review process as regular ads.** Design notes for
+  build time: "eventually" signals phased delivery — v1 could be the events
+  page + posting + review + display (no blast), blast as phase 2; an SMS
+  blast to the whole list is the single most expensive action in the product
+  (digest-scale cost for one event) — it must ride the outbox/segment-budget
+  machinery, be labeled, and respect quiet hours/slots; events need a date
+  field and should auto-expire after the event date; likely its own table +
+  migration and its own review queue tab (or a type flag reusing the ads
+  pipeline — decide against the ads-table-overload tradeoff at build).
