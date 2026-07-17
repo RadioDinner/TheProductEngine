@@ -11,7 +11,7 @@ export default function PrivacyPolicy() {
   return (
     <div className="container prose">
       <h1>Privacy policy</h1>
-      <p className="fine">Effective July 7, 2026</p>
+      <p className="fine">Effective July 7, 2026 · Updated July 17, 2026</p>
       <p>
         {site.name} is a classified ads service for {site.region} that runs on plain text
         messages and this website. This page says, in plain words, what information we
@@ -43,9 +43,26 @@ export default function PrivacyPolicy() {
         <strong>Your ads</strong> — the text you send, and any picture you attach.
       </p>
       <p>
+        <strong>Your member profile</strong>, if you add one — the member number we assign
+        you, an optional profile picture, and an optional pickup address. The pickup
+        address stays private: it is shown to another member only when you press the
+        button to share it inside a conversation.
+      </p>
+      <p>
         <strong>Messages to and from the service.</strong> We keep a record of the text
         messages and emails the service sends and receives, so we can answer questions,
         fix problems, and keep the service honest.
+      </p>
+      <p>
+        <strong>Messages between members.</strong> Messages you send another member
+        through this website go to that member, and we keep them on record and may review
+        them — to answer reports, stop abuse, and keep the service safe. They are not
+        public.
+      </p>
+      <p>
+        <strong>A sale you report.</strong> If you mark an ad sold and give us the
+        buyer&rsquo;s phone number, we record the sale so buyer and seller can rate each
+        other. Only give us a number when the buyer is fine with that.
       </p>
       <p>
         <strong>Payment records.</strong> Card payments are handled by Stripe, our payment
@@ -104,9 +121,20 @@ export default function PrivacyPolicy() {
         <li>Our hosting and database providers, to run the website and store the records.</li>
       </ul>
       <p>
-        None of them may use your information for their own marketing. Beyond that, we share
-        information only if the law requires it, or to protect the service and its members
-        from fraud or abuse. We do not sell personal information.
+        None of them may use your information for their own marketing. Beyond that, we
+        share information only when you ask us to or say it&rsquo;s okay, when the law
+        requires it, or when it is genuinely needed to protect the service, its members,
+        or the public — for example to stop fraud, enforce our terms, or answer a valid
+        request from a court or law enforcement. We do not sell personal information, and
+        we have no affiliates or &ldquo;business partners&rdquo; we pass it to.
+      </p>
+
+      <h2>If the service ever changes hands</h2>
+      <p>
+        If {site.name} were ever sold or merged into another company, the records that run
+        the service would go with it. We would tell you before that happened, and the new
+        owner would have to honor this policy or post a new one before relying on your
+        information.
       </p>
 
       <h2>What&rsquo;s public</h2>
@@ -120,7 +148,12 @@ export default function PrivacyPolicy() {
       <h2>Cookies</h2>
       <p>
         This website uses one kind of cookie: the one that keeps you signed in. No
-        advertising cookies, no analytics trackers, no third-party cookies.
+        advertising cookies, no analytics trackers, no third-party cookies, and no web
+        beacons or tracking pixels — on the site or in our emails.
+      </p>
+      <p>
+        We do count page visits, but the counter runs on our own server without cookies
+        and stores no personal information — it cannot identify you.
       </p>
 
       <h2>How long we keep things</h2>
@@ -138,10 +171,18 @@ export default function PrivacyPolicy() {
         the service small, plain, and careful.
       </p>
 
+      <h2>Where records live</h2>
+      <p>
+        The service is run from the United States and your records are processed and
+        stored here. If you use the service from somewhere else, your information comes
+        to the United States, where privacy laws may differ from your own.
+      </p>
+
       <h2>Children</h2>
       <p>
         The service is not directed at children under 13, and we do not knowingly collect
-        information from them.
+        information from them. If you believe a child has given us information, contact
+        us — see <Link href="#questions">Questions</Link> — and we will delete it.
       </p>
 
       <h2>Your choices</h2>
