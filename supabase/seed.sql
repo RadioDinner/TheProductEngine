@@ -89,6 +89,9 @@ insert into config (key, value) values
   ('pic_abuse_per_day',        '15'),
   ('pic_daily_allowance',      '3'),
   ('pic_bank_cap',             '20'),
+  ('reveals_per_day',          '10'),
+  ('reveal_bank_cap',          '30'),
+  ('reveal_abuse_per_day',     '25'),
   ('saved_card_discount_percent', '10')
 on conflict (key) do nothing;
 

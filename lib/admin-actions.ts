@@ -340,6 +340,9 @@ const SETTING_MAX: Record<string, number> = {
   picAbusePerDay: 1000,
   picDailyAllowance: 1000,
   picBankCap: 10000,
+  revealsPerDay: 1000,
+  revealBankCap: 10000,
+  revealAbusePerDay: 1000,
   savedCardDiscountPercent: 100,
   outboundThrottlePerMin: 10000,
 };
@@ -385,6 +388,9 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
     "picAbusePerDay",
     "picDailyAllowance",
     "picBankCap",
+    "revealsPerDay",
+    "revealBankCap",
+    "revealAbusePerDay",
     "savedCardDiscountPercent",
     "outboundThrottlePerMin",
   ]) {

@@ -215,6 +215,44 @@ export default async function AdminInsights({
             <p>No picture requests in this window.</p>
           )}
 
+          <h2 className="section-h">Number look-ups (website reveals)</h2>
+          <p className="fine">
+            Members pressing &ldquo;Show number&rdquo; on the most ads — each count is
+            distinct sellers&rsquo; numbers revealed (re-viewing a revealed ad is free and
+            not counted). Flagged when more than <strong>{data.revealThresholdPerDay}</strong>{" "}
+            in 24 hours — the scraper signature (change it on{" "}
+            <Link href="/admin/settings">Settings</Link>).
+          </p>
+          {data.revealHeavy.length ? (
+            <div className="table-scroll" style={{ overflowX: "auto" }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Member</th>
+                    <th>Last 24h</th>
+                    <th>Last {data.windowDays}d</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.revealHeavy.map((r) => (
+                    <tr key={r.phone}>
+                      <td>{who(r.phone)}</td>
+                      <td>{r.reveals24h}</td>
+                      <td>{r.revealsWindow}</td>
+                      <td>
+                        {r.flagged && <span className="ad-sold">Excessive</span>}{" "}
+                        {blockCell(r.phone)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p>No numbers revealed in this window.</p>
+          )}
+
           <h2 className="section-h">Most engaged</h2>
           {data.engagement.length ? (
             <div className="table-scroll" style={{ overflowX: "auto" }}>

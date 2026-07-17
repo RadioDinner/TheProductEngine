@@ -18,6 +18,7 @@ import { supabaseConfigured } from "@/lib/db";
 import * as remote from "@/lib/store-supabase";
 import { CHAT_PHOTO_CAP } from "@/lib/chat";
 import { accruePicQuota } from "@/lib/pic-quota";
+import { decideReveal } from "@/lib/reveal-quota";
 import { unreadChatCount } from "@/lib/unread";
 import { normalizePhone } from "@/lib/phone";
 import { USER_ID_MAX_ATTEMPTS, isRetirementActive, randomUserId } from "@/lib/user-id";
@@ -53,6 +54,10 @@ export interface Account {
   picBalance?: number;
   /** ET day (YYYY-MM-DD) the PIC bank was last accrued to; null/undefined = never. */
   picAccrualDay?: string | null;
+  /** Number look-up bank (item 23) — reveals available now (lib/reveal-quota.ts). */
+  revealBalance?: number;
+  /** ET day (YYYY-MM-DD) the reveal bank was last accrued to; null/undefined = never. */
+  revealAccrualDay?: string | null;
   /** Profile picture URL (FEATURES item 3) — file store only; Supabase reads
    * it via getProfile so core lookups never depend on migration 9983. */
   profilePhoto?: string | null;
@@ -70,6 +75,13 @@ export interface Account {
 export interface PicQuotaResult {
   allowed: boolean;
   remaining: number;
+}
+
+/** One reveal-log row (item 23) — for the /admin/insights excessive-reveal flags. */
+export interface RevealSince {
+  phone: string;
+  adId: number;
+  at: string; // ISO
 }
 
 /**
@@ -287,6 +299,9 @@ interface StoreShape {
   }[];
   chatReads?: Record<string, number>; // `${chatId}#${phone}` -> last read message id
   nextChatId?: number;
+  /** Number look-up log (item 23): one row per (member phone, ad) — first
+   * reveal's timestamp; repeats are free and keep the original row. */
+  reveals?: { phone: string; adId: number; at: string }[];
 }
 
 const STORE_PATH = join(process.cwd(), ".data", "store.json");
@@ -771,6 +786,58 @@ const file = {
     account.picAccrualDay = state.day;
     save(store);
     return { allowed: false, remaining: 0 };
+  },
+
+  reserveRevealQuota(
+    phone: string,
+    adId: number,
+    dailyAllowance: number,
+    bankCap: number,
+    today: string,
+  ): PicQuotaResult {
+    const store = load();
+    const reveals = (store.reveals ??= []);
+    // Free repeat first: an already-revealed ad never touches the bank.
+    if (reveals.some((r) => r.phone === phone && r.adId === adId)) {
+      return { allowed: true, remaining: -1 };
+    }
+    const account = store.accounts[phone];
+    // Metering off (dailyAllowance <= 0) and the defensive no-account case
+    // both allow without spending — decideReveal handles the precedence; a
+    // missing account passes accrued: null (fail-open, the action
+    // ensureAccount()s first).
+    const accrued =
+      dailyAllowance > 0 && account
+        ? accruePicQuota(
+            { balance: account.revealBalance ?? 0, day: account.revealAccrualDay ?? null },
+            today,
+            dailyAllowance,
+            bankCap,
+          )
+        : null;
+    const decision = decideReveal({
+      alreadyRevealed: false,
+      revealsPerDay: dailyAllowance,
+      accrued,
+    });
+    if (decision.state && account) {
+      account.revealBalance = decision.state.balance;
+      account.revealAccrualDay = decision.state.day;
+    }
+    if (decision.allowed) {
+      reveals.push({ phone, adId, at: new Date().toISOString() });
+    }
+    save(store);
+    return { allowed: decision.allowed, remaining: decision.remaining };
+  },
+
+  hasRevealed(phone: string, adId: number): boolean {
+    return (load().reveals ?? []).some((r) => r.phone === phone && r.adId === adId);
+  },
+
+  listRevealsSince(since: string): RevealSince[] {
+    const sinceMs = Date.parse(since);
+    return (load().reveals ?? []).filter((r) => Date.parse(r.at) >= sinceMs);
   },
 
   recordOffense(phone: string): number {
@@ -1368,6 +1435,44 @@ export async function reservePicQuota(
   return supabaseConfigured
     ? remote.reservePicQuota(phone, dailyAllowance, bankCap, today)
     : file.reservePicQuota(phone, dailyAllowance, bankCap, today);
+}
+
+/**
+ * Atomically decide one number reveal (FEATURES item 23): free repeat if this
+ * member already revealed this ad, else accrue the daily allowance / rolling
+ * bank (lib/reveal-quota.ts) and spend one look-up, logging the reveal.
+ * `today` is the ET calendar day (YYYY-MM-DD); dailyAllowance <= 0 turns
+ * metering off (always allowed, still logged, remaining -1). Serialized per
+ * user in prod; degrades to an unmetered allow when migration 9979 is missing.
+ */
+export async function reserveRevealQuota(
+  phone: string,
+  adId: number,
+  dailyAllowance: number,
+  bankCap: number,
+  today: string,
+): Promise<PicQuotaResult> {
+  return supabaseConfigured
+    ? remote.reserveRevealQuota(phone, adId, dailyAllowance, bankCap, today)
+    : file.reserveRevealQuota(phone, adId, dailyAllowance, bankCap, today);
+}
+
+/**
+ * Has this member already revealed this ad's number? Persistent — the ad page
+ * server-renders revealed numbers from this record. "unsupported" = the
+ * reveal log is unavailable (migration 9979 not yet pasted); the page then
+ * falls back to the just-revealed redirect param (see app/ad/[id]).
+ */
+export async function hasRevealed(
+  phone: string,
+  adId: number,
+): Promise<boolean | "unsupported"> {
+  return supabaseConfigured ? remote.hasRevealed(phone, adId) : file.hasRevealed(phone, adId);
+}
+
+/** Reveal-log rows since an ISO instant — for the Insights excessive-reveal flags. */
+export async function listRevealsSince(since: string): Promise<RevealSince[]> {
+  return supabaseConfigured ? remote.listRevealsSince(since) : file.listRevealsSince(since);
 }
 
 /** Increment strikes; auto-bans posting at the threshold. Returns the new count. */

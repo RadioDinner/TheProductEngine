@@ -3,12 +3,13 @@ import Link from "next/link";
 import { type Ad, derivePrice, deriveRest, deriveTitle } from "@/lib/ads";
 import { MaskedText, maskPhonesPlain } from "@/components/MaskedText";
 
-export function AdRow({ ad, revealed }: { ad: Ad; revealed?: boolean }) {
-  // The title is the ad's lead clause, which can contain a phone number — mask
-  // it for signed-out visitors just like the body, so PII doesn't leak in the
-  // heading / aria-label.
-  const rawTitle = deriveTitle(ad.body);
-  const title = revealed ? rawTitle : maskPhonesPlain(rawTitle);
+export function AdRow({ ad }: { ad: Ad }) {
+  // Seller numbers NEVER render in list rows — for anyone, signed-in included
+  // (item 23 anti-scraping posture: one signed-in burner account must not be
+  // able to scrape every number off a listing page). The per-ad "Show number"
+  // reveal lives on the ad page. Title included: it's the ad's lead clause,
+  // which can carry the number into the heading / aria-label.
+  const title = maskPhonesPlain(deriveTitle(ad.body));
   const price = derivePrice(ad.body);
   const sold = ad.status === "sold";
   // When the excerpt opens with the exact price already shown in the price
@@ -50,7 +51,7 @@ export function AdRow({ ad, revealed }: { ad: Ad; revealed?: boolean }) {
           </h3>
           {rest && (
             <p className="ad-body">
-              <MaskedText text={rest} revealed={revealed} />
+              <MaskedText text={rest} />
             </p>
           )}
           <p className="ad-meta">Ad #{ad.id}</p>

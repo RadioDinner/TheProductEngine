@@ -17,7 +17,7 @@ import {
   type InsightBump,
   type InsightMessage,
 } from "@/lib/engine-store";
-import { listLedgerSince, type LedgerSince } from "@/lib/store";
+import { listLedgerSince, listRevealsSince, type LedgerSince, type RevealSince } from "@/lib/store";
 import { getEngineSettings } from "@/lib/settings";
 
 const HOUR = 60 * 60 * 1000;
@@ -44,6 +44,13 @@ export interface PicHeavy {
   pics7d: number;
   flagged: boolean;
 }
+/** Website number look-ups ("Show number", item 23) — the scraper signature. */
+export interface RevealHeavy {
+  phone: string;
+  reveals24h: number;
+  revealsWindow: number;
+  flagged: boolean;
+}
 export interface EngagementRow {
   address: string;
   messages: number;
@@ -58,6 +65,7 @@ export interface Insights {
   since: string;
   generatedAtMs: number;
   picThresholdPerDay: number;
+  revealThresholdPerDay: number;
   totals: {
     inboundMessages: number;
     uniqueSenders: number;
@@ -78,6 +86,7 @@ export interface Insights {
   topAdvertisers: TopAdvertiser[];
   topSenders: TopSender[];
   picHeavy: PicHeavy[];
+  revealHeavy: RevealHeavy[];
   engagement: EngagementRow[];
   topBumpedAds: { adId: number; ownerPhone: string; bumps: number }[];
 }
@@ -87,14 +96,20 @@ interface RawData {
   bumpsAll: InsightBump[];
   ads: InsightAd[];
   ledgerWindow: LedgerSince[];
+  reveals: RevealSince[];
 }
 
 /** Pure aggregation — no I/O, so it is straightforward to unit test. */
 export function computeInsights(
   data: RawData,
-  opts: { nowMs: number; windowDays: number; picThresholdPerDay: number },
+  opts: {
+    nowMs: number;
+    windowDays: number;
+    picThresholdPerDay: number;
+    revealThresholdPerDay: number;
+  },
 ): Insights {
-  const { nowMs, windowDays, picThresholdPerDay } = opts;
+  const { nowMs, windowDays, picThresholdPerDay, revealThresholdPerDay } = opts;
   const sinceMs = nowMs - windowDays * DAY;
   const since = new Date(sinceMs).toISOString();
 
@@ -190,6 +205,33 @@ export function computeInsights(
     .sort((a, b) => b.pics24h - a.pics24h || b.pics1h - a.pics1h || a.address.localeCompare(b.address))
     .slice(0, TOP_N);
 
+  // ---- website number look-ups (item 23): excessive-reveal flags ----
+  // One log row per (member, ad), so these counts are DISTINCT sellers'
+  // numbers revealed — free repeats never inflate them.
+  const revealTimes = new Map<string, number[]>();
+  for (const r of data.reveals) {
+    let times = revealTimes.get(r.phone);
+    if (!times) revealTimes.set(r.phone, (times = []));
+    times.push(Date.parse(r.at));
+  }
+  const revealHeavy: RevealHeavy[] = [...revealTimes.entries()]
+    .map(([phone, times]) => {
+      const reveals24h = times.filter((t) => t >= nowMs - DAY).length;
+      return {
+        phone,
+        reveals24h,
+        revealsWindow: times.length,
+        flagged: revealThresholdPerDay > 0 && reveals24h > revealThresholdPerDay,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.reveals24h - a.reveals24h ||
+        b.revealsWindow - a.revealsWindow ||
+        a.phone.localeCompare(b.phone),
+    )
+    .slice(0, TOP_N);
+
   // ---- ledger: spend / purchases per phone (window) ----
   const spentPerPhone = new Map<string, number>();
   const purchasesPerPhone = new Map<string, number>();
@@ -246,6 +288,7 @@ export function computeInsights(
     since,
     generatedAtMs: nowMs,
     picThresholdPerDay,
+    revealThresholdPerDay,
     totals: {
       inboundMessages: data.inbound.length,
       uniqueSenders: sender.size,
@@ -260,6 +303,7 @@ export function computeInsights(
     topAdvertisers,
     topSenders,
     picHeavy,
+    revealHeavy,
     engagement,
     topBumpedAds,
   };
@@ -270,14 +314,20 @@ export async function getInsights(windowDays = 30): Promise<Insights> {
   const nowMs = Date.now();
   const since = new Date(nowMs - windowDays * DAY).toISOString();
   const settings = await getEngineSettings();
-  const [inbound, bumpsAll, ads, ledgerWindow] = await Promise.all([
+  const [inbound, bumpsAll, ads, ledgerWindow, reveals] = await Promise.all([
     listInboundSince(since),
     listBumpsSince(null),
     listAdsLite(),
     listLedgerSince(since),
+    listRevealsSince(since), // degrades to [] when migration 9979 is unpasted
   ]);
   return computeInsights(
-    { inbound, bumpsAll, ads, ledgerWindow },
-    { nowMs, windowDays, picThresholdPerDay: settings.picAbusePerDay },
+    { inbound, bumpsAll, ads, ledgerWindow, reveals },
+    {
+      nowMs,
+      windowDays,
+      picThresholdPerDay: settings.picAbusePerDay,
+      revealThresholdPerDay: settings.revealAbusePerDay,
+    },
   );
 }

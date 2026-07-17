@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 
 /**
- * Renders ad body text with phone numbers masked for signed-out visitors.
- * The area code stays visible; the rest is withheld until login (spec Q16).
+ * Renders ad text with phone numbers masked. The area code stays visible; the
+ * rest is withheld (spec Q16 + FEATURES item 23): visitors sign in first, and
+ * signed-in members unmask one ad at a time with "Show number" on the ad page
+ * — numbers never render in page HTML until that per-ad, metered reveal.
  */
 const PHONE_RE = /\(?(\d{3})\)?[ .-]?\d{3}[ .-]?\d{4}/g;
 
@@ -23,7 +25,7 @@ export function MaskedText({ text, revealed }: { text: string; revealed?: boolea
       <span
         key={key++}
         className="tel-masked"
-        title="Phone numbers are shown to signed-in members"
+        title="Sign in, open the ad, and press “Show number” to see it"
       >
         {match[1]}-···-····
       </span>,

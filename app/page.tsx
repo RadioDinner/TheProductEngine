@@ -85,7 +85,13 @@ export default async function Home({
           />
           <button type="submit">Search</button>
         </form>
-        {!session && (
+        {session ? (
+          // Signed-in members see masked numbers in list rows too (item 23):
+          // explain the one-click unmask so the dots don't read as a bug.
+          <p className="search-note">
+            Open an ad and press &ldquo;Show number&rdquo; to see the seller&rsquo;s number.
+          </p>
+        ) : (
           <p className="search-note">
             Phone numbers are shown to signed-in members.{" "}
             <Link href="/login">Sign in</Link>
@@ -123,7 +129,7 @@ export default async function Home({
             <h2 className="day-heading">{group.label}</h2>
             <ul className="ad-list">
               {group.ads.map((ad) => (
-                <AdRow key={ad.id} ad={ad} revealed={!!session} />
+                <AdRow key={ad.id} ad={ad} />
               ))}
             </ul>
           </section>
