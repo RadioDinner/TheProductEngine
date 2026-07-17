@@ -18,6 +18,9 @@ itself; build details live in the session logs and HANDOFF.md.
 | 8 | **Admin "add a member"** — from /admin/users: a button that texts an invite ("to sign up, reply START", with opt-out + instructions), and the ability to set their starting credits right there | session 008 | **built** (no migration) |
 | 9 | **Web ad posting** — LOGGED-IN members can post ads from the website; it spends credits exactly like texting one in (and says so clearly); the picture rules stay explicit: ONE picture rides the ad listing, any additional pictures are WEB ONLY | session 008 | not started |
 | 10 | **Mixed SMS + chat messaging** — chat messages are copied to the recipient's SMS (a real copy of the message, not "you have a message waiting"); an SMS reply routes back into the chat thread on the site AND to the other party's SMS if they have one | session 008 | not started |
+| 11 | **Hide the SMS signup strip for signed-in members** — the "Get the ads by text — text SUBSCRIBE to (330) 960-7170…" compliance section is hidden (or made much less obvious) once someone is logged in | session 008 | not started |
+| 12 | **Header messages icon + notifications** — signed-in members get a messages icon at the top of every page with a little red unread count (Joe replies → Jacob sees a red "1"), and an alert when a reply arrives | session 008 | not started |
+| 13 | **Modern chat threads** — sent messages bubble from the right, received from the left; a "report this message" path for review; links can't be sent; and every message on the TPE exchange is audit logged | session 008 | not started |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -80,3 +83,23 @@ itself; build details live in the session logs and HANDOFF.md.
   WHICH thread an inbound text answers (most-recent-thread heuristic or a
   short reply code), and chat texts must respect STOP/pause/caps. Decide the
   cost posture with the user at build time.
+- **11 · hide signup strip when signed in**: the strip is TCR-compliance
+  surface for VISITORS; a signed-in member already opted in (or knows how).
+  Keep it in the page for crawlers/compliance if needed — likely render only
+  when there's no session, or collapse to one small line. Touches the shared
+  layout/footer component.
+- **12 · header messages icon + notifications**: unread count comes from
+  `listChatsFor` (already computed); render an icon + red badge in the site
+  header for signed-in members. "Alert on reply" v1 = the badge appearing on
+  next page load; true live alerts would need polling or push — decide how
+  fresh it must be at build time (a light poll of an unread-count endpoint
+  every ~60 s is probably plenty for this audience).
+- **13 · modern chat threads**: right/left bubbles need chat-specific CSS
+  (today it reuses the dev-sim thread styles); "report this message" flags a
+  message for the operator (needs a small table or a flag column + an admin
+  review surface); link-blocking can reuse `hasLink` from
+  lib/content-filter.ts (reject at send with a friendly note); audit-logging
+  every chat message REVERSES a session-008 decision (chat messages
+  deliberately stayed out of the admin message log) — when built, log them
+  (probably into the existing messages table or an admin chat viewer) and
+  note the privacy stance on /admin/help.

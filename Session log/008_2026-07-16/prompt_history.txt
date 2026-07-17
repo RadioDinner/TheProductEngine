@@ -36,3 +36,10 @@ add to feature list, I want to be able to "add" a user from the /admin/users pag
 Also, another feature I want, I want LOGGED IN users to be able to post ads from the web page. I want to make sure it uses credits and I want the picture system to be very clear. You get ONE picture you can add to the ad listing, and any additional pictures are WEB ONLY. Also, make it clear that posting web ads still takes credits
 
 Another tweak to a feature for the list. I want the ability to mix messages with the messaging system on the plain exchange. For instance, if Joe messages Jacob about his wagon that is for sale, I want it to also instead of telling Joe he has a message waiting for him, send him a copy of the message. If Joe replies, send the message to Jacob's messaging profile on the plain exchange AND to his SMS if he has one.
+
+--- 2026-07-17 12:13 ---
+Also a few more changes for the queue. When people are logged in, hide or make less obvious, the section about "Get the ads by text — text SUBSCRIBE to (330) 960-7170. Free, up to 4 digests a day; msg & data rates may apply. Reply HELP for help, STOP to cancel. Text terms · Privacy."
+
+Also, when users are logged in, I want an icon at the top of the page with messages and a notification system so that if user Jacob is logged in and Joe responds to his message, Jacob gets an alert, and a little red nubmer 1 on his messaging icon at the top. 
+
+Also, make the conversation threads look a bit more like a modern day messagging platform in terms of function. I want messages sent from the sender side to pop up from the right, and messages received pop up from the left. I also want a way for people to report messages for review. And I don't want people to be able to send links. Also, I want all messages send on TPE message exchange to be audit logged
