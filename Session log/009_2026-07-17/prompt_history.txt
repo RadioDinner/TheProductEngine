@@ -200,3 +200,9 @@ However, make it look better in terms of format and use different examples. Vary
 Delivery: "One combined digest (Recommended)"
 Categorizing: "You, at review (Recommended)"
 Menu copy: "Yes, use the draft"
+
+--- 2026-07-17 19:58 ---
+I think I'm running a risk by allowing numbers to be exposed via the web login. Because technically anyone could create a web profile and log in to start scraping numbers out. How do I mitigate this? I ran the migration too btw
+
+--- 2026-07-17 20:04 --- (AskUserQuestion answer, number-scraping mitigation)
+Reveal policy: "Metered click-to-reveal (Recommended)"

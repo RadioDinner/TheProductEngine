@@ -30,6 +30,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 20 | **Accessibility statement** — a footer page adapted from the user's template with truthful Plain Exchange specifics (WCAG 2.1 AA aim, partial compliance declared for member-submitted photos, SMS as the accessible alternative channel) | session 009 | **built** (no migration) |
 | 21 | **Refund policy** — a footer page reflecting the system's actual refund rules: ordinary decline → auto refund; deleted before approval or before ever broadcasting → refund; ran in any digest → spent; violation → kept + strike; pack purchases discretionary per terms | session 009 | **built** (no migration) |
 | 22 | **Category subscriptions** — SUBSCRIBE/START answers with a category menu (alphabetical, reformatted from the user's competitor example); subscribers text one category word per message to pick what ads they get; digests filter accordingly | session 009 | not started |
+| 23 | **Metered click-to-reveal for phone numbers** (anti-scraping, user concern + decision session 009) — the website never renders seller numbers in HTML; a signed-in member clicks "Show number" per ad, metered ~10/day per account (admin-tunable, PIC-quota style), every reveal logged; excessive-reveal flags + one-click block in /admin/insights | session 009 | not started |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -195,7 +196,22 @@ itself; build details live in the session logs and HANDOFF.md.
   COMBINED digest per slot** containing only the subscriber's categories
   (never one text per category); **the operator assigns the category at
   review** (dropdown on the review queue; web posting may offer a seller
-  picker the operator can override). Build notes: needs a migration (subscriber
+  picker the operator can override).
+- **23 · metered click-to-reveal** (session 009; the user spotted the risk:
+  one burner-phone account could scrape every seller number off the site).
+  Decided posture: numbers NEVER render in page HTML (list rows or detail);
+  a per-ad "Show number" action reveals server-side for signed-in members,
+  with a daily allowance + rolling bank exactly like PIC pulls
+  (`pic-quota`-style pure math + atomic RPC; defaults ~10/day, admin-tunable
+  on /admin/settings, 0 = off). Every reveal is recorded (account, ad,
+  time) — /admin/insights gains an excessive-reveals flag (like
+  picAbusePerDay) with the existing one-click block. Friendly out-of-reveals
+  message, deduped. SMS digests unchanged (numbers are the product there;
+  bulk-limited to the daily cap by nature). Needs a migration (reveal log
+  table + RPC) — number assigned at build; also mask numbers inside ad BODY
+  text on the web reveal path, not just the contact line (scrapers read
+  bodies too; body PII masking exists for titles — extend it). Chat remains
+  the no-number contact path. Build notes: needs a migration (subscriber
   category prefs + ads.category), commands.ts parsing, welcome rewrite in
   engine.ts, digest composer filtering + outbox interaction, admin review
   dropdown + web-posting field, /admin/help doc. The digest cost model
