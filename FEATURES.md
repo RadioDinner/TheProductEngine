@@ -24,6 +24,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 14 | **Pictures in chat** — people in a conversation can send each other pictures; a picture NEVER rides the SMS copy (no MMS doubling) — the SMS side just gets "View image on the web" (or messages them directly) | session 008 | not started |
 | 15 | **Messaging performance overhaul** — sending a message has a distinct lag; overhaul the whole messaging system's speed | session 008 | not started |
 | 16 | **Member ad management ("My ads" tab)** — signed-in members get a "My ads" tab in the header next to the messages icon / their member link; from it they can mark an ad sold, bump it, change the picture that rides `PIC`, add additional pictures, or delete it themselves. Delete refund rules (user decision): posted but not yet approved → refund the credit; approved but never sent in any digest → refund the credit; ever sent in a digest → no refund ("game over") | session 009 | not started |
+| 17 | **Business advertising packages** — a website link titled "Advertising for Businesses"; businesses buy a package that runs their ad in a digest once a day: 1 week $39.99, 2 weeks $59.99, 1 month $89.99 | session 009 | not started |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -153,3 +154,23 @@ itself; build details live in the session logs and HANDOFF.md.
   swaps in (manual-review-everything ethos; otherwise a swap bypasses
   moderation); (b) web mark-sold offers an optional "buyer's phone" field so
   the item-2 sale/ratings flow still gets fed (skippable).
+- **17 · business advertising** (arrived session 009): the site link reads
+  "Advertising for Businesses" (the prompt-history original carries the
+  user's spelling; the rendered link uses the corrected spelling). Recorded
+  pricing: $39.99 / 1 week, $59.99 / 2 weeks, $89.99 / 1 month — the package
+  runs the business's ad in a digest once a day for the duration.
+  Open design questions to settle at build time (not yet decided with the
+  user): (a) purchase flow — presumably the existing Stripe hosted-Checkout
+  seam with a new product type, vs "call/contact us" v1 where the operator
+  sets it up manually; (b) does a daily business ad consume one of the cap-10
+  FIFO digest slots or ride as a labeled extra line ("Sponsor"), and should
+  it be marked as business/sponsored in the digest and on the site; (c) does
+  it still pass manual review (presumably yes) and does the emoji/link filter
+  apply the same (businesses likely WANT a link — mayPostLinks() was built as
+  exactly this seam); (d) mechanically this is a scheduled daily re-broadcast
+  for N days — closest existing machinery is the bump path + `broadcast_at`,
+  likely needs a small migration for package/expiry tracking; (e) segment-
+  budget interaction: a guaranteed-daily ad must not silently die when the
+  digest breaker trips. Cost sanity note for the pricing conversation: at
+  ~150 subscribers a 1-week package ≈ 7 extra ad-broadcasts; current digest
+  cost math (docs/profitability.md) should confirm margin at each tier.

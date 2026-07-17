@@ -9,3 +9,6 @@ start working on the feature log
 
 --- 2026-07-17 17:12 ---
 I want another feature added. When people are logged in, I want a "My ads" tab to be shown next to their message icon or their number/member email. I want people to be able to mark as sold, bump their ad, change the picture that gets sent with the /PIC command or add aditional pictures. Or delete it themselves (They do not get refunds if the ad was ever sent in any digest). If it is posted but not yet approved, refund the credit. If it was posted and approved, but not ever sent in a digest, refund the credit. Otherwise, it's game over.
+
+--- 2026-07-17 17:31 ---
+Something else for the main website. I want to add a few features to the list. If they are a business wanting to advertise, I want to setup a special system for them. Put a link on the website with the title of "Adveristing for Businesses" and then I will offer them a package of running in a digest once a day for 1 week, 2 weeks or a month. $39.99 for a week, $59.99 for two. $89.99 for a month
