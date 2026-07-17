@@ -186,6 +186,20 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/9980_chat_upgrade.sql in the SQL editor",
           }
         : { applied: true };
+      // reveal_log ships in the same paste as the users reveal_balance /
+      // reveal_accrual_day columns and reserve_reveal_quota(), so this table
+      // probe stands in for the whole of 9979 (metered click-to-reveal).
+      const revealLog = await db()
+        .from("reveal_log")
+        .select("id", { count: "exact", head: true });
+      report.migration9979 = revealLog.error
+        ? {
+            applied: false,
+            code: revealLog.error.code,
+            error: revealLog.error.message,
+            fix: "run supabase/migrations/9979_reveal_quota.sql in the SQL editor",
+          }
+        : { applied: true };
     } catch (e) {
       report.db = { ok: false, thrown: e instanceof Error ? e.message : String(e) };
     }

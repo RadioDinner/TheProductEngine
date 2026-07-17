@@ -47,6 +47,21 @@ const FIELDS: { key: string; label: string; hint?: string }[] = [
     hint: "the rolling/sinking fund ceiling — unused daily pulls stack up to this many",
   },
   {
+    key: "revealsPerDay",
+    label: "Number look-ups (Show number) per member per day",
+    hint: "website reveals of seller numbers — the anti-scraping meter; re-viewing a revealed ad is free. 0 turns metering off",
+  },
+  {
+    key: "revealBankCap",
+    label: "Most number look-ups a member can bank",
+    hint: "unused daily look-ups stack up to this many",
+  },
+  {
+    key: "revealAbusePerDay",
+    label: "Flag excessive number look-ups (per day)",
+    hint: "on Insights, flag any member revealing more than this many numbers in 24h (0 turns the flag off)",
+  },
+  {
     key: "smsGlobalPerHour",
     label: "Command replies service-wide per hour",
     hint: "circuit breaker — digests are never counted",

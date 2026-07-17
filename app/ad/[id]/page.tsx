@@ -3,8 +3,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deriveRest, deriveTitle, getAd } from "@/lib/ads";
-import { getRatingSummary, getVerifiedAt } from "@/lib/store";
+import { getRatingSummary, getVerifiedAt, hasRevealed } from "@/lib/store";
 import { startChat } from "@/lib/account-actions";
+import { revealNumber } from "@/lib/reveal-actions";
+import { revealLimitMessage } from "@/lib/reveal-quota";
+import { getEngineSettings } from "@/lib/settings";
+import { isAdminPhone } from "@/lib/admin";
 import { MaskedText, maskPhonesPlain } from "@/components/MaskedText";
 import { readSession } from "@/lib/session";
 import { recordVisit } from "@/lib/analytics";
@@ -63,13 +67,13 @@ export default async function AdPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ chat?: string }>;
+  searchParams: Promise<{ chat?: string; reveal?: string }>;
 }) {
   const id = parseId((await params).id);
   if (!id) notFound();
   const ad = await getAd(id);
   if (!ad) notFound();
-  const chatParam = (await searchParams).chat;
+  const { chat: chatParam, reveal: revealParam } = await searchParams;
   await recordVisit("/ad");
 
   if (ad.status === "expired") {
@@ -97,10 +101,24 @@ export default async function AdPage({
   const sellerRating = (await getRatingSummary(ad.ownerPhone)).asSeller;
   // Operator-granted green check (FEATURES item 7).
   const sellerVerified = Boolean(await getVerifiedAt(ad.ownerPhone));
-  // Mask a phone number in the heading for signed-out visitors (the body below
-  // is already masked via MaskedText).
+  // Metered click-to-reveal (item 23): seller numbers never render in the HTML
+  // — title AND body — until this member's per-ad reveal. Owners always see
+  // their own ad's numbers; the admin sees everything; everyone else needs a
+  // "Show number" click (persisted in the reveal log, so it survives reloads).
+  const isOwner = session?.phone === ad.ownerPhone;
+  const isAdmin = session ? isAdminPhone(session.phone) : false;
+  const logged =
+    session && !isOwner && !isAdmin ? await hasRevealed(session.phone, ad.id) : false;
+  // "unsupported" = migration 9979 not pasted yet (no reveal log): honor the
+  // just-revealed redirect param instead — the documented unmetered degrade.
+  // Post-migration the log is authoritative, so hand-typing ?reveal=ok shows
+  // nothing.
+  const revealed =
+    isOwner || isAdmin || logged === true || (logged === "unsupported" && revealParam === "ok");
+  const outOfReveals = Boolean(session) && !revealed && revealParam === "out";
+  const revealSettings = outOfReveals ? await getEngineSettings() : null;
   const rawTitle = deriveTitle(ad.body);
-  const title = session ? rawTitle : maskPhonesPlain(rawTitle);
+  const title = revealed ? rawTitle : maskPhonesPlain(rawTitle);
   const rest = deriveRest(ad.body);
 
   return (
@@ -161,9 +179,32 @@ export default async function AdPage({
           </div>
         )}
         <p className="ad-fulltext">
-          <MaskedText text={rest || ad.body} revealed={!!session} />
+          <MaskedText text={rest || ad.body} revealed={revealed} />
         </p>
       </article>
+      {session && !sold && !revealed && (
+        <aside className="contact-gate" aria-label="Seller’s number">
+          <h2>Seller&rsquo;s number</h2>
+          {outOfReveals && revealSettings ? (
+            <p className="form-error" role="status">
+              {revealLimitMessage(revealSettings.revealsPerDay, revealSettings.revealBankCap)}
+            </p>
+          ) : (
+            <>
+              <p>
+                Numbers unlock one ad at a time — press the button and the number appears in
+                the ad above, and stays visible for you on this ad.
+              </p>
+              <form action={revealNumber} className="inline-form">
+                <input type="hidden" name="adId" value={ad.id} />
+                <button className="btn btn-sm" type="submit">
+                  Show number
+                </button>
+              </form>
+            </>
+          )}
+        </aside>
+      )}
       {session && !sold && session.phone !== ad.ownerPhone && (
         <aside className="contact-gate" aria-label="Message the seller">
           <h2>Message the seller</h2>

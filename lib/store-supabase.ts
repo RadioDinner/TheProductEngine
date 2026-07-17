@@ -23,6 +23,7 @@ import {
   type MergeOutcome,
   type PicQuotaResult,
   type Profile,
+  type RevealSince,
   type RatingSummary,
   type ReportedChatMessage,
   type SmsContext,
@@ -1021,6 +1022,76 @@ export async function reservePicQuota(
   const row = (data ?? {}) as { allowed?: boolean; remaining?: number };
   // Fail-open on an unexpected shape — never wrongly deny a paid-for photo.
   return { allowed: row.allowed !== false, remaining: row.remaining ?? -1 };
+}
+
+/**
+ * Atomically check-log-accrue-spend one number reveal (migration 9979
+ * reserve_reveal_quota — item 23). Pre-migration degrade, stated tradeoff:
+ * the reveal must never 500, so if the RPC is missing the reveal button
+ * still WORKS but unmetered — the quota falls back to a per-request in-memory
+ * noop (allow, remaining -1) and the log write silently doesn't happen (no
+ * reveal_log yet to write to). Until 9979 is pasted there is no metering, no
+ * abuse flagging, and no persistent reveal record — the accepted cost of
+ * never breaking the member-facing page on schema drift.
+ */
+export async function reserveRevealQuota(
+  phone: string,
+  adId: number,
+  dailyAllowance: number,
+  bankCap: number,
+  today: string,
+): Promise<PicQuotaResult> {
+  try {
+    const { data, error } = await db().rpc("reserve_reveal_quota", {
+      p_phone: phone,
+      p_ad_id: adId,
+      p_daily: dailyAllowance,
+      p_cap: bankCap,
+      p_today: today,
+    });
+    if (error) throw error;
+    const row = (data ?? {}) as { allowed?: boolean; remaining?: number };
+    // Fail-open on an unexpected shape — never wrongly lock a member out.
+    return { allowed: row.allowed !== false, remaining: row.remaining ?? -1 };
+  } catch (e) {
+    console.error("[reveal] reserve_reveal_quota failed (migration 9979 pasted?):", e);
+    return { allowed: true, remaining: -1 };
+  }
+}
+
+/**
+ * Persistent already-revealed check (reveal_log, migration 9979).
+ * "unsupported" = table missing — the ad page then honors the just-revealed
+ * redirect param instead (matching the unmetered pre-migration degrade above).
+ */
+export async function hasRevealed(
+  phone: string,
+  adId: number,
+): Promise<boolean | "unsupported"> {
+  const { data, error } = await db()
+    .from("reveal_log")
+    .select("id")
+    .eq("phone", phone)
+    .eq("ad_id", adId)
+    .limit(1);
+  if (error) return "unsupported";
+  return (data ?? []).length > 0;
+}
+
+/** Reveal-log rows since an instant, newest first (bounded) — for Insights. */
+export async function listRevealsSince(since: string): Promise<RevealSince[]> {
+  const { data, error } = await db()
+    .from("reveal_log")
+    .select("phone, ad_id, created_at")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(5000);
+  if (error) return []; // pre-9979: the Insights block simply shows empty
+  return (data ?? []).map((row) => ({
+    phone: row.phone as string,
+    adId: Number(row.ad_id),
+    at: row.created_at as string,
+  }));
 }
 
 export async function recordOffense(phone: string): Promise<number> {

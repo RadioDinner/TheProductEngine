@@ -91,6 +91,23 @@ export const engineDefaults = {
   /** Max photo pulls a number can bank across days (the sinking-fund ceiling). */
   picBankCap: 20,
   /**
+   * Metered click-to-reveal (item 23, anti-scraping): "Show number" look-ups a
+   * signed-in member gets per ET day; unused ones bank up to `revealBankCap`
+   * (same daily-allowance + rolling-bank shape as PIC pulls). Re-viewing an
+   * already-revealed ad is always free. Set revealsPerDay to 0 to turn
+   * metering OFF (reveals still click-gated and logged, never denied). See
+   * lib/reveal-quota.ts.
+   */
+  revealsPerDay: 10,
+  /** Max number look-ups a member can bank across days. */
+  revealBankCap: 30,
+  /**
+   * Insights: flag a member revealing more than this many seller numbers in a
+   * rolling 24h as "excessive" (a scraper signature). Purely a reporting
+   * threshold — the actual cap is revealsPerDay/revealBankCap. 0 disables.
+   */
+  revealAbusePerDay: 25,
+  /**
    * Percent off a credit pack when it's bought with a saved card by text
    * (BUYCREDIT) — the incentive to keep a card on file. 0 = no discount.
    */

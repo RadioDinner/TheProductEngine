@@ -30,6 +30,12 @@ export interface EngineSettings {
   picDailyAllowance: number;
   /** Max PIC pulls a number can bank across days (rolling/sinking fund cap). */
   picBankCap: number;
+  /** "Show number" look-ups per member per ET day (item 23; 0 = metering off). */
+  revealsPerDay: number;
+  /** Max number look-ups a member can bank across days. */
+  revealBankCap: number;
+  /** Insights: flag members revealing more than this many numbers per 24h. */
+  revealAbusePerDay: number;
   /** Percent off a credit pack bought by text with a saved card (BUYCREDIT). */
   savedCardDiscountPercent: number;
   /** Master outbound kill switch: "off" | "bulk" (partial) | "all" (full). */
@@ -61,6 +67,9 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   picAbusePerDay: "pic_abuse_per_day",
   picDailyAllowance: "pic_daily_allowance",
   picBankCap: "pic_bank_cap",
+  revealsPerDay: "reveals_per_day",
+  revealBankCap: "reveal_bank_cap",
+  revealAbusePerDay: "reveal_abuse_per_day",
   savedCardDiscountPercent: "saved_card_discount_percent",
   pauseMode: "pause_mode",
   underAttack: "under_attack",
@@ -111,6 +120,9 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     picAbusePerDay: engineDefaults.picAbusePerDay,
     picDailyAllowance: engineDefaults.picDailyAllowance,
     picBankCap: engineDefaults.picBankCap,
+    revealsPerDay: engineDefaults.revealsPerDay,
+    revealBankCap: engineDefaults.revealBankCap,
+    revealAbusePerDay: engineDefaults.revealAbusePerDay,
     savedCardDiscountPercent: engineDefaults.savedCardDiscountPercent,
     pauseMode: engineDefaults.pauseMode,
     underAttack: engineDefaults.underAttack,

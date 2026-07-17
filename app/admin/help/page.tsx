@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
 import { getEngineSettings } from "@/lib/settings";
 import { site } from "@/lib/config";
@@ -244,6 +245,27 @@ export default async function AdminHelp() {
         never sent by text, so chat can&apos;t create MMS cost.
       </p>
 
+      <h2 className="section-h">Show number: why seller numbers are metered on the website</h2>
+      <p>
+        Seller phone numbers <strong>never appear in the website&rsquo;s page code</strong> —
+        not in the listings, not on the ad page, not inside the ad text. One burner-phone
+        account could otherwise sign in once and scrape every seller&rsquo;s number off the
+        site. Instead, a signed-in member presses <strong>Show number</strong> on an ad and
+        that one ad&rsquo;s numbers appear (and stay visible for them — looking again is
+        free). Look-ups are metered like picture pulls:{" "}
+        <strong>{s.revealsPerDay || "unlimited"}</strong> a day, unused ones banking up to{" "}
+        <strong>{s.revealBankCap}</strong> (set &ldquo;per day&rdquo; to 0 to turn metering
+        off). A real buyer never notices the meter; a scraper hits it in minutes. Every
+        reveal is recorded (who, which ad, when), and{" "}
+        <Link href="/admin/insights">Insights</Link> flags anyone revealing more than{" "}
+        <strong>{s.revealAbusePerDay}</strong> distinct numbers in 24 hours, with the usual
+        one-click block. Out-of-look-ups members see a friendly &ldquo;they refill
+        tomorrow&rdquo; note pointing at chat — messaging the seller is never metered. Ad
+        owners always see their own numbers; digests and texting are untouched (numbers are
+        the product there, and SMS is bulk-limited by nature). All three numbers are on{" "}
+        <Link href="/admin/settings">Settings</Link>.
+      </p>
+
       <h2 className="section-h">The green check (verified members)</h2>
       <p>
         The <strong>✓ Verified</strong> mark is yours to give and take, one account at a time,
@@ -339,6 +361,8 @@ export default async function AdminHelp() {
           <tr><td>Max ads per digest</td><td>{s.digestCap}</td></tr>
           <tr><td>Max ad length</td><td>{s.maxChars} characters</td></tr>
           <tr><td>Ad run time</td><td>{s.expiryDays} days</td></tr>
+          <tr><td>Number look-ups (Show number) per day / bank</td><td>{s.revealsPerDay} / {s.revealBankCap}</td></tr>
+          <tr><td>Excessive-reveal flag (per 24h)</td><td>{s.revealAbusePerDay}</td></tr>
           <tr><td>Digest send-times, SMS + email (ET)</td><td>{s.slots.join(", ")}</td></tr>
         </tbody>
       </table>
