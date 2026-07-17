@@ -224,7 +224,7 @@ export default async function AdminHelp() {
         address&rdquo; inside a conversation. <strong>Chat</strong> lives on the website
         (&ldquo;Message the seller&rdquo; on any ad): messages travel between 6-digit member
         numbers so nobody&apos;s phone number is exposed, and the other party gets at most one
-        &ldquo;you have a message waiting&rdquo; text every few hours (reply-class — it respects
+        &ldquo;you have a message waiting&rdquo; text per day (reply-class — it respects
         pause, blocklist, and the hourly caps). Flip-phone members simply keep using the phone
         number printed in the ad, as always — chat is an extra lane, not a replacement.
       </p>

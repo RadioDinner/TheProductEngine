@@ -34,8 +34,10 @@ async function requirePhone(): Promise<string> {
 // ---------- profile + chat (FEATURES items 3 & 4) ----------
 
 const MAX_PROFILE_PHOTO_BYTES = 8 * 1024 * 1024;
-/** Dedup marker for the you-have-a-message SMS (one per number per 3 h). */
+/** Dedup marker for the you-have-a-message SMS — at most one per number per
+ * DAY (FEATURES item 6, user decision). */
 const CHAT_NUDGE_MARKER = "message waiting for you";
+const CHAT_NUDGE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export async function saveProfile(formData: FormData): Promise<void> {
   const phone = await requirePhone();
@@ -84,7 +86,7 @@ export async function startChat(formData: FormData): Promise<void> {
 async function nudgeBySms(phone: string): Promise<void> {
   if (!phone) return;
   try {
-    const recent = await countRecentOutboundContaining(phone, CHAT_NUDGE_MARKER, 3 * 60 * 60 * 1000);
+    const recent = await countRecentOutboundContaining(phone, CHAT_NUDGE_MARKER, CHAT_NUDGE_WINDOW_MS);
     if (recent > 0) return;
     const text = `${site.name}: you have a message waiting for you on the website. Read and reply at ${siteUrl}/account/messages — sign in with your phone number.`;
     const { sent } = await dispatchSms(phone, text, { cls: "reply" });

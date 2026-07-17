@@ -49,3 +49,6 @@ Also, I want people messaging to be able to send pictures to the other buyer, BU
 
 --- 2026-07-17 12:14 ---
 When placing an ad online, limit them to the number of characters that would fit well in a digest. Remind them to keep it brief for the sms part. I think that is the right call?
+
+--- 2026-07-17 12:18 ---
+lets just keep item 10 to web with once a day nudges for now. Also, the messaging system seems to have a distinct lag when I click send message. Can we do a performance overhaul for this whole system? Add this stuff to the feature list

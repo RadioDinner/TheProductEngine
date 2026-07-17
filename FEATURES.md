@@ -13,15 +13,16 @@ itself; build details live in the session logs and HANDOFF.md.
 | 3 | **Profile picture + pickup address** — settable by the member; the address is private to them, optionally shareable with a buyer they're in conversation with | session 008 | **built** (migration 0017) |
 | 4 | **Chat** — on-platform messages between buyers and sellers, keyed on user ids, so nobody's phone number is exposed | session 008 | **built** (migration 0017) |
 | 5 | **Digest numbers** — every digest carries a number, incrementing by 1 from 1; counter reset at build time | session 008 | **built** (migration 0018) |
-| 6 | **Chat nudge cap** — no party gets a "message waiting" text more than once a day (item 4 shipped with a 3-hour dedup; tighten it to 24 h) | session 008 | not started |
+| 6 | **Chat nudge cap** — no party gets a "message waiting" text more than once a day (item 4 shipped with a 3-hour dedup; tighten it to 24 h) | session 008 | **built** (no migration) |
 | 7 | **Verified members** — a green check mark, granted and revoked manually by the operator as they verify real buyers/sellers; verified members get perks in the long run | session 008 | **built** (migration 0019) |
 | 8 | **Admin "add a member"** — from /admin/users: a button that texts an invite ("to sign up, reply START", with opt-out + instructions), and the ability to set their starting credits right there | session 008 | **built** (no migration) |
 | 9 | **Web ad posting** — LOGGED-IN members can post ads from the website; it spends credits exactly like texting one in (and says so clearly); the picture rules stay explicit: ONE picture rides the ad listing, any additional pictures are WEB ONLY | session 008 | not started |
-| 10 | **Mixed SMS + chat messaging** — chat messages are copied to the recipient's SMS (a real copy of the message, not "you have a message waiting"); an SMS reply routes back into the chat thread on the site AND to the other party's SMS if they have one | session 008 | not started |
+| 10 | **Mixed SMS + chat messaging** — chat messages are copied to the recipient's SMS (a real copy of the message, not "you have a message waiting"); an SMS reply routes back into the chat thread on the site AND to the other party's SMS if they have one | session 008 | **on hold** (user decision: chat stays web-only with once-a-day nudges for now) |
 | 11 | **Hide the SMS signup strip for signed-in members** — the "Get the ads by text — text SUBSCRIBE to (330) 960-7170…" compliance section is hidden (or made much less obvious) once someone is logged in | session 008 | not started |
 | 12 | **Header messages icon + notifications** — signed-in members get a messages icon at the top of every page with a little red unread count (Joe replies → Jacob sees a red "1"), and an alert when a reply arrives | session 008 | not started |
 | 13 | **Modern chat threads** — sent messages bubble from the right, received from the left; a "report this message" path for review; links can't be sent; and every message on the TPE exchange is audit logged | session 008 | not started |
 | 14 | **Pictures in chat** — people in a conversation can send each other pictures; a picture NEVER rides the SMS copy (no MMS doubling) — the SMS side just gets "View image on the web" (or messages them directly) | session 008 | not started |
+| 15 | **Messaging performance overhaul** — sending a message has a distinct lag; overhaul the whole messaging system's speed | session 008 | not started |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -55,8 +56,9 @@ itself; build details live in the session logs and HANDOFF.md.
   (SMS edition; its email mirror shows the same number). Numbering starts at
   1 for the first digest composed after migration 0018 — past digests are not
   renumbered.
-- **6 · chat nudge cap**: one-line change when built — the dedup window in
-  `nudgeBySms` (lib/account-actions.ts) goes from 3 h to 24 h. No migration.
+- **6 · chat nudge cap**: built with the item-10 decision — the dedup window
+  in `nudgeBySms` (lib/account-actions.ts) went from 3 h to 24 h. No
+  migration.
 - **7 · verified members**: `users.verified_at` (migration 0019) doubles as
   flag + audit stamp. Grant/revoke lives on /admin/users ("Mark verified ✓")
   — no self-serve path anywhere, by design. Shown as a green ✓ on the ad
@@ -118,3 +120,18 @@ itself; build details live in the session logs and HANDOFF.md.
   ThePlainExchange.com/account/messages"), so no MMS doubling, ever. Chat
   photos should count against a sensible per-thread cap and follow item
   13's report/audit rules.
+- **15 · messaging performance overhaul** — where the send lag actually
+  comes from (diagnosis, session 008): `sendChat` is a full server-action
+  round trip with NO optimistic UI, and in prod each send strings together
+  ~8 sequential Supabase queries (member lookup → chat row → insert →
+  last_message_at update → read-watermark upsert → other-party phone) plus
+  the nudge check (`countRecentOutboundContaining` runs an ILIKE scan over
+  the messages table — likely the worst offender) BEFORE the redirect, then
+  the thread page re-renders with another ~6 queries (membership, messages,
+  and a full `listChatsFor` just for the header). Overhaul menu: make the
+  page a client component with optimistic append; collapse the send path
+  into one RPC (or parallelize + drop redundant lookups); take the nudge off
+  the critical path (Vercel `waitUntil`); fetch a single-thread summary
+  instead of `listChatsFor`; index or restructure the nudge-dedup check
+  (e.g. a `last_nudged_at` column instead of scanning message bodies).
+  Measure before/after with server timing logs.
