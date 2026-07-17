@@ -15,7 +15,7 @@ export interface FixtureAd {
 }
 
 export const FIXTURE_ADS: FixtureAd[] = [
-  { id: 1042, ownerPhone: "3305550190", body: "Sweet corn by the dozen or bushel. Ready now at the produce stand, CR 77 south of Berlin. Troyer family.", status: "approved", daysAgo: 0, slotHour: 12 },
+  { id: 1042, ownerPhone: "3305550190", body: "Sweet corn by the dozen or bushel. Ready now at the produce stand, CR 77 south of Berlin. Yoder family.", status: "approved", daysAgo: 0, slotHour: 12 },
   { id: 1041, ownerPhone: "3305550171", body: "Driving horse, $2,800. Standardbred gelding, 9 years, traffic safe and sound. Jonas S., 330-555-0171, Fredericksburg.", status: "approved", daysAgo: 0, slotHour: 7 },
   { id: 1040, ownerPhone: "3305550177", body: "Laying hens, $8 each. Two dozen Rhode Island Reds, laying steady. Katie H., 330-555-0177, New Bedford.", status: "approved", daysAgo: 0, slotHour: 7, photo: { src: "/ads/1040.jpg", alt: "Rhode Island Red laying hens", width: 960, height: 1075 } },
   { id: 1039, ownerPhone: "3305550163", body: "First cutting hay, $5.50 a bale. About 400 bales, stored dry in the barn. Mervin Y., 330-555-0163, Walnut Creek.", status: "approved", daysAgo: 1, slotHour: 20, photo: { src: "/ads/1039.jpg", alt: "Hay bales in a barn", width: 640, height: 480 } },

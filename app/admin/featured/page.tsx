@@ -169,7 +169,7 @@ export default async function AdminFeatured({
                   name="caption"
                   type="text"
                   maxLength={FEATURED_CAPTION_MAX}
-                  placeholder="Troyer's Harness Shop — spring sale"
+                  placeholder="Miller's Harness Shop — spring sale"
                 />
               </div>
               <div className="field">
