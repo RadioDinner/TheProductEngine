@@ -151,3 +151,22 @@ Playwright before its push (75 walk checks total across 6 walks).
   9/9 walk checks. **0019 still needs the user's paste.**
 - Item 6 (chat nudge once per day) added to FEATURES.md earlier — still not
   started, per the user's "for later".
+
+## Second post-wrap batch (Jul 17 afternoon): item 8 + the queue grows to 15
+
+- `4e37400` **Admin add-a-member (item 8, built)**: account + optional
+  starting credits + one-time compliant invite text ("To sign up, reply
+  START"; rates/HELP/STOP/  /sms link). 1/number/24 h dedup; subscribed
+  numbers refused; reply-class. 9/9 walk checks. Documented on /admin/help.
+- `1abaa7d` **item 6 built** (nudge once per DAY — user decision) and
+  **item 10 put ON HOLD** (chat stays web-only for now).
+- **Queue additions (user, this afternoon):** 9 web ad posting (+ decision:
+  same maxChars cap as SMS, price stated up front, one listing picture vs
+  web-only extras); 11 hide the SMS signup strip when signed in; 12 header
+  messages icon + red unread badge; 13 modern chat threads (bubbles,
+  report-a-message, no links, audit-log all chat — reverses this session's
+  privacy default, flag on build); 14 pictures in chat (never doubled onto
+  SMS); 15 messaging performance overhaul (send-lag diagnosis + fix menu
+  written into the FEATURES note).
+- Commits this batch: `4e37400`, `7708a81`, `f79e2cf`, `e65f163`, `1abaa7d`,
+  plus this wrap.

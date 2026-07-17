@@ -57,7 +57,7 @@ itself — never a 500) and `/api/health` (CRON_SECRET) probes
     edition mirrors it; /admin/digests history shows it.
 
 **Post-wrap additions (Jul 17, same session):**
-- **User applied migrations 0013–0018** ✓.
+- **User applied migrations 0013–0018** ✓ (0019 came after — see below).
 - `b605caf` **inbound-photos fix:** Resend's `email.received` webhook carries
   attachment METADATA only — the handler now pulls the real files via
   `GET api.resend.com/emails/receiving/{email_id}/attachments`
@@ -70,13 +70,38 @@ itself — never a 500) and `/api/health` (CRON_SECRET) probes
   /admin/users only (no self-serve, by design); ✓ shows on the ad page
   ("✓ Verified seller"), the member's account page, and in chat. Perks
   deliberately later, off `getVerifiedAt`. **User must paste 0019.**
+- `4e37400` **Admin add-a-member (FEATURES item 8, built, no migration):**
+  "Add a member" on /admin/users creates the account, grants optional
+  starting credits (ledger `grant`), and texts a one-time compliant invite
+  ("To sign up, reply START" + rates/HELP/STOP/  /sms link). Deduped 1/number
+  /24 h; already-subscribed refused; reply-class gates apply. 9/9 walk checks.
+- `1abaa7d` **Chat nudge once per DAY (item 6 built; user decision)** — and
+  **item 10 (mixed SMS+chat) ON HOLD**: chat stays web-only for now.
+- **FEATURES queue grew to items 9–15** (all not started unless noted):
+  9 web ad posting (decision recorded: same `maxChars` cap as SMS, price
+  shown before posting, one listing picture vs web-only extras); 11 hide the
+  SMS signup strip for signed-in members; 12 header messages icon + red
+  unread badge/alerts; 13 modern chat threads (right/left bubbles, report-a-
+  message, no links, audit-log ALL chat messages — note: reverses this
+  session's chat-privacy default, stance to be documented when built);
+  14 pictures in chat (media NEVER doubled onto SMS — text pointer instead);
+  15 messaging performance overhaul (send-lag diagnosis written into the
+  item: no optimistic UI + ~8 sequential Supabase queries on send + ~6 on
+  re-render; ILIKE nudge-dedup scan the likely worst offender; fix menu
+  listed). FEATURES.md item notes carry the build guidance for each.
 
 **VERIFY EARLY NEXT SESSION (couldn't reach prod from the session
-container):** (1) health shows `migration0012`–`migration0019` all applied +
-digests composing (carried from 007); (2) review-alert emails arrive
-post-ADMIN_EMAIL-fix (carried); (3) a real photo email to photos@ lands as a
-submission on /admin/ads (needs the b605caf deploy + MX/webhook verified in
-Resend).
+container):** (1) health shows `migration0012`–`migration0019` all applied
+(**0019 is the one the user may not have pasted yet**) + digests composing
+(carried from 007); (2) review-alert emails arrive post-ADMIN_EMAIL-fix
+(carried); (3) a real photo email to photos@ lands as a submission on
+/admin/ads (needs the b605caf deploy + MX/webhook verified in Resend);
+(4) the admin invite button live (needs nothing but the deploy).
+
+**NEXT SESSION default work order (unless the user redirects):** FEATURES
+items 9 (web ad posting), 11–15 — plus the standing hardening backlog
+(retry-swallow trap, DLR badges, abuse-suite pass over the conversational
+flows).
 
 **Recommended-but-unbuilt (carried + new):** (1) the retry-swallow inbound
 trap (any throw after `recordInboundOnce` still permanently eats that
