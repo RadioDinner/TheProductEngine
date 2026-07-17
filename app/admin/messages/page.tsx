@@ -54,6 +54,7 @@ export default async function AdminMessages({
               {m.direction === "inbound" ? "From" : "To"} {formatPhone(m.address)} ·{" "}
               {stamp(m.createdAt)}
               {m.channel === "mms" && " · MMS"}
+              {m.channel === "chat" && " · chat (on-site)"}
               {m.digestId && " · digest"}
             </p>
             <p className="sim-body">{m.body || "(no text)"}</p>

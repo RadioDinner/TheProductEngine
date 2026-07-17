@@ -112,7 +112,26 @@ export interface ChatMessageView {
   id: number;
   mine: boolean;
   body: string;
+  /** Web-uploaded picture URL (item 14, migration 9980) — website only. */
+  photo?: string | null;
+  /** True once a member reported this message (item 13, migration 9980). */
+  reported?: boolean;
   at: string;
+}
+
+/** One open member report, for the operator queue (item 13, migration 9980). */
+export interface ReportedChatMessage {
+  messageId: number;
+  chatId: number;
+  adId: number | null;
+  body: string;
+  photo: string | null;
+  /** When the message was sent. */
+  at: string;
+  reportedAt: string;
+  senderPhone: string;
+  senderMemberId: string | null;
+  reporterPhone: string;
 }
 
 /** Email-only subscriber (no phone account) — spec Q11. */
@@ -223,7 +242,20 @@ interface StoreShape {
     createdAt: string;
     lastMessageAt: string;
   }[];
-  chatMessages?: { id: number; chatId: number; fromPhone: string; body: string; at: string }[];
+  chatMessages?: {
+    id: number;
+    chatId: number;
+    fromPhone: string;
+    body: string;
+    at: string;
+    /** Web-uploaded picture URL (item 14) — website only, never rides SMS. */
+    photo?: string | null;
+    /** Report-a-message state (item 13). */
+    reportedAt?: string;
+    reportedBy?: string;
+    reportResolvedAt?: string;
+    reportResolution?: "resolved" | "dismissed";
+  }[];
   chatReads?: Record<string, number>; // `${chatId}#${phone}` -> last read message id
   nextChatId?: number;
 }
@@ -469,7 +501,70 @@ const file = {
     return (store.chatMessages ?? [])
       .filter((m) => m.chatId === chatId)
       .sort((a, b) => a.id - b.id)
-      .map((m) => ({ id: m.id, mine: m.fromPhone === phone, body: m.body, at: m.at }));
+      .map((m) => ({
+        id: m.id,
+        mine: m.fromPhone === phone,
+        body: m.body,
+        photo: m.photo ?? null,
+        reported: Boolean(m.reportedAt),
+        at: m.at,
+      }));
+  },
+
+  flagChatMessage(
+    chatId: number,
+    messageId: number,
+    byPhone: string,
+  ): "reported" | "denied" | "unsupported" {
+    const store = load();
+    if (!file.chatMember(chatId, byPhone)) return "denied";
+    const message = (store.chatMessages ?? []).find(
+      (m) => m.id === messageId && m.chatId === chatId,
+    );
+    // You can only report the other party's messages, not your own.
+    if (!message || message.fromPhone === byPhone) return "denied";
+    message.reportedAt = new Date().toISOString();
+    message.reportedBy = byPhone;
+    // A re-report reopens a previously resolved one.
+    delete message.reportResolvedAt;
+    delete message.reportResolution;
+    save(store);
+    return "reported";
+  },
+
+  listChatReports(): ReportedChatMessage[] {
+    const store = load();
+    return (store.chatMessages ?? [])
+      .filter((m) => m.reportedAt && !m.reportResolvedAt)
+      .sort((a, b) => Date.parse(b.reportedAt!) - Date.parse(a.reportedAt!))
+      .map((m) => {
+        const chat = (store.chats ?? []).find((c) => c.id === m.chatId);
+        return {
+          messageId: m.id,
+          chatId: m.chatId,
+          adId: chat?.adId ?? null,
+          body: m.body,
+          photo: m.photo ?? null,
+          at: m.at,
+          reportedAt: m.reportedAt!,
+          senderPhone: m.fromPhone,
+          senderMemberId: store.accounts[m.fromPhone]?.userId ?? null,
+          reporterPhone: m.reportedBy ?? "",
+        };
+      });
+  },
+
+  resolveChatReport(
+    messageId: number,
+    resolution: "resolved" | "dismissed",
+  ): "resolved" | "unsupported" {
+    const store = load();
+    const message = (store.chatMessages ?? []).find((m) => m.id === messageId);
+    if (!message?.reportedAt) return "resolved"; // nothing open — idempotent
+    message.reportResolvedAt = new Date().toISOString();
+    message.reportResolution = resolution;
+    save(store);
+    return "resolved";
   },
 
   sendChatMessage(
@@ -1057,6 +1152,36 @@ export async function markChatRead(chatId: number, phone: string): Promise<void>
   return supabaseConfigured
     ? remote.markChatRead(chatId, phone)
     : file.markChatRead(chatId, phone);
+}
+
+/**
+ * Report a message in a thread the reporter belongs to (FEATURES item 13).
+ * "denied" = not a member, no such message, or it's their own message;
+ * "unsupported" = migration 9980 pending (the report UI stays quiet).
+ */
+export async function flagChatMessage(
+  chatId: number,
+  messageId: number,
+  byPhone: string,
+): Promise<"reported" | "denied" | "unsupported"> {
+  return supabaseConfigured
+    ? remote.flagChatMessage(chatId, messageId, byPhone)
+    : file.flagChatMessage(chatId, messageId, byPhone);
+}
+
+/** Open (unresolved) member reports for the operator queue; [] pre-9980. */
+export async function listChatReports(): Promise<ReportedChatMessage[]> {
+  return supabaseConfigured ? remote.listChatReports() : file.listChatReports();
+}
+
+/** Operator: clear a report from the queue, recording the outcome. */
+export async function resolveChatReport(
+  messageId: number,
+  resolution: "resolved" | "dismissed",
+): Promise<"resolved" | "unsupported"> {
+  return supabaseConfigured
+    ? remote.resolveChatReport(messageId, resolution)
+    : file.resolveChatReport(messageId, resolution);
 }
 
 /** When the operator verified this member (FEATURES item 7); null = not

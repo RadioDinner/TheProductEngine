@@ -22,6 +22,7 @@ import {
   type PicQuotaResult,
   type Profile,
   type RatingSummary,
+  type ReportedChatMessage,
   type SmsContext,
   type SmsSubscriberEntry,
   type VerifyCodeResult,
@@ -554,28 +555,151 @@ export async function setVerified(
   return data?.length ? "saved" : "unsupported";
 }
 
+/** The thread's rows, newest-migration columns first with a 42703 retry so the
+ * page keeps working while the 9980 paste is pending. */
+async function chatMessageRows(chatId: number): Promise<
+  { rows: Record<string, unknown>[] } | { error: { code?: string } }
+> {
+  const fetchRows = (columns: string) =>
+    db()
+      .from("chat_messages")
+      .select(columns)
+      .eq("chat_id", chatId)
+      .order("id", { ascending: true })
+      .limit(500);
+  let { data, error } = await fetchRows(
+    "id, from_user_id, body, photo, reported_at, created_at",
+  );
+  if (error?.code === "42703") {
+    ({ data, error } = await fetchRows("id, from_user_id, body, created_at"));
+  }
+  if (error) return { error };
+  return { rows: (data ?? []) as unknown as Record<string, unknown>[] };
+}
+
+function toChatMessageView(row: Record<string, unknown>, meUserId: string): ChatMessageView {
+  return {
+    id: row.id as number,
+    mine: row.from_user_id === meUserId,
+    body: row.body as string,
+    ...(row.photo !== undefined && { photo: (row.photo as string | null) ?? null }),
+    reported: Boolean(row.reported_at),
+    at: row.created_at as string,
+  };
+}
+
 export async function listChatMessages(
   chatId: number,
   phone: string,
 ): Promise<ChatMessageView[] | null> {
   const membership = await chatForMember(chatId, phone);
   if (!membership) return null;
+  const result = await chatMessageRows(chatId);
+  if ("error" in result) {
+    if (chatSchemaMissing(result.error)) return null;
+    throw result.error;
+  }
+  return result.rows.map((m) => toChatMessageView(m, membership.userId));
+}
+
+export async function flagChatMessage(
+  chatId: number,
+  messageId: number,
+  byPhone: string,
+): Promise<"reported" | "denied" | "unsupported"> {
+  const membership = await chatForMember(chatId, byPhone);
+  if (!membership) return "denied";
+  // Only the other party's messages are reportable; a re-report reopens a
+  // resolved one.
   const { data, error } = await db()
     .from("chat_messages")
-    .select("id, from_user_id, body, created_at")
+    .update({
+      reported_at: new Date().toISOString(),
+      reported_by: membership.userId,
+      report_resolved_at: null,
+      report_resolution: null,
+    })
+    .eq("id", messageId)
     .eq("chat_id", chatId)
-    .order("id", { ascending: true })
-    .limit(500);
+    .neq("from_user_id", membership.userId)
+    .select("id");
   if (error) {
-    if (chatSchemaMissing(error)) return null;
+    if (chatSchemaMissing(error)) return "unsupported";
     throw error;
   }
-  return (data ?? []).map((m) => ({
-    id: m.id as number,
-    mine: m.from_user_id === membership.userId,
-    body: m.body as string,
-    at: m.created_at as string,
+  return data?.length ? "reported" : "denied";
+}
+
+export async function listChatReports(): Promise<ReportedChatMessage[]> {
+  const { data, error } = await db()
+    .from("chat_messages")
+    .select("id, chat_id, from_user_id, body, photo, reported_at, reported_by, created_at")
+    .not("reported_at", "is", null)
+    .is("report_resolved_at", null)
+    .order("reported_at", { ascending: false })
+    .limit(100);
+  if (error) {
+    if (chatSchemaMissing(error)) return []; // 9980 pending — queue stays hidden
+    throw error;
+  }
+  const rows = (data ?? []) as unknown as Record<string, unknown>[];
+  if (!rows.length) return [];
+
+  const chatIds = [...new Set(rows.map((r) => r.chat_id as number))];
+  const { data: chatRows } = await db().from("chats").select("id, ad_id").in("id", chatIds);
+  const adByChat = new Map<number, number | null>(
+    (chatRows ?? []).map((c) => [c.id as number, (c.ad_id as number | null) ?? null]),
+  );
+
+  const userIds = [
+    ...new Set(rows.flatMap((r) => [r.from_user_id, r.reported_by]).filter(Boolean)),
+  ] as string[];
+  // user_id is migration 9986 — retry without it if that paste is pending.
+  const fetchUsers = (columns: string) => db().from("users").select(columns).in("id", userIds);
+  let { data: userRows, error: usersError } = await fetchUsers("id, phone, user_id");
+  if (usersError?.code === "42703") {
+    ({ data: userRows, error: usersError } = await fetchUsers("id, phone"));
+  }
+  const users = new Map<string, { phone: string; memberId: string | null }>();
+  if (!usersError) {
+    for (const u of (userRows ?? []) as unknown as Record<string, unknown>[]) {
+      users.set(u.id as string, {
+        phone: (u.phone as string | null) ?? "",
+        memberId: (u.user_id as string | null) ?? null,
+      });
+    }
+  }
+
+  return rows.map((r) => ({
+    messageId: r.id as number,
+    chatId: r.chat_id as number,
+    adId: adByChat.get(r.chat_id as number) ?? null,
+    body: r.body as string,
+    photo: (r.photo as string | null) ?? null,
+    at: r.created_at as string,
+    reportedAt: r.reported_at as string,
+    senderPhone: users.get(r.from_user_id as string)?.phone ?? "",
+    senderMemberId: users.get(r.from_user_id as string)?.memberId ?? null,
+    reporterPhone: users.get(r.reported_by as string)?.phone ?? "",
   }));
+}
+
+export async function resolveChatReport(
+  messageId: number,
+  resolution: "resolved" | "dismissed",
+): Promise<"resolved" | "unsupported"> {
+  const { error } = await db()
+    .from("chat_messages")
+    .update({
+      report_resolved_at: new Date().toISOString(),
+      report_resolution: resolution,
+    })
+    .eq("id", messageId);
+  if (error) {
+    if (chatSchemaMissing(error)) return "unsupported";
+    throw error;
+  }
+  return "resolved";
 }
 
 export async function sendChatMessage(

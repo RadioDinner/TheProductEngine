@@ -7,23 +7,18 @@ import {
   addLedgerEntry,
   ensureAccount,
   ensureChat,
-  getProfile,
-  sendChatMessage,
   setEmail,
   setEmailEdition,
   setProfile,
   setSubscribed,
 } from "@/lib/store";
-import { formatPrice, getPack, site } from "@/lib/config";
+import { formatPrice, getPack } from "@/lib/config";
 import { createCheckoutSession, paymentsDevMode } from "@/lib/payments";
 import { devToolsEnabled } from "@/lib/env";
 import { getAd } from "@/lib/ads";
 import { storeImageBytes } from "@/lib/photos";
 import { sniffImage, CONTENT_TYPE_BY_EXT } from "@/lib/image-sniff";
 import { supabaseConfigured } from "@/lib/db";
-import { countRecentOutboundContaining, logMessage } from "@/lib/engine-store";
-import { dispatchSms } from "@/lib/outbound";
-import { siteUrl } from "@/lib/email";
 
 async function requirePhone(): Promise<string> {
   const session = await readSession();
@@ -31,13 +26,10 @@ async function requirePhone(): Promise<string> {
   return session.phone;
 }
 
-// ---------- profile + chat (FEATURES items 3 & 4) ----------
+// ---------- profile + chat entry (FEATURES items 3 & 4) ----------
+// Sending/reporting inside a thread lives in lib/chat-actions.ts (items 13–15).
 
 const MAX_PROFILE_PHOTO_BYTES = 8 * 1024 * 1024;
-/** Dedup marker for the you-have-a-message SMS — at most one per number per
- * DAY (FEATURES item 6, user decision). */
-const CHAT_NUDGE_MARKER = "message waiting for you";
-const CHAT_NUDGE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export async function saveProfile(formData: FormData): Promise<void> {
   const phone = await requirePhone();
@@ -79,49 +71,6 @@ export async function startChat(formData: FormData): Promise<void> {
   await ensureAccount(ad.ownerPhone);
   const chatId = await ensureChat(adId, session.phone, ad.ownerPhone);
   if (chatId === null) redirect(`/ad/${adId}?chat=unavailable`);
-  redirect(`/account/messages/${chatId}`);
-}
-
-/** One deduped "you have a message on the website" SMS to the other party. */
-async function nudgeBySms(phone: string): Promise<void> {
-  if (!phone) return;
-  try {
-    const recent = await countRecentOutboundContaining(phone, CHAT_NUDGE_MARKER, CHAT_NUDGE_WINDOW_MS);
-    if (recent > 0) return;
-    const text = `${site.name}: you have a message waiting for you on the website. Read and reply at ${siteUrl}/account/messages — sign in with your phone number.`;
-    const { sent } = await dispatchSms(phone, text, { cls: "reply" });
-    if (sent) {
-      await logMessage({ direction: "outbound", channel: "sms", address: phone, body: text });
-    }
-  } catch (e) {
-    console.error("[chat] nudge failed:", e);
-  }
-}
-
-export async function sendChat(formData: FormData): Promise<void> {
-  const phone = await requirePhone();
-  const chatId = Number(formData.get("chatId"));
-  if (!Number.isInteger(chatId)) redirect("/account/messages");
-  const body = String(formData.get("body") ?? "").trim().slice(0, 1000);
-  if (!body) redirect(`/account/messages/${chatId}`);
-  const result = await sendChatMessage(chatId, phone, body);
-  if (result.outcome === "sent") await nudgeBySms(result.otherPhone);
-  redirect(`/account/messages/${chatId}`);
-}
-
-/** The EXPLICIT act that shares the private pickup address into one chat. */
-export async function sharePickupAddress(formData: FormData): Promise<void> {
-  const phone = await requirePhone();
-  const chatId = Number(formData.get("chatId"));
-  if (!Number.isInteger(chatId)) redirect("/account/messages");
-  const profile = await getProfile(phone);
-  if (!profile?.pickupAddress) redirect(`/account/messages/${chatId}?share=noaddress`);
-  const result = await sendChatMessage(
-    chatId,
-    phone,
-    `My pickup address: ${profile.pickupAddress}`,
-  );
-  if (result.outcome === "sent") await nudgeBySms(result.otherPhone);
   redirect(`/account/messages/${chatId}`);
 }
 

@@ -172,6 +172,20 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/9981_verified_members.sql in the SQL editor",
           }
         : { applied: true };
+      // reported_at ships in the same paste as the photo/chat_nudged_at
+      // columns, the 'chat' enum value, and send_chat(), so this column probe
+      // stands in for the whole of 9980 (chat reports/pictures/perf).
+      const chatUpgrade = await db()
+        .from("chat_messages")
+        .select("reported_at", { count: "exact", head: true });
+      report.migration9980 = chatUpgrade.error
+        ? {
+            applied: false,
+            code: chatUpgrade.error.code,
+            error: chatUpgrade.error.message,
+            fix: "run supabase/migrations/9980_chat_upgrade.sql in the SQL editor",
+          }
+        : { applied: true };
     } catch (e) {
       report.db = { ok: false, thrown: e instanceof Error ? e.message : String(e) };
     }

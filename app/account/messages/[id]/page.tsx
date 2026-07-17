@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { readSession } from "@/lib/session";
 import { listChatMessages, listChatsFor, markChatRead } from "@/lib/store";
-import { sendChat, sharePickupAddress } from "@/lib/account-actions";
+import { reportChatMessage, sendChat, sharePickupAddress } from "@/lib/chat-actions";
+import { chatSendNote } from "@/lib/chat";
 import { site } from "@/lib/config";
 
 export const metadata: Metadata = {
@@ -21,13 +22,13 @@ function when(iso: string): string {
   });
 }
 
-/** One chat thread (FEATURES item 4). Membership is enforced by the store. */
+/** One chat thread (FEATURES items 4 & 13). Membership is enforced by the store. */
 export default async function ChatPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ share?: string }>;
+  searchParams: Promise<{ share?: string; send?: string; report?: string }>;
 }) {
   const session = await readSession();
   const { id: rawId } = await params;
@@ -41,7 +42,8 @@ export default async function ChatPage({
   if (messages === null) notFound();
   await markChatRead(chatId, session.phone);
   const summary = (await listChatsFor(session.phone)).find((c) => c.id === chatId);
-  const share = (await searchParams).share;
+  const { share, send, report } = await searchParams;
+  const otherName = `Member ${summary?.otherMemberId ?? ""}`.trim();
 
   return (
     <div className="container account">
@@ -64,16 +66,50 @@ export default async function ChatPage({
         ) : null}
       </h1>
       {messages.length === 0 && <p className="fine">Say hello — your message starts the conversation.</p>}
-      <ul className="sim-thread">
+      <ul className="chat-thread">
         {messages.map((m) => (
-          <li key={m.id} className={`sim-msg ${m.mine ? "sim-inbound" : "sim-outbound"}`}>
-            <p className="sim-meta">
-              {m.mine ? "You" : `Member ${summary?.otherMemberId ?? ""}`} · {when(m.at)}
+          <li key={m.id} className={`chat-msg ${m.mine ? "chat-sent" : "chat-received"}`}>
+            <p className="chat-meta">
+              {m.mine ? "You" : otherName} · {when(m.at)}
             </p>
-            <p className="sim-body">{m.body}</p>
+            {m.photo && (
+              // Chat pictures are plain re-hosted storage URLs, like the
+              // website-only ad extras — a plain img keeps them outside
+              // next/image's host allowlist.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className="chat-photo" src={m.photo} alt="Picture message" loading="lazy" />
+            )}
+            {m.body && <p className="chat-body">{m.body}</p>}
+            {!m.mine &&
+              (m.reported ? (
+                <p className="chat-reported">Reported — the operator will take a look.</p>
+              ) : (
+                <form action={reportChatMessage}>
+                  <input type="hidden" name="chatId" value={chatId} />
+                  <input type="hidden" name="messageId" value={m.id} />
+                  <button className="chat-report" type="submit">
+                    Report this message
+                  </button>
+                </form>
+              ))}
           </li>
         ))}
       </ul>
+      {send && (
+        <p className="form-error" role="alert">
+          {chatSendNote(send)}
+        </p>
+      )}
+      {report === "ok" && (
+        <p className="notice" role="status">
+          Thanks — the message was reported and the operator will review it.
+        </p>
+      )}
+      {report === "unavailable" && (
+        <p className="form-error" role="alert">
+          Reporting isn&apos;t available just yet — please try again later.
+        </p>
+      )}
       <form action={sendChat}>
         <input type="hidden" name="chatId" value={chatId} />
         <div className="field">
@@ -98,7 +134,8 @@ export default async function ChatPage({
       </form>
       <p className="fine">
         Your pickup address stays private until you press that button — it&apos;s sent into this
-        conversation only. Never share bank or card numbers here.
+        conversation only. Never share bank or card numbers here, and links can&apos;t be sent
+        in chat.
       </p>
     </div>
   );
