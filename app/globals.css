@@ -606,6 +606,35 @@ input:focus-visible {
   outline-offset: 0;
 }
 
+/* Location / area filter (item 26) — hidden until AREAS_SELECTOR_ENABLED. */
+.location-filter {
+  margin-bottom: var(--space-md);
+}
+.location-options {
+  list-style: none;
+  margin: 0 0 var(--space-2xs);
+  padding: 0;
+}
+.location-option {
+  display: flex;
+  gap: var(--space-2xs);
+  align-items: baseline;
+  font-size: var(--text-sm);
+  padding: 0.15rem 0;
+}
+.location-option input {
+  margin: 0;
+}
+
+/* Footer "Ask a question" / "Suggest an idea" buttons (item 27). */
+.footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  justify-content: center;
+  margin: var(--space-md) 0;
+}
+
 .char-count {
   margin-top: var(--space-2xs);
   font-size: var(--text-sm);

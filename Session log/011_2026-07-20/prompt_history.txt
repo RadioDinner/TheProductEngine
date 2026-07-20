@@ -22,3 +22,13 @@ Also, on the left hand side, I want a "location" selector to be built. BUT DO NO
 
 --- 2026-07-20 15:58 ---
 I want a clear "Ask a question" button and a "Suggest an Idea" button to be somewhere convenient on the page. This would send me an email and include their contact info so I can reach out to them.
+
+--- 2026-07-20 16:35 ---
+I get this error when posting an ad on the website directly 
+
+This page couldn't load
+A server error occurred. Reload to try again.
+ERROR 2613278069@E394
+
+--- 2026-07-20 16:35 ---
+If someone sends in a message like "NEW AD 7x12 10k Tandem Axle Dump Trailer for Sale 11k OBO. Text 330-600-1834", is it easier to just assume they mean "AD NEW"? Should I just treat it as an ad listing or should I reply and say, it looks like you're trying to post an ad... I think it should just be assumed. These guys are flip phone typers and it would be annoying to get that message. Also, I sent this message "AD NEW 7x12 10k Tandem Axle Dump Trailer for Sale 11k OBO. Text 330-600-1834" and never got a reply...

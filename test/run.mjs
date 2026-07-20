@@ -23,6 +23,7 @@ const SUITES = [
   "town-hall",
   "featured",
   "categories",
+  "areas",
 ];
 
 let totalPass = 0;

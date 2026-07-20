@@ -97,6 +97,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <p>
               {site.name} — classifieds by text message for {site.region}.
             </p>
+            <p className="footer-actions">
+              <Link className="btn btn-sm" href="/contact?type=question">
+                Ask a question
+              </Link>
+              <Link className="btn btn-sm btn-secondary" href="/contact?type=idea">
+                Suggest an idea
+              </Link>
+            </p>
             <p>
               Text <strong>SUBSCRIBE</strong> to <strong>{site.smsNumber}</strong> for the ads —
               up to 4 digests a day, msg &amp; data rates may apply. Text <strong>HELP</strong>{" "}

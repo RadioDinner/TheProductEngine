@@ -12,6 +12,8 @@ import { slotRotation } from "@/lib/featured";
 import { listActiveFeaturedSpots } from "@/lib/featured-store";
 import { AdRow } from "@/components/AdRow";
 import { FeaturedRotator, type RotatorSpot } from "@/components/FeaturedRotator";
+import { LocationSelector } from "@/components/LocationSelector";
+import { AREAS_SELECTOR_ENABLED, listAreas, validAreaSlugs } from "@/lib/areas";
 import { maskPhonesPlain } from "@/components/MaskedText";
 
 /** Upcoming events shown in the homepage sidebar (the full board is /town-hall). */
@@ -52,7 +54,12 @@ function pageHref(q: string | undefined, category: string | undefined, page: num
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string; category?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    page?: string;
+    category?: string;
+    area?: string | string[];
+  }>;
 }) {
   const params = await searchParams;
   const session = await readSession();
@@ -71,6 +78,12 @@ export default async function Home({
     page: Number(params.page) || 1,
     perPage: site.adsPerPage,
   });
+  // Area filter (item 26) — parsed here, but the selector is HIDDEN
+  // (backend-only) so this only matters once AREAS_SELECTOR_ENABLED flips on
+  // and listings carry more than one area.
+  const areaSel = validAreaSlugs(
+    Array.isArray(params.area) ? params.area : params.area ? [params.area] : [],
+  );
   const categoryCounts = withCategories ? await countLiveAdsByCategory() : null;
   const groups = groupByDay(ads);
   // Town hall sidebar (item 18) — null until migration 9977 (sidebar hides).
@@ -105,6 +118,15 @@ export default async function Home({
           the stack — Featured above the ads, Town hall below. Either sidebar
           hides entirely when it has nothing to show (no empty scaffolding). */}
       <div className="home-layout">
+      {/* Location selector (item 26) — BUILT BUT HIDDEN by user request:
+          renders only when AREAS_SELECTOR_ENABLED. Left column, above
+          Featured. Reveal-time note: with this on, the left column exists
+          even when there are no Featured spots. */}
+      {AREAS_SELECTOR_ENABLED && (
+        <aside className="home-side home-locations">
+          <LocationSelector areas={listAreas()} selected={areaSel} />
+        </aside>
+      )}
       {/* Featured sidebar (item 19) — operator-posted image spots; hides
           entirely when nothing is active. On narrow screens only slot 1
           shows (compact), above the ads. */}
