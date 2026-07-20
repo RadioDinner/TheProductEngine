@@ -45,19 +45,23 @@ On branch `claude/ad-sending-strategy-eeiwe0`. Three outcomes:
    (`ca1a808`, FEATURES 27); "NEW AD"→"AD NEW" leniency (`b6e487b`,
    FEATURES 28). Unit suite 401 → **428**.
 
-5. ⚠️ **OPEN PROD BUG — ad posting fails in production** (web → raw crash
-   "ERROR …@E394"; SMS "AD NEW …" → no reply). The ad logic is SOUND (the
-   exact ad reproduces + posts in dev), so it's environment-specific — the
-   session-007 signature (a prod throw the SMS pipeline silently eats via the
-   retry-swallow trap; the web surfaces it raw). **Hardened both paths**
-   (`b6e487b` inbound, `a0dd2d8` web) so they now LOG the real error and fail
-   gracefully instead of silently/raw-crashing. **Root cause still needs prod
-   data:** the Vercel log line (`[post] web ad submission failed: …` /
-   `[inbound] processing failed …`) or `/api/health` (CRON_SECRET) migration
-   posture. The posting path does NOT touch the unapplied 9976–9979 columns,
-   so it isn't the obvious missing migration. **The retry-swallow trap — a
-   standing backlog item since session 007 — is now fixed for the inbound
-   path.**
+5. ✅ **PROD AD-POSTING OUTAGE — ROOT-CAUSED + FIXED** (web → raw crash
+   "ERROR …@E394"; SMS "AD NEW …" → no reply). The graceful-error hardening
+   (`b6e487b` inbound, `a0dd2d8` web) surfaced the real error in the Vercel
+   log: **42804 — `column "kind" is of type ledger_kind but expression is of
+   type text`.** The `spend_credits` RPC (9995) inserts its `p_kind` TEXT
+   parameter into `credit_ledger.kind` (the `ledger_kind` ENUM) with no cast;
+   Postgres won't coerce a text *variable* to an enum. Free-ad-pass posts use
+   a PostgREST insert (`addLedgerEntry`) which DOES coerce, so this was latent
+   until a seller's free passes ran out and the first real **credit charge**
+   hit the RPC. **Fix: ⚠️ NEW MIGRATION `9975_fix_spend_credits_ledger_kind.sql`
+   — USER MUST PASTE IT** (Supabase SQL Editor; re-runnable create-or-replace,
+   only change is `p_kind::ledger_kind`). Until pasted, credit-charged posts
+   keep failing — but now GRACEFULLY (friendly reply/redirect, logged), not
+   silently/crashing. **The retry-swallow trap — a standing backlog item since
+   session 007 — is now fixed for the inbound path.** Note: unit/abuse suites
+   run on the file store, so they can't catch a Supabase enum-cast bug — this
+   class needs the migration to be right.
 3. **Session-010 cleanup CONFIRMED DONE:** redaction is on `main` (grep
    clean) and both old branches are deleted on GitHub. A Holmes County
    competitor scan was delivered in chat only (names stay out of the repo

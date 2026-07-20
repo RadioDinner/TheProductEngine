@@ -32,3 +32,15 @@ ERROR 2613278069@E394
 
 --- 2026-07-20 16:35 ---
 If someone sends in a message like "NEW AD 7x12 10k Tandem Axle Dump Trailer for Sale 11k OBO. Text 330-600-1834", is it easier to just assume they mean "AD NEW"? Should I just treat it as an ad listing or should I reply and say, it looks like you're trying to post an ad... I think it should just be assumed. These guys are flip phone typers and it would be annoying to get that message. Also, I sent this message "AD NEW 7x12 10k Tandem Axle Dump Trailer for Sale 11k OBO. Text 330-600-1834" and never got a reply...
+
+--- 2026-07-20 16:49 ---
+I tried on the website and it gave me "Something went wrong on our end and your ad didn't go through — nothing was charged. Please try again in a few minutes, or call (234) 301-0048 for help."
+api/health says "ok true mode "supabase""
+
+--- 2026-07-20 16:49 ---
+Vercel log is [post] web ad submission failed: {
+  code: '42804',
+  details: null,
+  hint: 'You will need to rewrite or cast the expression.',
+  message: 'column "kind" is of type ledger_kind but expression is of type text'
+}

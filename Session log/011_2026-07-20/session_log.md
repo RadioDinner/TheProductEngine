@@ -164,14 +164,18 @@ User hit: web post → raw platform crash "ERROR 2613278069@E394"; and
   unexpected throw is logged (`[post] web ad submission failed…`) and the
   member sees a friendly `error=server` note ("nothing was charged") instead
   of the crash. NEXT_REDIRECT is re-thrown so normal outcomes flow.
-- ⚠️ **ROOT CAUSE STILL OPEN — needs prod data.** The posting path doesn't
-  touch the unapplied 9976–9979 columns (USER_SELECT/AD_SELECT verified
-  clean; category/reveal reads are guarded), so it isn't the obvious missing
-  migration. Next step depends on the user: (a) re-try a web post — it now
-  fails gracefully if still broken; (b) send the Vercel function log line for
-  the failed post (now `[post] web ad submission failed: <error>`) or the
-  inbound one; (c) or hit `/api/health` (CRON_SECRET) for the migration/env
-  posture. Any one pins it.
+- ✅ **ROOT-CAUSED + FIXED.** The hardening surfaced the Vercel log:
+  **42804 — `column "kind" is of type ledger_kind but expression is of type
+  text`.** The `spend_credits` RPC (9995) inserts its `p_kind` TEXT param
+  into `credit_ledger.kind` (the `ledger_kind` ENUM) with no cast; Postgres
+  won't coerce a text *variable* to an enum. Free-pass posts use
+  `addLedgerEntry` (a PostgREST insert, which coerces) so they worked — this
+  stayed latent until the first **credit-charged** post hit the RPC.
+  **Fix: `supabase/migrations/9975_fix_spend_credits_ledger_kind.sql`** —
+  re-runnable `create or replace`, only change `p_kind::ledger_kind`.
+  ⚠️ **USER MUST PASTE 9975** into the Supabase SQL Editor; then credit
+  posting works. The test suites can't catch this (file store, not
+  Supabase).
 
 ## What shipped
 
