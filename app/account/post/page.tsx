@@ -140,6 +140,12 @@ export default async function PostAdPage({
           call {site.supportPhone}.
         </p>
       )}
+      {params.error === "server" && (
+        <p className="form-error" role="alert">
+          Something went wrong on our end and your ad didn&rsquo;t go through — nothing was
+          charged. Please try again in a few minutes, or call {site.supportPhone} for help.
+        </p>
+      )}
       {params.error === "funds" && (
         <p className="form-error" role="alert">
           That ad needs {credits(Number(params.cost) || settings.costText)} and you have{" "}

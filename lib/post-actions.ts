@@ -64,7 +64,31 @@ async function storeExtraBytes(bytes: Buffer): Promise<string | null> {
   return ext ? `data:${CONTENT_TYPE_BY_EXT[ext]};base64,${bytes.toString("base64")}` : null;
 }
 
+/**
+ * The web posting action. Thin wrapper so an UNEXPECTED throw (a DB hiccup,
+ * etc.) doesn't crash the page with a raw platform error — it's logged for
+ * diagnosis and the member is sent back with a friendly "try again" note.
+ * redirect()'s own NEXT_REDIRECT is re-thrown so normal outcomes flow through.
+ */
 export async function postAd(formData: FormData): Promise<void> {
+  try {
+    await postAdInner(formData);
+  } catch (e) {
+    if (
+      e &&
+      typeof e === "object" &&
+      "digest" in e &&
+      typeof (e as { digest?: unknown }).digest === "string" &&
+      (e as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+    ) {
+      throw e; // a normal redirect() outcome — let it through
+    }
+    console.error("[post] web ad submission failed:", e);
+    redirect("/account/post?error=server");
+  }
+}
+
+async function postAdInner(formData: FormData): Promise<void> {
   const session = await readSession();
   if (!session) redirect("/login?next=%2Faccount%2Fpost");
   const phone = session.phone;
