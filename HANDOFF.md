@@ -3,7 +3,32 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-07-17 (session 010).
+**Last updated:** 2026-07-20 (session 011).
+
+## Session 011 (2026-07-20) — digest decision + location-specific direction
+
+On branch `claude/ad-sending-strategy-eeiwe0`. Three outcomes:
+
+1. **DIGESTS STAY (user decision).** The user weighed per-ad
+   send-on-approval (5 min after approval, 7am–8pm window); a full
+   code-grounded analysis (segment cost ≈ wash; the blocker is the
+   registered "up to 4 digests/day" 10DLC frequency promise + complaint
+   mechanics; build itself tractable) is in
+   `Session log/011_2026-07-20/session_log.md`. Standing offer if faster
+   delivery is wanted: slots `[7, 12, 16, 20]` on /admin/settings is
+   zero-code and matches every registered word.
+2. **New direction: location-specific exchange** — Holmes County named as
+   the area, per-area WhatsApp (Telnyx WhatsApp Business API), eventual
+   rollout to Lancaster PA / northern Indiana / Harrisonburg VA / Big
+   Valley PA + request-a-new-area. Immediate slice = **FEATURES item 26**
+   (not started); the rollout/WhatsApp/request-flow live in the NEW
+   **`LONG_TERM_VISION.md`** (user-instructed convention: long-range list,
+   separate from FEATURES, not to be built unless greenlit).
+3. **Session-010 cleanup CONFIRMED DONE:** redaction is on `main` (grep
+   clean) and both old branches are deleted on GitHub. A Holmes County
+   competitor scan was delivered in chat only (names stay out of the repo
+   per the 010 order); headline: all competition is print/mail/auctions —
+   no SMS or WhatsApp classifieds service found.
 
 ## Session 010 (2026-07-17) — competitor-reference redaction on `main`
 

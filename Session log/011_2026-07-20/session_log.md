@@ -67,19 +67,54 @@ history — decision list captured above.
 
 ## Directional decisions
 
-- (pending) User to decide: digest vs per-ad vs middle path.
+- **DIGESTS STAY (user decision, this session):** "Ok, I think we can keep
+  the digest direction." The per-ad send-on-approval idea is dropped for
+  now; the analysis above stands as the record if it resurfaces. The
+  recommended free move (slots → [7, 12, 16, 20]) was offered, not
+  ordered — still the user's call on /admin/settings.
+- **Pivot: location-specific exchange.** The user wants the exchange to be
+  location-specific — a Holmes County exchange — with a per-area WhatsApp
+  chat (Telnyx WhatsApp Business API; heavy Mennonite WhatsApp use), and
+  eventually the same system for Lancaster PA, northern Indiana,
+  Harrisonburg VA, Big Valley PA, all plain communities, plus a
+  request-a-new-area flow. Captured as **FEATURES item 26** (immediate
+  slice: area identity) + **`LONG_TERM_VISION.md`** (everything else).
+- **New convention: `LONG_TERM_VISION.md`** (user instruction) — long-range
+  items tracked separately from the immediate FEATURES list; not to be
+  built unless greenlit. Reflected in CLAUDE.md? No — kept in the doc's own
+  header; add to standing orders only if the user asks.
+
+## Also this session
+
+- **Competitor scan for Holmes County** (user question): researched and
+  delivered **in chat only** — competitor names are deliberately kept out
+  of repo files per the session-010 repo-wide redaction order (the prompt
+  log carries an editor's-note redaction, same convention as 010).
+  Headline: the county's classifieds competition is all print/weekly-mail
+  (a dominant free weekly shopper + the long-standing Sugarcreek weekly +
+  a farm weekly + two national plain-community mail publications) plus
+  auctions; **no SMS-first or WhatsApp classifieds service was found
+  anywhere** — the direct-model lane appears empty.
+- Confirmed the session-010 redaction fully landed: `main` greps clean,
+  both old branches deleted on GitHub. That ops item is CLOSED.
+- Verified Telnyx WhatsApp Business API is real (same number does
+  SMS + WhatsApp, ~$0.0035/msg + Meta passthrough, template-gated
+  marketing sends) — facts recorded in LONG_TERM_VISION.md V2.
 
 ## What shipped
 
 - `d940120` Session 011: start session log + prompt history
-- (this file) decision analysis record
+- `1439220` digest-vs-immediate-send decision analysis (this file, part 1)
+- (this commit) FEATURES item 26, `LONG_TERM_VISION.md`, HANDOFF update,
+  prompt history
 
 ## Open questions / next step
 
-- User's call on the send model. If per-ad: the open product decisions are
-  the per-subscriber daily cap, bump meaning + bumpCost, email edition
-  shape, sponsor carrier, numbering, catch-up replacement, refund-window
-  wording, and the 10DLC re-registration sequencing.
-- Workflow artifacts: full agent outputs in the session scratchpad
-  (coupling/cost/compliance/design/check JSON) — key numbers reproduced
-  above.
+- Item 26 (location-specific / Holmes County identity) is the newest
+  not-started FEATURES item — scope its v1 with the user (naming/copy
+  surfaces vs. deeper area plumbing) before building.
+- If the user wants faster ad delivery within digests: slots
+  [7, 12, 16, 20] is a zero-code settings change matching all registered
+  copy.
+- Session 009 ops queue still stands: paste migrations 9979/9978/9977/9976
+  → check /api/health; carried photos@ + review-alert verification.

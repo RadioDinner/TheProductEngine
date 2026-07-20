@@ -33,6 +33,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 23 | **Metered click-to-reveal for phone numbers** (anti-scraping, user concern + decision session 009) — the website never renders seller numbers in HTML; a signed-in member clicks "Show number" per ad, metered ~10/day per account (admin-tunable, PIC-quota style), every reveal logged; excessive-reveal flags + one-click block in /admin/insights | session 009 | **built** (migration 9979) |
 | 24 | **Category management + toggle replies + spam guard** (extends item 22, builds with it) — members manage their categories from the web (/account), kept in sync with SMS; texting a category name TOGGLES it with a confirmation ("You will now receive ads in the Horses category. To stop receiving them, reply Horses"); gibberish or endless category texts must not spike outbound SMS cost — throttled while legitimate use keeps working | session 009 | **built** (migration 9976) |
 | 25 | **Homepage category browser** (extends item 22, builds with it) — a category picker on the homepage ad list so anyone browsing can filter the ads they see by category | session 009 | **built** (migration 9976) |
+| 26 | **Location-specific exchange** — the exchange names its area: this is the HOLMES COUNTY exchange, and the product says so (site, digests, welcome copy). Area becomes a first-class concept so more plain-community areas can be added later (the schema already carries `county` columns, default `'holmes'`, since init). The multi-area rollout itself + per-area WhatsApp channel live in `LONG_TERM_VISION.md`, not here | session 011 | **not started** |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -280,3 +281,17 @@ itself; build details live in the session logs and HANDOFF.md.
   + active toggle), likely one small migration for a featured_spots table.
   Mobile: sidebars stack (featured above / town hall below the ads, or
   collapse) — decide at build; never horizontal-scroll the homepage.
+- **26 · Location-specific exchange** (arrived session 011, user words in
+  prompt history): "I want to make my exchange location specific. I want a
+  Holmes county location." Scope for the immediate item: surface the area
+  identity (Holmes County) across the product — the rest of the direction
+  (Lancaster PA, northern Indiana, Harrisonburg VA, Big Valley PA, all
+  plain communities; request-a-new-area; per-area WhatsApp chat via
+  Telnyx's WhatsApp Business API) is deliberately parked in
+  `LONG_TERM_VISION.md` per the user's instruction that long-term items be
+  tracked separately from this list. Build notes: the `county` column
+  (default 'holmes') already exists on the core tables and digest
+  idempotency is already keyed `(channel, county, scheduled_for)` — v1 of
+  this item is mostly naming/copy + making the area a visible product
+  concept, NOT multi-tenant plumbing; don't build area switching until an
+  actual second area is greenlit.
