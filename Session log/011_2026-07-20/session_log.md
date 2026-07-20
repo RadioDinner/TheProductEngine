@@ -119,12 +119,70 @@ history — decision list captured above.
   SMS + WhatsApp, ~$0.0035/msg + Meta passthrough, template-gated
   marketing sends) — facts recorded in LONG_TERM_VISION.md V2.
 
+## Build work this session (all on `main`, per user)
+
+- **Town hall add form** (`cfac15b`): the native date input (which only
+  exposed month+year on the user's device) replaced with explicit Month /
+  Day / Year `<select>` pickers; new pure `assembleEventDay()` assembles the
+  strict YYYY-MM-DD server-side, unit-tested, guarded by the existing
+  validity checks. "Place (optional)" → "Address (optional)".
+- **Areas backend + HIDDEN selector** (`ca1a808`, FEATURES item 26 backend):
+  `lib/areas.ts` registry — Holmes (live) + Lancaster PA, Elkhart–LaGrange IN
+  (the northern-Indiana settlement, chosen as ONE area covering
+  Shipshewana/Topeka/Middlebury — split it in the registry if you'd rather
+  run Nappanee/Elkhart separately), Big Valley PA — each with its own
+  SMS-number env (`TELNYX_FROM_NUMBER_*`) and `areaForNumber()` inbound
+  routing. `components/LocationSelector.tsx` wired into the homepage LEFT
+  column behind `AREAS_SELECTOR_ENABLED=false` → built but not shown, as
+  instructed. **Each area needs its own number + 10DLC campaign when it goes
+  live** (per-area env vars are the seam).
+- **Feedback buttons** (`ca1a808`, FEATURES item 27): `/contact` "Ask a
+  question" / "Suggest an idea" page → emails ADMIN_EMAIL (operator class)
+  WITH the sender's contact info; two footer buttons on every page.
+- **"NEW AD" leniency** (`b6e487b`, FEATURES item 28): reversed word order
+  (and run-together "NEWAD") now posts as AD NEW — user decision, flip-phone
+  typers. Bare listings with NO verb deliberately still return the "automated
+  system" reply (auto-treating every unknown text as an ad would turn STOP /
+  HELP / buyer messages / gibberish into pending ads and burn credits — told
+  the user, offered as an explicit opt-in if they want it).
+
+## Ad-posting bug — diagnosis + hardening (`b6e487b`, `a0dd2d8`)
+
+User hit: web post → raw platform crash "ERROR 2613278069@E394"; and
+"AD NEW 7x12 … Dump Trailer …" over SMS → **no reply**.
+
+- **Reproduced the exact ad in dev — it posts fine** (creates the ad,
+  replies). So the ad LOGIC is sound; the prod failure is
+  **environment-specific**. This is the session-007 signature: a prod
+  throw that the SMS pipeline SILENTLY EATS (the retry-swallow trap — the
+  provider id is recorded, so the Telnyx retry finds it "handled" and
+  replies nothing) and the website surfaces as a raw crash.
+- **Hardened both paths so it can never fail silently again AND the real
+  error gets logged:** `handleInbound` now wraps all post-dedup processing —
+  a throw is logged (`[inbound] processing failed…`) and the sender gets one
+  friendly, deduped heads-up instead of silence. `postAd` is wrapped — an
+  unexpected throw is logged (`[post] web ad submission failed…`) and the
+  member sees a friendly `error=server` note ("nothing was charged") instead
+  of the crash. NEXT_REDIRECT is re-thrown so normal outcomes flow.
+- ⚠️ **ROOT CAUSE STILL OPEN — needs prod data.** The posting path doesn't
+  touch the unapplied 9976–9979 columns (USER_SELECT/AD_SELECT verified
+  clean; category/reveal reads are guarded), so it isn't the obvious missing
+  migration. Next step depends on the user: (a) re-try a web post — it now
+  fails gracefully if still broken; (b) send the Vercel function log line for
+  the failed post (now `[post] web ad submission failed: <error>`) or the
+  inbound one; (c) or hit `/api/health` (CRON_SECRET) for the migration/env
+  posture. Any one pins it.
+
 ## What shipped
 
-- `d940120` Session 011: start session log + prompt history
-- `1439220` digest-vs-immediate-send decision analysis (this file, part 1)
-- (this commit) FEATURES item 26, `LONG_TERM_VISION.md`, HANDOFF update,
-  prompt history
+- `d940120` start session log + prompt history
+- `1439220` digest-vs-immediate-send decision analysis
+- `10723f9` keep digests; location direction + `LONG_TERM_VISION.md`
+- `d6129e5` unified-brand areas + Amish/Mennonite marketplace North Star
+- `cfac15b` town hall month/day/year pickers + optional address
+- `ca1a808` areas backend (hidden selector) + Ask/Suggest feedback buttons
+- `b6e487b` SMS: NEW AD leniency + retry-swallow safety net
+- `a0dd2d8` web ad posting: graceful error instead of a raw crash
 
 ## Open questions / next step
 

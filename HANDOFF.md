@@ -35,6 +35,29 @@ On branch `claude/ad-sending-strategy-eeiwe0`. Three outcomes:
    to `main`** ("merge to main and keep merging to main") — same posture as
    sessions 007–009. Session-011 work was developed on
    `claude/ad-sending-strategy-eeiwe0` then fast-forwarded onto `main`.
+
+4. **Build work shipped (all on `main`):** town-hall month/day/year date
+   pickers + "Address (optional)" (`cfac15b`); areas backend + HIDDEN
+   location selector (`ca1a808`, FEATURES 26 — `lib/areas.ts`,
+   `AREAS_SELECTOR_ENABLED=false`; Indiana = one Elkhart–LaGrange area;
+   each area needs its own SMS number + campaign to go live); "Ask a
+   question / Suggest an idea" feedback buttons emailing the operator
+   (`ca1a808`, FEATURES 27); "NEW AD"→"AD NEW" leniency (`b6e487b`,
+   FEATURES 28). Unit suite 401 → **428**.
+
+5. ⚠️ **OPEN PROD BUG — ad posting fails in production** (web → raw crash
+   "ERROR …@E394"; SMS "AD NEW …" → no reply). The ad logic is SOUND (the
+   exact ad reproduces + posts in dev), so it's environment-specific — the
+   session-007 signature (a prod throw the SMS pipeline silently eats via the
+   retry-swallow trap; the web surfaces it raw). **Hardened both paths**
+   (`b6e487b` inbound, `a0dd2d8` web) so they now LOG the real error and fail
+   gracefully instead of silently/raw-crashing. **Root cause still needs prod
+   data:** the Vercel log line (`[post] web ad submission failed: …` /
+   `[inbound] processing failed …`) or `/api/health` (CRON_SECRET) migration
+   posture. The posting path does NOT touch the unapplied 9976–9979 columns,
+   so it isn't the obvious missing migration. **The retry-swallow trap — a
+   standing backlog item since session 007 — is now fixed for the inbound
+   path.**
 3. **Session-010 cleanup CONFIRMED DONE:** redaction is on `main` (grep
    clean) and both old branches are deleted on GitHub. A Holmes County
    competitor scan was delivered in chat only (names stay out of the repo
