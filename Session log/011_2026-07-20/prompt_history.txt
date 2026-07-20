@@ -7,3 +7,7 @@ repo-wide competitor-redaction order; the full text is in the chat transcript.]
 Ok, I think we can keep the digest direction. I do want to pivot though, or maybe better view it as add a feature. I want to make my exchange location specific. I want a Holmes county location because I discovered Telynx has a feature that they do WhatsApp for business, and I would want a whatsapp chat for the county too. A lot of mennonites use it. I eventually want to build this system for Lancaster, Indiana, Harrisonburg, Big Valley PA, all the plain communities and eventually have people be able to submit a request for a new area.
 
 I want you to also make a "Long term vision feature" list. This isn't to be worked on in the immediate "feature list" items but rather be kept track of long term. Are there any competitors other than [REDACTED] advertising in Holmes county?
+
+--- 2026-07-20 13:55 ---
+[/model set to claude-opus-4-8]
+merge to main and keep merging to main for the remainder of this session. I want to KEEP the "The Plain Exchange" brand. I want that to be the whole brand, with separate areas that people can browse from the web page. I am thinking, I want this to be a mennonite/amish ONLY marketplace, think facebook, sms based and craigslist mashed into one

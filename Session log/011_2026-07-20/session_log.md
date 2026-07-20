@@ -83,6 +83,24 @@ history — decision list captured above.
   items tracked separately from the immediate FEATURES list; not to be
   built unless greenlit. Reflected in CLAUDE.md? No — kept in the doc's own
   header; add to standing orders only if the user asks.
+- **Brand stays unified (user decision):** "I want to KEEP 'The Plain
+  Exchange' brand. I want that to be the whole brand, with separate areas
+  that people can browse from the web page." So areas are browsable
+  sub-sections of ONE brand, not separately-branded exchanges. FEATURES
+  item 26 + LONG_TERM_VISION V1 updated to match.
+- **North Star (user vision, this session):** "I want this to be a
+  mennonite/amish ONLY marketplace — think facebook, sms based and
+  craigslist mashed into one." Recorded as the North Star at the top of
+  `LONG_TERM_VISION.md` (craigslist = the classifieds core, already built;
+  sms-based = the backbone; facebook = the social layer already boned out
+  in items 2/3/4/7/12/13/14/18; plain-only membership leaning on the
+  verified-member gate — with the flagged hard question of enforcing
+  membership without excluding flip-phone users). Directional, NOT a build
+  order — captured, not started.
+- **Merging to main (user instruction):** "merge to main and keep merging
+  to main for the remainder of this session." Prior sessions 007–009 also
+  committed directly to main; this re-authorizes it. Session work now lands
+  on `main` directly.
 
 ## Also this session
 

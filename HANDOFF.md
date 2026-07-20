@@ -17,13 +17,24 @@ On branch `claude/ad-sending-strategy-eeiwe0`. Three outcomes:
    `Session log/011_2026-07-20/session_log.md`. Standing offer if faster
    delivery is wanted: slots `[7, 12, 16, 20]` on /admin/settings is
    zero-code and matches every registered word.
-2. **New direction: location-specific exchange** — Holmes County named as
-   the area, per-area WhatsApp (Telnyx WhatsApp Business API), eventual
-   rollout to Lancaster PA / northern Indiana / Harrisonburg VA / Big
+2. **New direction: location-specific areas under ONE brand.** "The Plain
+   Exchange" stays the whole brand (user: keep the brand); it gains
+   location-specific AREAS people browse from the web — Holmes County
+   first, then Lancaster PA / northern Indiana / Harrisonburg VA / Big
    Valley PA + request-a-new-area. Immediate slice = **FEATURES item 26**
    (not started); the rollout/WhatsApp/request-flow live in the NEW
    **`LONG_TERM_VISION.md`** (user-instructed convention: long-range list,
    separate from FEATURES, not to be built unless greenlit).
+   **North Star (user, this session):** an Amish/Mennonite-ONLY marketplace
+   — "facebook, sms based and craigslist mashed into one" — recorded at the
+   top of `LONG_TERM_VISION.md`. Plain-only membership would lean on the
+   verified-member gate (item 7); the flagged hard question is enforcing it
+   without excluding flip-phone members. Directional, not a build order.
+
+   **Git:** as of session 011 the user re-authorized committing **directly
+   to `main`** ("merge to main and keep merging to main") — same posture as
+   sessions 007–009. Session-011 work was developed on
+   `claude/ad-sending-strategy-eeiwe0` then fast-forwarded onto `main`.
 3. **Session-010 cleanup CONFIRMED DONE:** redaction is on `main` (grep
    clean) and both old branches are deleted on GitHub. A Holmes County
    competitor scan was delivered in chat only (names stay out of the repo

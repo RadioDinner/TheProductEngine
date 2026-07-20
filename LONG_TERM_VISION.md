@@ -13,10 +13,41 @@ system for Lancaster, Indiana, Harrisonburg, Big Valley PA, all the plain
 communities — and eventually have people be able to submit a request for a
 new area."
 
-## V1 · Multi-area rollout — an exchange per plain community
+## North Star — the plain-community marketplace
 
-One system, many location-specific exchanges. Holmes County, Ohio is the
-first and the template. Target areas named by the user (session 011):
+User (session 011): "I want this to be a mennonite/amish ONLY marketplace —
+think facebook, sms based and craigslist mashed into one." One brand, **The
+Plain Exchange**, for the whole plain community, combining three things:
+
+- **Craigslist** — the classifieds marketplace: text an ad in, buy and sell.
+  This is the core and it already exists.
+- **SMS-based** — posting and delivery over text so the flip-phone /
+  no-internet member is first-class, never an afterthought. Already the
+  backbone; it's what separates this from every competitor (all print/mail).
+- **Facebook** — the social layer: member profiles, on-platform chat,
+  ratings/reputation, the town hall / events board, verified members. The
+  bones are built (items 2, 3, 4, 7, 12, 13, 14, 18) — the vision is to
+  deepen them into a real community, not just a listings board.
+
+**Plain-only membership.** The marketplace is FOR — and eventually limited
+to — the Amish/Mennonite plain community. This builds on the existing
+verified-member machinery (item 7): verification becomes the gate to
+participate, not merely a green check. The hard open question for build
+time: how to prove and enforce plain-community membership WITHOUT excluding
+the flip-phone audience the whole product is built for — a web-signup gate
+would defeat the SMS-first premise. Scope this carefully with the user
+before building any gating; it is the most consequential decision on this
+whole list.
+
+## V1 · Areas under one brand — browsable from the web
+
+One brand — **The Plain Exchange** — for the whole plain community, with
+location-specific AREAS that people browse and pick from the website (user
+decision, session 011: keep "The Plain Exchange" as the whole brand, "with
+separate areas that people can browse from the web page"). Areas are NOT
+separately-branded exchanges; they are sub-sections of the one brand. Holmes
+County, Ohio is the first area and the template. Target areas named by the
+user:
 
 | Area | Notes |
 |---|---|
