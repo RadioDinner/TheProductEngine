@@ -131,6 +131,19 @@ export function parseCommand(raw: string): Command {
     case "list":
       // Bare word only (like CREDITS): "list my stuff" stays unknown.
       return rest ? { kind: "unknown", text } : { kind: "list" };
+    case "newad":
+      // "NEWAD <body>" — the run-together reversed form. Same as AD NEW.
+      return parseCommand(`AD NEW ${rest}`);
+    case "new": {
+      // "NEW AD <body>" — the reversed word order flip-phone typers naturally
+      // send. Assume they mean AD NEW (user decision, session 011: don't make
+      // them re-send after a "did you mean to post an ad?" reply). Only when
+      // the next word is AD, so a real message that merely starts with "new"
+      // ("new puppies for sale, call…") stays unknown and never posts an ad.
+      const m = rest.match(/^ad\b[\s:,-]*/i);
+      if (m) return parseCommand(`AD NEW ${rest.slice(m[0].length)}`);
+      return { kind: "unknown", text };
+    }
     default:
       // Category words (item 22) — exact single word only, so a real message
       // that merely STARTS with one ("horses for sale?") is never a toggle.

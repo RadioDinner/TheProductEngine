@@ -12,6 +12,17 @@ export function run(t) {
   t.eq("bare AD body", parseCommand("ad Horse cart").body, "Horse cart");
   t.eq("ad new mixed case + punctuation", parseCommand("Ad New: Hay $5").body, "Hay $5");
   t.eq("extra whitespace AD NEW", parseCommand("  AD   NEW   Wagon  ").body, "Wagon");
+  // Reversed order (item: flip-phone typers) — "NEW AD" means "AD NEW".
+  t.eq("NEW AD reversed -> ad", parseCommand("NEW AD Horse cart, $50").kind, "ad");
+  t.eq("NEW AD reversed body", parseCommand("NEW AD Horse cart, $50").body, "Horse cart, $50");
+  t.eq("New Ad mixed case + punct", parseCommand("New Ad: Hay $5").body, "Hay $5");
+  t.eq("NEWAD run-together -> ad", parseCommand("NEWAD Wagon").body, "Wagon");
+  t.eq(
+    "NEW AD real dump-trailer body -> ad",
+    parseCommand("NEW AD 7x12 10k Tandem Axle Dump Trailer for Sale 11k OBO. Text 330-600-1834").kind,
+    "ad",
+  );
+  t.eq("new (not ad) stays unknown", parseCommand("new puppies for sale").kind, "unknown");
   t.eq("SOLD full 8-digit id (not truncated)", parseCommand("SOLD 12345678").id, 12345678);
   t.eq("SOLD 4-digit", parseCommand("SOLD 1042").id, 1042);
   t.eq("SOLD with phone in text -> full run", parseCommand("SOLD call 3305550142").id, 3305550142);

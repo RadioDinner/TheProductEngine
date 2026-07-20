@@ -83,6 +83,8 @@ export interface Reply {
 
 const REDIRECT_MARKER = "automated system";
 const STOP_MARKER = "unsubscribed and won't get more";
+/** Substring of the generic-failure reply, so it can be deduped to 1/number/hour. */
+const ERROR_REPLY_MARKER = "something went wrong on our end";
 const HOUR_MS = 60 * 60 * 1000;
 
 // Ratings-flow conversation windows (FEATURES item 2): the seller has two
@@ -851,37 +853,61 @@ export async function handleInbound(msg: InboundSms, providerId?: string): Promi
   // before anything else runs.
   if (await isBlockedNumber(msg.from)) return null;
 
-  const command = parseCommand(msg.text || "");
-  const settings = await getEngineSettings();
+  // Everything past the dedup is wrapped so a throw can't be SILENTLY EATEN:
+  // recordInboundOnce already logged this provider id, so a Telnyx retry would
+  // find it handled and reply nothing (the "retry-swallow" trap that has eaten
+  // texts before). On an unexpected failure we LOG the real error (for
+  // diagnosis) and send the sender a friendly, deduped heads-up instead of
+  // going dark. The happy path is unchanged.
+  try {
+    const command = parseCommand(msg.text || "");
+    const settings = await getEngineSettings();
 
-  // STOP always takes effect (unsubscribe — honored even under attack); only
-  // the carrier confirmation is deduped to once per number per day, so a STOP
-  // loop isn't unbounded outbound.
-  if (command.kind === "stop") {
+    // STOP always takes effect (unsubscribe — honored even under attack); only
+    // the carrier confirmation is deduped to once per number per day, so a STOP
+    // loop isn't unbounded outbound.
+    if (command.kind === "stop") {
+      const reply = await route(msg, command, settings);
+      if (!reply) return null;
+      const recentStop = await countRecentOutboundContaining(msg.from, STOP_MARKER, 24 * HOUR_MS);
+      if (recentStop > 0) return null;
+      return sendReply(msg.from, reply, settings);
+    }
+
+    // Reserve a send slot atomically BEFORE routing, so an over-cap command is
+    // dropped whole — never charged with its confirmation silently suppressed.
+    // Kind is known from the command (PIC replies are the costly MMS lane).
+    // Caps auto-tighten while UNDER ATTACK.
+    const kind = command.kind === "pic" ? "pic" : "reply";
+    const caps = effectiveSmsCaps(settings);
+    const allowed = await reserveSms(
+      msg.from,
+      kind,
+      caps.repliesPerHour,
+      caps.globalPerHour,
+      caps.picsPerHour,
+      HOUR_MS,
+    );
+    if (!allowed) return null;
+
     const reply = await route(msg, command, settings);
     if (!reply) return null;
-    const recentStop = await countRecentOutboundContaining(msg.from, STOP_MARKER, 24 * HOUR_MS);
-    if (recentStop > 0) return null;
     return sendReply(msg.from, reply, settings);
+  } catch (e) {
+    console.error(`[inbound] processing failed for ${msg.from}:`, e);
+    // Don't leave the sender in silence (and don't let the message be eaten by
+    // the retry dedup). One friendly reply per number per hour, best-effort.
+    try {
+      const recentErr = await countRecentOutboundContaining(msg.from, ERROR_REPLY_MARKER, HOUR_MS);
+      if (recentErr > 0) return null;
+      return await sendReply(msg.from, {
+        body:
+          `Sorry — ${ERROR_REPLY_MARKER} and your text didn't go through. ` +
+          `Please try again in a few minutes, or call ${site.supportPhone} for help.`,
+      });
+    } catch (inner) {
+      console.error(`[inbound] failure-notice also failed for ${msg.from}:`, inner);
+      return null;
+    }
   }
-
-  // Reserve a send slot atomically BEFORE routing, so an over-cap command is
-  // dropped whole — never charged with its confirmation silently suppressed.
-  // Kind is known from the command (PIC replies are the costly MMS lane).
-  // Caps auto-tighten while UNDER ATTACK.
-  const kind = command.kind === "pic" ? "pic" : "reply";
-  const caps = effectiveSmsCaps(settings);
-  const allowed = await reserveSms(
-    msg.from,
-    kind,
-    caps.repliesPerHour,
-    caps.globalPerHour,
-    caps.picsPerHour,
-    HOUR_MS,
-  );
-  if (!allowed) return null;
-
-  const reply = await route(msg, command, settings);
-  if (!reply) return null;
-  return sendReply(msg.from, reply, settings);
 }
