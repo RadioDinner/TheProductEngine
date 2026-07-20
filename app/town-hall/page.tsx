@@ -43,6 +43,17 @@ export default async function TownHallPage({
     );
   }
 
+  // Date-picker options for the add form: month names, days 1–31, and the
+  // handful of years an event can fall in (the board only takes dates within
+  // ~a year, so this year plus the next two covers every valid pick).
+  const thisYear = Number(etParts(new Date()).day.slice(0, 4));
+  const yearOptions = [thisYear, thisYear + 1, thisYear + 2];
+  const dayOptions = Array.from({ length: 31 }, (_, i) => i + 1);
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+
   return (
     <div className="container account">
       <h1>Town hall</h1>
@@ -95,8 +106,8 @@ export default async function TownHallPage({
       )}
       {params.error === "link" && (
         <p className="form-error" role="alert">
-          Please leave web addresses out of event listings — put the place and a phone
-          number instead, and folks will find you.
+          Please leave web addresses out of event listings — put the street address and
+          a phone number instead, and folks will find you.
         </p>
       )}
       {params.error === "notopen" && (
@@ -114,7 +125,7 @@ export default async function TownHallPage({
         ) : (
           <ul className="event-list">
             {/* The page's own copy invites phone numbers into events ("put the
-                place and a phone number instead"), so every free-text field is
+                address and a phone number instead"), so every free-text field is
                 masked for visitors — same anti-scraping posture as ad bodies
                 (item 23); signed-in members see the numbers plain. */}
             {events.map((event) => (
@@ -165,10 +176,41 @@ export default async function TownHallPage({
                   placeholder="Benefit haystack supper for the Yoder family"
                 />
               </div>
-              <div className="field">
-                <label htmlFor="event-date">Date of the event</label>
-                <input id="event-date" name="date" type="date" required />
-              </div>
+              <fieldset className="field date-field">
+                <legend>Date of the event</legend>
+                <div className="date-selects">
+                  <select name="month" aria-label="Month" required defaultValue="">
+                    <option value="" disabled>
+                      Month
+                    </option>
+                    {monthNames.map((label, i) => (
+                      <option key={label} value={i + 1}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <select name="day" aria-label="Day" required defaultValue="">
+                    <option value="" disabled>
+                      Day
+                    </option>
+                    {dayOptions.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                  <select name="year" aria-label="Year" required defaultValue="">
+                    <option value="" disabled>
+                      Year
+                    </option>
+                    {yearOptions.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </fieldset>
               <div className="field">
                 <label htmlFor="event-time">Time (optional)</label>
                 <input
@@ -179,14 +221,16 @@ export default async function TownHallPage({
                   placeholder="4:00–7:00 pm"
                 />
               </div>
+              {/* Stored internally as the event's `place` (DB column
+                  place_text); presented to members as an optional address. */}
               <div className="field">
-                <label htmlFor="event-place">Place (optional)</label>
+                <label htmlFor="event-place">Address (optional)</label>
                 <input
                   id="event-place"
                   name="place"
                   type="text"
                   maxLength={EVENT_PLACE_MAX}
-                  placeholder="Mt. Hope Auction barn, Mt. Hope"
+                  placeholder="Mt. Hope Auction, 8076 SR 241, Mt. Hope"
                 />
               </div>
               <div className="field">

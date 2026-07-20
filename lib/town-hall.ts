@@ -41,6 +41,23 @@ export function isValidEventDay(day: string): boolean {
   );
 }
 
+/**
+ * Build a strict YYYY-MM-DD day from the town-hall add form's separate
+ * month/day/year pickers. Month and day may arrive 1- or 2-digit ("7" or
+ * "07"); the year must be 4 digits. Returns "" if any part is missing or
+ * non-numeric, so the caller's isValidEventDay / eventDateVerdict guard
+ * rejects it as "invalid" exactly as an unreadable date would. This only
+ * assembles the shape — impossible days (e.g. Feb 31) are still caught by
+ * isValidEventDay's calendar round-trip.
+ */
+export function assembleEventDay(year: string, month: string, day: string): string {
+  const y = year.trim();
+  const m = month.trim();
+  const d = day.trim();
+  if (!/^\d{4}$/.test(y) || !/^\d{1,2}$/.test(m) || !/^\d{1,2}$/.test(d)) return "";
+  return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+}
+
 /** Whole days from `fromDay` to `toDay` (both valid YYYY-MM-DD); + = future. */
 export function daysBetween(fromDay: string, toDay: string): number {
   const utc = (day: string) => {

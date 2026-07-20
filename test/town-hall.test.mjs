@@ -4,6 +4,7 @@
 import { hasLink } from "../lib/content-filter.ts";
 import {
   EVENT_MAX_DAYS_AHEAD,
+  assembleEventDay,
   daysBetween,
   eventDateVerdict,
   formatEventDay,
@@ -23,6 +24,19 @@ export function run(t) {
   t.eq("US format invalid", isValidEventDay("07/20/2026"), false);
   t.eq("garbage invalid", isValidEventDay("next Saturday"), false);
   t.eq("empty invalid", isValidEventDay(""), false);
+
+  // The add form's month/day/year pickers assemble into a strict day; the
+  // calendar-validity guard still runs on the assembled shape.
+  t.eq("assemble pads single digits", assembleEventDay("2026", "8", "2"), "2026-08-02");
+  t.eq("assemble keeps two digits", assembleEventDay("2026", "12", "25"), "2026-12-25");
+  t.eq("assemble missing part empty", assembleEventDay("2026", "", "2"), "");
+  t.eq("assemble non-numeric empty", assembleEventDay("2026", "Aug", "2"), "");
+  t.eq("assemble two-digit year empty", assembleEventDay("26", "8", "2"), "");
+  t.eq(
+    "assembled impossible day still caught",
+    isValidEventDay(assembleEventDay("2026", "2", "31")),
+    false,
+  );
 
   t.eq("daysBetween forward", daysBetween("2026-07-17", "2026-07-20"), 3);
   t.eq("daysBetween across DST", daysBetween("2026-10-30", "2026-11-02"), 3);

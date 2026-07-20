@@ -23,6 +23,7 @@ import {
   EVENT_PLACE_MAX,
   EVENT_TIME_MAX,
   EVENT_TITLE_MAX,
+  assembleEventDay,
   eventDateVerdict,
 } from "@/lib/town-hall";
 import { submitEvent } from "@/lib/town-hall-store";
@@ -36,7 +37,17 @@ export async function submitTownHallEvent(formData: FormData): Promise<void> {
   if (account.postingBannedAt) redirect("/town-hall?error=banned#add");
 
   const title = stripEmoji(String(formData.get("title") ?? ""));
-  const date = String(formData.get("date") ?? "").trim();
+  // The add form posts the date as three pickers (month/day/year); assemble
+  // it here. A single `date` field still wins if present, so any older caller
+  // keeps working. eventDateVerdict below rejects anything unreadable.
+  const rawDate = String(formData.get("date") ?? "").trim();
+  const date =
+    rawDate ||
+    assembleEventDay(
+      String(formData.get("year") ?? ""),
+      String(formData.get("month") ?? ""),
+      String(formData.get("day") ?? ""),
+    );
   const timeText = stripEmoji(String(formData.get("time") ?? ""));
   const placeText = stripEmoji(String(formData.get("place") ?? ""));
   const body = stripEmoji(String(formData.get("body") ?? ""));

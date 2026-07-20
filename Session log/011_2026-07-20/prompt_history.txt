@@ -11,3 +11,14 @@ I want you to also make a "Long term vision feature" list. This isn't to be work
 --- 2026-07-20 13:55 ---
 [/model set to claude-opus-4-8]
 merge to main and keep merging to main for the remainder of this session. I want to KEEP the "The Plain Exchange" brand. I want that to be the whole brand, with separate areas that people can browse from the web page. I am thinking, I want this to be a mennonite/amish ONLY marketplace, think facebook, sms based and craigslist mashed into one
+
+--- 2026-07-20 15:58 ---
+I want to make some changes to the town-hall add screen
+1) the date picker only lets me pick the month and year, then I need to hand edit a day. I want a month, day and year picker.
+2) change the place into an optional address field.
+
+--- 2026-07-20 15:58 ---
+Also, on the left hand side, I want a "location" selector to be built. BUT DO NOT SHOW IT AT THIS TIME. Also add to the multi-select filter "lancaster, PA",whatever area in Indiana would be best (would it be shipshewana town? Or lanagrange county? Or elkhart? Or should I make multiple?,"Holmes County,OH", big valley PA or wherever there is a large amish community in that are. But DO NOT show the selector at this time. I want to build the backend feature. I'll need a different SMS number for each area too.
+
+--- 2026-07-20 15:58 ---
+I want a clear "Ask a question" button and a "Suggest an Idea" button to be somewhere convenient on the page. This would send me an email and include their contact info so I can reach out to them.

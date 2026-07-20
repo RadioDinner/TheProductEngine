@@ -570,6 +570,42 @@ input:focus-visible {
   outline-offset: 0;
 }
 
+/* Town hall add-event date: month / day / year pickers side by side. */
+.date-field {
+  border: 0;
+  padding: 0;
+  margin-inline: 0;
+  min-inline-size: 0;
+}
+
+.date-field legend {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-bottom: var(--space-2xs);
+  padding: 0;
+}
+
+.date-selects {
+  display: flex;
+  gap: var(--space-2xs);
+}
+
+.date-selects select {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--border-input);
+  border-radius: 2px;
+  padding: 0.5rem 0.5rem;
+}
+
+.date-selects select:focus-visible {
+  border-color: var(--blue);
+  outline-offset: 0;
+}
+
 .char-count {
   margin-top: var(--space-2xs);
   font-size: var(--text-sm);
