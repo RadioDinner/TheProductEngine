@@ -1,0 +1,2 @@
+--- 2026-07-20 12:46 ---
+I'm trying to decide if sending out in digests is the right call. I think I'm going to say the ads send automatically 5 minutes after approval. Then the sending window is from 7 am to 8pm
