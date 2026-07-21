@@ -51,3 +51,6 @@ My competition is sending pictures with every ad. They use an automated 10 digit
 
 --- 2026-07-21 13:54 ---
 i want to review the credit cost sytem. and I want to make sure I have a way to manually credit people, and "checkout" screen for when people call in to add cards. Can I save the cards in stripe? I want them to automatically be able to bill their card with more credits
+
+--- 2026-07-21 15:11 ---
+So I'm selling a dollar a credit. $5 for 5 credits, $9 for 10 credits, $20 for 25 credits. A text ad takes 1 credit, a picture add takes 5, right?
