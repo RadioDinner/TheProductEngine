@@ -119,6 +119,21 @@ export interface ChargeResult {
   reason?: string;
 }
 
+/** The saved card on file for a customer (last4 only), for display — e.g. the
+ * admin phone-order panel deciding between "bill saved card" and "add a card".
+ * Best-effort: any Stripe error reads as "no card" rather than breaking a page. */
+export async function savedCardOnFile(
+  customerId: string,
+): Promise<{ last4?: string } | null> {
+  try {
+    const card = await firstSavedCard(customerId);
+    return card ? { last4: card.last4 } : null;
+  } catch (e) {
+    console.error("[payments] saved-card lookup failed:", e);
+    return null;
+  }
+}
+
 /** The customer's first saved card (id + last4), or null if none is on file. */
 async function firstSavedCard(
   customerId: string,

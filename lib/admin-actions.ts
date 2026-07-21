@@ -7,6 +7,8 @@ import {
   addLedgerEntry,
   ensureAccount,
   getAccount,
+  getCreditBalance,
+  hasLedgerRef,
   mergeAccounts,
   resolveChatReport,
   setOffenseCount,
@@ -15,8 +17,9 @@ import {
 } from "@/lib/store";
 import { headers } from "next/headers";
 import { dispatchSms } from "@/lib/outbound";
-import { getPack, site } from "@/lib/config";
-import { createCheckoutSession, paymentsDevMode } from "@/lib/payments";
+import { discountedCents, formatPrice, getPack, site } from "@/lib/config";
+import { chargeSavedCard, createCheckoutSession, paymentsDevMode } from "@/lib/payments";
+import { devToolsEnabled } from "@/lib/env";
 import {
   addWordRule,
   getEngineSettings,
@@ -287,6 +290,71 @@ async function phoneOrderSession(
     console.error("[admin] phone-order session failed:", e);
     return { phone, error: "phoneorder" };
   }
+}
+
+/**
+ * Bill the member's SAVED card for a pack while they're on the phone ("charge
+ * my card on file"). Same product as the BUYCREDIT text flow — same saved-card
+ * discount, same off-session charge, same idempotent ref-then-grant — but the
+ * confirmation is verbal, so the form carries a render-time nonce as the ref:
+ * a double-click (or a Stripe retry) can neither double-charge nor
+ * double-grant. Declines (incl. banks demanding 3-D Secure, which can't
+ * happen over the phone) come back as a readable reason; the fallback is the
+ * checkout lane below, where the bank challenge can actually be met.
+ */
+export async function adminBillSavedCard(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const phone = normalizePhone(String(formData.get("phone") ?? ""));
+  if (!phone) redirect("/admin/users");
+  // The explicit `never` annotation on the CONST (not just the arrow) is what
+  // lets TS narrow after each `back(...)` guard below.
+  const back: (q: string) => never = (q) => redirect(`/admin/users?phone=${phone}&${q}`);
+
+  const pack = getPack(String(formData.get("pack") ?? ""));
+  if (!pack) back("error=phoneorder_pack");
+  const nonce = String(formData.get("nonce") ?? "").replace(/[^a-zA-Z0-9-]/g, "");
+  if (!nonce) back("error=bill");
+  const account = await getAccount(phone);
+  if (!account?.stripeCustomerId) back("error=bill_nocard");
+
+  const settings = await getEngineSettings();
+  const price = discountedCents(pack.priceCents, settings.savedCardDiscountPercent);
+  const ref = `adminbill:${phone}:${nonce}`;
+  if (await hasLedgerRef(ref)) {
+    back(`saved=bill&detail=${encodeURIComponent(`Those credits were already added — balance ${await getCreditBalance(phone)}.`)}`);
+  }
+
+  let result: { ok: boolean; last4?: string; reason?: string };
+  if (!paymentsDevMode) {
+    result = await chargeSavedCard({
+      customerId: account.stripeCustomerId,
+      amountCents: price,
+      ref,
+      phone,
+      packId: pack.id,
+      credits: pack.credits,
+    });
+  } else if (devToolsEnabled) {
+    result = { ok: true, last4: "0000" }; // dev simulation (never in a real prod deploy)
+  } else {
+    back("error=phoneorder_dev");
+    return; // unreachable — keeps TS happy about `result`
+  }
+  if (!result.ok) {
+    back(`error=bill&reason=${encodeURIComponent(result.reason ?? "charge failed")}`);
+  }
+  await addLedgerEntry(phone, {
+    delta: pack.credits,
+    kind: "purchase",
+    note: `Purchased ${pack.credits} credits (${formatPrice(price)}) — saved card, phone order`,
+    ref,
+  });
+  const last4 = result.last4 ? ` ending ${result.last4}` : "";
+  back(
+    `saved=bill&detail=${encodeURIComponent(
+      `Charged ${formatPrice(price)} to the card${last4}. ${pack.credits} credits added — balance ${await getCreditBalance(phone)}.`,
+    )}`,
+  );
 }
 
 /** Open the Stripe checkout in the ADMIN's browser — the operator keys in the

@@ -331,7 +331,10 @@ export default async function AdminHelp() {
       <h2 className="section-h">Taking payment over the phone (Phone order)</h2>
       <p>
         On a member&rsquo;s page (Users tab) the <strong>Phone order</strong> section handles a
-        caller paying by card: pick the pack, then either <strong>Open checkout here</strong> —
+        caller paying by card. If a card is already on file it says so, and{" "}
+        <strong>Bill their saved card</strong> charges it on their verbal OK — same price and
+        saved-card discount as texting BUYCREDIT, and a double-click can&rsquo;t charge twice.
+        No card yet? Pick the pack, then either <strong>Open checkout here</strong> —
         Stripe&rsquo;s secure payment page opens in your browser and you key the card in as the
         caller reads it out — or <strong>Text them the link</strong> so they finish it
         themselves (the link lasts 24 hours). The card number goes straight into Stripe and is

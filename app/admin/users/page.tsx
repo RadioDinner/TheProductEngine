@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
+  adminBillSavedCard,
   adminGrantCredits,
   adminInviteUser,
   adminMergeUsers,
@@ -21,7 +22,9 @@ import {
 } from "@/lib/store";
 import { listAdsByOwner } from "@/lib/ads";
 import { formatPhone, normalizePhone } from "@/lib/phone";
-import { formatPrice, packs, site } from "@/lib/config";
+import { discountedCents, formatPrice, packs, site } from "@/lib/config";
+import { paymentsDevMode, savedCardOnFile } from "@/lib/payments";
+import { getEngineSettings } from "@/lib/settings";
 
 export const metadata: Metadata = {
   title: `Users — ${site.name} admin`,
@@ -51,6 +54,14 @@ export default async function AdminUsers({
   const params = await searchParams;
   const phone = params.phone ? normalizePhone(params.phone) : null;
   const account = phone ? await getAccount(phone) : null;
+  // Phone-order panel: is a card on file? (best-effort; display only)
+  const savedCard =
+    account?.stripeCustomerId && !paymentsDevMode
+      ? await savedCardOnFile(account.stripeCustomerId)
+      : account?.stripeCustomerId
+        ? {}
+        : null;
+  const engineSettings = await getEngineSettings();
 
   return (
     <>
@@ -140,6 +151,24 @@ export default async function AdminUsers({
           {params.error === "grant" && (
             <p className="form-error" role="alert">
               A non-zero amount and a note are both required.
+            </p>
+          )}
+          {params.saved === "bill" && params.detail && (
+            <p className="notice" role="status">
+              {params.detail}
+            </p>
+          )}
+          {params.error === "bill" && (
+            <p className="form-error" role="alert">
+              Saved-card charge failed{params.reason ? `: ${params.reason}` : ""}. Nothing was
+              granted. If their bank wants extra verification, use &ldquo;Open checkout
+              here&rdquo; or text them the link instead.
+            </p>
+          )}
+          {params.error === "bill_nocard" && (
+            <p className="form-error" role="alert">
+              No card is on file for this member — collect one with &ldquo;Open checkout
+              here&rdquo; or &ldquo;Text them the link&rdquo; first.
             </p>
           )}
           {params.saved === "phoneorder" && (
@@ -285,17 +314,31 @@ export default async function AdminUsers({
 
           <h3 className="subsection-h">Phone order — card payment by phone</h3>
           <p className="fine">
-            For a caller paying by card: pick the pack, then either{" "}
-            <strong>open the checkout here</strong> and key the card into Stripe&rsquo;s secure
-            page while they read it out (never write the number down — it goes straight into
-            Stripe, this site never sees it), or <strong>text them the link</strong> to finish
-            on their own (needs a phone that opens web pages; link lasts 24 hours). Either way
-            the credits land on this account automatically and the card is saved, so from then
-            on they can buy by texting <span className="cmd">BUYCREDIT</span>. Paying by cash or
-            check? Use Adjust credits above instead.
+            {savedCard ? (
+              <>
+                <strong>Card on file{savedCard.last4 ? ` (ending ${savedCard.last4})` : ""}.</strong>{" "}
+                &ldquo;Bill their saved card&rdquo; charges it right now with their verbal
+                OK — same {engineSettings.savedCardDiscountPercent}% saved-card discount as
+                texting BUYCREDIT.
+              </>
+            ) : (
+              <>
+                <strong>No card on file.</strong> Collect one below — either{" "}
+                <strong>open the checkout here</strong> and key the card into Stripe&rsquo;s
+                secure page while they read it out (never write the number down — it goes
+                straight into Stripe, this site never sees it), or{" "}
+                <strong>text them the link</strong> to finish on their own (needs a phone that
+                opens web pages; link lasts 24 hours).
+              </>
+            )}{" "}
+            Either way the credits land on this account automatically and the card is saved,
+            so from then on they can buy by texting <span className="cmd">BUYCREDIT</span> —
+            or you can bill them here. Paying by cash or check? Use Adjust credits above
+            instead.
           </p>
           <form className="review-form">
             <input type="hidden" name="phone" value={phone} />
+            <input type="hidden" name="nonce" value={crypto.randomUUID()} />
             <div className="inline-fields">
               <select name="pack" defaultValue="" className="admin-select" aria-label="Credit pack">
                 <option value="" disabled>
@@ -304,10 +347,22 @@ export default async function AdminUsers({
                 {packs.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.credits} credits — {formatPrice(p.priceCents)}
+                    {savedCard
+                      ? ` (${formatPrice(discountedCents(p.priceCents, engineSettings.savedCardDiscountPercent))} billed to the saved card)`
+                      : ""}
                   </option>
                 ))}
               </select>
-              <button className="btn btn-sm" formAction={adminPhoneOrderCheckout} type="submit">
+              {savedCard && (
+                <button className="btn btn-sm" formAction={adminBillSavedCard} type="submit">
+                  Bill their saved card
+                </button>
+              )}
+              <button
+                className={savedCard ? "btn btn-sm btn-secondary" : "btn btn-sm"}
+                formAction={adminPhoneOrderCheckout}
+                type="submit"
+              >
                 Open checkout here
               </button>
               <button className="btn btn-sm btn-secondary" formAction={adminTextCheckoutLink} type="submit">

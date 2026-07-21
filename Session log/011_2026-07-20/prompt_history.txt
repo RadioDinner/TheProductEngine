@@ -66,3 +66,6 @@ I want the marketing on the website to say that the first 200 subscribers get 3 
 
 --- 2026-07-21 15:37 ---
 never mind, i found the settings to make the ads cost more. I want a "banner" ad spot on my home page, where I can easily run sales on credits. make that for me
+
+--- 2026-07-21 15:39 ---
+I also want the admin end checkout to work. I want to be able to select a user and do something like "bill" or "add card" and then run through the checkout for them over the phone
