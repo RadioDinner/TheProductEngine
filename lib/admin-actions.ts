@@ -527,6 +527,21 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
   const slots = parseSlots("slots");
   if (slots.length) update.slots = [...new Set(slots)].sort((a, b) => a - b);
   await saveEngineSettings(update);
+
+  // Homepage promo banner: free text, clamped; CLEARING the field is how the
+  // admin hides the banner, so blank saves as "" (unlike the numbers above).
+  // The link must stay a site-relative path — anything else falls back to the
+  // credits section so a typo can never send the homepage off-site.
+  const bannerText = formData.get("bannerText");
+  if (bannerText !== null) {
+    const text = String(bannerText).replace(/\s+/g, " ").trim().slice(0, 200);
+    const rawLink = String(formData.get("bannerLink") ?? "").trim();
+    const link =
+      rawLink.startsWith("/") && !rawLink.startsWith("//") && rawLink.length <= 200
+        ? rawLink
+        : "/account#credits";
+    await saveEngineSettings({ promoBannerText: text, promoBannerLink: link });
+  }
   redirect("/admin/settings?saved=1");
 }
 

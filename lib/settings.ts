@@ -41,6 +41,10 @@ export interface EngineSettings {
   categoryConfirmsPerHour: number;
   /** Percent off a credit pack bought by text with a saved card (BUYCREDIT). */
   savedCardDiscountPercent: number;
+  /** Homepage promo banner text (credit sales etc). Empty = banner hidden. */
+  promoBannerText: string;
+  /** Where the banner links (site-relative path). */
+  promoBannerLink: string;
   /** Master outbound kill switch: "off" | "bulk" (partial) | "all" (full). */
   pauseMode: "off" | "bulk" | "all";
   /** UNDER ATTACK mode: suppress+tighten+throttle outbound while true. */
@@ -75,6 +79,8 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   revealAbusePerDay: "reveal_abuse_per_day",
   categoryConfirmsPerHour: "category_confirms_per_hour",
   savedCardDiscountPercent: "saved_card_discount_percent",
+  promoBannerText: "promo_banner_text",
+  promoBannerLink: "promo_banner_link",
   pauseMode: "pause_mode",
   underAttack: "under_attack",
   outboundThrottlePerMin: "outbound_throttle_per_min",
@@ -129,6 +135,8 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     revealAbusePerDay: engineDefaults.revealAbusePerDay,
     categoryConfirmsPerHour: engineDefaults.categoryConfirmsPerHour,
     savedCardDiscountPercent: engineDefaults.savedCardDiscountPercent,
+    promoBannerText: engineDefaults.promoBannerText,
+    promoBannerLink: engineDefaults.promoBannerLink,
     pauseMode: engineDefaults.pauseMode,
     underAttack: engineDefaults.underAttack,
     outboundThrottlePerMin: engineDefaults.outboundThrottlePerMin,

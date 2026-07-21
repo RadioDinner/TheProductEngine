@@ -6,6 +6,7 @@ import { CATEGORIES, categoryLabel, isCategoryKey } from "@/lib/categories";
 import { recordVisit } from "@/lib/analytics";
 import { site } from "@/lib/config";
 import { etParts } from "@/lib/et";
+import { getEngineSettings } from "@/lib/settings";
 import { formatEventDay } from "@/lib/town-hall";
 import { listUpcomingEvents } from "@/lib/town-hall-store";
 import { slotRotation } from "@/lib/featured";
@@ -95,6 +96,9 @@ export default async function Home({
     spots.map((s) => ({ id: s.id, src: s.src, caption: s.caption, linkUrl: s.linkUrl }));
   const slot1 = toRotator(slotRotation(featured, 1));
   const slot2 = toRotator(slotRotation(featured, 2));
+  // Homepage promo banner (credit sales) — operator-set on /admin/settings;
+  // empty text = no banner. Rendered above the ads for everyone.
+  const { promoBannerText, promoBannerLink } = await getEngineSettings();
 
   return (
     <>
@@ -106,8 +110,9 @@ export default async function Home({
           <p className="container">
             Get the ads by text — text <strong>SUBSCRIBE</strong> to{" "}
             <strong className="tel">{site.smsNumber}</strong>. Free, up to 4 digests a day; msg
-            &amp; data rates may apply. Reply <strong>HELP</strong> for help,{" "}
-            <strong>STOP</strong> to cancel. <Link href="/sms">Text terms</Link> ·{" "}
+            &amp; data rates may apply. <strong>The first 200 subscribers get 3 free
+            ads.</strong> Reply <strong>HELP</strong> for help, <strong>STOP</strong> to
+            cancel. <Link href="/sms">Text terms</Link> ·{" "}
             <Link href="/privacy">Privacy</Link>.
           </p>
         </div>
@@ -150,6 +155,12 @@ export default async function Home({
       )}
       <div className="home-center container">
         <h1 className="visually-hidden">Latest classified ads</h1>
+
+        {promoBannerText && (
+          <Link className="promo-banner" href={promoBannerLink || "/account#credits"}>
+            {promoBannerText}
+          </Link>
+        )}
 
         <form className="search" action="/" method="get" role="search">
           <label className="visually-hidden" htmlFor="q">

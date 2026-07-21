@@ -783,7 +783,8 @@ configured (which disables all of it automatically).
 ## Product rules (grilled + confirmed 2026-07-06; do not relitigate)
 
 - One credit = one broadcast in the next digest; ad lists on site 30 days
-  (config). Text ad 1 credit, picture 5, starter grant 3 ads flat — all
+  (config). Text ad 2 credits, picture 10 (defaults raised session 011; the user
+  also set the live values on /admin/settings), starter grant 3 ads flat — all
   admin-config. `/PIC` pulls charge no credit but are rate-limited:
   `picDailyAllowance`/day (default 3) per number with a rolling bank up to
   `picBankCap` (default 20) — session 006, admin-tunable, 0 disables; also

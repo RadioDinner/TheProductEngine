@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { site } from "@/lib/config";
+import { getEngineSettings } from "@/lib/settings";
 
 export const metadata: Metadata = {
   title: `Questions and answers — ${site.name}`,
   description: `Common questions about ${site.name}: subscribing, posting ads, pictures, credits, and getting help.`,
 };
 
-export default function Faq() {
+export default async function Faq() {
+  // Live prices, so this page can never drift from /admin/settings again.
+  const s = await getEngineSettings();
   return (
     <div className="container prose">
       <h1>Questions and answers</h1>
@@ -35,9 +38,10 @@ export default function Faq() {
       <h2>What does it cost?</h2>
       <p>
         Getting the ads is free. Browsing the website is free. Posting an ad uses ad
-        credits — a plain ad costs 1 credit, a picture ad costs 5 — and{" "}
-        <strong>your first 3 ads are free</strong>, picture or plain. Credit packs
-        are sold on this website under <Link href="/account">your account</Link>.
+        credits — a plain ad costs {s.costText} credit{s.costText === 1 ? "" : "s"}, a
+        picture ad costs {s.costPhoto} — and <strong>the first 200 subscribers get
+        their first 3 ads free</strong>, picture or plain. Credit packs are sold on
+        this website under <Link href="/account">your account</Link>.
       </p>
 
       <h2>How do I start getting the ads?</h2>

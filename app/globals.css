@@ -626,6 +626,29 @@ input:focus-visible {
   margin: 0;
 }
 
+/* Homepage promo banner (credit sales) — operator-set on /admin/settings. */
+.promo-banner {
+  display: block;
+  text-align: center;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: var(--text-sm);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--blue-deep);
+  text-decoration: none;
+  border-top: 3px double var(--rule-strong);
+  border-bottom: 3px double var(--rule-strong);
+  background: var(--surface);
+  padding: var(--space-xs) var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.promo-banner:hover {
+  color: var(--blue);
+  text-decoration: underline;
+}
+
 /* Footer "Ask a question" / "Suggest an idea" buttons (item 27). */
 .footer-actions {
   display: flex;

@@ -57,3 +57,12 @@ So I'm selling a dollar a credit. $5 for 5 credits, $9 for 10 credits, $20 for 2
 
 --- 2026-07-21 15:13 ---
 Are we still profitable at this ad credit rate?
+
+--- 2026-07-21 15:31 ---
+So lets make a text ad take 2 credits, and a picture ad take 10
+
+--- 2026-07-21 15:37 ---
+I want the marketing on the website to say that the first 200 subscribers get 3 free ads.
+
+--- 2026-07-21 15:37 ---
+never mind, i found the settings to make the ads cost more. I want a "banner" ad spot on my home page, where I can easily run sales on credits. make that for me

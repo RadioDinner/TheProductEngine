@@ -14,8 +14,8 @@ insert into config (key, value) values
   ('digest_slots_sms',        '[7, 18]'),
   ('digest_slots_email',      '[7, 16]'),
   ('digest_ad_cap',           '10'),
-  ('credit_cost_text',        '1'),
-  ('credit_cost_photo',       '5'),
+  ('credit_cost_text',        '2'),
+  ('credit_cost_photo',       '10'),
   ('bump_cost',               '0'),
   ('max_queued_bumps_per_ad', '1'),
   ('starter_free_ads',        '3'),
@@ -27,6 +27,8 @@ insert into config (key, value) values
   ('sms_global_per_hour',     '500'),
   ('digest_daily_segment_budget', '12000'),
   ('pic_abuse_per_day',        '15'),
+  ('promo_banner_text',       ''),
+  ('promo_banner_link',       '/account#credits'),
   ('saved_card_discount_percent', '10')
 on conflict (key) do nothing;
 

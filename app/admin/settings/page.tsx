@@ -202,6 +202,36 @@ export default async function AdminSettings({
           <input id="slots" name="slots" type="text" defaultValue={settings.slots.join(", ")} />
           <p className="fine">The email edition goes out at these same times.</p>
         </div>
+        <div className="field">
+          <label htmlFor="bannerText">Homepage banner (credit sales)</label>
+          <input
+            id="bannerText"
+            name="bannerText"
+            type="text"
+            maxLength={200}
+            defaultValue={settings.promoBannerText}
+            placeholder={'e.g. "CREDIT SALE — 25 credits for $15 through Saturday"'}
+          />
+          <p className="fine">
+            Shows as a banner at the top of the homepage. <strong>Clear the text and save to
+            hide it.</strong>
+          </p>
+        </div>
+        <div className="field">
+          <label htmlFor="bannerLink">Banner links to (site page)</label>
+          <input
+            id="bannerLink"
+            name="bannerLink"
+            type="text"
+            maxLength={200}
+            defaultValue={settings.promoBannerLink}
+            placeholder="/account#credits"
+          />
+          <p className="fine">
+            Must start with &ldquo;/&rdquo; (a page on this site) — anything else falls back
+            to the credits section.
+          </p>
+        </div>
         <button className="btn" type="submit">
           Save settings
         </button>

@@ -47,8 +47,8 @@ export function discountedCents(priceCents: number, discountPercent: number): nu
  * settings store (lib/settings.ts). Mirrors supabase/seed.sql.
  */
 export const engineDefaults = {
-  costText: 1,
-  costPhoto: 5,
+  costText: 2,
+  costPhoto: 10,
   bumpCost: 0,
   digestCap: 10,
   /**
@@ -120,6 +120,9 @@ export const engineDefaults = {
    * (BUYCREDIT) — the incentive to keep a card on file. 0 = no discount.
    */
   savedCardDiscountPercent: 10,
+  /** Homepage promo banner (credit sales). Empty text = hidden. */
+  promoBannerText: "",
+  promoBannerLink: "/account#credits",
   /**
    * Master outbound kill switch (operator-flipped at /admin/settings):
    *   "off"  — normal operation.
