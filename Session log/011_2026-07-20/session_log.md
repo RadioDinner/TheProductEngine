@@ -198,3 +198,40 @@ User hit: web post → raw platform crash "ERROR 2613278069@E394"; and
   copy.
 - Session 009 ops queue still stands: paste migrations 9979/9978/9977/9976
   → check /api/health; carried photos@ + review-alert verification.
+
+## Shortcode/pictures analysis (user request, later in session 011)
+
+Question: pivot to the competitor's shortcode + MMS-picture-with-every-ad
+model, or keep metered PIC pulls? Full 5-agent workflow (shortcode economics
+w/ 2026 pricing, repo-grounded cost model, flip-phone MMS reality, option
+space, adversarial number check). Verdict delivered in chat:
+**DON'T pivot; formalize the user's own tiered instinct.**
+
+Key verified numbers (all recomputed): shortcode lease ~$1,000/mo on Telnyx
+(+$500 one-time MMS enablement, 8–12 wk carrier certification, ~$12k/yr
+floor) and it does NOT make MMS cheaper (~$0.02–0.03 all-in vs the $0.035
+long-code rate — the lease buys THROUGHPUT, not cheap media; it exists to
+escape T-Mobile's 2,000/day 10DLC cap, which per-ad MMS hits at ~200–400
+subs). Picture-with-every-ad = 3.2–6.1x today's total cost at every tier
+($787/mo at 150 subs/5 ads vs $156 today; $5,250/mo at 500 subs/10 ads).
+Underwater vs photo-ad revenue at 150 subs already ($5.25 cost/ad vs
+$3.60–5.00 revenue). SURPRISE: ONE bundled MMS digest/day = $1.05/sub/mo,
+CHEAPER than a 7-segment text day ($1.68) — the cost bomb is per-ad sends,
+not MMS itself; but flip-phone multi-image rendering is unproven and MMS
+silently fails on data-off/text-only-plan phones (the plainest segment —
+delivery shows "delivered", handset never fetches). PIC pulls are
+user-initiated → OUTSIDE the registered "up to 4 digests/day" promise; ≤1
+MMS per existing slot stays inside it; per-ad MMS breaks it.
+
+Recommended sequence (chat): (1) keep PIC default, get the ~$41.50 external
+vetting now; (2) field-test MMS rendering on real community flip phones;
+(3) build opt-in Picture Edition (keyword toggle, item-22 category machinery
+is the proven template) delivered as a CAPPED picture-digest MMS ≤1/slot,
+cost scales with opt-ins only, optionally $2–3/mo; (4) optional seller-
+funded "Picture Blast" priced from live subscriber count (margin-positive by
+construction, item-17 sponsor machinery is the template); (5) shortcode only
+at multi-area scale. Flagged code gap: NO MMS budget breaker exists
+(digestDailySegmentBudget counts SMS segments only; PIC MMS bypasses the
+outbox) — any broadcast-MMS build needs its own budget knob. Second
+competitor: nothing SMS-based found in the niche; asked user for number
+type / who pays / how subscribers join (or forward one message).
