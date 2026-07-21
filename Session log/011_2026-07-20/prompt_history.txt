@@ -69,3 +69,6 @@ never mind, i found the settings to make the ads cost more. I want a "banner" ad
 
 --- 2026-07-21 15:39 ---
 I also want the admin end checkout to work. I want to be able to select a user and do something like "bill" or "add card" and then run through the checkout for them over the phone
+
+--- 2026-07-21 18:16 ---
+I just thought of a great idea! I could combine 4 incoming pictures into a single image before sending them out. Is there an AI service that can do this for me for free? I'd want them to take all the pictures that we sent in and combine them automatically but only up to 4
