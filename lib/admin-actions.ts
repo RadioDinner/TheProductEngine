@@ -13,8 +13,10 @@ import {
   setPostingBanned,
   setVerified,
 } from "@/lib/store";
+import { headers } from "next/headers";
 import { dispatchSms } from "@/lib/outbound";
-import { site } from "@/lib/config";
+import { getPack, site } from "@/lib/config";
+import { createCheckoutSession, paymentsDevMode } from "@/lib/payments";
 import {
   addWordRule,
   getEngineSettings,
@@ -243,6 +245,76 @@ export async function adminSendDigest(formData: FormData): Promise<void> {
     );
   }
   redirect(`/admin/digests?senderror=${encodeURIComponent(result.reason)}`);
+}
+
+/**
+ * Phone orders (call-in card payments). Both actions create a REAL Stripe
+ * Checkout session for a credit pack ON BEHALF of the member being viewed —
+ * same metadata/webhook path as self-serve, so completing it grants the
+ * credits AND saves the card to that member's Stripe customer (enabling
+ * BUYCREDIT texts). Card numbers never touch this app: they are keyed
+ * directly into Stripe's hosted page — either by the OPERATOR while the
+ * caller reads the card out (open-here), or by the member themselves via a
+ * texted link. Cash/check stays on Adjust credits above.
+ */
+async function phoneOrderSession(
+  formData: FormData,
+  urls: (origin: string, phone: string) => { successUrl?: string; cancelUrl?: string },
+): Promise<{ phone: string; url: string; packCredits: number } | { phone: string; error: string }> {
+  await requireAdmin();
+  const phone = normalizePhone(String(formData.get("phone") ?? ""));
+  if (!phone) redirect("/admin/users");
+  const pack = getPack(String(formData.get("pack") ?? ""));
+  if (!pack) return { phone, error: "phoneorder_pack" };
+  if (paymentsDevMode) return { phone, error: "phoneorder_dev" };
+  // A brand-new caller gets an account minted right here, so the very first
+  // contact with the exchange can be "call in, pay, start posting".
+  await ensureAccount(phone);
+  const requestHeaders = await headers();
+  const origin =
+    process.env.SITE_URL || `https://${requestHeaders.get("host") ?? "localhost:3000"}`;
+  try {
+    const url = await createCheckoutSession({
+      packId: pack.id,
+      credits: pack.credits,
+      priceCents: pack.priceCents,
+      phone,
+      origin,
+      ...urls(origin, phone),
+    });
+    return { phone, url, packCredits: pack.credits };
+  } catch (e) {
+    console.error("[admin] phone-order session failed:", e);
+    return { phone, error: "phoneorder" };
+  }
+}
+
+/** Open the Stripe checkout in the ADMIN's browser — the operator keys in the
+ * card while the caller reads it out, then lands back on the member's page. */
+export async function adminPhoneOrderCheckout(formData: FormData): Promise<void> {
+  const out = await phoneOrderSession(formData, (origin, phone) => ({
+    successUrl: `${origin}/admin/users?phone=${encodeURIComponent(phone)}&saved=phoneorder`,
+    cancelUrl: `${origin}/admin/users?phone=${encodeURIComponent(phone)}&error=phoneorder_cancel`,
+  }));
+  if ("error" in out) redirect(`/admin/users?phone=${out.phone}&error=${out.error}`);
+  redirect(out.url);
+}
+
+/** Text the member a checkout link instead (for callers with someone who can
+ * open a web page). Same session shape; they land on the normal receipt. */
+export async function adminTextCheckoutLink(formData: FormData): Promise<void> {
+  const out = await phoneOrderSession(formData, () => ({}));
+  if ("error" in out) redirect(`/admin/users?phone=${out.phone}&error=${out.error}`);
+  const body =
+    `${site.name}: secure checkout for ${out.packCredits} ad credits — pay by card here ` +
+    `(link good for 24 hours): ${out.url}`;
+  const { sent, reason } = await dispatchSms(out.phone, body, { cls: "reply" });
+  if (!sent) {
+    console.warn(`[admin] checkout-link text suppressed: ${reason ?? "unknown"}`);
+    redirect(`/admin/users?phone=${out.phone}&error=phoneorder_sms`);
+  }
+  await logMessage({ direction: "outbound", channel: "sms", address: out.phone, body });
+  redirect(`/admin/users?phone=${out.phone}&saved=phoneorder_link`);
 }
 
 export async function adminGrantCredits(formData: FormData): Promise<void> {

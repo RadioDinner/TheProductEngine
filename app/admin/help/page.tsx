@@ -328,6 +328,21 @@ export default async function AdminHelp() {
         adding credits twice.
       </p>
 
+      <h2 className="section-h">Taking payment over the phone (Phone order)</h2>
+      <p>
+        On a member&rsquo;s page (Users tab) the <strong>Phone order</strong> section handles a
+        caller paying by card: pick the pack, then either <strong>Open checkout here</strong> —
+        Stripe&rsquo;s secure payment page opens in your browser and you key the card in as the
+        caller reads it out — or <strong>Text them the link</strong> so they finish it
+        themselves (the link lasts 24 hours). The card number goes straight into Stripe and is
+        never seen or stored by this site, so don&rsquo;t write it down either. When the payment
+        goes through, the credits are granted to that member automatically and the card is
+        saved to their account — from then on they can top up by texting{" "}
+        <span className="cmd">BUYCREDIT</span> (a YES confirms and charges the saved card, with
+        the saved-card discount). For cash or a check, skip Stripe entirely and use{" "}
+        <strong>Adjust credits</strong> with a note like &ldquo;check #204&rdquo;.
+      </p>
+
       <h2 className="section-h">Why the website can&rsquo;t read the database directly</h2>
       <p>
         The database has row-level security turned on for every table with no access policies,

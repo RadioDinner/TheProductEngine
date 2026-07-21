@@ -24,13 +24,19 @@ export async function createCheckoutSession(args: {
   priceCents: number;
   phone: string;
   origin: string;
+  /** Where the payer's browser lands after paying/cancelling. Defaults to the
+   * member receipt flow; the admin phone-order flow returns to /admin/users
+   * instead (the member success page only shows the buyer their own order). */
+  successUrl?: string;
+  cancelUrl?: string;
 }): Promise<string> {
   const params = new URLSearchParams({
     mode: "payment",
     client_reference_id: args.phone,
     customer_creation: "always",
-    success_url: `${args.origin}/account/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${args.origin}/account?checkout=cancelled#credits`,
+    success_url:
+      args.successUrl ?? `${args.origin}/account/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: args.cancelUrl ?? `${args.origin}/account?checkout=cancelled#credits`,
     "line_items[0][quantity]": "1",
     "line_items[0][price_data][currency]": "usd",
     "line_items[0][price_data][unit_amount]": String(args.priceCents),

@@ -4,9 +4,11 @@ import {
   adminGrantCredits,
   adminInviteUser,
   adminMergeUsers,
+  adminPhoneOrderCheckout,
   adminSetBan,
   adminSetStrikes,
   adminSetVerified,
+  adminTextCheckoutLink,
 } from "@/lib/admin-actions";
 import {
   ensureUserId,
@@ -19,7 +21,7 @@ import {
 } from "@/lib/store";
 import { listAdsByOwner } from "@/lib/ads";
 import { formatPhone, normalizePhone } from "@/lib/phone";
-import { site } from "@/lib/config";
+import { formatPrice, packs, site } from "@/lib/config";
 
 export const metadata: Metadata = {
   title: `Users — ${site.name} admin`,
@@ -140,6 +142,47 @@ export default async function AdminUsers({
               A non-zero amount and a note are both required.
             </p>
           )}
+          {params.saved === "phoneorder" && (
+            <p className="notice" role="status">
+              Payment complete. The credits are granted (and the card saved) the moment
+              Stripe&rsquo;s confirmation arrives — usually within seconds; refresh to see the
+              new balance in the ledger below.
+            </p>
+          )}
+          {params.saved === "phoneorder_link" && (
+            <p className="notice" role="status">
+              Checkout link texted. When they finish paying, the credits land on this account
+              automatically and the card is saved for BUYCREDIT texts.
+            </p>
+          )}
+          {params.error === "phoneorder_cancel" && (
+            <p className="form-error" role="alert">
+              Checkout was cancelled — nothing was charged.
+            </p>
+          )}
+          {params.error === "phoneorder_pack" && (
+            <p className="form-error" role="alert">
+              Pick a credit pack for the phone order first.
+            </p>
+          )}
+          {params.error === "phoneorder_dev" && (
+            <p className="form-error" role="alert">
+              Payments aren&rsquo;t configured (dev mode) — phone orders need the live Stripe
+              keys.
+            </p>
+          )}
+          {params.error === "phoneorder_sms" && (
+            <p className="form-error" role="alert">
+              The checkout was created but the text could not be sent (paused or blocked
+              number). Try &ldquo;Open checkout here&rdquo; instead.
+            </p>
+          )}
+          {params.error === "phoneorder" && (
+            <p className="form-error" role="alert">
+              Couldn&rsquo;t start the Stripe checkout — try again, and check the Stripe keys
+              if it keeps failing.
+            </p>
+          )}
           {params.saved === "merge" && params.detail && (
             <p className="notice" role="status">
               {params.detail}
@@ -236,6 +279,39 @@ export default async function AdminUsers({
               <input name="note" type="text" placeholder="Required note — e.g. phone order, check #204" required />
               <button className="btn btn-sm" type="submit">
                 Apply
+              </button>
+            </div>
+          </form>
+
+          <h3 className="subsection-h">Phone order — card payment by phone</h3>
+          <p className="fine">
+            For a caller paying by card: pick the pack, then either{" "}
+            <strong>open the checkout here</strong> and key the card into Stripe&rsquo;s secure
+            page while they read it out (never write the number down — it goes straight into
+            Stripe, this site never sees it), or <strong>text them the link</strong> to finish
+            on their own (needs a phone that opens web pages; link lasts 24 hours). Either way
+            the credits land on this account automatically and the card is saved, so from then
+            on they can buy by texting <span className="cmd">BUYCREDIT</span>. Paying by cash or
+            check? Use Adjust credits above instead.
+          </p>
+          <form className="review-form">
+            <input type="hidden" name="phone" value={phone} />
+            <div className="inline-fields">
+              <select name="pack" defaultValue="" className="admin-select" aria-label="Credit pack">
+                <option value="" disabled>
+                  Credit pack…
+                </option>
+                {packs.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.credits} credits — {formatPrice(p.priceCents)}
+                  </option>
+                ))}
+              </select>
+              <button className="btn btn-sm" formAction={adminPhoneOrderCheckout} type="submit">
+                Open checkout here
+              </button>
+              <button className="btn btn-sm btn-secondary" formAction={adminTextCheckoutLink} type="submit">
+                Text them the link
               </button>
             </div>
           </form>
