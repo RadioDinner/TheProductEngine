@@ -235,3 +235,19 @@ at multi-area scale. Flagged code gap: NO MMS budget breaker exists
 outbox) — any broadcast-MMS build needs its own budget knob. Second
 competitor: nothing SMS-based found in the niche; asked user for number
 type / who pays / how subscribers join (or forward one message).
+
+## Credit-system review + phone orders (later in session 011)
+
+User asked to review the credit system: manual crediting, a call-in card
+checkout, Stripe card saving, and automatic re-billing. Findings: manual
+crediting EXISTED (/admin/users "Adjust credits", ledger `adjustment`);
+cards ARE saved in Stripe (customer id only, off_session, PCI-clean);
+text-to-buy EXISTED (BUYCREDIT quote → YES → idempotent off-session
+charge, 10% saved-card discount). The gap was call-in card capture —
+built as FEATURES item 29 (`95acfef`): "Phone order" on the member page —
+operator opens Stripe Checkout in their own browser and keys the caller's
+card, or texts the member the link; the existing webhook grants credits +
+saves the card (BUYCREDIT enabled after). Documented on /admin/help.
+Flagged to user: credit prices ($0.72–1.00) sit below the modeled
+break-even (~$1.65 @150 subs) and bumpCost is still 0; the live
+off-session charge still needs one real-money test.
