@@ -44,3 +44,7 @@ Vercel log is [post] web ad submission failed: {
   hint: 'You will need to rewrite or cast the expression.',
   message: 'column "kind" is of type ledger_kind but expression is of type text'
 }
+
+--- 2026-07-21 11:20 ---
+[/model set to claude-fable-5]
+My competition is sending pictures with every ad. They use an automated 10 digit phone number to manage subscriptions, but a 6 digit short code to send all the ads. I know pictures are very important for advertising. Yesterday I discovered a second competitor sells text ads but im not sure how they work. Analyze this thoroughly, and help me decide if I should pivot to a shortcode number for pictures model, or just keep the /pic request system. I think something different, like my request system, could be a cool option for people that don't want all the images. Idk
