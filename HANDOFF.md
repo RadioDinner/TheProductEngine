@@ -3,7 +3,80 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-07-20 (session 011).
+**Last updated:** 2026-07-23 (session 012).
+
+## Session 012 (2026-07-23) — pay-by-phone card capture added (standalone service)
+
+The user uploaded a new feature (`plainexchangepaybyphone.zip`); it's added
+**unmodified** under `pay-by-phone/` at the repo root — a standalone
+Node/Express service implementing a **Twilio `<Pay>` IVR → Stripe card-on-file**
+flow. Four files (`server.js` ~231 lines, `README.md` full console/ops setup,
+`package.json` with its own express/twilio/stripe deps, `.env.example`).
+
+**What it does:** `POST /voice` reads a stored-credential consent script then
+runs TwiML `<Pay>` in tokenize-only mode (`chargeAmount "0"`,
+`tokenType "payment-method"`) — the caller keys card/expiry/CVC/ZIP on the
+phone keypad and the digits flow carrier → Twilio → Stripe, **never touching
+the operator, this server, or a log**. `POST /pay-result` attaches the
+returned `pm_…` to a Stripe customer keyed by caller phone, sets it default,
+stamps `card_consent_at`, texts a "card saved" confirmation. `POST /charge`
+(bearer `INTERNAL_API_KEY`, called by your order workflow) makes an
+off-session PaymentIntent against the saved card.
+
+**Product-wise it's the PCI-safe upgrade to FEATURES item 29** (call-in card
+checkout). Item 29 today has the OPERATOR key the card into Stripe's page
+while the caller reads it aloud — the exact thing this README warns against.
+This removes the operator from the card path.
+
+**Kept as a SEPARATE deployable, by design:**
+- Twilio **PCI Mode is irreversible and redacts logs account-wide** → it wants
+  its own Twilio account/subaccount (don't put that on the classifieds SMS
+  account). And the main app is on **Telnyx**, not Twilio — there's no shared
+  number to fold into anyway.
+- Build guards so it can't touch prod: `.vercelignore` now excludes
+  `pay-by-phone/` from the Next build/deploy; its `package.json` is not a
+  workspace (the root install ignores it); `tsconfig` globs only `**/*.ts(x)`
+  so `server.js` is never typechecked. The Next app build is untouched.
+
+**NOT wired into member accounts (deliberately deferred — it needs a user
+decision and it touches the production app):** as written the service is an
+island. It finds Stripe customers by `customers.search` on `metadata['phone']`;
+the app charges saved cards via the member account's stored `stripeCustomerId`
+(`chargeSavedCard` → item 29 "Bill their saved card"). So an IVR-saved card is
+**not chargeable from `/admin/users` or by BUYCREDIT** until: (1) the service
+and the app share the **same Stripe account/key**, and (2) a reconciliation
+bridge stamps the IVR-created customer onto that member's `stripeCustomerId`.
+Minimal bridge (recommended next step, when greenlit) — either:
+  a. `/pay-result`, after attaching the card, POSTs `{phone, customerId}` to a
+     new authenticated main-app endpoint that sets `account.stripeCustomerId`; or
+  b. add a phone-based fallback to the app's `firstSavedCard` (search Stripe by
+     `metadata['phone']`) when the account has no stored customer id.
+Either makes the whole item-29 + BUYCREDIT surface work for call-in cards
+automatically. Confirm phone formats line up (app `normalizePhone` E.164 vs
+Twilio `From`/`Caller` E.164 — they should, but verify at build). I offered to
+build this bridge now; the user declined to spec it this turn, so it stays a
+documented seam, not built.
+
+**Review notes (added as-is; flagged for when it's relied on in prod):**
+- Consent/PCI is sound: the spoken script covers saving the card AND future
+  off-session charges + cancellation — a proper stored-credential mandate.
+- `/charge` auth is a shared bearer token; the README's own hardening checklist
+  is the pre-reliance punch list (enforce prod webhook signatures, keep your
+  own phone→customer table instead of Stripe search which lags ~1 min, log
+  `PayErrorCode`, optional PIN before `<Pay>` for shared shanty numbers). No
+  rate limit on `/charge` and a non-constant-time token compare — low risk
+  behind a private caller, worth tightening if the endpoint is ever exposed.
+- Twilio webhook signature validation is enforced only when
+  `NODE_ENV=production` (dev-open for ngrok testing, by design).
+
+**Ops to go live (from the README):** Stripe account → Twilio voice number →
+enable PCI Mode → install the Stripe Pay Connector (name it `Default`) → point
+the number's voice webhook at `https://<host>/voice` → fill `.env` → deploy →
+test with card `4242…`. Costs ≈ $0.20 to save a card, ≈ 3% + $0.45 per charge.
+
+**Git:** developed on the designated task branch
+`claude/new-feature-upload-zh3y9p` (NOT `main` this session). Committed + pushed
+there. Full detail: `Session log/012_2026-07-23/session_log.md`.
 
 ## Session 011 (2026-07-20) — digest decision + location-specific direction
 

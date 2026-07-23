@@ -38,6 +38,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 28 | **"NEW AD" leniency** — accept the reversed word order (and run-together "NEWAD") as "AD NEW", so flip-phone typers who send "NEW AD …" get their ad posted instead of a "did you mean to post an ad?" reply | session 011 | **built** (no migration) |
 | 29 | **Phone-order card checkout + saved-card billing** — on a member's /admin/users page: shows whether a card is on file; **Bill their saved card** charges it on a verbal OK (BUYCREDIT pricing + discount, double-click-safe); no card yet → open the Stripe checkout in the operator's browser (key the card in while the caller reads it out) or text the member the checkout link; paying grants the credits and saves the card for BUYCREDIT texts | session 011 | **built** (no migration) |
 | 30 | **Homepage promo banner** — an operator-set banner at the top of the homepage for running credit sales; text + link live on /admin/settings (clear the text to hide it; link must be a page on this site, falls back to the credits section) | session 011 | **built** (no migration — new config keys fall back to defaults) |
+| 31 | **Pay-by-phone card capture** (Twilio `<Pay>` IVR → Stripe card on file) — callers key their OWN card into the phone keypad on a dedicated voice number; Twilio's Stripe Pay Connector tokenizes it (digits never touch the operator, this server, or a log) and it's saved to a Stripe customer; a bearer-authed `POST /charge` bills it off-session per order. The PCI-safe replacement for item 29's operator-keys-the-card call-in flow | session 012 | **added as standalone service** (`pay-by-phone/` — its own Twilio+Stripe deploy; NOT yet wired into member accounts — see note) |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -305,3 +306,34 @@ itself; build details live in the session logs and HANDOFF.md.
   this item is mostly naming/copy + making the area a visible, browsable
   product concept, NOT multi-tenant plumbing; don't build area switching
   until an actual second area is greenlit.
+- **31 · pay-by-phone card capture** (arrived session 012 — user uploaded
+  `plainexchangepaybyphone.zip`; added **as-is**, unmodified). A standalone
+  Node/Express service under `pay-by-phone/`: `POST /voice` reads a
+  stored-credential consent script then runs TwiML `<Pay>` in tokenize-only
+  mode (`chargeAmount "0"`, `tokenType "payment-method"`) so the caller keys
+  card/expiry/CVC/ZIP on the keypad and the digits go carrier → Twilio →
+  Stripe, never to this app; `POST /pay-result` attaches the returned `pm_…`
+  to a Stripe customer keyed by caller phone, sets it default, stamps
+  `card_consent_at`, texts a confirmation; `POST /charge` (bearer
+  `INTERNAL_API_KEY`) makes an off-session PaymentIntent against the saved
+  card. **Kept separate on purpose:** Twilio **PCI Mode is irreversible and
+  redacts logs account-wide**, so it wants its own Twilio account/subaccount,
+  and the main app is on **Telnyx** (no shared number to fold into). Build
+  guards: `.vercelignore` excludes it from the Next deploy; its `package.json`
+  is not a workspace (root install ignores it); `tsconfig` globs only
+  `**/*.ts(x)` so `server.js` isn't typechecked.
+  **NOT wired to member accounts yet (deferred — needs a user decision + it
+  touches prod):** as written it's an island. It finds Stripe customers by
+  `customers.search` on `metadata['phone']`; the app charges saved cards via
+  the account's stored `stripeCustomerId` (`chargeSavedCard` → item 29 "Bill
+  their saved card"). So an IVR-saved card is not chargeable from
+  `/admin/users` or by BUYCREDIT until (1) the service and app share **one
+  Stripe account/key**, and (2) a small bridge stamps the IVR customer onto
+  the member's `stripeCustomerId` — the recommended options: have
+  `/pay-result` POST `{phone, customerId}` to a new authed main-app endpoint
+  that sets `account.stripeCustomerId`, OR add a phone-search fallback to the
+  app's `firstSavedCard` when the account has no stored customer id. Confirm
+  phone formats line up (app `normalizePhone` vs Twilio `From`/`Caller`, both
+  E.164). Pre-reliance punch list is the README's own hardening checklist
+  (enforce prod webhook signatures, own phone→customer table, log
+  `PayErrorCode`, optional PIN for shared shanty numbers).

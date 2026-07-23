@@ -1,0 +1,5 @@
+# pay-by-phone/ is a SEPARATE deployable, not part of the Vercel Next.js app.
+# It runs on its own host with its own Twilio (irreversible PCI Mode) account
+# and Stripe key. Keep it out of the Next build/deploy so it can never affect
+# production. See pay-by-phone/README.md.
+pay-by-phone/
