@@ -62,7 +62,8 @@ path is well-engineered.
    worthwhile: burn a member's free passes and post one credit-charged ad
    in prod — that's the only path that exercises the fixed RPC.
 3. ~~Fix the CAN-SPAM address~~ **✅ fixed 2026-07-28: "PO Box 216 ·
-   Millersburg, OH 44654"** (user-supplied box number; on `main`).
+   Beach City, OH 44608"** (user-supplied box + city; ZIP is Beach City's
+   standard 44608 — user should flag if their box uses a different ZIP).
 4. ~~Verify ADMIN_EMAIL~~ **✅ user reports fixed 2026-07-28.** Confirm
    delivery once: post a test ad and check the review-alert email arrives.
 5. **Confirm what pings the digest cron** (LAUNCH A5, open since session

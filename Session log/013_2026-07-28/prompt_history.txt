@@ -10,3 +10,6 @@ Update the CAN-SPAM to PO Box 216
 
 --- 2026-07-28 ---
 I fixed the ADMIN_EMAIL. I'm not sure what you mean by saying the digest cron trigger
+
+--- 2026-07-28 ---
+City should be Beach City, not Millersburg.
