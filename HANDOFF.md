@@ -66,10 +66,12 @@ path is well-engineered.
    standard 44608 — user should flag if their box uses a different ZIP).
 4. ~~Verify ADMIN_EMAIL~~ **✅ user reports fixed 2026-07-28.** Confirm
    delivery once: post a test ad and check the review-alert email arrives.
-5. **Confirm what pings the digest cron** (LAUNCH A5, open since session
-   003). vercel.json schedules */5 and digests HAVE composed since Jul 14 —
-   so something works; identify it (paid Vercel plan cron?) so it isn't an
-   unknown single point of failure. The public site fills from it.
+5. ~~Confirm what pings the digest cron~~ **✅ IDENTIFIED 2026-07-28: it's
+   Vercel's native cron** (user's logs: 200 every 5 min at :34s, hitting
+   the deployment-specific hosts; kept firing on the fresh deployment hash
+   right after the session-013 merge). LAUNCH §A5 checked off with the
+   external-pinger fallback documented in case the Vercel plan ever
+   changes.
 6. **Verify photos@ + subscribe@ inbound end-to-end** (RESEND_WEBHOOK_SECRET
    set? domain verified? MX added?). Fail-closed means: if unset, emailed-in
    photos silently do nothing.

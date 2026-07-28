@@ -13,3 +13,40 @@ I fixed the ADMIN_EMAIL. I'm not sure what you mean by saying the digest cron tr
 
 --- 2026-07-28 ---
 City should be Beach City, not Millersburg.
+
+--- 2026-07-28 ---
+Logs
+
+requestPath:/api/cron/digests 
+13:22:0013:28:3013:34:4013:40:5013:51:00
+Time
+Status
+Host
+Request
+Messages
+TimeMethodStatusHostRequestMessage
+Live Mode
+Jul 28 13:50:36.98
+GET200
+the-product-engine-gawpb8exm-ilandedits-projects.vercel.app
+/api/cron/digests
+Jul 28 13:45:34.12
+GET200
+the-product-engine-2o6v00a1i-ilandedits-projects.vercel.app
+/api/cron/digests
+Jul 28 13:40:34.08
+GET200
+the-product-engine-2o6v00a1i-ilandedits-projects.vercel.app
+/api/cron/digests
+Jul 28 13:35:34.34
+GET200
+the-product-engine-2o6v00a1i-ilandedits-projects.vercel.app
+/api/cron/digests
+Jul 28 13:30:34.06
+GET200
+the-product-engine-2o6v00a1i-ilandedits-projects.vercel.app
+/api/cron/digests
+Jul 28 13:25:34.08
+GET200
+the-product-engine-2o6v00a1i-ilandedits-projects.vercel.app
+/api/cron/digests

@@ -67,26 +67,21 @@ Redeploy after any change — env edits never touch running deployments.
       a real phone). Sanity-check any time at `/admin/sms-diag`.
 
 ### A5. Digest cron — THE silent launch-killer
-**Empirically WORKING as of 2026-07-16** (session 007): digests have composed
-on schedule at every slot since Jul 14, so something already pings
-`/api/cron/digests` every few minutes — most likely the `vercel.json` cron on
-a paid plan. Confirm the source in Vercel → Settings → Cron Jobs so it's a
-known dependency, then check this section off. Original guidance kept below
-in case the plan ever changes:
-
-Vercel **Hobby runs crons at most once per day**; the `*/5` schedule in
-`vercel.json` will not fire every 5 minutes on Hobby, and digests simply
-won't send. Pick one:
-- [ ] Upgrade the Vercel project to Pro (the vercel.json cron then works
-      as written), **or**
-- [ ] Free external pinger (cron-job.org, UptimeRobot, etc.):
-      `GET https://www.theplainexchange.com/api/cron/digests`
-      every 5 minutes with header `Authorization: Bearer <CRON_SECRET>`.
-- [ ] Verify: hit the URL once with the header — expect
-      `{"ok":true,"sms":[…],"email":[…],"drain":{…}}`, and 401 without it.
-      (`drain` is the outbox delivery pass: `sent` / `failed` / `remaining` /
-      `halted` — `halted:true` means the daily digest segment budget in
-      `/admin/settings` stopped sending and queued rows are waiting.)
+- [x] **CONFIRMED 2026-07-28 (session 013): it's Vercel's own cron.** The
+      user's request logs show `GET /api/cron/digests` returning 200 every
+      5 minutes on the dot (:34s past the minute), addressed to the
+      deployment-specific `the-product-engine-*.vercel.app` hosts — the
+      exact signature of Vercel's native cron running the `vercel.json`
+      `*/5` schedule (so the plan supports sub-daily crons). The 13:50 run
+      hit a NEW deployment hash minutes after the session-013 merge, so the
+      cron follows fresh production deploys automatically. Known
+      dependency: if the project ever moves off this Vercel plan, revisit
+      the fallback below.
+      Fallback if the plan ever changes (Hobby runs crons at most once per
+      day): external pinger (cron-job.org, UptimeRobot, etc.) —
+      `GET https://www.theplainexchange.com/api/cron/digests` every 5
+      minutes with header `Authorization: Bearer <CRON_SECRET>`; verify
+      with one manual hit (expect `{"ok":true,…}`, 401 without the header).
 
 ### A6. Stripe (live)
 - [ ] One test-mode purchase first (test keys, card `4242 4242 4242 4242`):
