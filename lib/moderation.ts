@@ -20,6 +20,7 @@ import {
 } from "@/lib/store";
 import { getEngineSettings } from "@/lib/settings";
 import { dispatchSms } from "@/lib/outbound";
+import { adRefundableTotal } from "@/lib/myads";
 
 async function notify(phone: string, body: string): Promise<void> {
   // "reply" class: a FULL pause suppresses these seller notices, a PARTIAL
@@ -67,23 +68,20 @@ export async function rejectAd(
   if (!transitioned) return;
 
   if (kind === "benign") {
-    // Full refund of whatever the submission charged (spec Q4/Q8). Match the
-    // ad id as a delimited token — a bare `includes("Ad #12")` also matches
-    // "Ad #125", so refund could resolve to the wrong (larger) charge.
+    // Full refund of whatever the submission charged (spec Q4/Q8) — the base
+    // charge PLUS any picture-upgrade charge (item 32), netted against an
+    // upgrade already returned by a failed attach. adRefundableTotal matches
+    // ad ids as delimited tokens, so #12 never resolves to #125's charge.
     const ledger = await getLedger(ad.ownerPhone);
-    const charge = ledger.find(
-      (entry) =>
-        entry.kind === "spend" &&
-        (entry.note.includes(`Ad #${id} (`) || entry.note.includes(`ad #${id} (`)),
-    );
+    const owed = adRefundableTotal(ledger, id);
     let refundNote = "charge";
-    if (charge && charge.delta < 0) {
+    if (owed > 0) {
       await addLedgerEntry(ad.ownerPhone, {
-        delta: -charge.delta,
+        delta: owed,
         kind: "refund",
         note: `Refund — ad #${id} not accepted`,
       });
-      refundNote = `${-charge.delta} credit${-charge.delta === 1 ? "" : "s"}`;
+      refundNote = `${owed} credit${owed === 1 ? "" : "s"}`;
     } else {
       await grantFreeAd(ad.ownerPhone);
       await addLedgerEntry(ad.ownerPhone, {

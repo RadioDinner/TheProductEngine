@@ -41,6 +41,19 @@ export function run(t) {
   // Trailing punctuation on a single-word keyword still routes (compliance: STOP.)
   t.eq("STOP. -> stop", parseCommand("STOP.").kind, "stop");
   t.eq("Stop! -> stop", parseCommand("Stop!").kind, "stop");
+
+  // CTIA/FCC opt-out words (session 013). END/REVOKE/OPTOUT are sole-keyword
+  // only — real messages starting with those words must never unsubscribe.
+  t.eq("END -> stop", parseCommand("END").kind, "stop");
+  t.eq("STOPALL -> stop", parseCommand("STOPALL").kind, "stop");
+  t.eq("REVOKE -> stop", parseCommand("Revoke").kind, "stop");
+  t.eq("OPTOUT -> stop", parseCommand("optout").kind, "stop");
+  t.eq("OPT-OUT -> stop", parseCommand("OPT-OUT").kind, "stop");
+  t.eq("OPT OUT -> stop", parseCommand("OPT OUT").kind, "stop");
+  t.eq("END. -> stop", parseCommand("END.").kind, "stop");
+  t.eq("'End table for sale' is NOT a stop", parseCommand("End table for sale $30").kind, "unknown");
+  t.eq("'Revoke my ad' is NOT a stop", parseCommand("Revoke my ad 1042").kind, "unknown");
+  t.eq("'opt for the buggy' is NOT a stop", parseCommand("opt for the buggy").kind, "unknown");
   t.eq("YES. -> confirm", parseCommand("YES.").kind, "confirm");
   t.eq("SUBSCRIBE, -> subscribe", parseCommand("SUBSCRIBE,").kind, "subscribe");
   t.eq("credits! (no arg) -> credits", parseCommand("credits!").kind, "credits");

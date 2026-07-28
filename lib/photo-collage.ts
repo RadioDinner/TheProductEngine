@@ -72,7 +72,10 @@ export async function combineImageBuffers(images: Buffer[]): Promise<Buffer> {
   const slots = layoutFor(use.length);
   const cells = await Promise.all(
     use.map((buf, i) =>
-      sharp(buf)
+      // limitInputPixels: sender bytes could be a decompression bomb — a
+      // small JPEG expanding past 64MP throws (caught by callers' fallback)
+      // instead of eating the function's memory.
+      sharp(buf, { limitInputPixels: 64_000_000 })
         .rotate()
         .resize(slots[i].width, slots[i].height, { fit: "cover" })
         .jpeg({ quality: 90 })

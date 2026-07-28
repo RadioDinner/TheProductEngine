@@ -54,6 +54,7 @@ import {
   deleteBumpRefundRef,
   deleteRefundDecision,
   deleteRefundRef,
+  adRefundableTotal,
   findAdCharge,
   findUnrefundedBumpCharge,
   hasBenignRejectRefund,
@@ -366,14 +367,17 @@ export async function deleteMine(formData: FormData): Promise<void> {
       refundParam = "none"; // refunded once already — never twice
     } else {
       const charge = findAdCharge(ledger, ad.id);
-      if (charge && charge.delta < 0) {
+      // Base charge + picture upgrade (item 32), net of any upgrade already
+      // returned by a failed attach.
+      const owed = adRefundableTotal(ledger, ad.id);
+      if (owed > 0) {
         await addLedgerEntry(phone, {
-          delta: -charge.delta,
+          delta: owed,
           kind: "refund",
           note: `Refund — ad #${ad.id} deleted before it ran`,
           ref,
         });
-        refundParam = `credits&amount=${-charge.delta}`;
+        refundParam = `credits&amount=${owed}`;
       } else if (charge) {
         // A delta-0 spend = the ad was covered by a free ad pass.
         await grantFreeAd(phone);

@@ -99,6 +99,31 @@ export function findAdCharge<T extends LedgerLike>(ledger: T[], adId: number): T
 }
 
 /**
+ * Everything still owed back for an ad's submission-lane charges: the base
+ * `Ad #<id> (kind)` spend PLUS any `Ad #<id> (picture upgrade)` spend (item
+ * 32 — a picture texted to a text ad charges the difference as its own
+ * entry), MINUS upgrade money already returned by a failed-attach refund.
+ * Zero for pass-paid ads (their spends are delta 0) — callers keep the
+ * return-the-pass branch for that.
+ */
+export function adRefundableTotal(ledger: LedgerLike[], adId: number): number {
+  const spent = ledger
+    .filter(
+      (entry) =>
+        entry.kind === "spend" &&
+        (entry.note.includes(`Ad #${adId} (`) || entry.note.includes(`ad #${adId} (`)),
+    )
+    .reduce((sum, entry) => sum + entry.delta, 0);
+  const upgradeReturned = ledger
+    .filter(
+      (entry) =>
+        entry.kind === "refund" && entry.note.includes(`ad #${adId} (picture upgrade)`),
+    )
+    .reduce((sum, entry) => sum + entry.delta, 0);
+  return Math.max(0, -spent - upgradeReturned);
+}
+
+/**
  * True when this ad's charge was ALREADY returned by a benign rejection
  * (lib/moderation.ts notes: "Refund — ad #N not accepted" / "Free ad returned
  * — ad #N not accepted"). A delete must never refund a second time. The

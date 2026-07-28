@@ -74,7 +74,21 @@ export function parseCommand(raw: string): Command {
     case "unsubscribe":
     case "cancel":
     case "quit":
+    case "stopall":
       return { kind: "stop" };
+    case "end":
+    case "revoke":
+    case "optout":
+    case "opt-out":
+      // CTIA/FCC opt-out words — but SOLE-keyword only: "End table for sale"
+      // and "Revoke my ad" are real messages, not opt-outs. (STOP-family
+      // words above keep routing even with trailing text, as they always did.)
+      if (!rest) return { kind: "stop" };
+      return { kind: "unknown", text };
+    case "opt":
+      // "OPT OUT" as two words.
+      if (/^out\W*$/i.test(rest)) return { kind: "stop" };
+      return { kind: "unknown", text };
     case "start":
     case "unstop":
       return { kind: "start" };

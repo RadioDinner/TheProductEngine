@@ -24,6 +24,7 @@ import { getLedger } from "@/lib/store";
 import { getEngineSettings } from "@/lib/settings";
 import {
   deleteRefundDecision,
+  adRefundableTotal,
   findAdCharge,
   findUnrefundedBumpCharge,
   hasBenignRejectRefund,
@@ -117,8 +118,9 @@ export default async function MyAdsPage({
               : "This ad is closed (sold or ended), so there is no refund — deleting just takes it off the website.";
       } else if (hasBenignRejectRefund(ledger, target.id)) {
         confirmMoney = "This ad's charge was already refunded once, so deleting returns nothing more.";
-      } else if (charge && charge.delta < 0) {
-        confirmMoney = `This ad hasn't run in any digest yet. Delete it and your ${credits(-charge.delta)} come${-charge.delta === 1 ? "s" : ""} back.`;
+      } else if (adRefundableTotal(ledger, target.id) > 0) {
+        const owed = adRefundableTotal(ledger, target.id);
+        confirmMoney = `This ad hasn't run in any digest yet. Delete it and your ${credits(owed)} come${owed === 1 ? "s" : ""} back.`;
       } else if (charge) {
         confirmMoney =
           "This ad hasn't run in any digest yet. Delete it and your free ad pass comes back.";

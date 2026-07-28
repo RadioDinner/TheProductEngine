@@ -7,6 +7,7 @@ import {
   deleteBumpRefundRef,
   deleteRefundDecision,
   deleteRefundRef,
+  adRefundableTotal,
   findAdCharge,
   findUnrefundedBumpCharge,
   hasBenignRejectRefund,
@@ -87,6 +88,22 @@ export function run(t) {
   t.eq("ad #12 does not match ad #125", findAdCharge(ledger, 12)?.note, "Free ad used — ad #12 (text)");
   t.eq("#125 finds its own charge", findAdCharge(ledger, 125)?.delta, -5);
   t.eq("no charge → undefined", findAdCharge(ledger, 999), undefined);
+
+  // ---- the refundable total (base + picture upgrade, item 32) ----
+  t.eq("total for a plain credit charge", adRefundableTotal(ledger, 1042), 1);
+  t.eq("total for a pass-paid ad is 0", adRefundableTotal(ledger, 12), 0);
+  t.eq("total for no charge is 0", adRefundableTotal(ledger, 999), 0);
+  const upgraded = [
+    ...ledger,
+    { kind: "spend", delta: -8, note: "Ad #1042 (picture upgrade)" },
+  ];
+  t.eq("upgrade joins the refund total", adRefundableTotal(upgraded, 1042), 9);
+  t.eq("#104 does not absorb #1042's upgrade", adRefundableTotal(upgraded, 104), 0);
+  const upgradeReturned = [
+    ...upgraded,
+    { kind: "refund", delta: 8, note: "Refund — ad #1042 (picture upgrade) didn't attach" },
+  ];
+  t.eq("a failed-attach refund nets out of the total", adRefundableTotal(upgradeReturned, 1042), 1);
 
   // ---- the never-refund-twice guard ----
   const refunded = [

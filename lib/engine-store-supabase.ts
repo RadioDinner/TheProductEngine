@@ -174,10 +174,10 @@ export async function latestPendingAdFor(
 
 /**
  * Install/replace the position-0 picture and append gallery originals
- * (item 32). Row-first ordering keeps a crash from ever leaving a broken
- * image: the position-0 row points at the new src before the caller removes
- * any replaced storage object. Returns the previous position-0 src, or null
- * if the ad is gone/deleted.
+ * (item 32). PENDING ads only. Row-first ordering keeps a crash from ever
+ * leaving a broken image: the position-0 row points at the new src before
+ * the caller removes any replaced storage object. Returns the previous
+ * position-0 src, or null if the ad is not pending anymore.
  */
 export async function attachAdPhotos(
   id: number,
@@ -190,7 +190,9 @@ export async function attachAdPhotos(
     .eq("id", id)
     .maybeSingle();
   if (adError) throw adError;
-  if (!adRow || adRow.status === "deleted") return null;
+  // Pending only: a reviewed (approved/rejected/deleted) ad must never gain
+  // an unreviewed picture from a follow-up racing the admin's decision.
+  if (!adRow || adRow.status !== "pending") return null;
   const { data: rows, error: rowsError } = await db()
     .from("ad_photos")
     .select("id, src, position")

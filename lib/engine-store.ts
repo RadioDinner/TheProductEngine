@@ -391,7 +391,9 @@ const file = {
   ): { oldPrimarySrc: string | null } | null {
     const store = load();
     const ad = store.ads.find((a) => a.id === id);
-    if (!ad || ad.status === "deleted") return null;
+    // Pending only: a reviewed (approved/rejected/deleted) ad must never gain
+    // an unreviewed picture from a follow-up racing the admin's decision.
+    if (!ad || ad.status !== "pending") return null;
     const oldPrimarySrc = ad.photo?.src ?? null;
     if (primary) ad.photo = primary;
     if (addParts.length) (ad.morePhotos ??= []).push(...addParts);
@@ -1064,8 +1066,10 @@ export async function latestPendingAdFor(phone: string, sinceIso: string): Promi
 
 /**
  * Install/replace the position-0 picture and append gallery originals
- * (item 32). Returns the previous position-0 src (the caller removes the old
- * storage object when it was a replaced collage), or null if the ad is gone.
+ * (item 32). PENDING ads only — a reviewed ad never gains an unreviewed
+ * picture. Returns the previous position-0 src (the caller removes the old
+ * storage object when it was a replaced collage), or null if the ad is not
+ * pending anymore.
  */
 export async function attachAdPhotos(
   id: number,

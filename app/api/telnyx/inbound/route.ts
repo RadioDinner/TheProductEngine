@@ -11,6 +11,12 @@ import { isProduction } from "@/lib/env";
 
 const TELNYX_TOLERANCE_S = 300;
 
+// The multi-picture combine (item 32) made this the heaviest route in the
+// app: up to 4 media fetches + sharp compose + storage writes on one inbound
+// message. The platform default timeout could kill it mid-work — and a timed-
+// out inbound is permanently eaten by the retry dedup.
+export const maxDuration = 60;
+
 /** null = verified; otherwise the reason, logged so a rejected webhook is
  * diagnosable from the Vercel function logs instead of a bare 401. */
 function signatureRejection(raw: string, req: NextRequest): string | null {

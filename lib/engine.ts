@@ -330,6 +330,21 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
 /** How long after posting a pending ad still accepts follow-up pictures. */
 const PHOTO_FOLLOWUP_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+/** The pending ad was approved/rejected/deleted between lookup and attach —
+ * attachAdPhotos only touches pending ads, so a reviewed ad never gains an
+ * unreviewed picture. */
+class AdLeftReviewError extends Error {}
+
+/** How to post when a picture arrives with nothing to attach it to. Silent
+ * while UNDER ATTACK — an MMS flood must not each earn a reply. */
+function photoGuidance(count: number, settings: EngineSettings): Reply | null {
+  if (settings.underAttack) return null;
+  const many = count > 1;
+  return {
+    body: `To post an ad with ${many ? "these pictures" : "this picture"}, resend ${many ? "them" : "it"} with your ad text, like: AD NEW Horse cart for sale $1,000, call ${site.smsNumber}.`,
+  };
+}
+
 /**
  * A photo-only message while the sender has a fresh pending ad = more
  * pictures for that ad (item 32). Phones routinely send "AD NEW …" and the
@@ -405,22 +420,45 @@ async function handlePhotoFollowup(
   // either kind) or the upgrade was already charged (picture trickles).
   // Ads that already have a picture paid the picture price; more pictures for
   // the one collage photo cost nothing extra.
+  //
+  // The charge note carries the delimited `Ad #<id> (` token, so the benign-
+  // reject and member-delete refund paths (adRefundableTotal) return the
+  // upgrade along with the base charge. Charged-ness is counted as charges
+  // minus failed-attach refunds, so a retry after a refund pays again; the
+  // debit itself is a ref-guarded ledger insert keyed on that refund count —
+  // two concurrent photo messages race to ONE ref, so a double-charge is
+  // impossible (the duplicate insert no-ops). The balance check isn't atomic
+  // with the insert (unlike spendCredits), but the worst concurrent case is
+  // a small visible negative balance — traded for double-charge immunity.
   let chargeNote = "";
   let upgradeCharged = 0;
+  let upgradeAttempt = 0;
   if (!ad.photo) {
-    const upgradeNote = `Ad #${ad.id} picture upgrade`;
+    const upgradeToken = `Ad #${ad.id} (picture upgrade)`;
     const delta = Math.max(0, settings.costPhoto - settings.costText);
     if (delta > 0) {
       const ledger = await getLedger(from);
-      const alreadyCharged = ledger.some((e) => e.note?.startsWith(upgradeNote));
-      const paidByPass = ledger.some((e) => e.note?.startsWith(`Free ad used — ad #${ad.id}`));
-      if (!alreadyCharged && !paidByPass) {
+      const charges = ledger.filter(
+        (e) => e.kind === "spend" && e.note?.includes(upgradeToken),
+      ).length;
+      const refunds = ledger.filter(
+        (e) => e.kind === "refund" && e.note?.includes(`ad #${ad.id} (picture upgrade)`),
+      ).length;
+      const paidByPass = ledger.some((e) => e.note?.includes(`Free ad used — ad #${ad.id} (`));
+      if (charges <= refunds && !paidByPass) {
         const balance = await getCreditBalance(from);
-        if (balance < delta || !(await spendCredits(from, delta, upgradeNote))) {
+        if (balance < delta) {
           return {
             body: `Adding a picture to ad #${ad.id} takes ${delta} more credit${delta === 1 ? "" : "s"} (picture ads cost ${settings.costPhoto}) and you have ${balance}. Buy credits at ThePlainExchange.com, or call ${site.supportPhone}, then send the picture again.`,
           };
         }
+        upgradeAttempt = refunds;
+        await addLedgerEntry(from, {
+          delta: -delta,
+          kind: "spend",
+          note: upgradeToken,
+          ref: `ad-${ad.id}-pic-upgrade-r${upgradeAttempt}`,
+        });
         upgradeCharged = delta;
         chargeNote = ` (${delta} credit${delta === 1 ? "" : "s"} — ${Math.max(0, balance - delta)} left.)`;
       }
@@ -445,14 +483,13 @@ async function handlePhotoFollowup(
         width: 800,
         height: 600,
       }));
-      await attachAdPhotos(ad.id, primary, newParts);
+      if (!(await attachAdPhotos(ad.id, primary, newParts))) throw new AdLeftReviewError();
     } else if (shownCount === 1) {
       // A text ad gaining its one picture: same shape as a single-picture AD NEW.
       const stored = await storeImageBytes(newBuffers[0]);
       if (!stored.ok) throw new Error(stored.reason);
       primary = { src: stored.url, alt: title, width: 800, height: 600 };
-      const attached = await attachAdPhotos(ad.id, primary, []);
-      if (!attached) throw new Error(`ad #${ad.id} disappeared during attach`);
+      if (!(await attachAdPhotos(ad.id, primary, []))) throw new AdLeftReviewError();
     } else {
       // Collage rebuild. Gather the existing originals' bytes; the legacy
       // single-picture primary also needs a `parts/` gallery copy since the
@@ -520,7 +557,7 @@ async function handlePhotoFollowup(
         }
       }
       const attached = await attachAdPhotos(ad.id, primary, newParts);
-      if (!attached) throw new Error(`ad #${ad.id} disappeared during attach`);
+      if (!attached) throw new AdLeftReviewError();
       if (removeSrcs.length && attached.oldPrimarySrc === primarySrc) {
         await removeHostedPhotos(removeSrcs);
       }
@@ -538,13 +575,23 @@ async function handlePhotoFollowup(
       : `Got it! ${newCount === 1 ? "Your picture was" : `${newCount} pictures were`} added to ad #${ad.id} (${title}). It's waiting for review.${chargeNote}${note}`;
     return { body };
   } catch (e) {
-    // Undo the upgrade charge — the pictures didn't make it onto the ad.
+    // Undo the upgrade charge — the pictures didn't make it onto the ad. The
+    // note carries the `ad #<id> (picture upgrade)` token so the charged-ness
+    // count above sees it (a later retry charges again) and adRefundableTotal
+    // nets it out of a subsequent reject/delete refund; the ref makes a
+    // doubled failure path refund exactly once.
     if (upgradeCharged > 0) {
       await addLedgerEntry(from, {
         delta: upgradeCharged,
         kind: "refund",
-        note: `Refund — ad #${ad.id} picture upgrade failed`,
+        note: `Refund — ad #${ad.id} (picture upgrade) didn't attach`,
+        ref: `ad-${ad.id}-pic-upgrade-refund-r${upgradeAttempt}`,
       }).catch(() => {});
+    }
+    if (e instanceof AdLeftReviewError) {
+      return {
+        body: `Ad #${ad.id} already went through review, so this picture wasn't added.${upgradeCharged ? " Nothing extra was charged." : ""} Text AD NEW with your pictures to post a new ad, or call ${site.supportPhone}.`,
+      };
     }
     console.error(`[engine] photo follow-up failed for ad #${ad.id}:`, e);
     return {
@@ -810,11 +857,7 @@ async function route(
   // (spec Q13).
   if (msg.media?.length && command.kind === "unknown" && !msg.text.trim()) {
     const attached = await handlePhotoFollowup(from, msg.media, settings);
-    if (attached) return attached;
-    const many = msg.media.length > 1;
-    return {
-      body: `To post an ad with ${many ? "these pictures" : "this picture"}, resend ${many ? "them" : "it"} with your ad text, like: AD NEW Horse cart for sale $1,000, call ${site.smsNumber}.`,
-    };
+    return attached ?? photoGuidance(msg.media.length, settings);
   }
 
   // An open conversational prompt may consume a non-command message — the
@@ -822,6 +865,14 @@ async function route(
   if (command.kind === "unknown") {
     const answered = await answerBuyerPhone(from, command.text);
     if (answered) return answered;
+    // A picture WITH a caption ("here's another photo of the buggy") gets the
+    // same treatment as a bare picture — attach to the fresh pending ad, else
+    // guide. Silently losing a texted picture is worse than misreading a
+    // caption (item 32 audit fix).
+    if (msg.media?.length) {
+      const attached = await handlePhotoFollowup(from, msg.media, settings);
+      return attached ?? photoGuidance(msg.media.length, settings);
+    }
   }
 
   switch (command.kind) {
