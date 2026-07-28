@@ -211,8 +211,9 @@ export default async function AdminHelp() {
 
       <h2 className="section-h">Emailed-in extra pictures (Ads tab)</h2>
       <p>
-        Sellers (or a helper with email) can send <strong>more pictures for an ad</strong> to the
-        photos@ inbound address with the ad number in the subject line (&ldquo;Ad 1042&rdquo;).
+        Sellers (or a helper with email) can send <strong>more pictures for an ad</strong> to
+        <strong> ads@theplainexchange.com</strong> with the ad number in the subject line
+        (&ldquo;Ad 1042&rdquo;; the old photos@ address still works too).
         Each image is verified by its bytes and copied into our storage exactly like an MMS
         photo, then waits as a submission on the <strong>Ads tab</strong> — nothing goes live
         until you approve it there, because an email From line is easy to fake. Approved

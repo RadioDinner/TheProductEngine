@@ -31,7 +31,7 @@ import { supabaseConfigured } from "@/lib/db";
 
 const TOLERANCE_S = 300;
 const INBOUND_ADDRESS = (process.env.EMAIL_INBOUND_ADDRESS ?? "subscribe@theplainexchange.com").toLowerCase();
-const PHOTOS_ADDRESS = (process.env.EMAIL_PHOTOS_ADDRESS ?? "photos@theplainexchange.com").toLowerCase();
+const PHOTOS_ADDRESS = (process.env.EMAIL_PHOTOS_ADDRESS ?? "ads@theplainexchange.com").toLowerCase();
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Verify a Svix-signed webhook (Resend's scheme). */
@@ -128,8 +128,9 @@ async function resendAttachmentUrls(emailId: string): Promise<InboundAttachment[
 }
 
 /**
- * Emailed-in extra ad pictures (FEATURES item 1): a message to photos@ with
- * the ad number in the subject ("Ad 1042" / "#1042") and pictures attached.
+ * Emailed-in extra ad pictures (FEATURES item 1): a message to ads@ (or the
+ * legacy photos@) with the ad number in the subject ("Ad 1042" / "#1042")
+ * and pictures attached.
  * Every image is byte-sniffed and re-hosted exactly like an MMS photo, then
  * parked as a SUBMISSION awaiting admin review on /admin/ads — the sender
  * address is spoofable, so review is the gate, and nothing goes live here.
@@ -260,8 +261,13 @@ export async function POST(req: NextRequest) {
     ...addressList(data.to),
     ...addressList((data.envelope as Record<string, unknown> | undefined)?.to),
   ];
-  // photos@ = emailed-in extra pictures for an ad (FEATURES item 1).
-  const toPhotos = recipients.some((r) => r === PHOTOS_ADDRESS || r.split("@")[0] === "photos");
+  // ads@ = emailed-in extra pictures for an ad (FEATURES item 1; renamed from
+  // photos@ 2026-07-28 — the old local part stays accepted so anything
+  // already told photos@ keeps working; Resend inbound is domain-wide, so no
+  // provider config changes with the name).
+  const toPhotos = recipients.some(
+    (r) => r === PHOTOS_ADDRESS || r.split("@")[0] === "ads" || r.split("@")[0] === "photos",
+  );
   if (sender && toPhotos) return handlePhotoEmail(sender, data);
   const toSubscribe =
     recipients.some((r) => r === INBOUND_ADDRESS || r.split("@")[0] === "subscribe") ||

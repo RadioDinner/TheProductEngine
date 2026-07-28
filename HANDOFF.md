@@ -72,9 +72,12 @@ path is well-engineered.
    right after the session-013 merge). LAUNCH §A5 checked off with the
    external-pinger fallback documented in case the Vercel plan ever
    changes.
-6. **Verify photos@ + subscribe@ inbound end-to-end** (RESEND_WEBHOOK_SECRET
+6. **Verify ads@ + subscribe@ inbound end-to-end** (RESEND_WEBHOOK_SECRET
    set? domain verified? MX added?). Fail-closed means: if unset, emailed-in
-   photos silently do nothing.
+   photos silently do nothing. **Renamed 2026-07-28 (user request):
+   `ads@theplainexchange.com` is now the pictures-in address** (photos@
+   stays accepted as a legacy alias; Resend inbound is domain-wide, so the
+   rename needs NO Resend config change — routing is by local part).
 7. www vs apex + SITE_URL alignment (LAUNCH A1 second box).
 
 **Code backlog from the audit (launch-relevant first, none built — need
