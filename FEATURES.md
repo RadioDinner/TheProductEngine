@@ -39,6 +39,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 29 | **Phone-order card checkout + saved-card billing** — on a member's /admin/users page: shows whether a card is on file; **Bill their saved card** charges it on a verbal OK (BUYCREDIT pricing + discount, double-click-safe); no card yet → open the Stripe checkout in the operator's browser (key the card in while the caller reads it out) or text the member the checkout link; paying grants the credits and saves the card for BUYCREDIT texts | session 011 | **built** (no migration) |
 | 30 | **Homepage promo banner** — an operator-set banner at the top of the homepage for running credit sales; text + link live on /admin/settings (clear the text to hide it; link must be a page on this site, falls back to the credits section) | session 011 | **built** (no migration — new config keys fall back to defaults) |
 | 31 | **Pay-by-phone card capture** (Twilio `<Pay>` IVR → Stripe card on file) — callers key their OWN card into the phone keypad on a dedicated voice number; Twilio's Stripe Pay Connector tokenizes it (digits never touch the operator, this server, or a log) and it's saved to a Stripe customer; a bearer-authed `POST /charge` bills it off-session per order. The PCI-safe replacement for item 29's operator-keys-the-card call-in flow | session 012 | **added as standalone service** (`pay-by-phone/` — its own Twilio+Stripe deploy; NOT yet wired into member accounts — see note) |
+| 32 | **Multi-picture combine** — a seller who texts several pictures (in one MMS or trickled across messages) gets them automatically combined into a SINGLE collage image that rides the ad (up to 4 pictures; the user's session-011 idea). The ad still carries exactly one photo, so MMS/PIC/digest costs and the one-picture-ad price are untouched; the individual originals also join the website gallery | session 011 (idea) / session 013 (build) | **built** (no migration — see note) |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -337,3 +338,35 @@ itself; build details live in the session logs and HANDOFF.md.
   E.164). Pre-reliance punch list is the README's own hardening checklist
   (enforce prod webhook signatures, own phone→customer table, log
   `PayErrorCode`, optional PIN for shared shanty numbers).
+- **32 · Multi-picture combine** (idea arrived session 011 — "combine 4
+  incoming pictures into a single image before sending them out … only up to
+  4"; built session 013 after the user texted several pictures and nothing
+  combined). No AI service needed — `sharp` (the standard Node image library,
+  now a dependency) composes the collage in-process at ingest. How it works:
+  - **One MMS with 2–4 pictures:** each attachment is byte-validated and
+    re-hosted individually (`parts/` storage folder, website gallery
+    positions 1+), then composed into one collage JPEG (`collage/` folder,
+    position 0 — the picture MMS/PIC/digests carry). 2 → side-by-side,
+    3 → one wide + two below, 4 → 2×2 grid; white gutters; EXIF orientation
+    honored; ≤1200px, baseline JPEG (safe for old handsets + carrier size
+    limits). Attachments past 4 are dropped and the confirmation says so.
+  - **Pictures trickled across messages:** a photo-only MMS from a sender
+    with a PENDING ad less than 24 h old attaches to that ad — the collage is
+    rebuilt with the new picture(s) up to the cap of 4. Approved ads never
+    change silently (pending only). A photo-only message with no such ad
+    still gets the how-to-post guidance, and strangers still mint no account.
+  - **Pricing is unchanged and fair:** the combined ad is ONE picture ad
+    (costPhoto). A follow-up photo landing on a TEXT ad upgrades it and
+    charges exactly the difference (costPhoto − costText) — unless a free ad
+    pass paid for the ad (a pass covers either kind) or the upgrade was
+    already charged; a failed attach refunds the upgrade. Insufficient
+    credits → the photo is refused with the exact shortfall, nothing charged.
+  - **Provenance lives in storage paths, not a schema change** (no
+    migration): `collage/` = replaceable composed image, `parts/` = collage
+    source originals, bare path = single photo or emailed-in extra. Emailed
+    extras (item 1) never join the collage. Compose failures degrade to
+    first-picture-as-photo with the rest in the gallery — a photo problem
+    never blocks an ad (session-007 policy).
+  - Dev mode (no Supabase storage) keeps the allowlisted URLs: first picture
+    = photo, the rest = gallery; unit suite pins the collage geometry/colors
+    (`test/photo-collage.test.mjs`).

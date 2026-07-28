@@ -104,6 +104,9 @@ export interface NewAdInput {
   body: string;
   flagged: boolean;
   photo?: StoredAd["photo"];
+  /** Individual source pictures of a combined photo (item 32) — website
+   * gallery, ad_photos positions 1+. */
+  morePhotos?: StoredAd["morePhotos"];
 }
 
 /**
@@ -365,9 +368,35 @@ const file = {
         rejectionKind: "violation" as const,
       }),
       ...(input.photo && { photo: input.photo }),
+      ...(input.morePhotos?.length && { morePhotos: input.morePhotos }),
     });
     save(store);
     return id;
+  },
+
+  latestPendingAdFor(phone: string, sinceIso: string): StoredAd | null {
+    const store = load();
+    const candidates = store.ads
+      .filter(
+        (a) => a.ownerPhone === phone && a.status === "pending" && a.createdAt >= sinceIso,
+      )
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.id - a.id);
+    return candidates[0] ?? null;
+  },
+
+  attachAdPhotos(
+    id: number,
+    primary: StoredAd["photo"] | null,
+    addParts: NonNullable<StoredAd["morePhotos"]>,
+  ): { oldPrimarySrc: string | null } | null {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === id);
+    if (!ad || ad.status === "deleted") return null;
+    const oldPrimarySrc = ad.photo?.src ?? null;
+    if (primary) ad.photo = primary;
+    if (addParts.length) (ad.morePhotos ??= []).push(...addParts);
+    save(store);
+    return { oldPrimarySrc };
   },
 
   getAllAds(q?: string, status?: StoredAdStatus, limit = 100): StoredAd[] {
@@ -1023,6 +1052,29 @@ export async function createAd(input: NewAdInput, options: CreateAdOptions = {})
 
 export async function getAdRecord(id: number): Promise<StoredAd | null> {
   return supabaseConfigured ? remote.getAdRecord(id) : file.getAdRecord(id);
+}
+
+/** The owner's newest pending ad created since `sinceIso` — the ad a
+ * follow-up photo-only MMS attaches to (item 32). */
+export async function latestPendingAdFor(phone: string, sinceIso: string): Promise<StoredAd | null> {
+  return supabaseConfigured
+    ? remote.latestPendingAdFor(phone, sinceIso)
+    : file.latestPendingAdFor(phone, sinceIso);
+}
+
+/**
+ * Install/replace the position-0 picture and append gallery originals
+ * (item 32). Returns the previous position-0 src (the caller removes the old
+ * storage object when it was a replaced collage), or null if the ad is gone.
+ */
+export async function attachAdPhotos(
+  id: number,
+  primary: StoredAd["photo"] | null,
+  addParts: NonNullable<StoredAd["morePhotos"]>,
+): Promise<{ oldPrimarySrc: string | null } | null> {
+  return supabaseConfigured
+    ? remote.attachAdPhotos(id, primary, addParts)
+    : file.attachAdPhotos(id, primary, addParts);
 }
 
 export async function getPendingAds(): Promise<StoredAd[]> {

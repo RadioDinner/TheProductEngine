@@ -193,6 +193,22 @@ export default async function AdminHelp() {
         is the flow that refunds (benign) or records a strike (violation) and tells the seller.
       </p>
 
+      <h2 className="section-h">Several pictures on one ad: the combined photo</h2>
+      <p>
+        A seller who texts <strong>more than one picture</strong> — in one MMS or one picture
+        per message — gets them <strong>combined into a single collage image</strong> that
+        becomes the ad&apos;s one photo (up to 4 pictures; 2 sit side by side, 3 get one wide on
+        top, 4 make a 2×2 grid). The ad still carries exactly one picture, so PIC pulls, the
+        digests, and picture-ad pricing are all unchanged; the individual pictures also join
+        the ad&apos;s website gallery. Pictures texted <em>after</em> the ad (with no text in
+        the message) attach to the sender&apos;s most recent <strong>pending</strong> ad from
+        the last 24 hours and the collage is rebuilt — an ad you already approved never
+        changes on its own. A picture texted to a <em>text</em> ad upgrades it and charges the
+        seller the picture-vs-text price difference automatically (a free ad pass covers the
+        upgrade, since a pass always covered either kind). In review you see the finished
+        collage on the ad — what you approve is exactly what buyers get.
+      </p>
+
       <h2 className="section-h">Emailed-in extra pictures (Ads tab)</h2>
       <p>
         Sellers (or a helper with email) can send <strong>more pictures for an ad</strong> to the

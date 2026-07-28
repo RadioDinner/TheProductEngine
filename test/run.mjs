@@ -24,6 +24,7 @@ const SUITES = [
   "featured",
   "categories",
   "areas",
+  "photo-collage",
 ];
 
 let totalPass = 0;
@@ -37,7 +38,9 @@ for (const suite of SUITES) {
       results.push({ ok: JSON.stringify(got) === JSON.stringify(want), label, got, want });
     },
   };
-  mod.run(t);
+  // Await so a suite may be async (photo-collage does real image work);
+  // sync suites are unaffected.
+  await mod.run(t);
   const pass = results.filter((r) => r.ok).length;
   const fail = results.length - pass;
   console.log(`${mod.name ?? suite}: ${pass}/${results.length}${fail ? "  ❌" : "  ✓"}`);

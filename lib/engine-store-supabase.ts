@@ -129,10 +129,112 @@ export async function createAd(input: NewAdInput, options: CreateAdOptions = {})
       alt: input.photo.alt,
       width: input.photo.width,
       height: input.photo.height,
+      position: 0,
     });
     if (photoError) throw photoError;
   }
+  if (input.morePhotos?.length) {
+    // Combined-photo originals (item 32): website gallery at positions 1+.
+    const { error: partsError } = await db()
+      .from("ad_photos")
+      .insert(
+        input.morePhotos.map((p, i) => ({
+          ad_id: id,
+          src: p.src,
+          alt: p.alt,
+          width: p.width,
+          height: p.height,
+          position: i + 1,
+        })),
+      );
+    if (partsError) throw partsError;
+  }
   return id;
+}
+
+/** The owner's newest pending ad created since `sinceIso` (item 32). */
+export async function latestPendingAdFor(
+  phone: string,
+  sinceIso: string,
+): Promise<StoredAd | null> {
+  const userId = await userIdByPhone(phone);
+  if (!userId) return null;
+  const { data, error } = await db()
+    .from("ads")
+    .select(AD_SELECT)
+    .eq("user_id", userId)
+    .eq("status", "pending")
+    .gte("created_at", sinceIso)
+    .order("id", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  const row = (data as unknown as AdRow[] | null)?.[0];
+  return row ? toStored(row) : null;
+}
+
+/**
+ * Install/replace the position-0 picture and append gallery originals
+ * (item 32). Row-first ordering keeps a crash from ever leaving a broken
+ * image: the position-0 row points at the new src before the caller removes
+ * any replaced storage object. Returns the previous position-0 src, or null
+ * if the ad is gone/deleted.
+ */
+export async function attachAdPhotos(
+  id: number,
+  primary: StoredAd["photo"] | null,
+  addParts: NonNullable<StoredAd["morePhotos"]>,
+): Promise<{ oldPrimarySrc: string | null } | null> {
+  const { data: adRow, error: adError } = await db()
+    .from("ads")
+    .select("id, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (adError) throw adError;
+  if (!adRow || adRow.status === "deleted") return null;
+  const { data: rows, error: rowsError } = await db()
+    .from("ad_photos")
+    .select("id, src, position")
+    .eq("ad_id", id);
+  if (rowsError) throw rowsError;
+  const existing = (rows ?? []) as { id: number; src: string; position: number }[];
+  const current0 = existing.find((p) => p.position === 0);
+  const oldPrimarySrc = current0?.src ?? null;
+  if (primary) {
+    if (current0) {
+      const { error: updateError } = await db()
+        .from("ad_photos")
+        .update({ src: primary.src, alt: primary.alt, width: primary.width, height: primary.height })
+        .eq("id", current0.id);
+      if (updateError) throw updateError;
+    } else {
+      const { error: insertError } = await db().from("ad_photos").insert({
+        ad_id: id,
+        src: primary.src,
+        alt: primary.alt,
+        width: primary.width,
+        height: primary.height,
+        position: 0,
+      });
+      if (insertError) throw insertError;
+    }
+  }
+  if (addParts.length) {
+    const nextPosition = Math.max(0, ...existing.map((p) => p.position)) + 1;
+    const { error: partsError } = await db()
+      .from("ad_photos")
+      .insert(
+        addParts.map((p, i) => ({
+          ad_id: id,
+          src: p.src,
+          alt: p.alt,
+          width: p.width,
+          height: p.height,
+          position: nextPosition + i,
+        })),
+      );
+    if (partsError) throw partsError;
+  }
+  return { oldPrimarySrc };
 }
 
 export async function getAdRecord(id: number): Promise<StoredAd | null> {

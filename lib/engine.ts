@@ -7,11 +7,13 @@
 import { parseCommand } from "@/lib/commands";
 import { deriveTitle, adExpiresAt, type Ad } from "@/lib/ads";
 import {
+  attachAdPhotos,
   cancelQueuedOutboxFor,
   countRecentOutboundContaining,
   createAd,
   getAdRecord,
   getPendingAds,
+  latestPendingAdFor,
   listMessages,
   logMessage,
   queueBump,
@@ -20,6 +22,7 @@ import {
   reserveSms,
   reviveAd,
   markAdSold,
+  type StoredAd,
 } from "@/lib/engine-store";
 import { listAdsByOwner } from "@/lib/ads";
 import { sendRecentDigestTo } from "@/lib/digest-engine";
@@ -31,6 +34,7 @@ import {
   ensureAccount,
   getAccount,
   getCreditBalance,
+  getLedger,
   getSmsContext,
   getSubscriberCategories,
   grantStarterAdsIfFirst,
@@ -61,7 +65,16 @@ import { stripEmoji, hasLink, mayPostLinks } from "@/lib/content-filter";
 import { etParts } from "@/lib/et";
 import { picLimitMessage, PIC_LIMIT_MARKER } from "@/lib/pic-quota";
 import { isAllowedPhotoSrc } from "@/lib/media";
-import { rehostInboundPhoto } from "@/lib/photos";
+import {
+  fetchImageBytes,
+  ingestInboundPhotos,
+  isCollageSrc,
+  isCombinePartSrc,
+  removeHostedPhotos,
+  storeImageBytes,
+} from "@/lib/photos";
+import { MAX_COMBINED_PHOTOS, collageDimensions, combineImageBuffers } from "@/lib/photo-collage";
+import { sniffImage } from "@/lib/image-sniff";
 import { siteUrl } from "@/lib/email";
 import { supabaseConfigured } from "@/lib/db";
 import { chargeSavedCard, paymentsDevMode } from "@/lib/payments";
@@ -186,15 +199,46 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   // and copies it into our own storage. In production there is NO fallback to
   // the sender-supplied URL — unvalidated bytes and expiring provider links
   // never reach the site. Dev (no Supabase) keeps the allowlist-checked
-  // original so fixtures and simulators still work.
-  const inboundPhoto = media?.[0];
-  const rehosted = inboundPhoto ? await rehostInboundPhoto(inboundPhoto) : null;
-  const photoSrc = rehosted ?? (supabaseConfigured ? undefined : inboundPhoto);
+  // originals so fixtures and simulators still work.
+  //
+  // Multiple pictures (item 32): 2–4 attachments are combined into ONE collage
+  // photo — the ad still carries a single picture (MMS/PIC/digest costs and
+  // the picture-ad price are untouched) while every picture shows. The
+  // individual originals join the website gallery at positions 1+.
+  const sentPictures = media?.length ?? 0;
+  let photoSrc: string | undefined;
+  let galleryParts: string[] = [];
+  let savedPictures = 0;
+  let combined = false;
+  let photoDims = { width: 800, height: 600 };
+  if (sentPictures && supabaseConfigured) {
+    const ingest = await ingestInboundPhotos(media!);
+    if (ingest.ok) {
+      photoSrc = ingest.photo;
+      galleryParts = ingest.parts;
+      savedPictures = ingest.saved;
+      combined = ingest.combined;
+      if (ingest.width && ingest.height) photoDims = { width: ingest.width, height: ingest.height };
+    } else {
+      console.error("[engine] photo ingest failed:", ingest.reason);
+    }
+  } else if (sentPictures) {
+    const allowed = media!.slice(0, MAX_COMBINED_PHOTOS).filter(isAllowedPhotoSrc);
+    photoSrc = allowed[0];
+    galleryParts = allowed.slice(1);
+    savedPictures = allowed.length;
+  }
   const hasPhoto = isAllowedPhotoSrc(photoSrc);
-  // The sender attached a picture we could neither re-host nor trust: the ad
+  if (!hasPhoto) {
+    photoSrc = undefined;
+    galleryParts = [];
+    savedPictures = 0;
+    combined = false;
+  }
+  // The sender attached pictures we could neither re-host nor trust: the ad
   // still posts (as text, at text price) but the seller must be TOLD — a
   // silent drop reads as "my picture ad is live" when it isn't.
-  const photoDropped = Boolean(inboundPhoto) && !hasPhoto;
+  const photoDropped = sentPictures > 0 && !hasPhoto;
   const cost = hasPhoto ? settings.costPhoto : settings.costText;
   // Apply the one-time starter free-ad grant now — on the seller's FIRST real
   // AD NEW (past the empty/too-long/auto-reject gates), not on account creation.
@@ -222,7 +266,17 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
     body,
     flagged: rules.flagged || containsLink,
     ...(hasPhoto && {
-      photo: { src: photoSrc!, alt: deriveTitle(body), width: 800, height: 600 },
+      photo: { src: photoSrc!, alt: deriveTitle(body), ...photoDims },
+      ...(galleryParts.length && {
+        // Combined: parts are pictures 1..N (position 0 is the collage).
+        // Fallback: the photo IS picture 1, parts start at 2.
+        morePhotos: galleryParts.map((src, i) => ({
+          src,
+          alt: `${deriveTitle(body)} — picture ${combined ? i + 1 : i + 2}`,
+          width: 800,
+          height: 600,
+        })),
+      }),
     }),
   });
 
@@ -256,12 +310,247 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
 
   await notifyAdminNewAd({ id, from, hasPhoto, body, ...(hasPhoto && { photoSrc: photoSrc! }) });
 
-  const photoNote = photoDropped
-    ? ` Note: we couldn't save your picture, so this will run as a text-only ad. Reply with the photo again, or call ${site.supportPhone}.`
-    : "";
+  let photoNote = "";
+  if (photoDropped) {
+    photoNote = ` Note: we couldn't save your picture${sentPictures > 1 ? "s" : ""}, so this will run as a text-only ad. Reply with the photo${sentPictures > 1 ? "s" : ""} again, or call ${site.supportPhone}.`;
+  } else if (combined) {
+    photoNote = ` Your ${savedPictures} pictures were combined into one photo.`;
+  }
+  if (hasPhoto && savedPictures < sentPictures) {
+    photoNote +=
+      sentPictures > MAX_COMBINED_PHOTOS && savedPictures === MAX_COMBINED_PHOTOS
+        ? ` (${MAX_COMBINED_PHOTOS} pictures is the most one ad can show.)`
+        : ` (We could only save ${savedPictures} of your ${sentPictures} pictures.)`;
+  }
   return {
     body: `Got it! Your ad is #${id} and is waiting for review. You'll get a text when it's approved for the next digest. (${chargeNote})${photoNote}`,
   };
+}
+
+/** How long after posting a pending ad still accepts follow-up pictures. */
+const PHOTO_FOLLOWUP_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A photo-only message while the sender has a fresh pending ad = more
+ * pictures for that ad (item 32). Phones routinely send "AD NEW …" and the
+ * pictures as separate MMS messages, or trickle one picture per message —
+ * before this, every one of those pictures bounced with "resend it with your
+ * ad text". New pictures are combined with the ad's existing ones into a
+ * single collage photo (cap MAX_COMBINED_PHOTOS). Pending ads only, so a
+ * reviewed picture never changes after approval.
+ *
+ * Returns null when there's nothing to attach to — the caller falls back to
+ * the how-to-post guidance.
+ */
+async function handlePhotoFollowup(
+  from: string,
+  media: string[],
+  settings: EngineSettings,
+): Promise<Reply | null> {
+  const since = new Date(Date.now() - PHOTO_FOLLOWUP_WINDOW_MS).toISOString();
+  const ad = await latestPendingAdFor(from, since);
+  if (!ad) return null;
+  const title = deriveTitle(ad.body);
+
+  // The ad's current collage inputs, display order: a non-collage position-0
+  // picture (single-picture ad) first, then the `parts/` originals. Emailed-in
+  // extras (bare paths at positions 1+) never join the collage. Dev mode has
+  // no storage markers — everything the ad shows counts.
+  const primarySrc = ad.photo?.src;
+  const primaryIsCollage = Boolean(primarySrc && isCollageSrc(primarySrc));
+  const primaryIsPart = Boolean(primarySrc && isCombinePartSrc(primarySrc));
+  const gallerySrcs = (ad.morePhotos ?? []).map((p) => p.src);
+  const existingOriginals = (
+    supabaseConfigured
+      ? [
+          ...(primarySrc && !primaryIsCollage ? [primarySrc] : []),
+          ...gallerySrcs.filter(isCombinePartSrc),
+        ]
+      : [...(primarySrc ? [primarySrc] : []), ...gallerySrcs]
+  ).filter((src, i, arr) => arr.indexOf(src) === i);
+  const room = MAX_COMBINED_PHOTOS - existingOriginals.length;
+  if (room <= 0) {
+    return {
+      body: `Ad #${ad.id} already shows ${MAX_COMBINED_PHOTOS} pictures — that's the most one ad can combine. It's waiting for review.`,
+    };
+  }
+  const overCap = Math.max(0, media.length - room);
+
+  // Validate the new pictures BEFORE any charge, like AD NEW does.
+  const newBuffers: Buffer[] = [];
+  let droppedBad = 0;
+  if (supabaseConfigured) {
+    for (const src of media.slice(0, room)) {
+      const fetched = await fetchImageBytes(src);
+      if (fetched.ok && sniffImage(fetched.bytes)) newBuffers.push(fetched.bytes);
+      else {
+        droppedBad += 1;
+        console.error(
+          "[engine] follow-up picture dropped:",
+          fetched.ok ? `bytes are not an accepted image (labeled ${fetched.contentType})` : fetched.reason,
+        );
+      }
+    }
+  }
+  const devAllowed = supabaseConfigured ? [] : media.slice(0, room).filter(isAllowedPhotoSrc);
+  const newCount = supabaseConfigured ? newBuffers.length : devAllowed.length;
+  if (!newCount) {
+    return {
+      body: `We couldn't save ${media.length > 1 ? "those pictures" : "that picture"} for ad #${ad.id}. Please try sending ${media.length > 1 ? "them" : "it"} again, or call ${site.supportPhone}.`,
+    };
+  }
+
+  // Adding the FIRST picture upgrades a text ad to a picture ad, so the price
+  // difference is owed — unless a free ad pass paid for the ad (a pass covers
+  // either kind) or the upgrade was already charged (picture trickles).
+  // Ads that already have a picture paid the picture price; more pictures for
+  // the one collage photo cost nothing extra.
+  let chargeNote = "";
+  let upgradeCharged = 0;
+  if (!ad.photo) {
+    const upgradeNote = `Ad #${ad.id} picture upgrade`;
+    const delta = Math.max(0, settings.costPhoto - settings.costText);
+    if (delta > 0) {
+      const ledger = await getLedger(from);
+      const alreadyCharged = ledger.some((e) => e.note?.startsWith(upgradeNote));
+      const paidByPass = ledger.some((e) => e.note?.startsWith(`Free ad used — ad #${ad.id}`));
+      if (!alreadyCharged && !paidByPass) {
+        const balance = await getCreditBalance(from);
+        if (balance < delta || !(await spendCredits(from, delta, upgradeNote))) {
+          return {
+            body: `Adding a picture to ad #${ad.id} takes ${delta} more credit${delta === 1 ? "" : "s"} (picture ads cost ${settings.costPhoto}) and you have ${balance}. Buy credits at ThePlainExchange.com, or call ${site.supportPhone}, then send the picture again.`,
+          };
+        }
+        upgradeCharged = delta;
+        chargeNote = ` (${delta} credit${delta === 1 ? "" : "s"} — ${Math.max(0, balance - delta)} left.)`;
+      }
+    }
+  }
+
+  try {
+    let primary: StoredAd["photo"] | null = null;
+    let newParts: NonNullable<StoredAd["morePhotos"]> = [];
+    const removeSrcs: string[] = [];
+    let combinedNow = false;
+    let shownCount = existingOriginals.length + newCount;
+
+    if (!supabaseConfigured) {
+      // Dev keeps allowlisted URLs — no storage, no collage.
+      primary = ad.photo
+        ? null
+        : { src: devAllowed[0], alt: title, width: 800, height: 600 };
+      newParts = (primary ? devAllowed.slice(1) : devAllowed).map((src, i) => ({
+        src,
+        alt: `${title} — picture ${existingOriginals.length + (primary ? i + 2 : i + 1)}`,
+        width: 800,
+        height: 600,
+      }));
+      await attachAdPhotos(ad.id, primary, newParts);
+    } else if (shownCount === 1) {
+      // A text ad gaining its one picture: same shape as a single-picture AD NEW.
+      const stored = await storeImageBytes(newBuffers[0]);
+      if (!stored.ok) throw new Error(stored.reason);
+      primary = { src: stored.url, alt: title, width: 800, height: 600 };
+      const attached = await attachAdPhotos(ad.id, primary, []);
+      if (!attached) throw new Error(`ad #${ad.id} disappeared during attach`);
+    } else {
+      // Collage rebuild. Gather the existing originals' bytes; the legacy
+      // single-picture primary also needs a `parts/` gallery copy since the
+      // collage is about to take its position-0 spot.
+      const legacyPrimary = Boolean(primarySrc) && !primaryIsCollage && !primaryIsPart;
+      const inputs: Buffer[] = [];
+      let legacyCopy: { src: string } | null = null;
+      for (const [i, src] of existingOriginals.entries()) {
+        const fetched = await fetchImageBytes(src);
+        if (fetched.ok) {
+          inputs.push(fetched.bytes);
+          if (legacyPrimary && i === 0) {
+            const copy = await storeImageBytes(fetched.bytes, "parts");
+            if (copy.ok) legacyCopy = { src: copy.url };
+          }
+        } else if (legacyPrimary && i === 0) {
+          // Can't preserve the current paid picture — don't half-destroy the ad.
+          throw new Error(`current picture unreadable: ${fetched.reason}`);
+        } else {
+          console.error(`[engine] collage input unreadable (stays in gallery): ${fetched.reason}`);
+        }
+      }
+      const newStored: { bytes: Buffer; url: string }[] = [];
+      for (const bytes of newBuffers) {
+        const stored = await storeImageBytes(bytes, "parts");
+        if (stored.ok) newStored.push({ bytes, url: stored.url });
+        else {
+          droppedBad += 1;
+          console.error("[engine] follow-up picture store failed:", stored.reason);
+        }
+      }
+      if (!newStored.length) throw new Error("storage failed for every picture");
+      shownCount = inputs.length + newStored.length;
+      const galleryStart = gallerySrcs.length + 1;
+      newParts = [
+        ...(legacyCopy ? [{ src: legacyCopy.src, alt: `${title} — picture 1`, width: 800, height: 600 }] : []),
+        ...newStored.map((s, i) => ({
+          src: s.url,
+          alt: `${title} — picture ${galleryStart + (legacyCopy ? 1 : 0) + i}`,
+          width: 800,
+          height: 600,
+        })),
+      ];
+      try {
+        const collage = await combineImageBuffers([...inputs, ...newStored.map((s) => s.bytes)]);
+        const storedCollage = await storeImageBytes(collage, "collage");
+        if (!storedCollage.ok) throw new Error(storedCollage.reason);
+        primary = { src: storedCollage.url, alt: title, ...collageDimensions(shownCount) };
+        combinedNow = true;
+        // The replaced position-0 object: a superseded collage, or a legacy
+        // single now living on as its `parts/` copy.
+        if (primarySrc && (primaryIsCollage || (legacyPrimary && legacyCopy))) {
+          removeSrcs.push(primarySrc);
+        }
+      } catch (e) {
+        console.error("[engine] follow-up collage failed:", e instanceof Error ? e.message : String(e));
+        // Fallback: the pictures still land in the gallery; a photo-less ad
+        // promotes the first new picture to position 0.
+        if (!ad.photo) {
+          const first = newParts.find((p) => !legacyCopy || p.src !== legacyCopy.src);
+          if (first) {
+            primary = { src: first.src, alt: title, width: 800, height: 600 };
+            newParts = newParts.filter((p) => p.src !== first.src);
+          }
+        }
+      }
+      const attached = await attachAdPhotos(ad.id, primary, newParts);
+      if (!attached) throw new Error(`ad #${ad.id} disappeared during attach`);
+      if (removeSrcs.length && attached.oldPrimarySrc === primarySrc) {
+        await removeHostedPhotos(removeSrcs);
+      }
+    }
+
+    let note = "";
+    if (overCap > 0 && newCount + existingOriginals.length >= MAX_COMBINED_PHOTOS) {
+      note = ` (${MAX_COMBINED_PHOTOS} pictures is the most one ad can show.)`;
+    } else if (droppedBad > 0) {
+      note = ` (We could only save ${newCount} of the ${media.length} pictures.)`;
+    }
+    const s = newCount === 1 ? "" : "s";
+    const body = combinedNow
+      ? `Got your picture${s}! Ad #${ad.id} (${title}) now shows ${shownCount} pictures combined into one photo. It's waiting for review.${chargeNote}${note}`
+      : `Got it! ${newCount === 1 ? "Your picture was" : `${newCount} pictures were`} added to ad #${ad.id} (${title}). It's waiting for review.${chargeNote}${note}`;
+    return { body };
+  } catch (e) {
+    // Undo the upgrade charge — the pictures didn't make it onto the ad.
+    if (upgradeCharged > 0) {
+      await addLedgerEntry(from, {
+        delta: upgradeCharged,
+        kind: "refund",
+        note: `Refund — ad #${ad.id} picture upgrade failed`,
+      }).catch(() => {});
+    }
+    console.error(`[engine] photo follow-up failed for ad #${ad.id}:`, e);
+    return {
+      body: `We couldn't save ${media.length > 1 ? "those pictures" : "that picture"} for ad #${ad.id}. Nothing extra was charged. Please try again, or call ${site.supportPhone}.`,
+    };
+  }
 }
 
 async function handleOwnerCommand(
@@ -516,10 +805,15 @@ async function route(
 ): Promise<Reply | null> {
   const from = msg.from;
 
-  // A bare photo with no usable text (spec Q13).
+  // A bare photo with no usable text: more pictures for the sender's fresh
+  // pending ad when one exists (item 32), else the how-to-post guidance
+  // (spec Q13).
   if (msg.media?.length && command.kind === "unknown" && !msg.text.trim()) {
+    const attached = await handlePhotoFollowup(from, msg.media, settings);
+    if (attached) return attached;
+    const many = msg.media.length > 1;
     return {
-      body: `To post an ad with this picture, resend it with your ad text, like: AD NEW Horse cart for sale $1,000, call ${site.smsNumber}.`,
+      body: `To post an ad with ${many ? "these pictures" : "this picture"}, resend ${many ? "them" : "it"} with your ad text, like: AD NEW Horse cart for sale $1,000, call ${site.smsNumber}.`,
     };
   }
 

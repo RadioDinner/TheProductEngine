@@ -9,6 +9,7 @@
 import { randomUUID } from "node:crypto";
 import { db, supabaseConfigured } from "@/lib/db";
 import { CONTENT_TYPE_BY_EXT, sniffImage } from "@/lib/image-sniff";
+import { MAX_COMBINED_PHOTOS, collageDimensions, combineImageBuffers } from "@/lib/photo-collage";
 
 const BUCKET = "ad-photos";
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -44,6 +45,26 @@ async function ensureBucket(): Promise<void> {
 
 export type RehostResult = { ok: true; url: string } | { ok: false; reason: string };
 
+/**
+ * Storage folders encode provenance so no schema change is needed:
+ * - `collage/` — a combined multi-picture image (always at ad_photos position
+ *   0 when present; safe to delete when replaced by a recompose);
+ * - `parts/` — an individual source picture of a collage (website gallery,
+ *   positions 1+; the recompose inputs when the seller texts another photo);
+ * - bare path — a single-picture ad's photo, or an emailed-in extra.
+ */
+export type PhotoFolder = "collage" | "parts";
+
+const PUBLIC_MARKER = `/object/public/${BUCKET}/`;
+
+export function isCollageSrc(src: string): boolean {
+  return src.includes(`${PUBLIC_MARKER}collage/`);
+}
+
+export function isCombinePartSrc(src: string): boolean {
+  return src.includes(`${PUBLIC_MARKER}parts/`);
+}
+
 /** Telnyx-hosted media (api.telnyx.com/v2/media style) requires API-key auth
  * to fetch; send the bearer ONLY to telnyx.com hosts, never anywhere else. */
 function fetchHeaders(src: string): Record<string, string> {
@@ -60,7 +81,7 @@ function fetchHeaders(src: string): Record<string, string> {
  * must PROVE the file is jpg/png/gif/webp — sender-supplied content types and
  * filenames are never consulted.
  */
-export async function storeImageBytes(bytes: Buffer): Promise<RehostResult> {
+export async function storeImageBytes(bytes: Buffer, folder?: PhotoFolder): Promise<RehostResult> {
   if (!supabaseConfigured) return { ok: false, reason: "Supabase is not configured (dev mode)" };
   if (bytes.byteLength === 0 || bytes.byteLength > MAX_BYTES) {
     return { ok: false, reason: `unacceptable size (${bytes.byteLength} bytes)` };
@@ -71,7 +92,7 @@ export async function storeImageBytes(bytes: Buffer): Promise<RehostResult> {
   }
   try {
     await ensureBucket();
-    const path = `${randomUUID()}.${ext}`;
+    const path = `${folder ? `${folder}/` : ""}${randomUUID()}.${ext}`;
     const { error } = await db()
       .storage.from(BUCKET)
       .upload(path, bytes, { contentType: CONTENT_TYPE_BY_EXT[ext] });
@@ -84,9 +105,13 @@ export async function storeImageBytes(bytes: Buffer): Promise<RehostResult> {
   }
 }
 
-/** Copy an inbound MMS photo into our storage, reporting exactly why not. */
-export async function rehostInboundPhotoDetailed(src: string): Promise<RehostResult> {
-  if (!supabaseConfigured) return { ok: false, reason: "Supabase is not configured (dev mode)" };
+type FetchBytesResult =
+  | { ok: true; bytes: Buffer; contentType: string }
+  | { ok: false; reason: string };
+
+/** Download media bytes with the same guardrails every ingest path uses:
+ * https-only public hosts, Telnyx auth only to Telnyx, bounded time. */
+export async function fetchImageBytes(src: string): Promise<FetchBytesResult> {
   if (!fetchableHost(src)) return { ok: false, reason: `not a fetchable https host: ${src}` };
   try {
     const controller = new AbortController();
@@ -99,15 +124,124 @@ export async function rehostInboundPhotoDetailed(src: string): Promise<RehostRes
     }
     if (!response.ok) return { ok: false, reason: `media fetch returned HTTP ${response.status}` };
     const bytes = Buffer.from(await response.arrayBuffer());
-    const stored = await storeImageBytes(bytes);
-    if (!stored.ok && /not an accepted image/.test(stored.reason)) {
-      const headerType = (response.headers.get("content-type") ?? "unknown").split(";")[0];
-      return { ok: false, reason: `${stored.reason} (sender labeled it ${headerType})` };
-    }
-    return stored;
+    const contentType = (response.headers.get("content-type") ?? "unknown").split(";")[0];
+    return { ok: true, bytes, contentType };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/** Copy an inbound MMS photo into our storage, reporting exactly why not. */
+export async function rehostInboundPhotoDetailed(src: string): Promise<RehostResult> {
+  if (!supabaseConfigured) return { ok: false, reason: "Supabase is not configured (dev mode)" };
+  const fetched = await fetchImageBytes(src);
+  if (!fetched.ok) return fetched;
+  const stored = await storeImageBytes(fetched.bytes);
+  if (!stored.ok && /not an accepted image/.test(stored.reason)) {
+    return { ok: false, reason: `${stored.reason} (sender labeled it ${fetched.contentType})` };
+  }
+  return stored;
+}
+
+export interface IngestedAdPhotos {
+  /** The ad's position-0 picture — the one MMS/PIC/digests carry. */
+  photo: string;
+  /** Individually re-hosted source pictures (website gallery, positions 1+).
+   * Non-empty only when 2+ pictures were saved. */
+  parts: string[];
+  /** Pictures that made it in / attachments that didn't (bad bytes, fetch
+   * failures, or beyond the combine limit). */
+  saved: number;
+  dropped: number;
+  /** True when `photo` is a collage of the saved pictures; false when a
+   * single picture (or a compose-failure fallback) is the photo. */
+  combined: boolean;
+  /** Exact pixel size of the photo — known only for collages (we composed
+   * them); single pictures keep the caller's default. */
+  width?: number;
+  height?: number;
+}
+
+export type IngestResult = { ok: true } & IngestedAdPhotos | { ok: false; reason: string };
+
+/**
+ * Ingest every picture on an inbound MMS (FEATURES item 32). One picture
+ * re-hosts exactly as before. Two to four pictures are each re-hosted as
+ * `parts/` originals and composed into a single `collage/` image that becomes
+ * the ad's one photo. Attachments beyond MAX_COMBINED_PHOTOS are dropped (and
+ * counted, so the seller can be told). Best-effort at every step: a compose
+ * failure degrades to first-picture-as-photo with the rest still in the
+ * gallery; a photo problem never blocks an ad.
+ */
+export async function ingestInboundPhotos(srcs: string[]): Promise<IngestResult> {
+  if (!supabaseConfigured) return { ok: false, reason: "Supabase is not configured (dev mode)" };
+  const take = srcs.slice(0, MAX_COMBINED_PHOTOS);
+  let dropped = srcs.length - take.length;
+  const buffers: Buffer[] = [];
+  for (const src of take) {
+    const fetched = await fetchImageBytes(src);
+    if (fetched.ok && sniffImage(fetched.bytes) && fetched.bytes.byteLength <= MAX_BYTES) {
+      buffers.push(fetched.bytes);
+    } else {
+      dropped += 1;
+      console.error(
+        "[photos] ingest dropped an attachment:",
+        fetched.ok ? `bytes are not an accepted image (labeled ${fetched.contentType})` : fetched.reason,
+      );
+    }
+  }
+  if (!buffers.length) return { ok: false, reason: "no usable pictures in the message" };
+
+  if (buffers.length === 1) {
+    const stored = await storeImageBytes(buffers[0]);
+    if (!stored.ok) return stored;
+    return { ok: true, photo: stored.url, parts: [], saved: 1, dropped, combined: false };
+  }
+
+  // 2+ pictures: originals first (they're the recompose inputs and the
+  // website gallery), then the collage.
+  const stored: { bytes: Buffer; url: string }[] = [];
+  for (const bytes of buffers) {
+    const result = await storeImageBytes(bytes, "parts");
+    if (result.ok) stored.push({ bytes, url: result.url });
+    else {
+      dropped += 1;
+      console.error("[photos] ingest couldn't store an original:", result.reason);
+    }
+  }
+  if (!stored.length) return { ok: false, reason: "storage failed for every picture" };
+  const partUrls = stored.map((s) => s.url);
+  if (stored.length === 1) {
+    return { ok: true, photo: partUrls[0], parts: [], saved: 1, dropped, combined: false };
+  }
+  const saved = stored.length;
+  try {
+    const collage = await combineImageBuffers(stored.map((s) => s.bytes));
+    const storedCollage = await storeImageBytes(collage, "collage");
+    if (storedCollage.ok) {
+      return {
+        ok: true,
+        photo: storedCollage.url,
+        parts: partUrls,
+        saved,
+        dropped,
+        combined: true,
+        ...collageDimensions(saved),
+      };
+    }
+    console.error("[photos] collage store failed:", storedCollage.reason);
+  } catch (e) {
+    console.error("[photos] collage compose failed:", e instanceof Error ? e.message : String(e));
+  }
+  // Compose fallback: first picture is the photo, the rest ride the gallery.
+  return {
+    ok: true,
+    photo: partUrls[0],
+    parts: partUrls.slice(1),
+    saved,
+    dropped,
+    combined: false,
+  };
 }
 
 /** Bytes for an emailed-in attachment: inline base64 or an https download. */
