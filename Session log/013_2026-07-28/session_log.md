@@ -14,6 +14,20 @@ complete.
   `main` (per the user's "Merge to main for this session"). Main already
   contained session 012's pay-by-phone commit (the user had merged it), so
   the fast-forward was clean.
+- `9f2c435` **Audit fixes** (also merged to main): upgrade-charge notes are
+  delimited (`Ad #N (picture upgrade)`) and benign-reject/member-delete
+  refunds now return base + upgrade via the new `adRefundableTotal`
+  (lib/myads.ts); the upgrade debit is a ref-guarded ledger insert keyed on
+  the refund count (double-charge impossible, post-refund retry charges
+  again); `attachAdPhotos` is pending-only (a follow-up racing the admin's
+  decision refunds + explains instead of mutating a reviewed ad); captioned
+  pictures attach instead of being silently dropped (guidance silent under
+  UNDER ATTACK); CTIA/FCC opt-out keywords added (STOPALL; END / REVOKE /
+  OPTOUT / OPT-OUT / OPT OUT as sole keywords only — "End table for sale"
+  is still an ad); sharp decode capped at 64MP; `maxDuration=60` on the
+  Telnyx inbound route. Unit suite 448 → 464; second dev walk 14/14
+  (upgrade ledger shape, reject refunds 10, captioned attach, END vs "End
+  table"); abuse 19/19.
 
 ### How the feature works
 
@@ -83,12 +97,19 @@ complete.
 
 ## Pre-launch audit
 
-Run as a 8-dimension adversarial workflow (find → verify): schema parity,
-money paths, SMS compliance + cost control, ops/launch checklist truth,
-security surfaces, digest pipeline, an adversarial review of the new
-combine code, and backlog reconciliation. **Findings are summarized in
-HANDOFF.md (Session 013 section) and were reported in chat** — that's the
-authoritative copy of the audit outcome for future sessions.
+Run as an 8-dimension adversarial workflow (23 agents, find → verify;
+every blocker/high finding independently re-checked against the code):
+schema parity, money paths, SMS compliance + cost control, ops/launch
+checklist truth, security surfaces, digest pipeline, an adversarial review
+of the new combine code, and backlog reconciliation. Headlines: the ONE
+launch blocker is **Stripe was never configured in prod** (every payment
+surface is a dead end); the top verify-now items are migration 9975
+(unprobeable — test with a real credit-charged post), the CAN-SPAM
+"PO Box 000" placeholder shipping in live emails, ADMIN_EMAIL delivery,
+and the cron-trigger identity. The new-code findings the audit confirmed
+were all fixed this session in `9f2c435`. **The full punch list (operator
+queue + code backlog) lives in HANDOFF.md (Session 013 section)** — that's
+the authoritative copy for future sessions; it was also reported in chat.
 
 ## Directional decisions
 

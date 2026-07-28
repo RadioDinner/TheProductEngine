@@ -3,7 +3,120 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-07-23 (session 012).
+**Last updated:** 2026-07-28 (session 013).
+
+## Session 013 (2026-07-28) — multi-picture combine + pre-launch audit
+
+**Git: back on the merge-to-main posture** (user: "Merge to main for this
+session"). Developed on `claude/multi-image-combine-launch-review-8dbe4r`,
+fast-forwarded onto `main` (`main` already had session 012's pay-by-phone
+commit — the user had merged it). Prod auto-deploys `main`; **the next
+deploy installs `sharp` (new npm dependency) — expected to be automatic.**
+
+### Built: FEATURES item 32 — multi-picture combine (`c5a69c0` + `9f2c435`)
+
+The user texted several pictures and nothing combined — the session-011 idea
+is now built. 2–4 pictures in one MMS (or trickled as separate messages) are
+composed into ONE collage JPEG that is the ad's photo (position 0); the
+individual originals join the website gallery (positions 1+). Follow-up
+photo-only or captioned-photo messages attach to the sender's PENDING ad
+(<24 h) and rebuild the collage; approved ads never change. A photo landing
+on a TEXT ad charges exactly costPhoto − costText (waived for free-pass
+ads; ref-guarded so concurrent messages can't double-charge; refunded
+ref-idempotently if the attach fails; benign-reject and member-delete
+refunds now return base + upgrade via `adRefundableTotal`). No migration —
+provenance lives in storage folders (`collage/`, `parts/`, bare). `sharp`
+does the compositing (no external AI service needed). Unit suite 428 → 464;
+two dev walks 17/17 + 14/14; abuse 19/19. Details: FEATURES.md item 32,
+`Session log/013_2026-07-28/session_log.md`.
+
+Also shipped from the audit (in `9f2c435`): **CTIA/FCC opt-out keywords**
+(STOPALL joins STOP; END / REVOKE / OPTOUT / OPT-OUT / OPT OUT unsubscribe
+as sole keywords — "End table for sale" stays an ad-shaped message);
+pending-only `attachAdPhotos`; captioned pictures attach instead of being
+silently dropped; 64MP sharp decode cap; `maxDuration=60` on
+`/api/telnyx/inbound`.
+
+### Pre-launch audit (8-dimension adversarial workflow, 23 agents; all
+### blocker/high findings independently re-verified against the code)
+
+User context given: all migrations pasted, 10DLC registration complete.
+What's genuinely solid: schema-vs-code parity is CLEAN (no 42804-class enum
+bugs left), money plumbing is idempotent/atomic where it matters, all three
+webhooks fail closed, the retry-swallow inbound trap IS fixed for all
+paths, the choke-point outbound architecture holds, and the digest happy
+path is well-engineered.
+
+**⚠️ OPERATOR ACTION QUEUE (blockers/ops first — nothing here is code):**
+1. **BLOCKER: Stripe was never configured in prod.** STRIPE_SECRET_KEY +
+   STRIPE_WEBHOOK_SECRET unset (LAUNCH A2/A6 unchecked since session 003).
+   Every payment surface is a dead end — checkout shows "Development mode",
+   BUYCREDIT/YES refuses, business packages refuse. With prices at 2/10, a
+   seller is broke after 3 free passes and CANNOT PAY YOU. Set live keys +
+   the live webhook endpoint, run one real $5 purchase, check LAUNCH §A6.
+   (When configuring: card-only payment methods — the webhook credits only
+   synchronous `paid` checkouts; async methods would take money and grant
+   nothing.)
+2. **Verify migration 9975 actually took** (the spend_credits enum fix — the
+   session-011 outage). No health probe can see it (it's a function-body
+   swap). Test: burn a member's free passes, post a credit-charged ad (or
+   web-post), confirm it posts and the ledger row appears. Until verified,
+   assume credit-charged posting may still be broken in prod.
+3. **Fix the CAN-SPAM address**: every live digest email ships "PO Box 000"
+   (`lib/email-digest.ts` BUSINESS_ADDRESS). A real mailing address is a
+   legal requirement — one-line edit, needs YOUR address.
+4. **Verify ADMIN_EMAIL** (the `prontonmail.com` typo fix was never
+   confirmed): send yourself a review alert (post a test ad) and a feedback
+   email. If broken, review alerts + digest-breaker alarms + feedback all
+   go nowhere silently.
+5. **Confirm what pings the digest cron** (LAUNCH A5, open since session
+   003). vercel.json schedules */5 and digests HAVE composed since Jul 14 —
+   so something works; identify it (paid Vercel plan cron?) so it isn't an
+   unknown single point of failure. The public site fills from it.
+6. **Verify photos@ + subscribe@ inbound end-to-end** (RESEND_WEBHOOK_SECRET
+   set? domain verified? MX added?). Fail-closed means: if unset, emailed-in
+   photos silently do nothing.
+7. www vs apex + SITE_URL alignment (LAUNCH A1 second box).
+
+**Code backlog from the audit (launch-relevant first, none built — need
+prioritization/decisions):**
+- **STOP'd numbers still get app-initiated reply-class texts** (chat
+  nudges, rating invites, admin invites) — STOP only clears the digest
+  subscription; no opt-out state gates dispatchSms. Verifier downgraded to
+  medium (volumes are tiny + carrier-level blocks apply), but it's the
+  biggest remaining 10DLC-posture gap. Fix shape: an opted_out flag checked
+  in dispatchSms for non-transactional classes.
+- **Password sign-in has no throttle/lockout** (OTP lane is capped; the
+  password lane isn't) — online brute-force of the known admin phone.
+- **Email-signup lane** sends confirm emails to any address, unlimited —
+  email-bombing / Resend-domain-reputation risk. Needs a per-address +
+  per-IP cap.
+- **Digest failure paths** (two confirmed highs): (a) crash-recovery redo
+  recomposes from the live queue so finalize can consume ads whose text was
+  never enqueued (ad "broadcast" nobody received); (b) failed outbox sends
+  requeue instantly claimable — a Resend 429 burst burns all 3 attempts in
+  seconds and parks the email edition silently. Fix shapes: redo from the
+  digest's recorded items; add a not-before backoff column/logic.
+- **No MMS budget breaker** (PIC MMS outside digestDailySegmentBudget) and
+  **nothing clamps the registered "up to 4 digests/day"** (slots setting +
+  extra editions are unbounded) — both carried from session 011.
+- /api/health probes columns only — no RPC probes (the exact class that hid
+  the 9975 outage); extend health with side-effect-free RPC calls.
+- Telnyx DLR persistence (carried since 007); web-lane rate limiter
+  (contact form → operator-class email is unbounded); bumpCost still 0
+  (session-005 decision never made); HELP/FAQ don't mention category
+  commands; web unsubscribe doesn't purge queued digest rows (SMS STOP
+  does); concurrent attaches can duplicate ad_photos positions (cosmetic;
+  real fix = unique index migration); older degrade guards match 42P01 only
+  (PGRST205 is what PostgREST actually returns — business/featured guards
+  have it, chat/ratings/photo-submission guards don't); dead seeded config
+  (packs table, support_number, digest_slots_email are never read — edits
+  to them silently do nothing; seeded support_number contradicts
+  lib/config.ts).
+
+Full per-finding evidence with file:line cites: the workflow transcript is
+session-local, so the durable copy is this list + the session log; anything
+being fixed should be re-verified against the code first anyway.
 
 ## Session 012 (2026-07-23) — pay-by-phone card capture added (standalone service)
 
