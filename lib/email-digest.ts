@@ -39,7 +39,7 @@ export interface SponsorAd {
 }
 
 /** CAN-SPAM requires a physical mailing address in every message. */
-const BUSINESS_ADDRESS = "The Plain Exchange · PO Box 000 · Millersburg, OH 44654";
+const BUSINESS_ADDRESS = "The Plain Exchange · PO Box 216 · Millersburg, OH 44654";
 
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

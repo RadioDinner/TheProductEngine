@@ -57,18 +57,14 @@ path is well-engineered.
    (When configuring: card-only payment methods — the webhook credits only
    synchronous `paid` checkouts; async methods would take money and grant
    nothing.)
-2. **Verify migration 9975 actually took** (the spend_credits enum fix — the
-   session-011 outage). No health probe can see it (it's a function-body
-   swap). Test: burn a member's free passes, post a credit-charged ad (or
-   web-post), confirm it posts and the ledger row appears. Until verified,
-   assume credit-charged posting may still be broken in prod.
-3. **Fix the CAN-SPAM address**: every live digest email ships "PO Box 000"
-   (`lib/email-digest.ts` BUSINESS_ADDRESS). A real mailing address is a
-   legal requirement — one-line edit, needs YOUR address.
-4. **Verify ADMIN_EMAIL** (the `prontonmail.com` typo fix was never
-   confirmed): send yourself a review alert (post a test ad) and a feedback
-   email. If broken, review alerts + digest-breaker alarms + feedback all
-   go nowhere silently.
+2. ~~Verify migration 9975~~ **✅ user re-confirmed applied 2026-07-28**
+   (same session, after the audit). Belt-and-suspenders check remains
+   worthwhile: burn a member's free passes and post one credit-charged ad
+   in prod — that's the only path that exercises the fixed RPC.
+3. ~~Fix the CAN-SPAM address~~ **✅ fixed 2026-07-28: "PO Box 216 ·
+   Millersburg, OH 44654"** (user-supplied box number; on `main`).
+4. ~~Verify ADMIN_EMAIL~~ **✅ user reports fixed 2026-07-28.** Confirm
+   delivery once: post a test ad and check the review-alert email arrives.
 5. **Confirm what pings the digest cron** (LAUNCH A5, open since session
    003). vercel.json schedules */5 and digests HAVE composed since Jul 14 —
    so something works; identify it (paid Vercel plan cron?) so it isn't an
