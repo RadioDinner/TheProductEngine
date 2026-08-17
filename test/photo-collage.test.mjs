@@ -12,6 +12,7 @@ import {
   collageDimensions,
   collagePlacements,
   combineImageBuffers,
+  gridCells,
   isCollageSrc,
   isCombinePartSrc,
   websiteAdPhotos,
@@ -83,9 +84,9 @@ export async function run(t) {
     });
   }
 
-  // Placement invariants for every count: nothing cropped (aspect ratio
-  // preserved), nothing off the page, input order kept, cap enforced.
-  for (const count of [2, 3, 4]) {
+  // Scrapbook invariants (2–3 pictures): nothing cropped (aspect ratio
+  // preserved), nothing off the page, input order kept.
+  for (const count of [2, 3]) {
     const dims = SIZES.slice(0, count);
     const placements = collagePlacements(dims);
     t.eq(`${count}-up placement count`, placements.length, count);
@@ -104,6 +105,21 @@ export async function run(t) {
       );
     }
   }
+  // 4 pictures (user decision): the fixed 2×2 grid — equal cells, thin
+  // gutters, exactly tiling the page.
+  t.eq("4-up is the fixed grid", collagePlacements(SIZES), gridCells());
+  const cells = gridCells();
+  t.eq("grid tiles the page width", cells[0].width + cells[1].width < COLLAGE_WIDTH, true);
+  t.eq(
+    "grid right column touches the page edge",
+    cells[1].left + cells[1].width,
+    COLLAGE_WIDTH,
+  );
+  t.eq(
+    "grid bottom row touches the page edge",
+    cells[3].top + cells[3].height,
+    COLLAGE_HEIGHT,
+  );
   t.eq("placements clamp above cap", collagePlacements(SIZES.concat([SIZES[0]])).length, 4);
   // An extreme panorama still fits uncropped.
   const pano = collagePlacements([{ width: 4000, height: 800 }, SIZES[1]])[0];
@@ -144,19 +160,27 @@ export async function run(t) {
         t.eq(`${count}-up picture ${i + 1} color shows`, near(got, COLORS[i]), true);
       }
     }
-    // Somewhere on the page the white ground still shows (scrapbook look):
-    // a corner no placement covers.
-    const corners = [
-      [4, 4],
-      [COLLAGE_WIDTH - 5, 4],
-      [4, COLLAGE_HEIGHT - 5],
-      [COLLAGE_WIDTH - 5, COLLAGE_HEIGHT - 5],
-    ];
-    const free = corners.find(([x, y]) => !placements.some((p) => inside(p, x, y)));
-    t.eq(`${count}-up has a free corner`, Boolean(free), true);
-    if (free) {
-      const got = await probe(collage, free[0], free[1]);
-      t.eq(`${count}-up white shows through`, near(got, { r: 255, g: 255, b: 255 }), true);
+    if (count < 4) {
+      // Somewhere on the page the white ground still shows (scrapbook look):
+      // a corner no placement covers.
+      const corners = [
+        [4, 4],
+        [COLLAGE_WIDTH - 5, 4],
+        [4, COLLAGE_HEIGHT - 5],
+        [COLLAGE_WIDTH - 5, COLLAGE_HEIGHT - 5],
+      ];
+      const free = corners.find(([x, y]) => !placements.some((p) => inside(p, x, y)));
+      t.eq(`${count}-up has a free corner`, Boolean(free), true);
+      if (free) {
+        const got = await probe(collage, free[0], free[1]);
+        t.eq(`${count}-up white shows through`, near(got, { r: 255, g: 255, b: 255 }), true);
+      }
+    } else {
+      // The grid's gutters stay white between the filled cells.
+      const gutterX = await probe(collage, 600, 300);
+      const gutterY = await probe(collage, 300, 750);
+      t.eq("grid vertical gutter is white", near(gutterX, { r: 255, g: 255, b: 255 }), true);
+      t.eq("grid horizontal gutter is white", near(gutterY, { r: 255, g: 255, b: 255 }), true);
     }
   }
 

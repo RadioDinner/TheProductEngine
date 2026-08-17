@@ -190,6 +190,19 @@ what PIC sends). The storage-marker helpers (isCollageSrc /
 isCombinePartSrc, bucket constant) moved to pure photo-collage.ts,
 re-exported from photos.ts for existing call sites. Suite 521 → **529**.
 
+## Part 6: 4 pictures = clean 2×2 grid (user refinement)
+
+After seeing the scrapbook style live, the user split the layout by count:
+2–3 pictures keep the flexible scrapbook (never cropped); **4 pictures now
+compose as a fixed 2×2 grid** — cells filled edge-to-edge (cover-cropped,
+centered) with thin white gutters on the same 1200×1500 page. New pure
+`gridCells()`; `collagePlacements()` returns the grid for 4 (dims ignored
+there) and the fit placements for 2–3; `combineImageBuffers` switches
+resize fit accordingly ("cover" for the grid, exact "fill" otherwise).
+Tests updated (grid geometry pinned, gutter-white probes; photo-collage
+65 → 68 checks, suite 529 → 524 net of replaced scrapbook-4 checks).
+Sample 4-up render sent in chat.
+
 ## Open questions / next steps
 
 1. **USER: paste migration 9974**, then check `/api/health` →

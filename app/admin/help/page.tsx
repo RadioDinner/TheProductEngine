@@ -197,9 +197,10 @@ export default async function AdminHelp() {
       <p>
         A seller who texts <strong>more than one picture</strong> — in one MMS or one picture
         per message — gets them <strong>combined into a single collage image</strong> that
-        becomes the ad&apos;s one photo (up to 4 pictures, arranged scrapbook-style on a white
-        page: every picture keeps its <em>full frame</em>, nothing is cropped away — they
-        overlap slightly like a photo pile). The ad still carries exactly one picture on the
+        becomes the ad&apos;s one photo. 2 or 3 pictures arrange scrapbook-style on a white
+        page — every picture keeps its <em>full frame</em>, nothing is cropped away, they
+        overlap slightly like a photo pile; 4 pictures make a clean 2×2 grid (cells filled
+        edge-to-edge, which does crop to fit the cells). The ad still carries exactly one picture on the
         SMS side, so PIC pulls, the digests, and picture-ad pricing are all unchanged — but{" "}
         <strong>the website shows the full individual pictures</strong>, not the collage
         (nothing shrunk, nothing overlapped). Pictures texted <em>after</em> the ad (with no text in

@@ -73,11 +73,13 @@ recent bare single with the checker to size the damage.
 
 ### Also built: scrapbook collage style (user request, competitor examples)
 The cover-cropped grid was cutting off detail (worst at 3 pictures). New
-style in `lib/photo-collage.ts`: pictures are NEVER cropped — full frames,
-native shapes, corner-anchored and staggered with slight overlap on a
-portrait 4:5 white page (1200×1500, all counts). Pure `collagePlacements()`
-is unit-pinned; sample renders were approved-in-chat. Photo-collage suite
-20 → 65 checks. **And (user request, same session): the WEBSITE now shows a
+layout by count in `lib/photo-collage.ts` (user decision after seeing it
+live): **2–3 pictures = scrapbook** — never cropped, full frames, native
+shapes, corner-anchored and staggered with slight overlap on a portrait
+4:5 white page (1200×1500); **4 pictures = clean 2×2 grid** — cells filled
+edge-to-edge (cover-cropped) with thin white gutters, same page. Pure
+`collagePlacements()`/`gridCells()` are unit-pinned; sample renders were
+approved-in-chat. **And (user request, same session): the WEBSITE now shows a
 combined ad's full individual pictures, never the collage** — display-only
 filter `websiteAdPhotos()` in both site-ad mappers; the collage stays at
 position 0 for PIC MMS / the seller confirmation / the email embed / the

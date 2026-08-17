@@ -5,13 +5,14 @@
  * send position 0 only) is untouched; every picture the seller sent still
  * shows, and the individual originals join the website gallery at 1+.
  *
- * Style (reworked session 014 to match the scrapbook look the user asked
- * for): pictures are NEVER cropped. Each keeps its full frame and native
- * aspect ratio, scaled to fit a generous corner-anchored region of a
- * portrait 4:5 white page; regions are sized so typical photos overlap
- * slightly (later pictures sit on top), with white showing through —
- * a staggered photo-pile, not a grid. The old cover-cropped grid cut off
- * detail whenever a photo's shape didn't match its cell; fit-inside cannot.
+ * Style (session-014 rework, refined by user decision):
+ * - 2 or 3 pictures → SCRAPBOOK: nothing is ever cropped. Each picture
+ *   keeps its full frame and native aspect ratio, scaled to fit a generous
+ *   corner-anchored region of the portrait 4:5 white page; regions are
+ *   sized so typical photos overlap slightly (later pictures sit on top),
+ *   with white showing through — a staggered photo-pile.
+ * - 4 pictures → clean 2×2 GRID: each cell filled edge-to-edge (cover-crop
+ *   — that's what makes it read as a grid) with thin white gutters.
  *
  * Output is baseline JPEG (old handsets choke on progressive), sized well
  * under carrier MMS limits. sharp does the decode/compose work. `.rotate()`
@@ -85,11 +86,12 @@ interface Slot {
 
 const W = COLLAGE_WIDTH;
 const H = COLLAGE_HEIGHT;
+const GRID_GUTTER = 8;
 
-/** Corner-anchored regions per picture count, sized so typical phone photos
- * overlap a little (the diagonal two-up, the staggered three, the loose
- * 2×2). Order matters twice: slot N holds the seller's Nth picture, and
- * later pictures composite ON TOP where they overlap. */
+/** Corner-anchored scrapbook regions (2 and 3 pictures — 4 uses the grid),
+ * sized so typical phone photos overlap a little (the diagonal two-up, the
+ * staggered three). Order matters twice: slot N holds the seller's Nth
+ * picture, and later pictures composite ON TOP where they overlap. */
 function slotsFor(count: number): Slot[] {
   if (count === 2) {
     return [
@@ -97,18 +99,10 @@ function slotsFor(count: number): Slot[] {
       { boxW: 0.68 * W, boxH: 0.6 * H, x: W, y: H, ax: "right", ay: "bottom" },
     ];
   }
-  if (count === 3) {
-    return [
-      { boxW: 0.64 * W, boxH: 0.44 * H, x: 0, y: 0, ax: "left", ay: "top" },
-      { boxW: 0.56 * W, boxH: 0.64 * H, x: W, y: 0.18 * H, ax: "right", ay: "top" },
-      { boxW: 0.6 * W, boxH: 0.44 * H, x: 0, y: H, ax: "left", ay: "bottom" },
-    ];
-  }
   return [
-    { boxW: 0.55 * W, boxH: 0.46 * H, x: 0, y: 0.03 * H, ax: "left", ay: "top" },
-    { boxW: 0.54 * W, boxH: 0.5 * H, x: W, y: 0, ax: "right", ay: "top" },
-    { boxW: 0.54 * W, boxH: 0.47 * H, x: 0, y: H, ax: "left", ay: "bottom" },
-    { boxW: 0.55 * W, boxH: 0.52 * H, x: W, y: H, ax: "right", ay: "bottom" },
+    { boxW: 0.64 * W, boxH: 0.44 * H, x: 0, y: 0, ax: "left", ay: "top" },
+    { boxW: 0.56 * W, boxH: 0.64 * H, x: W, y: 0.18 * H, ax: "right", ay: "top" },
+    { boxW: 0.6 * W, boxH: 0.44 * H, x: 0, y: H, ax: "left", ay: "bottom" },
   ];
 }
 
@@ -119,17 +113,33 @@ export interface CollagePlacement {
   height: number;
 }
 
+/** The 4-picture layout (user decision): a fixed 2×2 grid, each cell filled
+ * edge-to-edge — cover-cropped, which is what makes it read as a grid —
+ * with a thin white gutter between cells. */
+export function gridCells(): CollagePlacement[] {
+  const w = (W - GRID_GUTTER) / 2;
+  const h = (H - GRID_GUTTER) / 2;
+  return [
+    { left: 0, top: 0, width: w, height: h },
+    { left: w + GRID_GUTTER, top: 0, width: w, height: h },
+    { left: 0, top: h + GRID_GUTTER, width: w, height: h },
+    { left: w + GRID_GUTTER, top: h + GRID_GUTTER, width: w, height: h },
+  ];
+}
+
 /**
  * Where each picture lands on the page, given the pictures' (EXIF-corrected)
- * pixel sizes. Pure — the unit suite pins the invariants: aspect ratios are
- * preserved exactly (nothing cropped, nothing stretched), every placement
- * stays on the page, input order is kept.
+ * pixel sizes. Pure — the unit suite pins the invariants. 2–3 pictures:
+ * scrapbook fit — aspect ratios preserved exactly (nothing cropped, nothing
+ * stretched), every placement on the page, input order kept. 4 pictures:
+ * the fixed 2×2 grid — dims are ignored because grid cells COVER-crop.
  */
 export function collagePlacements(
   dims: { width: number; height: number }[],
 ): CollagePlacement[] {
   const use = dims.slice(0, MAX_COMBINED_PHOTOS);
-  const slots = slotsFor(Math.min(Math.max(use.length, 2), MAX_COMBINED_PHOTOS));
+  if (use.length >= MAX_COMBINED_PHOTOS) return gridCells();
+  const slots = slotsFor(Math.min(Math.max(use.length, 2), 3));
   return use.map((d, i) => {
     const s = slots[i];
     const scale = Math.min(s.boxW / d.width, s.boxH / d.height);
@@ -161,12 +171,14 @@ export async function combineImageBuffers(images: Buffer[]): Promise<Buffer> {
   const placements = collagePlacements(
     normalized.map((n) => ({ width: n.info.width, height: n.info.height })),
   );
+  // Scrapbook (2–3): "fill" to the exact placement size — never distorts,
+  // collagePlacements preserved the ratio. Grid (4): "cover" fills each
+  // fixed cell edge-to-edge, cropping centered.
+  const fit = use.length >= MAX_COMBINED_PHOTOS ? ("cover" as const) : ("fill" as const);
   const cells = await Promise.all(
     normalized.map((n, i) =>
       sharp(n.data)
-        // Exact placement size, same aspect ratio — "fill" here never
-        // distorts because collagePlacements preserved the ratio.
-        .resize(placements[i].width, placements[i].height, { fit: "fill" })
+        .resize(placements[i].width, placements[i].height, { fit })
         .jpeg({ quality: 90 })
         .toBuffer(),
     ),
