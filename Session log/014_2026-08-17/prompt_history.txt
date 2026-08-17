@@ -1,0 +1,15 @@
+--- 2026-08-17 11:33 ---
+I clicked the link to review a photo in the review queue and I got this message "The image “https://dfhwdhlmjzxfkovhxupx.supabase.co/storage/v1/object/public/ad-photos/collage/aa1625d1-b81b-44b0-8004-f02452ed422d.jpg” cannot be displayed because it contains errors."
+
+It displayed as an image though, and to copy the message I had to inspect the element.
+
+Also, I tried to send a "AD NEW" with an image and I got a response of "Got it! Your ad is #1015 and is waiting for review. You'll get a text when it's approved for the next digest. (5 credits - 29 left.)" and then I sent another picture and got "Got your picture! Ad #1015 (Brand new baluster) now shows 2 pictures combined into one photo. It's waiting for review."
+
+Now, I want you to
+
+1) fix the error, or tell me why it is happening.
+2) When someone sends in an ad with AD NEW and attaches an image, I want the sytem to reply something like "Got your ad! If you have any more pictures please send them one at a time. If we don't hear back from you within 10 minutes, we'll assume this is the only picture. You can send up to 4 pictures total"
+3) I want the system to send back a "combined" picture to the listing person, once all the automatically combine pictures process is complete.
+
+(Note: the same prompt was sent twice — once before and once after a local /model
+command switching the session model; logged once, verbatim.)

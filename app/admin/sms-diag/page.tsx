@@ -281,11 +281,10 @@ export default async function SmsDiagPage({
         <div>
           <p>
             {check.ok ? (
-              <strong>✓ The stored photo is healthy</strong>
+              <strong>✓ The stored photo is healthy — {check.decode}</strong>
             ) : (
               <strong>✗ Problem found</strong>
             )}
-            {check.decode && !check.ok ? null : check.decode ? <> — {check.decode}</> : null}
           </p>
           {check.problems.map((p, i) => (
             <p key={i}>

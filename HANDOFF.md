@@ -3,7 +3,51 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-07-28 (session 013).
+**Last updated:** 2026-08-17 (session 014).
+
+## Session 014 (2026-08-17) — collage "contains errors" report + picture-set coaching + combined-photo texts
+
+On the designated task branch `claude/ad-photo-review-errors-a0t57t` (not
+merged to main by me — merge posture wasn't restated this session).
+
+### ⚠️ NEW MIGRATION 9974 — USER MUST PASTE IT
+`9974_collage_confirmation.sql` (ads.collage_notified_at +
+ad_photos.created_at, re-runnable). Until pasted, the new combined-photo
+confirmation texts are silently OFF (cron warns once, digests unaffected);
+`/api/health` probes `migration9974`. The reply-copy changes work regardless.
+
+### Built: FEATURES item 33 (user request) — `6df1e71`
+1. **Picture coaching replies:** AD NEW that saves a picture now replies
+   "Got your ad! … If you have more pictures, please send them one at a
+   time - up to 4 total. If we don't hear from you within 10 minutes, we'll
+   assume this is the only picture." Multi-picture/follow-up confirmations
+   say how many pictures fit and promise the combined photo.
+2. **Combined-photo confirmation:** once a combined ad's pictures are quiet
+   for 10 minutes, the 5-min cron MMS's the seller the finished collage
+   (`lib/collage-notify.ts`; CAS claim on ads.collage_notified_at =
+   at-most-once; 25 sends/tick cap; outbound choke point `pic` class; a
+   later picture re-arms exactly one fresh send). DESIGN DECISION (flagged
+   to user): the 24 h pending-ad attach window is UNCHANGED — "10 minutes"
+   is when the set is announced complete, not when attaching closes.
+3. **/admin/sms-diag "Check a stored photo":** paste any of our storage
+   URLs → server-side fetch verifies HTTP status, served headers vs actual
+   bytes, JPEG markers, and a full sharp decode; names the failing layer.
+   Built for the user's "image contains errors" report (below).
+
+### The collage "contains errors" report (user, Firefox, collage/aa1625d1…)
+Could NOT fetch the live object — this session's egress policy blocks
+*.supabase.co (proxy 403; remote runner too). Code-level verdict: the whole
+pipeline is byte-faithful (collage is re-sniffed as JPEG before upload;
+content-type set from the same bytes; supabase-js sends the raw buffer;
+verified locally that combineImageBuffers emits clean baseline JPEG).
+Likeliest causes, in order: a truncated/cached download in the user's
+browser (hard-refresh / try Chrome), or a Supabase serving-layer hiccup.
+The sms-diag checker settles it in one click once deployed — NEXT SESSION:
+ask for its verdict on that URL if the user hasn't run it.
+
+Unit suite 464 → **476**; abuse 19/19; tsc + build clean. Adversarial
+review workflow run over the diff before push (findings fixed in-session —
+see the session log). Details: `Session log/014_2026-08-17/session_log.md`.
 
 ## Session 013 (2026-07-28) — multi-picture combine + pre-launch audit
 
