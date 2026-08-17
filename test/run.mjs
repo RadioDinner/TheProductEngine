@@ -25,6 +25,7 @@ const SUITES = [
   "categories",
   "areas",
   "photo-collage",
+  "collage-confirm",
 ];
 
 let totalPass = 0;

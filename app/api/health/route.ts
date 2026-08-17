@@ -241,6 +241,21 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/9976_categories.sql in the SQL editor",
           }
         : { applied: true };
+      // ads.collage_notified_at ships in the same paste as
+      // ad_photos.created_at, so this column probe stands in for the whole of
+      // 9974 (combined-photo confirmation texts). Until it's applied the
+      // feature is dormant by design: the cron warns once and sends nothing.
+      const collageConfirm = await db()
+        .from("ads")
+        .select("collage_notified_at", { count: "exact", head: true });
+      report.migration9974 = collageConfirm.error
+        ? {
+            applied: false,
+            code: collageConfirm.error.code,
+            error: collageConfirm.error.message,
+            fix: "run supabase/migrations/9974_collage_confirmation.sql in the SQL editor",
+          }
+        : { applied: true };
     } catch (e) {
       report.db = { ok: false, thrown: e instanceof Error ? e.message : String(e) };
     }

@@ -310,11 +310,22 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
 
   await notifyAdminNewAd({ id, from, hasPhoto, body, ...(hasPhoto && { photoSrc: photoSrc! }) });
 
+  // Picture-ad guidance (item 33): tell the seller how to add more pictures
+  // (one message at a time — carriers split multi-photo MMS unreliably) and
+  // when the set closes. The 10-minute line matches the combined-photo
+  // confirmation cadence in lib/collage-confirm.ts; late pictures still
+  // attach while the ad is pending (24 h window) and simply re-arm a fresh
+  // combined-photo text.
   let photoNote = "";
   if (photoDropped) {
     photoNote = ` Note: we couldn't save your picture${sentPictures > 1 ? "s" : ""}, so this will run as a text-only ad. Reply with the photo${sentPictures > 1 ? "s" : ""} again, or call ${site.supportPhone}.`;
   } else if (combined) {
+    const room = MAX_COMBINED_PHOTOS - savedPictures;
     photoNote = ` Your ${savedPictures} pictures were combined into one photo.`;
+    if (room > 0) photoNote += ` You can send ${room} more, one at a time.`;
+    photoNote += ` We'll text you the combined photo once your pictures are in.`;
+  } else if (hasPhoto && savedPictures === 1) {
+    photoNote = ` If you have more pictures, please send them one at a time - up to ${MAX_COMBINED_PHOTOS} total. If we don't hear from you within 10 minutes, we'll assume this is the only picture.`;
   }
   if (hasPhoto && savedPictures < sentPictures) {
     photoNote +=
@@ -323,7 +334,9 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
         : ` (We could only save ${savedPictures} of your ${sentPictures} pictures.)`;
   }
   return {
-    body: `Got it! Your ad is #${id} and is waiting for review. You'll get a text when it's approved for the next digest. (${chargeNote})${photoNote}`,
+    body: hasPhoto
+      ? `Got your ad! It's #${id} and is waiting for review - you'll get a text when it's approved for the next digest. (${chargeNote})${photoNote}`
+      : `Got it! Your ad is #${id} and is waiting for review. You'll get a text when it's approved for the next digest. (${chargeNote})${photoNote}`,
   };
 }
 
@@ -539,6 +552,16 @@ async function handlePhotoFollowup(
         if (!storedCollage.ok) throw new Error(storedCollage.reason);
         primary = { src: storedCollage.url, alt: title, ...collageDimensions(shownCount) };
         combinedNow = true;
+        // A `parts/` object promoted to position 0 by an earlier compose
+        // fallback has no gallery row of its own — give it one (same storage
+        // object, no re-store) so the collage replacing it doesn't orphan the
+        // picture and the gallery keeps matching what the collage combines.
+        if (primarySrc && primaryIsPart && !gallerySrcs.includes(primarySrc)) {
+          newParts = [
+            { src: primarySrc, alt: `${title} — picture 1`, width: 800, height: 600 },
+            ...newParts,
+          ];
+        }
         // The replaced position-0 object: a superseded collage, or a legacy
         // single now living on as its `parts/` copy.
         if (primarySrc && (primaryIsCollage || (legacyPrimary && legacyCopy))) {
@@ -569,10 +592,15 @@ async function handlePhotoFollowup(
     } else if (droppedBad > 0) {
       note = ` (We could only save ${newCount} of the ${media.length} pictures.)`;
     }
+    // Room + the combined-photo promise (item 33): mirror the AD NEW guidance
+    // so a trickling seller always knows how many pictures are left and that
+    // the finished collage will be texted back once the set goes quiet.
+    const room = Math.max(0, MAX_COMBINED_PHOTOS - shownCount);
+    const roomNote = room > 0 ? ` You can send ${room} more, one at a time.` : "";
     const s = newCount === 1 ? "" : "s";
     const body = combinedNow
-      ? `Got your picture${s}! Ad #${ad.id} (${title}) now shows ${shownCount} pictures combined into one photo. It's waiting for review.${chargeNote}${note}`
-      : `Got it! ${newCount === 1 ? "Your picture was" : `${newCount} pictures were`} added to ad #${ad.id} (${title}). It's waiting for review.${chargeNote}${note}`;
+      ? `Got your picture${s}! Ad #${ad.id} (${title}) now shows ${shownCount} pictures combined into one photo.${roomNote} We'll text you the combined photo once your pictures are in. It's waiting for review.${chargeNote}${note}`
+      : `Got it! ${newCount === 1 ? "Your picture was" : `${newCount} pictures were`} added to ad #${ad.id} (${title}). It's waiting for review.${chargeNote}${note}${roomNote}`;
     return { body };
   } catch (e) {
     // Undo the upgrade charge — the pictures didn't make it onto the ad. The

@@ -1,0 +1,132 @@
+# Session 014 — 2026-08-17
+
+Branch: `claude/ad-photo-review-errors-a0t57t` (designated task branch;
+merge-to-main posture was NOT restated this session, so nothing was merged).
+
+## What shipped
+
+- **`6df1e71` — Picture-set coaching + combined-photo confirmation
+  (FEATURES item 33) + stored-photo checker.**
+  - AD NEW that saves one picture now replies with the user's requested
+    coaching: "Got your ad! … If you have more pictures, please send them
+    one at a time - up to 4 total. If we don't hear from you within 10
+    minutes, we'll assume this is the only picture." Multi-picture and
+    follow-up confirmations state how many pictures fit ("You can send N
+    more, one at a time") and promise the combined photo. Segment audit:
+    every new reply stays GSM-encoded; the picture-ad confirmation goes
+    1 → 2 segments (the requested copy simply doesn't fit in one).
+  - Combined-photo confirmation: once a combined ad's pictures have been
+    quiet for 10 minutes, the 5-minute cron texts the seller the finished
+    collage as an MMS (`lib/collage-notify.ts`, via the outbound choke
+    point, `pic` class, 25 sends/tick cap). Claims are CAS'd on
+    `ads.collage_notified_at` before dispatch (at-most-once; overlapping
+    cron ticks can't double-send); a picture arriving after a send makes
+    the stamp stale and re-arms exactly one fresh confirmation. Emailed-in
+    extras (bare storage paths) deliberately do NOT re-arm it — only
+    collage-relevant rows (position 0 + `parts/`) drive the quiet clock.
+    Pure decision math + seller copy in `lib/collage-confirm.ts`
+    (dependency-free, unit-tested).
+  - **⚠️ Migration `9974_collage_confirmation.sql`** (ads.collage_notified_at
+    + ad_photos.created_at; re-runnable) — until pasted, the confirmation
+    texts are silently off (cron warns once, digests unaffected);
+    `/api/health` probes `migration9974`.
+  - `/admin/sms-diag` gained **"Check a stored photo"**: paste one of our
+    storage URLs and the server fetches it and verifies HTTP status, served
+    headers against the actual bytes (content-type vs sniffed format,
+    content-length vs received), JPEG start/end markers, and a full sharp
+    decode — the verdict names the failing layer.
+
+## The "image contains errors" investigation (user report)
+
+Firefox said the review-queue collage
+(`…/ad-photos/collage/aa1625d1-….jpg`) "cannot be displayed because it
+contains errors" (message only copyable via inspect-element — that's
+Firefox rendering the error as the broken image's alt text).
+
+- **Could not fetch the live object from this session**: the environment's
+  egress policy blocks `*.supabase.co` (proxy CONNECT 403; the remote
+  runner and WebFetch are blocked the same way).
+- **Code-level audit came back clean**: the collage buffer is re-sniffed
+  before upload (it only lands at `collage/….jpg` if the bytes really start
+  with the JPEG signature), the upload sends the raw buffer with
+  `content-type: image/jpeg` derived from those same bytes (supabase-js
+  passes a Buffer through untouched — verified against the installed
+  storage-js source), and `combineImageBuffers` locally produces a clean
+  baseline JPEG (SOI/EOI verified, full decode OK).
+- **Verdict**: corruption in our pipeline is effectively ruled out; the
+  likeliest causes are a truncated/cached download in that browser (fix:
+  hard refresh / another browser) or a Supabase serving-layer hiccup. The
+  new sms-diag checker gives a definitive one-click answer from the
+  deployed environment — ask for its verdict on that URL next session.
+
+## Directional decisions
+
+- **The 24 h pending-ad attach window stays** (session-013 behavior). The
+  new "10 minutes" copy is when the set is *announced complete* (and the
+  combined photo texted), not when attaching closes: a late picture on a
+  still-pending ad still attaches and earns one fresh combined-photo text.
+  Flagged to the user in the wrap-up; tightening the window to 10 minutes
+  is a one-constant change if they want the literal behavior.
+- Confirmation MMS is at-most-once by design (claim before send; a send
+  failure after a claim is logged, not retried) — no MMS retry storms.
+- Suppressed sends (PAUSE/blocklist/under-attack) stay claimed on purpose:
+  operator controls are deliberate, not retry fodder.
+
+## Verification
+
+- Unit suite 464 → **476** (new `test/collage-confirm.test.mjs`: quiet
+  window, re-arm, boundary, junk-timestamp, copy checks).
+- Abuse suite 19/19; `tsc --noEmit` clean; `next build` clean.
+- Adversarial review workflow (3 lenses × find → refute) run over the diff
+  before push — outcome recorded below.
+
+## Open questions / next steps
+
+1. **USER: paste migration 9974**, then check `/api/health` →
+   `migration9974: {applied: true}`.
+2. **USER: after the deploy, open `/admin/sms-diag` → "Check a stored
+   photo" and paste the failing collage URL** — the verdict line settles
+   the "contains errors" mystery. (Also worth a plain Chrome try of the
+   URL.)
+3. Send a real 2-picture ad end-to-end in prod: expect the coaching reply,
+   then the combined-photo MMS 10–15 min after the last picture.
+4. Carried backlog: session-013 operator queue (Stripe prod config is
+   still the launch blocker) + code backlog in HANDOFF.
+
+## Review workflow outcome
+
+3 lenses × find → adversarial refute (21 agents); 16 confirmed findings
+deduping to 8 real fixes, ALL FIXED in the follow-up commit:
+
+1. **Claim-then-suppressed lost the promised text forever** (high): a
+   PAUSE/under-attack-throttle during a tick claimed every due ad and sent
+   nothing, permanently. Fix: paused/throttled sends CAS-restore the claim
+   (nothing was transmitted → double-send-safe) so the text goes out when
+   the control lifts; blocklisted numbers and thrown dispatches stay
+   claimed (deliberate / may-have-sent).
+2. **Claims now count against the 25/tick cap** (was successes-only, so a
+   failing tick could walk the whole backlog).
+3. **Stale-src race**: a follow-up picture between the candidate select and
+   the dispatch replaces + deletes the old collage → the MMS carried a dead
+   URL. Fix: re-read the ad after winning the claim; if the src changed or
+   dueness lapsed, restore the claim and skip (a later tick sends the fresh
+   collage).
+4. **attachAdPhotos ordering**: parts rows now insert BEFORE the position-0
+   collage update, so a cron tick can never see a fresh collage whose
+   quiet-clock rows don't exist yet (premature + duplicate MMS).
+5. **Candidate select paged** past PostgREST's ~1000-row cap (oldest
+   first); claim errors from a stale schema cache route through the
+   warn-once degrade path instead of error spam.
+6. **Lookback 24 h → 25 h**: an equal lookback silently dropped sets that
+   finished in the attach window's final minutes.
+7. **Telnyx transport got a 10 s AbortSignal timeout** (lib/sms.ts) — one
+   hung fetch can no longer eat the 60 s cron/webhook budget (benefits
+   every SMS/MMS send, not just this feature).
+8. **sms-diag checker honesty**: dropped the JPEG end-marker "truncated"
+   probe (healthy phone JPEGs routinely carry trailing bytes — Samsung
+   motion-photo trailers etc.); decode uses failOn "error" (browser-like
+   tolerance) + the 64 MP input cap. Also: a `parts/` object promoted to
+   position 0 by a compose fallback now keeps a gallery row when a later
+   collage replaces it (no orphaned picture, correct picture count).
+
+Post-fix: unit 476/476, abuse 19/19, tsc + build clean.

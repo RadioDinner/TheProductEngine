@@ -40,6 +40,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 30 | **Homepage promo banner** — an operator-set banner at the top of the homepage for running credit sales; text + link live on /admin/settings (clear the text to hide it; link must be a page on this site, falls back to the credits section) | session 011 | **built** (no migration — new config keys fall back to defaults) |
 | 31 | **Pay-by-phone card capture** (Twilio `<Pay>` IVR → Stripe card on file) — callers key their OWN card into the phone keypad on a dedicated voice number; Twilio's Stripe Pay Connector tokenizes it (digits never touch the operator, this server, or a log) and it's saved to a Stripe customer; a bearer-authed `POST /charge` bills it off-session per order. The PCI-safe replacement for item 29's operator-keys-the-card call-in flow | session 012 | **added as standalone service** (`pay-by-phone/` — its own Twilio+Stripe deploy; NOT yet wired into member accounts — see note) |
 | 32 | **Multi-picture combine** — a seller who texts several pictures (in one MMS or trickled across messages) gets them automatically combined into a SINGLE collage image that rides the ad (up to 4 pictures; the user's session-011 idea). The ad still carries exactly one photo, so MMS/PIC/digest costs and the one-picture-ad price are untouched; the individual originals also join the website gallery | session 011 (idea) / session 013 (build) | **built** (no migration — see note) |
+| 33 | **Picture-set coaching + combined-photo confirmation** — an AD NEW with a picture now replies "send more pictures one at a time, up to 4 total; quiet for 10 minutes = the set is complete", and once a combined ad's pictures HAVE been quiet for 10 minutes the seller is texted the finished collage (MMS), so they see exactly the one photo buyers will get; a later picture re-arms one fresh confirmation | session 014 | **built** (⚠️ migration 9974 — until pasted the confirmation texts are silently off; the reply coaching works regardless) |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -370,3 +371,30 @@ itself; build details live in the session logs and HANDOFF.md.
   - Dev mode (no Supabase storage) keeps the allowlisted URLs: first picture
     = photo, the rest = gallery; unit suite pins the collage geometry/colors
     (`test/photo-collage.test.mjs`).
+- **33 · Picture-set coaching + combined-photo confirmation** (user request,
+  session 014). Two halves:
+  - **Coaching replies:** an AD NEW that saves a picture replies "Got your
+    ad! … If you have more pictures, please send them one at a time - up to 4
+    total. If we don't hear from you within 10 minutes, we'll assume this is
+    the only picture." Multi-picture and follow-up confirmations say how many
+    pictures the ad now shows, how many more fit, and promise the combined
+    photo. Sending pictures one message at a time is deliberate advice —
+    carriers split multi-attachment MMS unreliably.
+  - **Combined-photo confirmation (migration 9974):** the 5-minute cron
+    (`/api/cron/digests` → `lib/collage-notify.ts`) finds pending/approved
+    ads from the last 25 h (one hour past the attach window, so sets that
+    finish near the window's edge still confirm) whose position-0 photo is a
+    `collage/` object and
+    whose newest picture (`ad_photos.created_at`, new column) is ≥10 quiet
+    minutes old, claims each by compare-and-set on `ads.collage_notified_at`
+    (new column; at-most-once — overlapping cron ticks can't double-send),
+    and texts the seller the collage as an MMS through the outbound choke
+    point (`pic` class, so PAUSE/blocklist/under-attack all apply; capped at
+    25 sends/tick). A picture arriving after a confirmation makes the stamp
+    older than the newest picture, which re-arms exactly ONE more send after
+    the next quiet stretch. The 24 h attach window is unchanged — "10
+    minutes" is when the set is ANNOUNCED complete, not when attaching
+    closes (late pictures still attach while the ad is pending, and earn a
+    fresh confirmation). Pre-9974 the cron warns once and sends nothing;
+    `/api/health` probes `migration9974`. Pure decision math + seller copy
+    unit-tested (`lib/collage-confirm.ts`, `test/collage-confirm.test.mjs`).
