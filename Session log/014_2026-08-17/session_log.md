@@ -1,7 +1,9 @@
 # Session 014 — 2026-08-17
 
-Branch: `claude/ad-photo-review-errors-a0t57t` (designated task branch;
-merge-to-main posture was NOT restated this session, so nothing was merged).
+Branch: `claude/ad-photo-review-errors-a0t57t` for the feature work; the
+user then merged it to main (PR #2) and said "commit directly to main for
+the remainder of this session" — the Supabase log-noise fixes below went
+straight to `main`.
 
 ## What shipped
 
@@ -79,6 +81,26 @@ Firefox rendering the error as the broken image's alt text).
 - Abuse suite 19/19; `tsc --noEmit` clean; `next build` clean.
 - Adversarial review workflow (3 lenses × find → refute) run over the diff
   before push — outcome recorded below.
+
+## Part 2: Supabase error-log triage (user screenshot + CSV)
+
+The dashboard showed 26 Postgres errors/hour. Three families, none of which
+broke anything — but one exposed real migration drift:
+
+1. **`digests_channel_county_scheduled_for_key` 23505, twice every 5 min** —
+   `createDigestIfAbsent` used insert-then-catch-23505 as its idempotency
+   check, so every cron tick logged two handled "errors" (sms + email
+   channel). Digests were composing and sending normally the whole time.
+   Fixed: select-first, unique constraint kept as the race guard.
+2. **`column chat_messages.photo does not exist` 42703 (sporadic)** — the
+   chat pages' graceful retry-without-photo firing. Root cause: **migration
+   9980 drift** — pasted mid-session-009, then amended later that session;
+   prod has reported_at but not photo/the current send_chat. Chat pictures
+   + reporting silently off. USER ACTION: re-paste 9980 (re-runnable). The
+   health probe now checks reported_at AND photo so single-column probes
+   can't vouch for an amended file again.
+3. **`buckets_pkey` 23505 (per cold start)** — ensureBucket create-on-exists;
+   fixed with a getBucket probe first.
 
 ## Open questions / next steps
 

@@ -813,6 +813,27 @@ export async function createDigestIfAbsent(
   // slotKey ends "#HH" (ET) → canonical scheduled_for used purely as identity.
   const parts = slotKey.split("#");
   const scheduledFor = `${parts[0]}T${parts[parts.length - 1].padStart(2, "0")}:00:00Z`;
+  // Select-first: the cron re-checks the already-composed slot every 5
+  // minutes, and the old insert-first pattern painted the operator's
+  // Postgres error log red with a handled-but-logged 23505 on EVERY tick
+  // (two per tick — sms + email; user report 2026-08-17). The unique
+  // constraint below remains the race guard for genuinely-concurrent runs.
+  const { data: existing, error: selectError } = await db()
+    .from("digests")
+    .select("id, sent_at")
+    .eq("channel", channel)
+    .eq("scheduled_for", scheduledFor)
+    .maybeSingle();
+  if (selectError) throw selectError;
+  if (existing) {
+    // finalized=false means a previous run died between compose and
+    // finalize — the caller re-runs the (idempotent) enqueue to recover.
+    return {
+      id: existing.id as number,
+      created: false,
+      finalized: existing.sent_at != null,
+    };
+  }
   const { data, error } = await db()
     .from("digests")
     .insert({ channel, scheduled_for: scheduledFor })
@@ -820,19 +841,17 @@ export async function createDigestIfAbsent(
     .single();
   if (error) {
     if (error.code === "23505") {
-      const { data: existing, error: selectError } = await db()
+      const { data: raced, error: racedError } = await db()
         .from("digests")
         .select("id, sent_at")
         .eq("channel", channel)
         .eq("scheduled_for", scheduledFor)
         .single();
-      if (selectError) throw selectError;
-      // finalized=false means a previous run died between compose and
-      // finalize — the caller re-runs the (idempotent) enqueue to recover.
+      if (racedError) throw racedError;
       return {
-        id: existing.id as number,
+        id: raced.id as number,
         created: false,
-        finalized: existing.sent_at != null,
+        finalized: raced.sent_at != null,
       };
     }
     throw error;

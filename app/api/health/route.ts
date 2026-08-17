@@ -172,12 +172,15 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/9981_verified_members.sql in the SQL editor",
           }
         : { applied: true };
-      // reported_at ships in the same paste as the photo/chat_nudged_at
-      // columns, the 'chat' enum value, and send_chat(), so this column probe
-      // stands in for the whole of 9980 (chat reports/pictures/perf).
+      // Probe BOTH ends of 9980: prod was caught (2026-08-17 logs) holding a
+      // partial paste — reported_at present, photo missing — because the file
+      // was amended after the user's mid-session-009 paste and a single-column
+      // probe vouched for the whole migration. photo is the last-added column,
+      // so reported_at + photo together span the file; re-pasting is safe
+      // (re-runnable).
       const chatUpgrade = await db()
         .from("chat_messages")
-        .select("reported_at", { count: "exact", head: true });
+        .select("reported_at, photo", { count: "exact", head: true });
       report.migration9980 = chatUpgrade.error
         ? {
             applied: false,

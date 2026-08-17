@@ -37,9 +37,16 @@ function fetchableHost(src: string): boolean {
 
 async function ensureBucket(): Promise<void> {
   if (bucketReady) return;
-  // Public bucket: ad photos are public content (they render on the site).
-  const { error } = await db().storage.createBucket(BUCKET, { public: true });
-  if (error && !/exist|duplicate/i.test(error.message)) throw error;
+  // Probe before create: create-on-exists logs a handled-but-visible 23505
+  // (buckets_pkey) in the operator's Postgres error log on every cold start.
+  // Creation stays for the true first run, with its exist/duplicate swallow
+  // as the race guard.
+  const { data: existing } = await db().storage.getBucket(BUCKET);
+  if (!existing) {
+    // Public bucket: ad photos are public content (they render on the site).
+    const { error } = await db().storage.createBucket(BUCKET, { public: true });
+    if (error && !/exist|duplicate/i.test(error.message)) throw error;
+  }
   bucketReady = true;
 }
 

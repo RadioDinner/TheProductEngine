@@ -13,3 +13,10 @@ Now, I want you to
 
 (Note: the same prompt was sent twice — once before and once after a local /model
 command switching the session model; logged once, verbatim.)
+
+--- 2026-08-17 13:10 ---
+[screenshot: Supabase dashboard, last 60 min — 475 total requests, 89.3% success; API gateway 418 (25 warnings, 0 errors); Postgres 48 (0 warnings, 26 ERRORS); Storage 9; Edge functions 0; Auth 0]
+[file: 5f91b58e-supabase_logs1.csv — Postgres error log export]
+commit directly to main for the remainder of this sesion. This is on my supabase dashboard
+
+attached is a screenshot and the logs. I'll get working on the 3 items you gave me

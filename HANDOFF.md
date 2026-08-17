@@ -7,8 +7,30 @@ this every session. Per-session detail lives in `Session log/`.
 
 ## Session 014 (2026-08-17) — collage "contains errors" report + picture-set coaching + combined-photo texts
 
-On the designated task branch `claude/ad-photo-review-errors-a0t57t` (not
-merged to main by me — merge posture wasn't restated this session).
+Developed on `claude/ad-photo-review-errors-a0t57t`; **the user merged it to
+main (PR #2) and re-authorized committing directly to `main` for the rest of
+the session** — later session-014 commits are on `main`.
+
+### ⚠️ USER MUST RE-PASTE MIGRATION 9980 (chat upgrade) — partial-paste drift
+The user's Supabase error logs (2026-08-17) show `column
+chat_messages.photo does not exist`: 9980 was pasted mid-session-009 and
+then AMENDED later that session (chat pictures + send_chat RPC), so prod
+holds an early partial version. Everything degrades (chat pages retry
+without photo; sends fall back), but chat pictures + reporting are silently
+OFF. The file is re-runnable — paste the whole of
+`9980_chat_upgrade.sql` again, then `/api/health` → `migration9980`
+(the probe now checks reported_at AND photo, so it catches this drift).
+
+### Supabase error-log triage (user screenshot + CSV, 26 errors/hour)
+All three families were handled-but-logged noise or the 9980 drift above;
+none broke anything, all silenced in `a8b3114`:
+- **digests 23505 ×2 every cron tick** — createDigestIfAbsent used
+  insert-then-catch-conflict as its idempotency; now select-first (unique
+  constraint kept as the race guard). Digests were sending fine throughout.
+- **chat_messages.photo 42703** — the graceful retry's first attempt; real
+  fix = the 9980 re-paste above.
+- **buckets_pkey 23505** — ensureBucket create-on-exists per cold start;
+  now getBucket-probe-first.
 
 ### ⚠️ NEW MIGRATION 9974 — USER MUST PASTE IT
 `9974_collage_confirmation.sql` (ads.collage_notified_at +
