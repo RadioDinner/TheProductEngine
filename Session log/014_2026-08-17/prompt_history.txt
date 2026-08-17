@@ -43,3 +43,10 @@ I did check photo on the /admin/sms-diag and got ✗ Problem found
   "decode": "DECODE FAILED: Input buffer contains unsupported image format"
 }
 ```
+
+--- 2026-08-17 14:40 ---
+Still getting ✗ Problem found
+— the bytes are not a recognizable jpg/png/gif/webp file
+— DECODE FAILED: Input buffer contains unsupported image format
+[same checker JSON as before: status 200, image/jpeg, 197801 bytes,
+etag 861591c161a617d2dcdff9225a30fa47, firstBytesHex efbfbdefbfbd…]

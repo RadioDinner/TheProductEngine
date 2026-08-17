@@ -10,9 +10,10 @@
 import Link from "next/link";
 import sharp from "sharp";
 import { requireAdmin } from "@/lib/admin";
+import { supabaseConfigured } from "@/lib/db";
 import { CONTENT_TYPE_BY_EXT, sniffImage } from "@/lib/image-sniff";
 import { normalizePhone } from "@/lib/phone";
-import { rehostInboundPhotoDetailed, type RehostResult } from "@/lib/photos";
+import { rehostInboundPhotoDetailed, storeImageBytes, type RehostResult } from "@/lib/photos";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -174,7 +175,14 @@ async function checkStoredPhoto(raw: string): Promise<StorageCheck> {
 export default async function SmsDiagPage({
   searchParams,
 }: {
-  searchParams: Promise<{ to?: string; send?: string; id?: string; mediaUrl?: string; checkUrl?: string }>;
+  searchParams: Promise<{
+    to?: string;
+    send?: string;
+    id?: string;
+    mediaUrl?: string;
+    checkUrl?: string;
+    selftest?: string;
+  }>;
 }) {
   const adminPhone = await requireAdmin();
   const params = await searchParams;
@@ -189,6 +197,22 @@ export default async function SmsDiagPage({
   let check: StorageCheck | null = null;
   if (params.checkUrl?.trim()) {
     check = await checkStoredPhoto(params.checkUrl);
+  }
+  // Upload self-test (2026-08-17 corruption incident): generate a fresh JPEG
+  // on the server, push it through the REAL photo-storage pipeline (which now
+  // includes the post-upload read-back), then independently re-download and
+  // verify it like any pasted URL. One click answers "are uploads healthy
+  // RIGHT NOW on this deployment" without hunting for a media URL.
+  let selfTest: { stored: RehostResult; check?: StorageCheck } | null = null;
+  if (params.selftest === "1" && supabaseConfigured) {
+    const testJpeg = await sharp({
+      create: { width: 240, height: 180, channels: 3, background: { r: 30, g: 90, b: 200 } },
+    })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+    const stored = await storeImageBytes(testJpeg);
+    selfTest = { stored };
+    if (stored.ok) selfTest.check = await checkStoredPhoto(stored.url);
   }
 
   if (configured && params.send === "1") {
@@ -264,6 +288,44 @@ export default async function SmsDiagPage({
       {rehost && !rehost.ok && (
         <p>
           <strong>✗ Re-host failed:</strong> {rehost.reason}
+        </p>
+      )}
+
+      <h2>Storage upload self-test</h2>
+      <p className="fine">
+        Creates a small test image on this server, saves it through the exact pipeline every
+        ad photo uses (including the corruption read-back guard), then independently
+        re-downloads and verifies it byte-for-byte. Run this after a deploy to confirm{" "}
+        <strong>new</strong> uploads are healthy — a photo that was already stored corrupted
+        stays corrupted at its old URL forever, so re-checking an old URL only tells you
+        about the past.
+      </p>
+      <form method="get" action="/admin/sms-diag">
+        <input type="hidden" name="selftest" value="1" />
+        <button type="submit" disabled={!supabaseConfigured}>
+          Run upload self-test
+        </button>
+      </form>
+      {selfTest && !selfTest.stored.ok && (
+        <p>
+          <strong>✗ Upload pipeline reported a failure:</strong> {selfTest.stored.reason}
+          {/(corrupted|readback)/i.test(selfTest.stored.reason) &&
+            " — the transport is still mangling uploads; the guard caught and deleted it (no broken photo was kept)."}
+        </p>
+      )}
+      {selfTest?.stored.ok && (
+        <p>
+          {selfTest.check?.ok ? (
+            <strong>✓ Uploads are healthy — the test image survived the round trip byte-for-byte.</strong>
+          ) : (
+            <strong>
+              ✗ Stored, but re-verification found: {selfTest.check?.problems.join("; ") ?? "no verdict"}
+            </strong>
+          )}{" "}
+          <a href={selfTest.stored.url} target="_blank" rel="noreferrer">
+            Open the test image
+          </a>{" "}
+          (a small blue rectangle; harmless to leave in storage).
         </p>
       )}
 
