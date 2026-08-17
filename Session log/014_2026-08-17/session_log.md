@@ -102,6 +102,48 @@ broke anything — but one exposed real migration drift:
 3. **`buckets_pkey` 23505 (per cold start)** — ensureBucket create-on-exists;
    fixed with a getBucket probe first.
 
+## Part 3: the collage corruption ROOT-CAUSED and fixed
+
+The user ran the new sms-diag checker on the failing collage: bytes at rest
+start `efbfbd efbfbd…` — the UTF-8 REPLACEMENT CHARACTER, repeated. The
+stored file is the JPEG after a lossy binary→string→UTF-8 round trip. That
+plus the checker's clean serve headers pinned the layer: the upload
+transport, in production only.
+
+Reproduction matrix (all with the prod-pinned versions — storage-js
+2.110.0, sharp 0.35.3): plain Node upload of a sharp buffer → intact;
+inside a `next dev` route handler → intact; inside a production
+`next build`+`next start` route handler → intact. Conclusion: not
+storage-js, not undici, not Next — it's **Vercel's function runtime**,
+matching a known bug class (Vercel community: "Node Buffer body re-encoded
+as UTF-8 on Vercel functions — high bytes become EF BF BD"). Why singles
+worked in July but the collage broke now: unknowable from outside Vercel
+(their runtime updates independently of deploys); the fix below doesn't
+depend on knowing.
+
+**Fix (both layers in `storeImageBytes`, the single upload choke point for
+every image the app stores):**
+1. Upload body is now an exact **ArrayBuffer copy**, never a Node Buffer —
+   a plain BufferSource with no Node-specific type for an instrumentation
+   layer to string-coerce.
+2. **Read-back verification**: after every upload, download the object and
+   compare byte-for-byte. On mismatch: delete the corrupt object, log the
+   hex signatures, return a clean failure — the callers' existing fallbacks
+   (post as text + tell the seller / first-picture-as-photo) take over. No
+   corrupt photo can ever ship silently again, whatever the transport does.
+
+Proven end-to-end against the REAL function with a fake storage server:
+honest server → ok + verified; server simulating the exact Vercel mangle →
+"readback mismatch" failure + corrupt object deleted (observed the DELETE).
+
+**Existing damage:** the corrupt collage(s) in prod storage stay corrupt
+until rebuilt. After this deploys: any new picture texted to a pending ad
+rebuilds its collage through the fixed pipeline; ad #1015 (test ad) can be
+fixed by texting one more picture, or delete + repost. Whether `parts/` and
+recent bare singles are also corrupt is checkable with the sms-diag
+checker (if the runtime mangles all Buffer bodies, everything uploaded
+since the runtime change is bad — worth spot-checking one of each).
+
 ## Open questions / next steps
 
 1. **USER: paste migration 9974**, then check `/api/health` →

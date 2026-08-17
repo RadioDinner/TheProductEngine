@@ -20,3 +20,26 @@ command switching the session model; logged once, verbatim.)
 commit directly to main for the remainder of this sesion. This is on my supabase dashboard
 
 attached is a screenshot and the logs. I'll get working on the 3 items you gave me
+
+--- 2026-08-17 13:55 ---
+I did check photo on the /admin/sms-diag and got ✗ Problem found
+— the bytes are not a recognizable jpg/png/gif/webp file
+— DECODE FAILED: Input buffer contains unsupported image format
+
+```
+{
+  "status": 200,
+  "headers": {
+    "content-type": "image/jpeg",
+    "content-length": "197801",
+    "content-encoding": "(absent)",
+    "cache-control": "public, max-age=3600",
+    "etag": "\"861591c161a617d2dcdff9225a30fa47\""
+  },
+  "bytesReceived": 197801,
+  "bytesAre": "not a known image format",
+  "firstBytesHex": "efbfbdefbfbdefbf",
+  "lastBytesHex": "bdefbfbd",
+  "decode": "DECODE FAILED: Input buffer contains unsupported image format"
+}
+```

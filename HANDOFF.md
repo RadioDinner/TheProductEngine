@@ -56,16 +56,20 @@ confirmation texts are silently OFF (cron warns once, digests unaffected);
    bytes, JPEG markers, and a full sharp decode; names the failing layer.
    Built for the user's "image contains errors" report (below).
 
-### The collage "contains errors" report (user, Firefox, collage/aa1625d1…)
-Could NOT fetch the live object — this session's egress policy blocks
-*.supabase.co (proxy 403; remote runner too). Code-level verdict: the whole
-pipeline is byte-faithful (collage is re-sniffed as JPEG before upload;
-content-type set from the same bytes; supabase-js sends the raw buffer;
-verified locally that combineImageBuffers emits clean baseline JPEG).
-Likeliest causes, in order: a truncated/cached download in the user's
-browser (hard-refresh / try Chrome), or a Supabase serving-layer hiccup.
-The sms-diag checker settles it in one click once deployed — NEXT SESSION:
-ask for its verdict on that URL if the user hasn't run it.
+### The collage "contains errors" — ✅ ROOT-CAUSED + FIXED (same session)
+The user ran the new sms-diag checker: the stored collage's bytes are
+`efbfbd…` = UTF-8 replacement characters — the JPEG went through a lossy
+binary→string round trip **in Vercel's function runtime** (known bug
+class: Node Buffer bodies re-encoded as UTF-8 on Vercel functions). NOT
+reproducible locally (plain Node / next dev / next start all byte-faithful
+with the prod-pinned versions). Fixed in `storeImageBytes` (the single
+upload choke point): (1) upload body is an ArrayBuffer copy, never a Node
+Buffer; (2) **post-upload read-back verification** — mismatch ⇒ delete the
+corrupt object + clean failure into the existing photo fallbacks. Proven
+end-to-end against a fake storage server incl. a simulated mangle.
+Residue: collages uploaded before the fix stay corrupt until their ad gets
+another picture (rebuild) or is reposted; spot-check a `parts/` and a
+recent bare single with the checker to size the damage.
 
 Unit suite 464 → **476**; abuse 19/19; tsc + build clean. Adversarial
 review workflow run over the diff before push (findings fixed in-session —

@@ -100,10 +100,41 @@ export async function storeImageBytes(bytes: Buffer, folder?: PhotoFolder): Prom
   try {
     await ensureBucket();
     const path = `${folder ? `${folder}/` : ""}${randomUUID()}.${ext}`;
+    // Upload as an exact-sliced ArrayBuffer, never a Node Buffer. Vercel's
+    // function runtime was caught (2026-08-17, ad #1015's collage) UTF-8
+    // re-encoding Buffer fetch bodies — every high byte became EF BF BD, so
+    // a valid in-memory JPEG landed in storage as mangled text. An
+    // ArrayBuffer is a plain BufferSource with no Node-specific type for an
+    // instrumentation layer to string-coerce. (Not reproducible locally —
+    // plain Node, next dev, and next start all send Buffers intact.)
+    const body = new Uint8Array(bytes).buffer; // exact copy into a fresh plain ArrayBuffer
     const { error } = await db()
       .storage.from(BUCKET)
-      .upload(path, bytes, { contentType: CONTENT_TYPE_BY_EXT[ext] });
+      .upload(path, body, { contentType: CONTENT_TYPE_BY_EXT[ext] });
     if (error) return { ok: false, reason: `storage upload failed: ${error.message}` };
+    // Read-back verification: fetch what storage actually holds and compare
+    // byte-for-byte. Whatever any transport layer does in the future, a
+    // corrupted upload now fails LOUDLY at ingest — the callers' existing
+    // fallbacks (post as text and tell the seller / first-picture-as-photo)
+    // handle it — instead of shipping a broken photo to review and buyers.
+    const { data: readback, error: readError } = await db().storage.from(BUCKET).download(path);
+    if (readError || !readback) {
+      await db().storage.from(BUCKET).remove([path]).catch(() => {});
+      return {
+        ok: false,
+        reason: `storage readback failed: ${readError?.message ?? "no data"}`,
+      };
+    }
+    const stored = Buffer.from(await readback.arrayBuffer());
+    if (stored.byteLength !== bytes.byteLength || !stored.equals(bytes)) {
+      await db().storage.from(BUCKET).remove([path]).catch(() => {});
+      console.error(
+        `[photos] storage readback mismatch for ${path}: sent ${bytes.byteLength} bytes` +
+          ` (${bytes.subarray(0, 4).toString("hex")}…), stored ${stored.byteLength}` +
+          ` (${stored.subarray(0, 4).toString("hex")}…) — upload transport corrupted the file`,
+      );
+      return { ok: false, reason: "the upload transport corrupted the file (readback mismatch)" };
+    }
     const { data } = db().storage.from(BUCKET).getPublicUrl(path);
     if (!data.publicUrl) return { ok: false, reason: "storage returned no public URL" };
     return { ok: true, url: data.publicUrl };
