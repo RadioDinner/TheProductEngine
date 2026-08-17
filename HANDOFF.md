@@ -71,9 +71,21 @@ Residue: collages uploaded before the fix stay corrupt until their ad gets
 another picture (rebuild) or is reposted; spot-check a `parts/` and a
 recent bare single with the checker to size the damage.
 
-Unit suite 464 → **476**; abuse 19/19; tsc + build clean. Adversarial
-review workflow run over the diff before push (findings fixed in-session —
-see the session log). Details: `Session log/014_2026-08-17/session_log.md`.
+### Also built: scrapbook collage style (user request, competitor examples)
+The cover-cropped grid was cutting off detail (worst at 3 pictures). New
+style in `lib/photo-collage.ts`: pictures are NEVER cropped — full frames,
+native shapes, corner-anchored and staggered with slight overlap on a
+portrait 4:5 white page (1200×1500, all counts). Pure `collagePlacements()`
+is unit-pinned; sample renders were approved-in-chat. Photo-collage suite
+20 → 65 checks.
+
+Unit suite 464 → **521**; abuse 19/19; tsc + build clean. Adversarial
+review workflow run over the item-33 diff before push (findings fixed
+in-session — see the session log). Also this session: the collage-corruption
+root cause (Vercel runtime mangling Buffer uploads) fixed with ArrayBuffer
+bodies + post-upload readback, the sms-diag one-click upload self-test, and
+the Postgres log-noise silencing. Details:
+`Session log/014_2026-08-17/session_log.md`.
 
 ## Session 013 (2026-07-28) — multi-picture combine + pre-launch audit
 

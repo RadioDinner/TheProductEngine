@@ -347,10 +347,16 @@ itself; build details live in the session logs and HANDOFF.md.
   - **One MMS with 2–4 pictures:** each attachment is byte-validated and
     re-hosted individually (`parts/` storage folder, website gallery
     positions 1+), then composed into one collage JPEG (`collage/` folder,
-    position 0 — the picture MMS/PIC/digests carry). 2 → side-by-side,
-    3 → one wide + two below, 4 → 2×2 grid; white gutters; EXIF orientation
-    honored; ≤1200px, baseline JPEG (safe for old handsets + carrier size
-    limits). Attachments past 4 are dropped and the confirmation says so.
+    position 0 — the picture MMS/PIC/digests carry). **Scrapbook style**
+    (session-014 rework, modeled on the user's competitor examples):
+    pictures are NEVER cropped — each keeps its full frame and native
+    shape, scaled to fit a corner-anchored region of a portrait 4:5
+    (1200×1500) white page, staggered so typical photos overlap slightly
+    (later pictures on top) with white showing through. The old
+    cover-cropped grid cut off detail whenever a photo's shape didn't
+    match its cell; fit-inside cannot. EXIF orientation honored; baseline
+    JPEG (safe for old handsets + carrier size limits). Attachments past 4
+    are dropped and the confirmation says so.
   - **Pictures trickled across messages:** a photo-only MMS from a sender
     with a PENDING ad less than 24 h old attaches to that ad — the collage is
     rebuilt with the new picture(s) up to the cap of 4. Approved ads never

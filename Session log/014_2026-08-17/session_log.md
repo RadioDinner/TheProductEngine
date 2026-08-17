@@ -144,6 +144,35 @@ recent bare singles are also corrupt is checkable with the sms-diag
 checker (if the runtime mangles all Buffer bodies, everything uploaded
 since the runtime change is bad — worth spot-checking one of each).
 
+## Part 4: scrapbook-style collage rework (user request, competitor examples)
+
+The user shared five competitor collages (2/3/4 pictures) and reported the
+real pain: the cover-cropped grid cuts off important detail, especially at
+3 pictures. Reworked `lib/photo-collage.ts` to the competitor's style:
+
+- **Nothing is ever cropped or stretched.** Each picture keeps its full
+  frame and native aspect ratio (EXIF-rotated first), scaled to FIT a
+  generous corner-anchored region.
+- **Portrait 4:5 white page (1200×1500) for every count** — pictures land
+  staggered (diagonal two-up, TL/right-tall/BL three-up, loose 2×2
+  four-up), typical photos overlap slightly, later pictures on top, white
+  ground showing through.
+- New pure `collagePlacements()` drives both the composer and the tests;
+  `collageDimensions()` now always returns the fixed page (call sites
+  unchanged). Sample renders (2/3/4-up) were generated with the real code
+  and sent to the user in chat for approval of the look.
+- Test suite rewritten around the new invariants (aspect preserved,
+  on-page, visible probe point per picture, white shows through, EXIF
+  before placement, panorama fits): photo-collage 20 → 65 checks; total
+  suite 476 → **521**.
+- Composed sizes are modest (sample 2-up 27 KB … 4-up 37 KB; real photos
+  a few hundred KB at q80 — comfortably under carrier MMS limits).
+
+Deliberate choices: send order = placement order (slot 2 is the tall one
+in a 3-up — no orientation-based reshuffling, so replies' "picture N"
+numbering always matches); overlap is emergent from region sizes, not
+random, so composes are deterministic and testable.
+
 ## Open questions / next steps
 
 1. **USER: paste migration 9974**, then check `/api/health` →

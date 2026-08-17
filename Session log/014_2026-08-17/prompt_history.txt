@@ -50,3 +50,9 @@ Still getting ✗ Problem found
 — DECODE FAILED: Input buffer contains unsupported image format
 [same checker JSON as before: status 200, image/jpeg, 197801 bytes,
 etag 861591c161a617d2dcdff9225a30fa47, firstBytesHex efbfbdefbfbd…]
+
+--- 2026-08-17 15:20 ---
+[5 images: competitor collage examples — horses ×3 staggered, e-bikes/ATV ×4,
+scope+backpack ×2 diagonal, Maytag washers ×3, horses ×2 diagonal; all
+uncropped photos on a white 4:5 canvas with slight overlaps]
+attached are some examples of how images are combined from a competitor. Can I do this somehow? When there are only 3 pictures, sometimes important details get cut off from the image depending on how the automatic part of the collage gets generated. The attached examples have varying amounts of pictures. a few have 2 pics combined, some have 3, and one of them has 4
