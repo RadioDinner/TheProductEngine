@@ -127,8 +127,13 @@ async function checkStoredPhoto(raw: string): Promise<StorageCheck> {
     const tail = bytes.subarray(-4).toString("hex");
     let decode: string;
     try {
-      const meta = await sharp(bytes).metadata();
-      await sharp(bytes).raw().toBuffer(); // full decode, not just the header
+      // failOn "error": tolerate warnings (trailing bytes after EOI, minor
+      // metadata oddities are normal in real phone JPEGs) but fail on true
+      // decode errors — roughly a browser's tolerance, unlike sharp's
+      // stricter default which would flag files every browser shows fine.
+      const opts = { failOn: "error" as const, limitInputPixels: 64_000_000 };
+      const meta = await sharp(bytes, opts).metadata();
+      await sharp(bytes, opts).raw().toBuffer(); // full decode, not just the header
       decode = `decodes cleanly as ${meta.format} ${meta.width}×${meta.height}`;
     } catch (e) {
       decode = `DECODE FAILED: ${e instanceof Error ? e.message : String(e)}`;
@@ -144,9 +149,10 @@ async function checkStoredPhoto(raw: string): Promise<StorageCheck> {
     if (Number.isFinite(lenHeader) && lenHeader !== bytes.byteLength) {
       problems.push(`content-length says ${lenHeader} but ${bytes.byteLength} bytes arrived (truncated in transit)`);
     }
-    if (sniffed === "jpg" && tail !== "ffd9" && !tail.endsWith("ffd9")) {
-      problems.push("JPEG is missing its end-of-image marker ffd9 (truncated file in storage)");
-    }
+    // Deliberately NO end-of-image-marker check: real intact JPEGs routinely
+    // carry trailing bytes after EOI (Samsung motion-photo trailers, encoder
+    // padding), so a tail probe would cry "truncated" on healthy files. The
+    // full decode above is the arbiter; the tail hex is shown as data below.
     if (decode.startsWith("DECODE FAILED")) problems.push(decode);
     return {
       url,

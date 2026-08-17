@@ -95,5 +95,38 @@ Firefox rendering the error as the broken image's alt text).
 
 ## Review workflow outcome
 
-(recorded at session end — see wrap-up message; any confirmed findings were
-fixed before push)
+3 lenses × find → adversarial refute (21 agents); 16 confirmed findings
+deduping to 8 real fixes, ALL FIXED in the follow-up commit:
+
+1. **Claim-then-suppressed lost the promised text forever** (high): a
+   PAUSE/under-attack-throttle during a tick claimed every due ad and sent
+   nothing, permanently. Fix: paused/throttled sends CAS-restore the claim
+   (nothing was transmitted → double-send-safe) so the text goes out when
+   the control lifts; blocklisted numbers and thrown dispatches stay
+   claimed (deliberate / may-have-sent).
+2. **Claims now count against the 25/tick cap** (was successes-only, so a
+   failing tick could walk the whole backlog).
+3. **Stale-src race**: a follow-up picture between the candidate select and
+   the dispatch replaces + deletes the old collage → the MMS carried a dead
+   URL. Fix: re-read the ad after winning the claim; if the src changed or
+   dueness lapsed, restore the claim and skip (a later tick sends the fresh
+   collage).
+4. **attachAdPhotos ordering**: parts rows now insert BEFORE the position-0
+   collage update, so a cron tick can never see a fresh collage whose
+   quiet-clock rows don't exist yet (premature + duplicate MMS).
+5. **Candidate select paged** past PostgREST's ~1000-row cap (oldest
+   first); claim errors from a stale schema cache route through the
+   warn-once degrade path instead of error spam.
+6. **Lookback 24 h → 25 h**: an equal lookback silently dropped sets that
+   finished in the attach window's final minutes.
+7. **Telnyx transport got a 10 s AbortSignal timeout** (lib/sms.ts) — one
+   hung fetch can no longer eat the 60 s cron/webhook budget (benefits
+   every SMS/MMS send, not just this feature).
+8. **sms-diag checker honesty**: dropped the JPEG end-marker "truncated"
+   probe (healthy phone JPEGs routinely carry trailing bytes — Samsung
+   motion-photo trailers etc.); decode uses failOn "error" (browser-like
+   tolerance) + the 64 MP input cap. Also: a `parts/` object promoted to
+   position 0 by a compose fallback now keeps a gallery row when a later
+   collage replaces it (no orphaned picture, correct picture count).
+
+Post-fix: unit 476/476, abuse 19/19, tsc + build clean.

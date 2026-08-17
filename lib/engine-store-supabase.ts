@@ -174,10 +174,16 @@ export async function latestPendingAdFor(
 
 /**
  * Install/replace the position-0 picture and append gallery originals
- * (item 32). PENDING ads only. Row-first ordering keeps a crash from ever
- * leaving a broken image: the position-0 row points at the new src before
- * the caller removes any replaced storage object. Returns the previous
- * position-0 src, or null if the ad is not pending anymore.
+ * (item 32). PENDING ads only. Ordering matters twice over: the gallery
+ * `parts/` rows go in FIRST so that the moment a collage appears at position
+ * 0 its quiet-clock rows (item 33 — ad_photos.created_at drives the
+ * combined-photo confirmation) already exist — the reverse order gave a
+ * concurrent cron tick a window where a fresh collage looked ancient and
+ * earned a premature text. And the position-0 row points at the new src
+ * before the caller removes any replaced storage object, so a crash between
+ * the two calls leaves the old photo plus extra gallery rows — never a
+ * broken image. Returns the previous position-0 src, or null if the ad is
+ * not pending anymore.
  */
 export async function attachAdPhotos(
   id: number,
@@ -201,6 +207,22 @@ export async function attachAdPhotos(
   const existing = (rows ?? []) as { id: number; src: string; position: number }[];
   const current0 = existing.find((p) => p.position === 0);
   const oldPrimarySrc = current0?.src ?? null;
+  if (addParts.length) {
+    const nextPosition = Math.max(0, ...existing.map((p) => p.position)) + 1;
+    const { error: partsError } = await db()
+      .from("ad_photos")
+      .insert(
+        addParts.map((p, i) => ({
+          ad_id: id,
+          src: p.src,
+          alt: p.alt,
+          width: p.width,
+          height: p.height,
+          position: nextPosition + i,
+        })),
+      );
+    if (partsError) throw partsError;
+  }
   if (primary) {
     if (current0) {
       const { error: updateError } = await db()
@@ -219,22 +241,6 @@ export async function attachAdPhotos(
       });
       if (insertError) throw insertError;
     }
-  }
-  if (addParts.length) {
-    const nextPosition = Math.max(0, ...existing.map((p) => p.position)) + 1;
-    const { error: partsError } = await db()
-      .from("ad_photos")
-      .insert(
-        addParts.map((p, i) => ({
-          ad_id: id,
-          src: p.src,
-          alt: p.alt,
-          width: p.width,
-          height: p.height,
-          position: nextPosition + i,
-        })),
-      );
-    if (partsError) throw partsError;
   }
   return { oldPrimarySrc };
 }

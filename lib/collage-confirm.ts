@@ -10,8 +10,12 @@ export const COLLAGE_QUIET_MS = 10 * 60 * 1000;
 
 /** Only ads this recent are considered — keeps the cron query tiny and stops
  * a freshly-pasted 9974 (which backfills ad_photos.created_at to the paste
- * time) from texting sellers about long-finished ads. */
-export const COLLAGE_CONFIRM_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+ * time) from texting sellers about long-finished ads. Deliberately ONE HOUR
+ * PAST the 24 h photo-follow-up attach window (PHOTO_FOLLOWUP_WINDOW_MS in
+ * lib/engine.ts): a picture attached in the window's final minutes still
+ * needs its quiet period + a cron tick to be confirmed after the window
+ * closes — an equal lookback would silently drop exactly those. */
+export const COLLAGE_CONFIRM_LOOKBACK_MS = 25 * 60 * 60 * 1000;
 
 export interface CollageConfirmInput {
   /** When the ad itself was posted. */

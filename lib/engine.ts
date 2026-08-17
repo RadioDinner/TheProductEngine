@@ -552,6 +552,16 @@ async function handlePhotoFollowup(
         if (!storedCollage.ok) throw new Error(storedCollage.reason);
         primary = { src: storedCollage.url, alt: title, ...collageDimensions(shownCount) };
         combinedNow = true;
+        // A `parts/` object promoted to position 0 by an earlier compose
+        // fallback has no gallery row of its own — give it one (same storage
+        // object, no re-store) so the collage replacing it doesn't orphan the
+        // picture and the gallery keeps matching what the collage combines.
+        if (primarySrc && primaryIsPart && !gallerySrcs.includes(primarySrc)) {
+          newParts = [
+            { src: primarySrc, alt: `${title} — picture 1`, width: 800, height: 600 },
+            ...newParts,
+          ];
+        }
         // The replaced position-0 object: a superseded collage, or a legacy
         // single now living on as its `parts/` copy.
         if (primarySrc && (primaryIsCollage || (legacyPrimary && legacyCopy))) {

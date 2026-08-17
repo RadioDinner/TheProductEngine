@@ -16,11 +16,17 @@ const devTransport: SmsTransport = {
   },
 };
 
+/** A message create is a fast API call; a Telnyx stall must fail in bounded
+ * time — senders run inside the 60 s cron/webhook budget, and one hung fetch
+ * would otherwise eat it (mirrors FETCH_TIMEOUT_MS in lib/photos.ts). */
+const SEND_TIMEOUT_MS = 10_000;
+
 /** Real Telnyx sending — active once TELNYX_API_KEY + TELNYX_FROM_NUMBER exist. */
 const telnyxTransport: SmsTransport = {
   async send(to, body, media) {
     const response = await fetch("https://api.telnyx.com/v2/messages", {
       method: "POST",
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${process.env.TELNYX_API_KEY}`,
         "Content-Type": "application/json",

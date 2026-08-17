@@ -382,7 +382,9 @@ itself; build details live in the session logs and HANDOFF.md.
     carriers split multi-attachment MMS unreliably.
   - **Combined-photo confirmation (migration 9974):** the 5-minute cron
     (`/api/cron/digests` → `lib/collage-notify.ts`) finds pending/approved
-    ads from the last 24 h whose position-0 photo is a `collage/` object and
+    ads from the last 25 h (one hour past the attach window, so sets that
+    finish near the window's edge still confirm) whose position-0 photo is a
+    `collage/` object and
     whose newest picture (`ad_photos.created_at`, new column) is ≥10 quiet
     minutes old, claims each by compare-and-set on `ads.collage_notified_at`
     (new column; at-most-once — overlapping cron ticks can't double-send),
