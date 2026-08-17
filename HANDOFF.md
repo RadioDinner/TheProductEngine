@@ -5,21 +5,41 @@ this every session. Per-session detail lives in `Session log/`.
 
 **Last updated:** 2026-08-17 (session 014).
 
-## Session 014 (2026-08-17) — collage "contains errors" report + picture-set coaching + combined-photo texts
+## Session 014 (2026-08-17) — picture-pipeline day: coaching replies, combined-photo texts, Vercel upload corruption root-caused, scrapbook/grid collages, web shows originals
 
-Developed on `claude/ad-photo-review-errors-a0t57t`; **the user merged it to
-main (PR #2) and re-authorized committing directly to `main` for the rest of
-the session** — later session-014 commits are on `main`.
+Started on the designated branch `claude/ad-photo-review-errors-a0t57t`
+(`6df1e71`, `899b51f`, `54223d7`); the user merged it (PR #2) and said
+"commit directly to main for the remainder of this session" — everything
+after is on `main`: `d0ec4a1`+`7e57fdf` (log-noise), `9be119a` (corruption
+fix), `6580ba3` (upload self-test), `338be72` (scrapbook), `5a3d769`
+(web shows originals), `9c9864d` (4-up grid). Prod auto-deploys `main`.
+Unit suite 464 → **524**; abuse 19/19; tsc + build clean at every push.
 
-### ⚠️ USER MUST RE-PASTE MIGRATION 9980 (chat upgrade) — partial-paste drift
-The user's Supabase error logs (2026-08-17) show `column
-chat_messages.photo does not exist`: 9980 was pasted mid-session-009 and
-then AMENDED later that session (chat pictures + send_chat RPC), so prod
-holds an early partial version. Everything degrades (chat pages retry
-without photo; sends fall back), but chat pictures + reporting are silently
-OFF. The file is re-runnable — paste the whole of
-`9980_chat_upgrade.sql` again, then `/api/health` → `migration9980`
-(the probe now checks reported_at AND photo, so it catches this drift).
+### ⚠️ OPERATOR ACTION QUEUE (start of next session: ask how far they got)
+1. **Paste `9974_collage_confirmation.sql`** — until then the combined-photo
+   confirmation texts are silently OFF (cron warns once; digests
+   unaffected). `/api/health` → `migration9974`.
+2. **RE-paste `9980_chat_upgrade.sql` (whole file, re-runnable)** — prod
+   holds a PARTIAL 9980 (pasted mid-session-009, file amended later that
+   session): `chat_messages.photo` is missing, so chat pictures + reporting
+   are silently off (pages degrade fine). The health probe now checks both
+   ends of the file, so `/api/health` → `migration9980` is authoritative.
+3. **Run "Run upload self-test" on `/admin/sms-diag`** — the one-click
+   verdict on whether the Vercel upload-corruption fix (`9be119a`) holds in
+   prod. Green = uploads healthy. Red "readback mismatch" = Vercel still
+   mangles even ArrayBuffer bodies — nothing corrupt gets stored anymore
+   (guard deletes + fails loudly), but photo saving would be broken:
+   next session switch the transport to Blob/FormData multipart and re-run.
+4. **Size the corruption damage**: run "Check a stored photo" on one
+   `parts/…` URL and one recent bare single. Objects uploaded while the
+   Vercel mangle was live are corrupt AT REST forever (the old collage
+   `collage/aa1625d1…` provably is — etag 861591c1…). Affected ads need
+   pictures resent; a pending ad rebuilds its collage on the next texted
+   picture.
+5. **End-to-end 2-picture test** (after 1 + green 3): AD NEW + photo →
+   coaching reply → second photo → scrapbook collage → combined-photo MMS
+   10–15 min after the last picture; website ad page shows the two full
+   originals, PIC sends the collage.
 
 ### Supabase error-log triage (user screenshot + CSV, 26 errors/hour)
 All three families were handled-but-logged noise or the 9980 drift above;
@@ -31,12 +51,6 @@ none broke anything, all silenced in `d0ec4a1`:
   fix = the 9980 re-paste above.
 - **buckets_pkey 23505** — ensureBucket create-on-exists per cold start;
   now getBucket-probe-first.
-
-### ⚠️ NEW MIGRATION 9974 — USER MUST PASTE IT
-`9974_collage_confirmation.sql` (ads.collage_notified_at +
-ad_photos.created_at, re-runnable). Until pasted, the new combined-photo
-confirmation texts are silently OFF (cron warns once, digests unaffected);
-`/api/health` probes `migration9974`. The reply-copy changes work regardless.
 
 ### Built: FEATURES item 33 (user request) — `6df1e71`
 1. **Picture coaching replies:** AD NEW that saves a picture now replies
@@ -85,13 +99,26 @@ filter `websiteAdPhotos()` in both site-ad mappers; the collage stays at
 position 0 for PIC MMS / the seller confirmation / the email embed / the
 review queue.
 
-Unit suite 464 → **521**; abuse 19/19; tsc + build clean. Adversarial
-review workflow run over the item-33 diff before push (findings fixed
-in-session — see the session log). Also this session: the collage-corruption
-root cause (Vercel runtime mangling Buffer uploads) fixed with ArrayBuffer
-bodies + post-upload readback, the sms-diag one-click upload self-test, and
-the Postgres log-noise silencing. Details:
-`Session log/014_2026-08-17/session_log.md`.
+### Hardening + notes
+- An adversarial review workflow (3 lenses × find → refute, 21 agents) ran
+  over the item-33 diff before push; 16 confirmed findings (8 distinct) all
+  fixed in `54223d7` — headline: paused/throttled confirmation sends now
+  CAS-restore their claim (a temporary PAUSE can't permanently swallow
+  promised texts), a post-claim re-read stops a racing recompose from
+  MMS'ing a deleted collage URL, and **every Telnyx send now has a 10 s
+  timeout** (lib/sms.ts — benefits all SMS/MMS, not just this feature).
+- Standing design decisions this session: the 24 h pending-ad attach window
+  is UNCHANGED ("10 minutes" is when the set is ANNOUNCED complete, and a
+  late picture re-arms one fresh combined-photo text); the 4-up grid
+  cover-crops its cells (that's what makes it a grid — buyers see the full
+  originals on the web); collage confirmations are at-most-once (a send
+  failure after a claim is logged, not retried).
+- New diagnostic surface on `/admin/sms-diag`: "Check a stored photo"
+  (headers-vs-bytes + full decode on any of our storage URLs) and "Run
+  upload self-test" — both built to be the fast path for any future "image
+  looks broken" report.
+
+Full detail: `Session log/014_2026-08-17/session_log.md`.
 
 ## Session 013 (2026-07-28) — multi-picture combine + pre-launch audit
 

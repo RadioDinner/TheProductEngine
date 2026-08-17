@@ -203,18 +203,33 @@ Tests updated (grid geometry pinned, gutter-white probes; photo-collage
 65 → 68 checks, suite 529 → 524 net of replaced scrapbook-4 checks).
 Sample 4-up render sent in chat.
 
+## Session commit ledger (chronological)
+
+- `6df1e71` item 33: coaching replies + combined-photo confirmation
+  (migration 9974) + sms-diag "Check a stored photo" (branch)
+- `899b51f` session log + HANDOFF + checker verdict-line tidy (branch)
+- `54223d7` adversarial-review hardening of the above (branch;
+  merged to main by the user as PR #2 → `7ea83ee`)
+- `d0ec4a1` + `7e57fdf` Postgres log-noise silencing + honest 9980 probe
+- `9be119a` Vercel upload-corruption fix: ArrayBuffer body + readback
+- `6580ba3` sms-diag one-click upload self-test
+- `338be72` scrapbook-style collages (competitor examples)
+- `5a3d769` website shows a combined ad's full originals, never the collage
+- `9c9864d` 4 pictures = clean 2×2 grid; 2–3 stay scrapbook
+- (wrap commit) this log + prompt history + final HANDOFF
+
 ## Open questions / next steps
 
-1. **USER: paste migration 9974**, then check `/api/health` →
-   `migration9974: {applied: true}`.
-2. **USER: after the deploy, open `/admin/sms-diag` → "Check a stored
-   photo" and paste the failing collage URL** — the verdict line settles
-   the "contains errors" mystery. (Also worth a plain Chrome try of the
-   URL.)
-3. Send a real 2-picture ad end-to-end in prod: expect the coaching reply,
-   then the combined-photo MMS 10–15 min after the last picture.
-4. Carried backlog: session-013 operator queue (Stripe prod config is
-   still the launch blocker) + code backlog in HANDOFF.
+The operator action queue lives at the top of HANDOFF's session-014
+section — headline: paste **9974**, RE-paste **9980**, run the
+**upload self-test** (the verdict on the Vercel corruption fix; if red,
+next session switches the upload transport to Blob/FormData), spot-check
+the corruption damage radius, then the end-to-end 2-picture test.
+Carried: the session-013 operator queue (Stripe prod config is still the
+launch blocker) + the code backlog in HANDOFF. If the user wants the 4-up
+grid to letterbox instead of crop, it's a one-word change
+(`fit: "cover"` → `"inside"` wouldn't be quite it — see
+combineImageBuffers; ask before changing).
 
 ## Review workflow outcome
 
