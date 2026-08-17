@@ -8,7 +8,9 @@
  * codes. Admin-only (layout enforces requireAdmin).
  */
 import Link from "next/link";
+import sharp from "sharp";
 import { requireAdmin } from "@/lib/admin";
+import { CONTENT_TYPE_BY_EXT, sniffImage } from "@/lib/image-sniff";
 import { normalizePhone } from "@/lib/phone";
 import { rehostInboundPhotoDetailed, type RehostResult } from "@/lib/photos";
 
@@ -72,10 +74,101 @@ function verdict(call: TelnyxCall): string | null {
   return `recipient status → ${to || "(none)"}   errors → ${errors}`;
 }
 
+/** One stored photo, verified end to end: fetch the object exactly the way a
+ * browser or Telnyx would, then check the served headers AND the bytes
+ * against each other. Built for "the image contains errors" reports — it
+ * tells corrupt-in-storage apart from a serving/header problem apart from a
+ * browser-side one-off in a single click, from the deployment's own network. */
+interface StorageCheck {
+  url: string;
+  ok: boolean;
+  problems: string[];
+  status?: number | string;
+  headers?: Record<string, string>;
+  byteCount?: number;
+  sniffed?: string | null;
+  head?: string;
+  tail?: string;
+  decode?: string;
+}
+
+async function checkStoredPhoto(raw: string): Promise<StorageCheck> {
+  const url = raw.trim();
+  if (!process.env.SUPABASE_URL) {
+    return { url, ok: false, problems: ["SUPABASE_URL is not set (dev mode) — nothing to check against"] };
+  }
+  const prefix = `${process.env.SUPABASE_URL.replace(/\/+$/, "")}/storage/v1/object/public/`;
+  if (!url.startsWith(prefix)) {
+    // Not an open proxy: only this project's own public storage objects.
+    return { url, ok: false, problems: [`only this project's public storage URLs can be checked (they start with ${prefix})`] };
+  }
+  try {
+    const response = await fetch(url, { cache: "no-store" });
+    const headers = Object.fromEntries(
+      ["content-type", "content-length", "content-encoding", "cache-control", "etag"].map((h) => [
+        h,
+        response.headers.get(h) ?? "(absent)",
+      ]),
+    );
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (!response.ok) {
+      return {
+        url,
+        ok: false,
+        problems: [`HTTP ${response.status} — the object is missing or unreadable (deleted collages return this; superseded collages are removed when rebuilt)`],
+        status: response.status,
+        headers,
+        byteCount: bytes.byteLength,
+      };
+    }
+    const sniffed = sniffImage(bytes);
+    const declared = headers["content-type"].split(";")[0].trim();
+    const head = bytes.subarray(0, 8).toString("hex");
+    const tail = bytes.subarray(-4).toString("hex");
+    let decode: string;
+    try {
+      const meta = await sharp(bytes).metadata();
+      await sharp(bytes).raw().toBuffer(); // full decode, not just the header
+      decode = `decodes cleanly as ${meta.format} ${meta.width}×${meta.height}`;
+    } catch (e) {
+      decode = `DECODE FAILED: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    const problems: string[] = [];
+    if (!sniffed) problems.push("the bytes are not a recognizable jpg/png/gif/webp file");
+    if (sniffed && CONTENT_TYPE_BY_EXT[sniffed] !== declared) {
+      problems.push(
+        `served content-type "${declared}" doesn't match the actual bytes (${sniffed}) — a browser opening the link directly decodes by the declared type and reports "contains errors"`,
+      );
+    }
+    const lenHeader = Number(headers["content-length"]);
+    if (Number.isFinite(lenHeader) && lenHeader !== bytes.byteLength) {
+      problems.push(`content-length says ${lenHeader} but ${bytes.byteLength} bytes arrived (truncated in transit)`);
+    }
+    if (sniffed === "jpg" && tail !== "ffd9" && !tail.endsWith("ffd9")) {
+      problems.push("JPEG is missing its end-of-image marker ffd9 (truncated file in storage)");
+    }
+    if (decode.startsWith("DECODE FAILED")) problems.push(decode);
+    return {
+      url,
+      ok: problems.length === 0,
+      problems,
+      status: response.status,
+      headers,
+      byteCount: bytes.byteLength,
+      sniffed,
+      head,
+      tail,
+      decode,
+    };
+  } catch (e) {
+    return { url, ok: false, problems: [`fetch failed: ${e instanceof Error ? e.message : String(e)}`] };
+  }
+}
+
 export default async function SmsDiagPage({
   searchParams,
 }: {
-  searchParams: Promise<{ to?: string; send?: string; id?: string; mediaUrl?: string }>;
+  searchParams: Promise<{ to?: string; send?: string; id?: string; mediaUrl?: string; checkUrl?: string }>;
 }) {
   const adminPhone = await requireAdmin();
   const params = await searchParams;
@@ -86,6 +179,10 @@ export default async function SmsDiagPage({
   let rehost: RehostResult | null = null;
   if (params.mediaUrl?.trim()) {
     rehost = await rehostInboundPhotoDetailed(params.mediaUrl.trim());
+  }
+  let check: StorageCheck | null = null;
+  if (params.checkUrl?.trim()) {
+    check = await checkStoredPhoto(params.checkUrl);
   }
 
   if (configured && params.send === "1") {
@@ -162,6 +259,57 @@ export default async function SmsDiagPage({
         <p>
           <strong>✗ Re-host failed:</strong> {rehost.reason}
         </p>
+      )}
+
+      <h2>Check a stored photo</h2>
+      <p className="fine">
+        Paste one of our own photo URLs (an ad&apos;s full-size link, a <code>collage/…</code>{" "}
+        image, a PIC media URL) and this fetches it from the server and verifies the whole
+        thing: the HTTP response, the served headers, and the actual bytes — including a full
+        image decode. Use it when a browser says an image &ldquo;contains errors&rdquo;: if
+        this reports clean, the stored file is good and the problem was that browser or its
+        cached copy (hard-refresh, or try another browser); if it reports a problem, the line
+        below says exactly which layer is at fault.
+      </p>
+      <form method="get" action="/admin/sms-diag">
+        <label>
+          Photo URL <input name="checkUrl" defaultValue={params.checkUrl ?? ""} size={60} />
+        </label>{" "}
+        <button type="submit">Check photo</button>
+      </form>
+      {check && (
+        <div>
+          <p>
+            {check.ok ? (
+              <strong>✓ The stored photo is healthy</strong>
+            ) : (
+              <strong>✗ Problem found</strong>
+            )}
+            {check.decode && !check.ok ? null : check.decode ? <> — {check.decode}</> : null}
+          </p>
+          {check.problems.map((p, i) => (
+            <p key={i}>
+              <strong>— {p}</strong>
+            </p>
+          ))}
+          {check.status !== undefined && (
+            <pre style={{ overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+              {JSON.stringify(
+                {
+                  status: check.status,
+                  headers: check.headers,
+                  bytesReceived: check.byteCount,
+                  bytesAre: check.sniffed ?? "not a known image format",
+                  firstBytesHex: check.head,
+                  lastBytesHex: check.tail,
+                  decode: check.decode,
+                },
+                null,
+                2,
+              )}
+            </pre>
+          )}
+        </div>
       )}
 
       {calls.map((call, i) => (

@@ -208,6 +208,18 @@ export default async function AdminHelp() {
         upgrade, since a pass always covered either kind). In review you see the finished
         collage on the ad — what you approve is exactly what buyers get.
       </p>
+      <p>
+        The confirmation replies coach the seller: send more pictures <em>one at a time</em>,
+        up to 4 total, and if nothing arrives for 10 minutes we treat the set as complete.
+        Once a combined ad&apos;s pictures have been quiet for 10 minutes, the system{" "}
+        <strong>texts the seller the finished collage</strong> (an MMS, sent by the 5-minute
+        cron — so it lands 10–15 minutes after their last picture), so they see exactly the
+        one photo buyers will get. A picture that arrives later still attaches while the ad
+        is pending and simply earns one fresh combined-photo text after the next quiet
+        stretch. Needs migration <code>9974_collage_confirmation.sql</code>; until it&apos;s
+        pasted the texts are silently off (<code>/api/health</code> shows{" "}
+        <code>migration9974</code>).
+      </p>
 
       <h2 className="section-h">Emailed-in extra pictures (Ads tab)</h2>
       <p>
