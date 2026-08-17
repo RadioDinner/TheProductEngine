@@ -23,7 +23,7 @@ OFF. The file is re-runnable — paste the whole of
 
 ### Supabase error-log triage (user screenshot + CSV, 26 errors/hour)
 All three families were handled-but-logged noise or the 9980 drift above;
-none broke anything, all silenced in `a8b3114`:
+none broke anything, all silenced in `d0ec4a1`:
 - **digests 23505 ×2 every cron tick** — createDigestIfAbsent used
   insert-then-catch-conflict as its idempotency; now select-first (unique
   constraint kept as the race guard). Digests were sending fine throughout.
