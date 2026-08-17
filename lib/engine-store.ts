@@ -13,6 +13,7 @@ import * as remote from "@/lib/engine-store-supabase";
 import { isPicReplaceSubmission } from "@/lib/myads";
 import { FIXTURE_ADS, fixtureDate } from "@/lib/fixtures";
 import { AD_TTL_DAYS, type Ad, type AdPage, type AdQuery, type AdStatus } from "@/lib/ads";
+import { websiteAdPhotos } from "@/lib/photo-collage";
 
 // ---------- types ----------
 
@@ -255,7 +256,10 @@ function sweep(store: EngineShape): void {
 }
 
 function toSiteAd(ad: StoredAd): Ad {
-  const photos = [...(ad.photo ? [ad.photo] : []), ...(ad.morePhotos ?? [])];
+  // The website prefers the full individual pictures over a position-0
+  // collage (user decision, session 014; no-op in dev, which never
+  // composes collages).
+  const photos = websiteAdPhotos([...(ad.photo ? [ad.photo] : []), ...(ad.morePhotos ?? [])]);
   return {
     id: ad.id,
     body: ad.body,

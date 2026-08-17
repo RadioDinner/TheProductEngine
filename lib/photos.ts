@@ -9,9 +9,19 @@
 import { randomUUID } from "node:crypto";
 import { db, supabaseConfigured } from "@/lib/db";
 import { CONTENT_TYPE_BY_EXT, sniffImage } from "@/lib/image-sniff";
-import { MAX_COMBINED_PHOTOS, collageDimensions, combineImageBuffers } from "@/lib/photo-collage";
+import {
+  AD_PHOTOS_BUCKET,
+  MAX_COMBINED_PHOTOS,
+  collageDimensions,
+  combineImageBuffers,
+} from "@/lib/photo-collage";
 
-const BUCKET = "ad-photos";
+// The storage-path provenance markers live in lib/photo-collage.ts (pure, so
+// the unit suite and the site-ad mappers can import them); re-exported here
+// for the existing call sites.
+export { isCollageSrc, isCombinePartSrc } from "@/lib/photo-collage";
+
+const BUCKET = AD_PHOTOS_BUCKET;
 const MAX_BYTES = 8 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 10_000;
 
@@ -52,25 +62,9 @@ async function ensureBucket(): Promise<void> {
 
 export type RehostResult = { ok: true; url: string } | { ok: false; reason: string };
 
-/**
- * Storage folders encode provenance so no schema change is needed:
- * - `collage/` — a combined multi-picture image (always at ad_photos position
- *   0 when present; safe to delete when replaced by a recompose);
- * - `parts/` — an individual source picture of a collage (website gallery,
- *   positions 1+; the recompose inputs when the seller texts another photo);
- * - bare path — a single-picture ad's photo, or an emailed-in extra.
- */
+/** Which provenance folder an upload lands in (markers documented on
+ * AD_PHOTOS_BUCKET in lib/photo-collage.ts). */
 export type PhotoFolder = "collage" | "parts";
-
-const PUBLIC_MARKER = `/object/public/${BUCKET}/`;
-
-export function isCollageSrc(src: string): boolean {
-  return src.includes(`${PUBLIC_MARKER}collage/`);
-}
-
-export function isCombinePartSrc(src: string): boolean {
-  return src.includes(`${PUBLIC_MARKER}parts/`);
-}
 
 /** Telnyx-hosted media (api.telnyx.com/v2/media style) requires API-key auth
  * to fetch; send the bearer ONLY to telnyx.com hosts, never anywhere else. */

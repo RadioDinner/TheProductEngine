@@ -173,6 +173,23 @@ in a 3-up — no orientation-based reshuffling, so replies' "picture N"
 numbering always matches); overlap is emergent from region sizes, not
 random, so composes are deterministic and testable.
 
+## Part 5: website shows the full originals, not the collage (user request)
+
+"I want the full size, non collage images to be the images on the ads when
+they're shown on the website." Done display-only: new pure
+`websiteAdPhotos()` in `lib/photo-collage.ts` (unit-tested) filters a
+position-0 collage out in favor of its `parts/` originals (send order,
+emailed extras after; a collage with no surviving originals stays; singles
+untouched). Applied in BOTH site-ad mappers — `toAd` (ads-supabase, prod)
+and `toSiteAd` (engine-store file store, dev parity) — so ad pages, list
+cards, and og:image all show the first original + the rest as the gallery.
+NOTHING else changes: the collage still exists at ad_photos position 0 and
+still serves PIC MMS, the seller's combined-photo confirmation, the email
+digest embed, and the admin review queue (what the operator approves is
+what PIC sends). The storage-marker helpers (isCollageSrc /
+isCombinePartSrc, bucket constant) moved to pure photo-collage.ts,
+re-exported from photos.ts for existing call sites. Suite 521 → **529**.
+
 ## Open questions / next steps
 
 1. **USER: paste migration 9974**, then check `/api/health` →

@@ -12,6 +12,9 @@ import {
   collageDimensions,
   collagePlacements,
   combineImageBuffers,
+  isCollageSrc,
+  isCombinePartSrc,
+  websiteAdPhotos,
 } from "../lib/photo-collage.ts";
 import { sniffImage } from "../lib/image-sniff.ts";
 
@@ -188,6 +191,35 @@ export async function run(t) {
   t.eq("EXIF rotation applied before placement", p0.height > p0.width, true);
   const insideP0 = await probe(withExif, p0.left + Math.round(p0.width / 2), p0.top + 20);
   t.eq("EXIF picture shows upright", near(insideP0, COLORS[0]), true);
+
+  // Website photo selection: a combined ad's site pictures are the FULL
+  // originals; the collage never renders on the web (it keeps serving the
+  // one-picture SMS channels from position 0).
+  const at = (path) => ({ src: `https://x.supabase.co/storage/v1/object/public/ad-photos/${path}` });
+  const collage = at("collage/c.jpg");
+  const part1 = at("parts/p1.jpg");
+  const part2 = at("parts/p2.jpg");
+  const extra = at("e1.jpg");
+  t.eq("marker: collage", isCollageSrc(collage.src), true);
+  t.eq("marker: part", isCombinePartSrc(part1.src), true);
+  t.eq("marker: bare is neither", isCollageSrc(extra.src) || isCombinePartSrc(extra.src), false);
+  t.eq(
+    "website drops the collage for its originals",
+    websiteAdPhotos([collage, part1, part2]),
+    [part1, part2],
+  );
+  t.eq(
+    "emailed extras follow the originals",
+    websiteAdPhotos([collage, part1, extra, part2]),
+    [part1, part2, extra],
+  );
+  t.eq(
+    "collage with no originals stays (better than no picture)",
+    websiteAdPhotos([collage, extra]),
+    [collage, extra],
+  );
+  t.eq("single-picture ad untouched", websiteAdPhotos([extra, at("e2.jpg")]), [extra, at("e2.jpg")]);
+  t.eq("no photos untouched", websiteAdPhotos([]), []);
 
   // Undecodable bytes throw (callers catch and fall back).
   let badThrew = false;

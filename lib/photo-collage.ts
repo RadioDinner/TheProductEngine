@@ -23,6 +23,41 @@ import sharp from "sharp";
 /** The most pictures one ad combines — extras beyond this are ignored. */
 export const MAX_COMBINED_PHOTOS = 4;
 
+/** The public storage bucket every ad photo lives in (lib/photos.ts uploads
+ * there; these path markers encode provenance so no schema change is needed):
+ * - `collage/` — a combined multi-picture image (always at ad_photos position
+ *   0 when present; safe to delete when replaced by a recompose);
+ * - `parts/` — an individual source picture of a collage;
+ * - bare path — a single-picture ad's photo, or an emailed-in extra. */
+export const AD_PHOTOS_BUCKET = "ad-photos";
+const PUBLIC_MARKER = `/object/public/${AD_PHOTOS_BUCKET}/`;
+
+export function isCollageSrc(src: string): boolean {
+  return src.includes(`${PUBLIC_MARKER}collage/`);
+}
+
+export function isCombinePartSrc(src: string): boolean {
+  return src.includes(`${PUBLIC_MARKER}parts/`);
+}
+
+/**
+ * The website's view of an ad's pictures (user decision, session 014): a
+ * combined ad shows its FULL individual pictures — the collage never renders
+ * on the site. The collage keeps existing at ad_photos position 0 for the
+ * one-picture SMS channels (PIC MMS, the seller's combined-photo text, the
+ * email digest embed); this filter is display-only. Order: the `parts/`
+ * originals first (they ARE pictures 1..N, in send order), then emailed-in
+ * extras. A collage with no surviving originals stays (better the collage
+ * than no picture); single-picture ads pass through untouched.
+ */
+export function websiteAdPhotos<T extends { src: string }>(photos: T[]): T[] {
+  if (!photos.length || !isCollageSrc(photos[0].src)) return photos;
+  const rest = photos.slice(1);
+  const parts = rest.filter((p) => isCombinePartSrc(p.src));
+  if (!parts.length) return photos;
+  return [...parts, ...rest.filter((p) => !isCombinePartSrc(p.src))];
+}
+
 /** The page: portrait 4:5, like a print photo mat. Every collage is this
  * size regardless of count — stable dimensions for next/image and MMS. */
 export const COLLAGE_WIDTH = 1200;

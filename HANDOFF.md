@@ -77,7 +77,11 @@ style in `lib/photo-collage.ts`: pictures are NEVER cropped — full frames,
 native shapes, corner-anchored and staggered with slight overlap on a
 portrait 4:5 white page (1200×1500, all counts). Pure `collagePlacements()`
 is unit-pinned; sample renders were approved-in-chat. Photo-collage suite
-20 → 65 checks.
+20 → 65 checks. **And (user request, same session): the WEBSITE now shows a
+combined ad's full individual pictures, never the collage** — display-only
+filter `websiteAdPhotos()` in both site-ad mappers; the collage stays at
+position 0 for PIC MMS / the seller confirmation / the email embed / the
+review queue.
 
 Unit suite 464 → **521**; abuse 19/19; tsc + build clean. Adversarial
 review workflow run over the item-33 diff before push (findings fixed

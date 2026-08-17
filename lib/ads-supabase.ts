@@ -5,6 +5,7 @@
  */
 import { db } from "@/lib/db";
 import type { Ad, AdPage, AdQuery, AdStatus } from "@/lib/ads";
+import { websiteAdPhotos } from "@/lib/photo-collage";
 
 interface PhotoRow {
   src: string;
@@ -28,16 +29,21 @@ const SELECT =
   "id, body, status, approved_at, expires_at, users!inner(phone), ad_photos(src, width, height, alt, position)";
 
 function toAd(row: AdRowDb): Ad {
-  // Position order: 0 is the MMS/digest picture, 1+ are approved emailed-in
-  // extras — the website shows the whole gallery (FEATURES item 1).
-  const photos = [...(row.ad_photos ?? [])]
-    .sort((a, b) => a.position - b.position)
-    .map((p) => ({
-      src: p.src,
-      alt: p.alt ?? "",
-      width: p.width ?? 800,
-      height: p.height ?? 600,
-    }));
+  // Position order: 0 is the MMS/digest picture, 1+ are the collage's
+  // individual originals and approved emailed-in extras. The WEBSITE shows
+  // the full individual pictures — websiteAdPhotos drops a position-0
+  // collage in favor of its originals (user decision, session 014); the
+  // collage keeps serving the one-picture SMS channels.
+  const photos = websiteAdPhotos(
+    [...(row.ad_photos ?? [])]
+      .sort((a, b) => a.position - b.position)
+      .map((p) => ({
+        src: p.src,
+        alt: p.alt ?? "",
+        width: p.width ?? 800,
+        height: p.height ?? 600,
+      })),
+  );
   return {
     id: row.id,
     body: row.body,
