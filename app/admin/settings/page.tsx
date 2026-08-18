@@ -14,82 +14,97 @@ import { getEngineSettings, getWordRules } from "@/lib/settings";
 import { listBlocked } from "@/lib/blocklist";
 import { formatPhone } from "@/lib/phone";
 import { site } from "@/lib/config";
+import type { HandbookKey } from "@/lib/admin-handbook";
+import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
   title: `Settings — ${site.name} admin`,
 };
 
-const FIELDS: { key: string; label: string; hint?: string }[] = [
-  { key: "costText", label: "Text ad cost (credits)" },
-  { key: "costPhoto", label: "Picture ad cost (credits)" },
-  { key: "bumpCost", label: "Bump cost (credits)", hint: "0 = free for now" },
-  { key: "digestCap", label: "Max ads per digest" },
-  { key: "maxChars", label: "Max ad length (characters)" },
-  { key: "expiryDays", label: "Ad run time (days)" },
+const FIELDS: { key: string; label: string; hint?: string; tip: HandbookKey }[] = [
+  { key: "costText", label: "Text ad cost (credits)", tip: "settings.costs" },
+  { key: "costPhoto", label: "Picture ad cost (credits)", tip: "settings.costs" },
+  { key: "bumpCost", label: "Bump cost (credits)", hint: "0 = free for now", tip: "settings.bumpCost" },
+  { key: "digestCap", label: "Max ads per digest", tip: "settings.digestCap" },
+  { key: "maxChars", label: "Max ad length (characters)", tip: "settings.maxChars" },
+  { key: "expiryDays", label: "Ad run time (days)", tip: "settings.expiryDays" },
   {
     key: "smsRepliesPerHour",
     label: "Command replies per number per hour",
     hint: "past this, the engine stops answering that number",
+    tip: "settings.replyCaps",
   },
   {
     key: "smsPicsPerHour",
     label: "Pictures (PIC) per number per hour",
     hint: "burst limit — picture texts cost the most to send",
+    tip: "settings.replyCaps",
   },
   {
     key: "picDailyAllowance",
     label: "Picture pulls per number per day",
     hint: "PIC photos each number gets a day; unused ones bank (below). 0 turns the daily limit off",
+    tip: "settings.picQuota",
   },
   {
     key: "picBankCap",
     label: "Most picture pulls a number can bank",
     hint: "the rolling/sinking fund ceiling — unused daily pulls stack up to this many",
+    tip: "settings.picQuota",
   },
   {
     key: "revealsPerDay",
     label: "Number look-ups (Show number) per member per day",
     hint: "website reveals of seller numbers — the anti-scraping meter; re-viewing a revealed ad is free. 0 turns metering off",
+    tip: "settings.reveals",
   },
   {
     key: "revealBankCap",
     label: "Most number look-ups a member can bank",
     hint: "unused daily look-ups stack up to this many",
+    tip: "settings.reveals",
   },
   {
     key: "revealAbusePerDay",
     label: "Flag excessive number look-ups (per day)",
     hint: "on Insights, flag any member revealing more than this many numbers in 24h (0 turns the flag off)",
+    tip: "settings.reveals",
   },
   {
     key: "categoryConfirmsPerHour",
     label: "Category confirmations per number per hour",
     hint: "category toggles/LIST confirmed before one “changes still apply” notice and silence for the hour — toggles still apply (0 = unthrottled)",
+    tip: "settings.categoryThrottle",
   },
   {
     key: "smsGlobalPerHour",
     label: "Command replies service-wide per hour",
     hint: "circuit breaker — digests are never counted",
+    tip: "settings.globalBreaker",
   },
   {
     key: "digestDailySegmentBudget",
     label: "Daily digest segment budget",
     hint: "billed SMS segments per rolling 24 hours before digest sending pauses (0 pauses digests)",
+    tip: "settings.segmentBudget",
   },
   {
     key: "picAbusePerDay",
     label: "Flag excessive picture requests (per day)",
     hint: "on Insights, flag any number asking for more than this many pictures in 24h (0 turns the flag off)",
+    tip: "settings.picAbuseFlag",
   },
   {
     key: "savedCardDiscountPercent",
     label: "Saved-card discount (%)",
     hint: "percent off a credit pack bought by text (BUYCREDIT) with a saved card; 0 = no discount",
+    tip: "settings.savedCardDiscount",
   },
   {
     key: "outboundThrottlePerMin",
     label: "Under-attack outbound throttle (per minute)",
     hint: "global sends/minute ceiling, enforced ONLY while UNDER ATTACK mode is on (excess defers to the next tick)",
+    tip: "settings.throttlePerMin",
   },
 ];
 
@@ -114,7 +129,9 @@ export default async function AdminSettings({
       )}
 
       <section className="controls-panel">
-        <h2 className="section-h">System controls</h2>
+        <h2 className="section-h">
+          System controls <Tip k="settings.pause" />
+        </h2>
         <p className="fine">
           Emergency kill switches. They take effect immediately — the engine reads them live.
         </p>
@@ -176,7 +193,7 @@ export default async function AdminSettings({
           UNDER ATTACK: stop replying to unknown/gibberish texts, skip new-subscriber catch-up,
           auto-tighten the per-number and service-wide SMS caps, and throttle outbound to the
           per-minute ceiling below. Pair it with the blocklist to kill bad actors — block them
-          fast from <Link href="/admin/insights">Insights</Link>.
+          fast from <Link href="/admin/insights">Insights</Link>. <Tip k="settings.underAttack" />
         </p>
       </section>
 
@@ -185,7 +202,7 @@ export default async function AdminSettings({
           <div className="field" key={f.key}>
             <label htmlFor={f.key}>
               {f.label}
-              {f.hint && <span className="status-muted"> — {f.hint}</span>}
+              {f.hint && <span className="status-muted"> — {f.hint}</span>} <Tip k={f.tip} />
             </label>
             <input
               id={f.key}
@@ -198,12 +215,16 @@ export default async function AdminSettings({
           </div>
         ))}
         <div className="field">
-          <label htmlFor="slots">Digest slots (hours ET, comma-separated)</label>
+          <label htmlFor="slots">
+            Digest slots (hours ET, comma-separated) <Tip k="settings.slots" />
+          </label>
           <input id="slots" name="slots" type="text" defaultValue={settings.slots.join(", ")} />
           <p className="fine">The email edition goes out at these same times.</p>
         </div>
         <div className="field">
-          <label htmlFor="bannerText">Homepage banner (credit sales)</label>
+          <label htmlFor="bannerText">
+            Homepage banner (credit sales) <Tip k="settings.banner" />
+          </label>
           <input
             id="bannerText"
             name="bannerText"
@@ -237,7 +258,9 @@ export default async function AdminSettings({
         </button>
       </form>
 
-      <h2 className="section-h">Word filter</h2>
+      <h2 className="section-h">
+        Word filter <Tip k="settings.wordFilter" />
+      </h2>
       <p className="fine">
         Flagged words sort their ads to the top of the review queue. Auto-reject words bounce
         the ad instantly — nothing charged, no strike, kept for the audit trail.
@@ -278,7 +301,9 @@ export default async function AdminSettings({
         </div>
       </form>
 
-      <h2 className="section-h">Blocked numbers</h2>
+      <h2 className="section-h">
+        Blocked numbers <Tip k="settings.blocklist" />
+      </h2>
       <p className="fine">
         A blocked number is dropped the instant it texts — no reply, no account, no charge — and
         never receives a digest. Block bad actors with one click from{" "}

@@ -19,6 +19,7 @@ import {
 import { formatPrice, site } from "@/lib/config";
 import { formatPhone } from "@/lib/phone";
 import { etParts } from "@/lib/et";
+import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
   title: `Business packages — ${site.name} admin`,
@@ -82,20 +83,24 @@ export default async function AdminBusinessPage() {
 
   return (
     <div>
-      <h1>Business packages</h1>
+      <h1>
+        Business packages <Tip k="business.model" />
+      </h1>
       <p>
         Paid sponsor ads from <Link href="/advertising">/advertising</Link>. Each active
         package rides the <strong>first digest of every day</strong> as a labeled
-        &ldquo;Sponsor:&rdquo; line on top of the member ads (never one of the 10 slots).
-        The run clock starts at approval; a day with no digest doesn&rsquo;t count
-        against the business — the run extends instead.
+        &ldquo;Sponsor:&rdquo; line on top of the member ads (never one of the 10 slots){" "}
+        <Tip k="business.sponsorLine" />. The run clock starts at approval; a day with no
+        digest doesn&rsquo;t count against the business — the run extends instead{" "}
+        <Tip k="business.missedDays" />.
       </p>
       {!available && (
         <p className="form-error" role="alert">
           Migration 9978 (business_packages) isn&rsquo;t applied — packages can&rsquo;t
           be stored or shown. If anyone has already PAID, the webhook logged the details
           (search the logs for &ldquo;PAID PACKAGE COULD NOT BE STORED&rdquo;). Run
-          supabase/migrations/9978_business_packages.sql in the SQL editor.
+          supabase/migrations/9978_business_packages.sql in the SQL editor.{" "}
+          <Tip k="concepts.migrations" />
         </p>
       )}
 
@@ -133,7 +138,9 @@ export default async function AdminBusinessPage() {
 
       {refundDue.length > 0 && (
         <>
-          <h2 className="section-h">Declined — refund due ({refundDue.length})</h2>
+          <h2 className="section-h">
+            Declined — refund due ({refundDue.length}) <Tip k="business.refundDue" />
+          </h2>
           <p className="form-error">
             These were paid but never ran, so per the{" "}
             <Link href="/refund-policy">refund policy</Link> the money goes back.{" "}

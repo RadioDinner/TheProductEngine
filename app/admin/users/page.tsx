@@ -25,6 +25,7 @@ import { formatPhone, normalizePhone } from "@/lib/phone";
 import { discountedCents, formatPrice, packs, site } from "@/lib/config";
 import { paymentsDevMode, savedCardOnFile } from "@/lib/payments";
 import { getEngineSettings } from "@/lib/settings";
+import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
   title: `Users — ${site.name} admin`,
@@ -82,7 +83,8 @@ export default async function AdminUsers({
           Creates their account right away and texts them a one-time invite — &ldquo;To sign
           up, reply START&rdquo; with opt-out instructions. Starting credits (optional) are
           granted immediately, so they&apos;re ready the moment they reply. One invite per
-          number per day; numbers that are already subscribed are refused.
+          number per day; numbers that are already subscribed are refused.{" "}
+          <Tip k="users.invite" />
         </p>
         <form action={adminInviteUser} className="review-form">
           <div className="inline-fields">
@@ -234,7 +236,9 @@ export default async function AdminUsers({
           )}
           <dl className="account-facts">
             <div>
-              <dt>Member ID</dt>
+              <dt>
+                Member ID <Tip k="users.memberId" />
+              </dt>
               <dd>{(await ensureUserId(phone)) ?? "— (needs migration 9986)"}</dd>
             </div>
             {await getVerifiedAt(phone).then((verifiedAt) => (
@@ -259,7 +263,9 @@ export default async function AdminUsers({
             {await getRatingSummary(phone).then((r) =>
               r.asSeller.count + r.asBuyer.count > 0 ? (
                 <div>
-                  <dt>Ratings</dt>
+                  <dt>
+                    Ratings <Tip k="users.ratings" />
+                  </dt>
                   <dd>
                     {r.asSeller.count > 0 && `as seller ★ ${r.asSeller.average} (${r.asSeller.count})`}
                     {r.asSeller.count > 0 && r.asBuyer.count > 0 && " · "}
@@ -283,7 +289,9 @@ export default async function AdminUsers({
               </div>
             )}
             <div>
-              <dt>Free ads</dt>
+              <dt>
+                Free ads <Tip k="users.freeAds" />
+              </dt>
               <dd>{account.freeAds}</dd>
             </div>
             <div>
@@ -300,7 +308,9 @@ export default async function AdminUsers({
             </div>
           </dl>
 
-          <h3 className="subsection-h">Adjust credits</h3>
+          <h3 className="subsection-h">
+            Adjust credits <Tip k="users.credits" />
+          </h3>
           <form action={adminGrantCredits} className="review-form">
             <input type="hidden" name="phone" value={phone} />
             <div className="inline-fields">
@@ -312,7 +322,9 @@ export default async function AdminUsers({
             </div>
           </form>
 
-          <h3 className="subsection-h">Phone order — card payment by phone</h3>
+          <h3 className="subsection-h">
+            Phone order — card payment by phone <Tip k="users.phoneOrder" />
+          </h3>
           <p className="fine">
             {savedCard ? (
               <>
@@ -371,7 +383,9 @@ export default async function AdminUsers({
             </div>
           </form>
 
-          <h3 className="subsection-h">Merge / link identities</h3>
+          <h3 className="subsection-h">
+            Merge / link identities <Tip k="users.merge" />
+          </h3>
           <p className="fine">
             Enter a <strong>phone number</strong> for a FULL merge (that account&apos;s ads,
             credits, free passes, strikes, and saved card move here; the account is then deleted —
@@ -394,7 +408,9 @@ export default async function AdminUsers({
             </div>
           </form>
 
-          <h3 className="subsection-h">Verification</h3>
+          <h3 className="subsection-h">
+            Verification <Tip k="users.verified" />
+          </h3>
           <p className="fine">
             The green check means YOU vouched for this person after checking them out — there is
             no self-serve path. Verified members will earn perks over time.
@@ -412,7 +428,9 @@ export default async function AdminUsers({
             </form>
           ))}
 
-          <h3 className="subsection-h">Moderation</h3>
+          <h3 className="subsection-h">
+            Moderation <Tip k="users.moderation" />
+          </h3>
           <div className="sim-actions">
             <form action={adminSetStrikes} className="inline-form">
               <input type="hidden" name="phone" value={phone} />
@@ -448,7 +466,9 @@ export default async function AdminUsers({
             ))}
           </ul>
 
-          <h3 className="subsection-h">Credit history</h3>
+          <h3 className="subsection-h">
+            Credit history <Tip k="concepts.ledger" />
+          </h3>
           <table className="cmd-table ledger-table">
             <thead>
               <tr>

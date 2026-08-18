@@ -1026,6 +1026,127 @@ a.btn-sm:hover {
   max-height: 36rem;
 }
 
+/* ---------- Admin handbook "?" tips (session 015) ---------- */
+
+.help-tip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-inline: 0.25rem;
+  padding: 0;
+  vertical-align: 0.12em;
+  border: 1px solid var(--blue);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--blue);
+  font: 700 0.72rem / 1 var(--font-sans);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.help-tip-btn:hover {
+  background: var(--blue);
+  color: var(--paper);
+}
+
+.help-tip-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+  background: oklch(0.235 0.012 210 / 0.35);
+  /* The "?" can sit inside <strong>, labels, or table headers — the card
+     resets the inherited text styling so it always reads the same. */
+  font: 400 var(--text-sm) / 1.5 var(--font-sans);
+  text-align: left;
+  white-space: normal;
+  text-transform: none;
+  letter-spacing: normal;
+  cursor: default;
+}
+
+.help-tip-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  width: min(26rem, 100%);
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: var(--space-md) var(--space-lg);
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--rule-strong);
+  border-top: 3px solid var(--blue);
+  box-shadow: 0 12px 32px oklch(0.235 0.012 210 / 0.25);
+}
+
+.help-tip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.help-tip-title {
+  font: 600 var(--text-base) / 1.3 var(--font-serif);
+}
+
+.help-tip-close {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  padding: 0 0.2rem;
+  cursor: pointer;
+}
+
+.help-tip-close:hover {
+  color: var(--ink);
+}
+
+.help-tip-why {
+  color: var(--muted);
+}
+
+.help-tip-why strong {
+  color: var(--ink);
+}
+
+.help-tip-gotcha {
+  border-left: 3px solid var(--red);
+  padding-left: var(--space-sm);
+}
+
+/* The handbook read straight through (bottom of /admin/help). */
+
+.handbook-entry {
+  margin: var(--space-sm) 0 var(--space-md);
+  padding-left: var(--space-md);
+  border-left: 2px solid var(--rule);
+}
+
+.handbook-entry h4 {
+  font: 600 var(--text-base) / 1.3 var(--font-serif);
+  margin: 0 0 var(--space-2xs);
+}
+
+.handbook-entry p {
+  font-size: var(--text-sm);
+  margin: 0 0 var(--space-2xs);
+}
+
+.handbook-entry .help-tip-gotcha {
+  display: block;
+}
+
 /* ---------- Dev SMS simulator ---------- */
 
 .sim {

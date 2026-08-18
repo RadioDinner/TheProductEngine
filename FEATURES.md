@@ -41,6 +41,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 31 | **Pay-by-phone card capture** (Twilio `<Pay>` IVR → Stripe card on file) — callers key their OWN card into the phone keypad on a dedicated voice number; Twilio's Stripe Pay Connector tokenizes it (digits never touch the operator, this server, or a log) and it's saved to a Stripe customer; a bearer-authed `POST /charge` bills it off-session per order. The PCI-safe replacement for item 29's operator-keys-the-card call-in flow | session 012 | **added as standalone service** (`pay-by-phone/` — its own Twilio+Stripe deploy; NOT yet wired into member accounts — see note) |
 | 32 | **Multi-picture combine** — a seller who texts several pictures (in one MMS or trickled across messages) gets them automatically combined into a SINGLE collage image that rides the ad (up to 4 pictures; the user's session-011 idea). The ad still carries exactly one photo on the SMS side, so MMS/PIC/digest costs and the one-picture-ad price are untouched; **the website shows the full individual pictures instead of the collage** (session-014 user decision) | session 011 (idea) / session 013 (build) / session 014 (scrapbook style + web-shows-originals) | **built** (no migration — see note) |
 | 33 | **Picture-set coaching + combined-photo confirmation** — an AD NEW with a picture now replies "send more pictures one at a time, up to 4 total; quiet for 10 minutes = the set is complete", and once a combined ad's pictures HAVE been quiet for 10 minutes the seller is texted the finished collage (MMS), so they see exactly the one photo buyers will get; a later picture re-arms one fresh confirmation | session 014 | **built** (⚠️ migration 9974 — until pasted the confirmation texts are silently off; the reply coaching works regardless) |
+| 34 | **Admin handbook tooltips** — a comprehensive operator handbook mined from the prompt history and session logs, delivered as little "?" boxes beside the admin features: each tip says what the control does, WHY it exists (the request/outage/decision that created it, cited by session number), and what to watch out for; the whole handbook also reads straight through at the bottom of /admin/help | session 015 | **built** (no migration) |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -378,6 +379,23 @@ itself; build details live in the session logs and HANDOFF.md.
   - Dev mode (no Supabase storage) keeps the allowlisted URLs: first picture
     = photo, the rest = gallery; unit suite pins the collage geometry/colors
     (`test/photo-collage.test.mjs`).
+- **34 · admin handbook tooltips** (user request, session 015: "I want to be
+  able to 'Remember' how certain features that we built work, and why they
+  exist. Make this through tooltips and little '?' boxes on the admin
+  features."). All content lives in **`lib/admin-handbook.ts`** — 80 entries
+  in 13 groups (one per admin page + cross-cutting concepts), each with
+  title / what / why / optional watch-out, mined from `Session log/`,
+  FEATURES.md, and HANDOFF.md, with session numbers cited so the full story
+  is findable. Rendered by `components/Tip.tsx` (server lookup; a typo'd key
+  fails `tsc`) + `components/HelpTip.tsx` (client "?" button opening a small
+  centered card — Escape/backdrop/× close it; content travels only in the
+  admin-gated page payload, never a public JS chunk). Placed across all 12
+  admin pages (headings, field labels, intro lines; every Settings field has
+  one), and the whole handbook reads straight through at the bottom of
+  /admin/help. `test/admin-handbook.test.mjs` guards entry completeness +
+  that every placed key exists + every page carries tips. Writing rules are
+  in the module header: never invent history; never hardcode tunable
+  numbers; plain language.
 - **33 · Picture-set coaching + combined-photo confirmation** (user request,
   session 014). Two halves:
   - **Coaching replies:** an AD NEW that saves a picture replies "Got your

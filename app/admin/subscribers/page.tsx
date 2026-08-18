@@ -3,6 +3,7 @@ import Link from "next/link";
 import { listEmailSubscribers, listSmsSubscribers } from "@/lib/store";
 import { formatPhone } from "@/lib/phone";
 import { site } from "@/lib/config";
+import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
   title: `Subscribers — ${site.name} admin`,
@@ -27,7 +28,9 @@ export default async function AdminSubscribers() {
 
   return (
     <>
-      <h1>Subscribers</h1>
+      <h1>
+        Subscribers <Tip k="subscribers.list" />
+      </h1>
       <p className="fine">
         Everyone currently receiving digests, newest first. The date is when their current
         subscription started (a STOP clears it; a later re-subscribe starts a fresh date). Trends

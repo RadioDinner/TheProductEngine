@@ -18,6 +18,7 @@ import {
 import { getEngineSettings } from "@/lib/settings";
 import { formatPhone } from "@/lib/phone";
 import { site } from "@/lib/config";
+import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
   title: `Digests — ${site.name} admin`,
@@ -143,17 +144,20 @@ export default async function AdminDigests({
       {params.senderror && <p className="fine">✗ Not sent: {params.senderror}</p>}
       <p>
         Slots: {slots.length ? slots.map(slotLabel).join(", ") : "none"} (email edition goes out at
-        the same times) · next digest composes at <strong>{nextSlotLabel}</strong> · capacity{" "}
-        {settings.digestCap} ads per digest
+        the same times) <Tip k="digests.slots" /> · next digest composes at{" "}
+        <strong>{nextSlotLabel}</strong> · capacity {settings.digestCap} ads per digest
         {queued > 0 && (
           <>
             {" "}
-            · <strong>{queued} queued deliveries still draining</strong>
+            · <strong>{queued} queued deliveries still draining</strong>{" "}
+            <Tip k="digests.draining" />
           </>
         )}
       </p>
 
-      <h2>Queued for the next digest ({total})</h2>
+      <h2>
+        Queued for the next digest ({total}) <Tip k="digests.queue" />
+      </h2>
       {total === 0 && (
         <p>
           Nothing waiting — approved ads that haven&apos;t broadcast yet and queued bumps appear
@@ -163,8 +167,11 @@ export default async function AdminDigests({
       {total > 0 && (
         <>
           <p className="fine">
-            New ads run first (top to bottom below); bumps fill what&apos;s left. Edits save the
-            public text — the seller&apos;s original stays in the audit record.
+            New ads run first (top to bottom below) <Tip k="digests.reorder" />; bumps fill
+            what&apos;s left. Edits save the public text — the seller&apos;s original stays in
+            the audit record. Skip next digest holds an ad out one edition{" "}
+            <Tip k="digests.skipNext" />; Back to review reverts it to pending{" "}
+            <Tip k="digests.backToReview" />.
           </p>
           <ul className="sim-pending">
             {newAds.map((ad, i) => (
@@ -187,6 +194,7 @@ export default async function AdminDigests({
                 Send extra — sends now AND the queue still runs at {next ? slotLabel(next.slot) : "the next slot"}
               </button>
             </form>
+            <Tip k="digests.sendEarly" />
           </div>
         </>
       )}
@@ -198,7 +206,9 @@ export default async function AdminDigests({
 
       {held.length > 0 && (
         <>
-          <h2>Held — skipping the next digest ({held.length})</h2>
+          <h2>
+            Held — skipping the next digest ({held.length}) <Tip k="digests.skipNext" />
+          </h2>
           <ul className="sim-pending">
             {held.map((ad) => (
               <li key={ad.id} className="myad-row">
@@ -225,7 +235,9 @@ export default async function AdminDigests({
         </>
       )}
 
-      <h2>Recent digests</h2>
+      <h2>
+        Recent digests <Tip k="digests.history" />
+      </h2>
       {history.length === 0 && <p>No digests composed yet.</p>}
       {history.length > 0 && (
         <ul className="myads">

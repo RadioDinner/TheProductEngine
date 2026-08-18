@@ -1,0 +1,5 @@
+--- 2026-08-17 (session 015) ---
+I want to make a comprehensive handbook for myself, as an admin, based off the prompt history and context from prompts and things from the past. I want to be able to "Remember" how certain features that we built work, and why they exist. Make this through tooltips and little "?" boxes on the admin features.
+
+--- 2026-08-18 (interruption during tool use) ---
+[Request interrupted by user for tool use] Continue from where you left off.

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { listMessages } from "@/lib/engine-store";
 import { formatPhone, normalizePhone } from "@/lib/phone";
 import { site } from "@/lib/config";
+import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
   title: `Messages — ${site.name} admin`,
@@ -28,7 +29,9 @@ export default async function AdminMessages({
 
   return (
     <>
-      <h1>Message audit log</h1>
+      <h1>
+        Message audit log <Tip k="messages.log" />
+      </h1>
       <form className="search" action="/admin/messages" method="get">
         <label className="visually-hidden" htmlFor="phone">
           Filter by phone

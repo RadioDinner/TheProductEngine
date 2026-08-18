@@ -9,6 +9,7 @@ import { FEATURED_CAPTION_MAX, SPOTS_PER_SLOT, slotRotation } from "@/lib/featur
 import { listFeaturedSpots, type FeaturedSpot } from "@/lib/featured-store";
 import { supabaseConfigured } from "@/lib/db";
 import { site } from "@/lib/config";
+import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
   title: `Featured spots — ${site.name} admin`,
@@ -24,14 +25,17 @@ export default async function AdminFeatured({
 
   return (
     <>
-      <h1>Featured spots</h1>
+      <h1>
+        Featured spots <Tip k="featured.concept" />
+      </h1>
       <p className="fine">
         The homepage&rsquo;s left sidebar: TWO Featured slots stacked, each rotating every
         8 seconds through up to {SPOTS_PER_SLOT} image ads — 6 sellable spots total.
         You post them here by hand (there&rsquo;s no self-serve selling flow yet; pricing
         isn&rsquo;t set). A spot&rsquo;s external link is the one sanctioned exception to
         the no-links rule and is marked <span className="cmd">rel=&quot;sponsored&quot;</span>{" "}
-        for search engines. The sidebar hides itself whenever nothing is active.
+        for search engines <Tip k="featured.links" />. The sidebar hides itself whenever
+        nothing is active.
       </p>
 
       {params.saved && (
@@ -66,7 +70,7 @@ export default async function AdminFeatured({
           Featured spots are dormant: run{" "}
           <span className="cmd">supabase/migrations/9977_town_hall_featured.sql</span> in
           the Supabase SQL editor, then reload. (The homepage simply hides the sidebar
-          until then — nothing breaks.)
+          until then — nothing breaks.) <Tip k="concepts.migrations" />
         </p>
       ) : (
         <>
@@ -199,7 +203,7 @@ export default async function AdminFeatured({
               </div>
               <p className="fine">
                 Order decides the rotation sequence inside the slot; only the first{" "}
-                {SPOTS_PER_SLOT} active spots rotate.
+                {SPOTS_PER_SLOT} active spots rotate. <Tip k="featured.rotation" />
               </p>
               <button className="btn" type="submit">
                 Add the spot

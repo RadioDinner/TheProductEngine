@@ -5,6 +5,7 @@ import { listBlocked } from "@/lib/blocklist";
 import { adminBlockNumber } from "@/lib/admin-actions";
 import { formatPhone } from "@/lib/phone";
 import { site } from "@/lib/config";
+import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
   title: `Insights — ${site.name} admin`,
@@ -80,7 +81,9 @@ export default async function AdminInsights({
 
   return (
     <>
-      <h1>Insights</h1>
+      <h1>
+        Insights <Tip k="insights.purpose" />
+      </h1>
       <p className="admin-nav" aria-label="Window">
         Window:{" "}
         {WINDOWS.map((d) => (
@@ -150,7 +153,9 @@ export default async function AdminInsights({
             <p>No ads yet.</p>
           )}
 
-          <h2 className="section-h">Who texts the most (last {data.windowDays} days)</h2>
+          <h2 className="section-h">
+            Who texts the most (last {data.windowDays} days) <Tip k="insights.block" />
+          </h2>
           {data.topSenders.length ? (
             <div className="table-scroll" style={{ overflowX: "auto" }}>
               <table className="data-table">
@@ -178,7 +183,9 @@ export default async function AdminInsights({
             <p>No texts yet.</p>
           )}
 
-          <h2 className="section-h">Picture requests</h2>
+          <h2 className="section-h">
+            Picture requests <Tip k="insights.picFlags" />
+          </h2>
           <p className="fine">
             Numbers pulling the most pictures. Flagged when more than{" "}
             <strong>{data.picThresholdPerDay}</strong> in 24 hours (change it on{" "}
@@ -215,7 +222,9 @@ export default async function AdminInsights({
             <p>No picture requests in this window.</p>
           )}
 
-          <h2 className="section-h">Number look-ups (website reveals)</h2>
+          <h2 className="section-h">
+            Number look-ups (website reveals) <Tip k="insights.revealFlags" />
+          </h2>
           <p className="fine">
             Members pressing &ldquo;Show number&rdquo; on the most ads — each count is
             distinct sellers&rsquo; numbers revealed (re-viewing a revealed ad is free and
@@ -253,7 +262,9 @@ export default async function AdminInsights({
             <p>No numbers revealed in this window.</p>
           )}
 
-          <h2 className="section-h">Most engaged</h2>
+          <h2 className="section-h">
+            Most engaged <Tip k="insights.engagement" />
+          </h2>
           {data.engagement.length ? (
             <div className="table-scroll" style={{ overflowX: "auto" }}>
               <table className="data-table">
@@ -287,7 +298,9 @@ export default async function AdminInsights({
             <p>No activity yet.</p>
           )}
 
-          <h2 className="section-h">Most-bumped ads</h2>
+          <h2 className="section-h">
+            Most-bumped ads <Tip k="insights.mostBumped" />
+          </h2>
           {data.topBumpedAds.length ? (
             <div className="table-scroll" style={{ overflowX: "auto" }}>
               <table className="data-table">

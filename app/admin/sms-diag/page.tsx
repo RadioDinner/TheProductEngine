@@ -14,6 +14,7 @@ import { supabaseConfigured } from "@/lib/db";
 import { CONTENT_TYPE_BY_EXT, sniffImage } from "@/lib/image-sniff";
 import { normalizePhone } from "@/lib/phone";
 import { rehostInboundPhotoDetailed, storeImageBytes, type RehostResult } from "@/lib/photos";
+import { Tip } from "@/components/Tip";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -235,14 +236,16 @@ export default async function SmsDiagPage({
 
   return (
     <section>
-      <h1>SMS delivery diagnostics</h1>
+      <h1>
+        SMS delivery diagnostics <Tip k="smsdiag.purpose" />
+      </h1>
       <p>
         Sends one test SMS through the exact payload the app uses, then asks Telnyx for that
         message&apos;s live status by id — including messages the portal&apos;s reports never show
         (a send stuck <code>queued</code> or held never finalizes, so it never appears there).
         Watch for <code>to[].status</code> (<code>delivered</code> vs <code>sending_failed</code>/
         <code>delivery_failed</code>) and the <code>errors</code> array — a 4xxxx code there is the
-        carrier&apos;s reason.
+        carrier&apos;s reason. <Tip k="smsdiag.testSend" />
       </p>
       {!configured && <p><strong>TELNYX_API_KEY is not set — this deployment can&apos;t reach Telnyx (dev mode).</strong></p>}
 
@@ -263,7 +266,9 @@ export default async function SmsDiagPage({
         </p>
       )}
 
-      <h2>Photo attachment test</h2>
+      <h2>
+        Photo attachment test <Tip k="smsdiag.rehost" />
+      </h2>
       <p className="fine">
         Paste an inbound MMS media URL (open the message in{" "}
         <Link href="/admin/messages">Messages</Link>, right-click its 📷 attachment link, copy the
@@ -291,7 +296,9 @@ export default async function SmsDiagPage({
         </p>
       )}
 
-      <h2>Storage upload self-test</h2>
+      <h2>
+        Storage upload self-test <Tip k="smsdiag.selftest" />
+      </h2>
       <p className="fine">
         Creates a small test image on this server, saves it through the exact pipeline every
         ad photo uses (including the corruption read-back guard), then independently
@@ -329,7 +336,9 @@ export default async function SmsDiagPage({
         </p>
       )}
 
-      <h2>Check a stored photo</h2>
+      <h2>
+        Check a stored photo <Tip k="smsdiag.checkPhoto" />
+      </h2>
       <p className="fine">
         Paste one of our own photo URLs (an ad&apos;s full-size link, a <code>collage/…</code>{" "}
         image, a PIC media URL) and this fetches it from the server and verifies the whole

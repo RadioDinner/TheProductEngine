@@ -3,7 +3,43 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-17 (session 014).
+**Last updated:** 2026-08-18 (session 015).
+
+## Session 015 (2026-08-17/18) — the admin handbook: "?" tips on every admin feature
+
+Branch `claude/admin-handbook-tooltips-q917kd` (designated task branch;
+awaiting the user's merge). **FEATURES item 34 built** — the user's ask: a
+comprehensive operator handbook "based off the prompt history and context
+from the past," so future-them can "Remember" how features work and why
+they exist, "through tooltips and little '?' boxes on the admin features."
+
+- **`lib/admin-handbook.ts` is the handbook** — 80 entries in 13 groups
+  (one per admin page + cross-cutting concepts), each: what the control
+  does / WHY it exists (request, outage, abuse case, or decision — cited
+  by session number, user quotes where they explain a why) / optional
+  watch-out. Mined from the full corpus: every session log, the founding
+  prompt histories, FEATURES.md, HANDOFF.md. Module header carries the
+  writing rules (never invent history; tunables say "set on Settings";
+  plain language). **When a future session changes an admin feature,
+  update its entry** — `test/admin-handbook.test.mjs` guards wiring.
+- **`components/Tip.tsx`** (server; key is tsc-checked, content stays in
+  the admin-gated payload) + **`components/HelpTip.tsx`** (client "?" →
+  small centered card; Escape/backdrop/× close). Placed across ALL 12
+  admin pages — every Settings field has one — and `/admin/help` gained
+  "The handbook — every '?' in one place" (all 80 entries, read straight
+  through, grouped by page with links).
+- Verified: unit suite 524 → **532** (new handbook suite), tsc + build
+  clean, 19/19 Playwright walk checks (real login incl. set-password
+  step; tips on every page; cards open/close; 80 entries render on help).
+- **Environment note:** the Workflow tool was broken in this session's
+  container — a harness permission-handler bug stripped the parameters
+  from every workflow-subagent tool call, so a 14-agent mining fan-out
+  died with zero file reads. Mined inline instead. If workflow agents ever
+  fail en masse with "permission handler returned updatedInput … failed
+  schema validation," it's that bug, not the script.
+- Ops queue unchanged from 013/014: **Stripe prod config is still the
+  launch blocker**; migration **9974** paste + **9980** re-paste still on
+  the user (see Session 014 section).
 
 ## Session 014 (2026-08-17) — picture-pipeline day: coaching replies, combined-photo texts, Vercel upload corruption root-caused, scrapbook/grid collages, web shows originals
 

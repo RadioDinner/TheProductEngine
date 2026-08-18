@@ -21,6 +21,7 @@ import { CATEGORIES, categoryLabel } from "@/lib/categories";
 import { isPicReplaceSubmission } from "@/lib/myads";
 import { formatPhone } from "@/lib/phone";
 import { site } from "@/lib/config";
+import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
   title: `All ads — ${site.name} admin`,
@@ -89,7 +90,15 @@ export default async function AdminAds({
 
   return (
     <>
-      <h1>All ads</h1>
+      <h1>
+        All ads <Tip k="ads.list" />
+      </h1>
+      <p className="fine">
+        Bump re-runs an ad free <Tip k="ads.bump" />, Edit changes the public text or
+        category <Tip k="ads.edit" />, Delete removes without refunding or notifying{" "}
+        <Tip k="ads.delete" />, and emailed-in pictures wait on their ad&apos;s row for
+        your review <Tip k="ads.photoSubmissions" />.
+      </p>
       {params.deleted && (
         <p className="notice" role="status">
           Deleted ad #{Number(params.deleted) || params.deleted}. It&apos;s off the website and
@@ -117,7 +126,7 @@ export default async function AdminAds({
             credits on the seller&apos;s page first. The seller is not notified. The ad leaves the
             website and the digest queue immediately
             {confirmTarget.photo ? ", and its photo is removed from storage" : ""}. Past digests
-            and the message log keep the ad number.
+            and the message log keep the ad number. <Tip k="ads.delete" />
           </p>
           <form action={adminDeleteAd} className="sim-actions">
             <input type="hidden" name="id" value={confirmTarget.id} />

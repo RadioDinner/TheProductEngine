@@ -17,6 +17,7 @@ import { site } from "@/lib/config";
 import { etParts } from "@/lib/et";
 import { formatEventDay } from "@/lib/town-hall";
 import { listPendingEvents } from "@/lib/town-hall-store";
+import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
   title: `Review queue — ${site.name} admin`,
@@ -49,7 +50,16 @@ export default async function AdminReview() {
 
   return (
     <>
-      <h1>Review queue</h1>
+      <h1>
+        Review queue <Tip k="review.queue" />
+      </h1>
+      <p className="fine">
+        Badges mark word-filter matches <Tip k="review.flagged" />, links{" "}
+        <Tip k="review.linkBadge" />, and pictures <Tip k="review.pictureBadge" />. Edit
+        freely before approving <Tip k="review.editText" />, file the ad with the category
+        dropdown <Tip k="review.category" />, and settle the money with the right reject
+        button <Tip k="review.reject" />.
+      </p>
       {pending.length === 0 && <p>Nothing waiting for review.</p>}
       <ul className="sim-pending">
         {pending.map((ad) => {
@@ -133,7 +143,9 @@ export default async function AdminReview() {
       </ul>
       {reports.length > 0 && (
         <>
-          <h2 className="section-h">Reported chat messages</h2>
+          <h2 className="section-h">
+            Reported chat messages <Tip k="review.chatReports" />
+          </h2>
           <p className="fine">
             A member pressed &ldquo;Report this message&rdquo; in their conversation. The full
             thread is in the <Link href="/admin/messages">message log</Link> (filter by the
@@ -188,7 +200,9 @@ export default async function AdminReview() {
       )}
       {pendingEvents.length > 0 && (
         <>
-          <h2 className="section-h">Town hall events</h2>
+          <h2 className="section-h">
+            Town hall events <Tip k="review.townHall" />
+          </h2>
           <p className="fine">
             Community events for the <Link href="/town-hall">town hall board</Link>.
             Listings are free in v1, so declining charges nothing and refunds nothing.

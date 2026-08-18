@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getReportSummary } from "@/lib/reports";
 import { formatPhone } from "@/lib/phone";
 import { site } from "@/lib/config";
+import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
   title: `Reports — ${site.name} admin`,
@@ -36,16 +37,22 @@ export default async function AdminReports() {
 
   return (
     <>
-      <h1>Reports</h1>
+      <h1>
+        Reports <Tip k="reports.overview" />
+      </h1>
 
-      <h2 className="section-h">Subscribers</h2>
+      <h2 className="section-h">
+        Subscribers <Tip k="reports.subscriberDates" />
+      </h2>
       <dl className="account-facts">
         {stat("Active text subscribers", r.smsSubscribers.toLocaleString())}
         {stat("Email subscribers", r.emailSubscribers.toLocaleString())}
         {stat("New subscribers (last 7 days)", r.newSubscribers7d.toLocaleString())}
       </dl>
 
-      <h2 className="section-h">Website visits</h2>
+      <h2 className="section-h">
+        Website visits <Tip k="reports.visits" />
+      </h2>
       <dl className="account-facts">
         {stat("Today", r.visits.today.toLocaleString())}
         {stat("Last 7 days", r.visits.last7.toLocaleString())}

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
 import { getEngineSettings } from "@/lib/settings";
 import { site } from "@/lib/config";
+import { handbookByPage } from "@/lib/admin-handbook";
 
 export const metadata: Metadata = {
   title: `Help & how it's built — ${site.name} admin`,
@@ -525,6 +526,38 @@ export default async function AdminHelp() {
           <tr><td>Digest send-times, SMS + email (ET)</td><td>{s.slots.join(", ")}</td></tr>
         </tbody>
       </table>
+
+      <h2 className="section-h">The handbook — every &ldquo;?&rdquo; in one place</h2>
+      <p className="fine">
+        Small <strong>?</strong> marks sit beside the controls across this admin portal.
+        Each one answers, for future-you: what the control does, why it exists (the request,
+        outage, or decision that created it — the session numbers point into{" "}
+        <span className="cmd">Session log/</span> in the repo), and what to watch out for.
+        This section is all of them in one read.
+      </p>
+      {handbookByPage().map((group) => (
+        <section key={group.label} aria-label={`Handbook: ${group.label}`}>
+          <h3 className="subsection-h">
+            <Link href={group.href}>{group.label}</Link>
+          </h3>
+          {group.entries.map(([key, entry]) => (
+            <div className="handbook-entry" key={key} id={`handbook-${key}`}>
+              <h4>{entry.title}</h4>
+              <p>{entry.what}</p>
+              <p className="help-tip-why">
+                <strong>Why it exists: </strong>
+                {entry.why}
+              </p>
+              {entry.gotchas && (
+                <p className="help-tip-gotcha">
+                  <strong>Watch out: </strong>
+                  {entry.gotchas}
+                </p>
+              )}
+            </div>
+          ))}
+        </section>
+      ))}
     </>
   );
 }

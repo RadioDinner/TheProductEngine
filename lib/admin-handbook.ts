@@ -1,0 +1,515 @@
+/**
+ * The admin handbook — the operator's memory, distilled from the project's
+ * session history ("Session log/", FEATURES.md, HANDOFF.md) into small "?"
+ * tips placed next to the admin features they explain (session 015, user
+ * request: "I want to be able to 'Remember' how certain features that we
+ * built work, and why they exist").
+ *
+ * Each entry answers three questions: WHAT the control actually does, WHY it
+ * exists (the request, outage, abuse case, or decision that created it —
+ * cited by session number so the full story is findable in `Session log/`),
+ * and optionally what to WATCH OUT for. Rendered by <Tip k="…" /> beside the
+ * control, and read straight through at the bottom of /admin/help.
+ *
+ * Writing rules (keep these when adding entries):
+ * - Never invent history. If a control has no recorded reason, say so.
+ * - Tunable numbers live on Settings — never hardcode them in tip text.
+ * - Plain language; the reader is the operator, not a programmer.
+ */
+
+export interface HandbookEntry {
+  title: string;
+  what: string;
+  why: string;
+  gotchas?: string;
+}
+
+/** Page groupings for the read-through view on /admin/help. */
+export const HANDBOOK_PAGES: { prefix: string; label: string; href: string }[] = [
+  { prefix: "review", label: "Review queue", href: "/admin" },
+  { prefix: "digests", label: "Digests", href: "/admin/digests" },
+  { prefix: "reports", label: "Reports", href: "/admin/reports" },
+  { prefix: "insights", label: "Insights", href: "/admin/insights" },
+  { prefix: "ads", label: "All ads", href: "/admin/ads" },
+  { prefix: "business", label: "Business packages", href: "/admin/business" },
+  { prefix: "featured", label: "Featured spots", href: "/admin/featured" },
+  { prefix: "users", label: "Users", href: "/admin/users" },
+  { prefix: "subscribers", label: "Subscribers", href: "/admin/subscribers" },
+  { prefix: "messages", label: "Message audit log", href: "/admin/messages" },
+  { prefix: "settings", label: "Settings", href: "/admin/settings" },
+  { prefix: "smsdiag", label: "SMS diagnostics", href: "/admin/sms-diag" },
+  { prefix: "concepts", label: "How it all hangs together", href: "/admin/help" },
+];
+
+const ENTRIES = {
+  /* ---------------- Review queue (/admin) ---------------- */
+
+  "review.queue": {
+    title: "Why every ad waits for you",
+    what: "Every ad — texted, web-posted, business, or event — sits here until a human approves it. Nothing broadcasts or appears on the website without your yes.",
+    why: "A founding decision from the very first grilling session: \"manual review with credit refund on rejection works … I want to review ads manually initially\" (session 001). The human gate is also the safety valve that lets other rules stay loose — links, categories, and business ads are all judged here rather than by rigid automation.",
+    gotchas: "The seller was already charged when the ad arrived (credits or a free pass). Rejecting is what settles the money — see the two reject buttons.",
+  },
+  "review.flagged": {
+    title: "The Flagged badge",
+    what: "A word on your Settings word filter matched this ad. Flagged words sort their ads to the top of the queue so you look closely; auto-reject words never reach the queue at all (bounced instantly, nothing charged, kept in the audit log).",
+    why: "From the first session: \"I want to build a small rejection system to analyze for specific words … in the admin portal … so I can add/remove words as I choose\" (session 001). Firearms were banned by name in session 009 — the stated rules and post form say so; matching word-filter entries were left to you to add.",
+  },
+  "review.linkBadge": {
+    title: "The link badge",
+    what: "The ad contains a web link or bare domain. It is flagged for your judgement, not stripped automatically — edit the link out before approving, or reject.",
+    why: "The service is a walled garden: links in member ads are edited out or the ad is rejected. The decision to FLAG rather than auto-strip was deliberate (session 004) — an automated rule can't tell spam from a legitimate reference, and manual review was already the model. Business packages are the sanctioned exception: they MAY keep one link, judged at review (session 009).",
+  },
+  "review.pictureBadge": {
+    title: "Picture ads in review",
+    what: "The thumbnail links to the full-size photo. For a multi-picture ad this is the finished collage — exactly the one image a buyer's PIC pull will send. The website shows the full individual pictures instead of the collage (display-only filter; the collage stays for SMS).",
+    why: "What-you-approve-is-what-sends: sellers who texted several pictures get them combined into one collage (session 013 build of the session-011 idea), and after competitor examples the layout became scrapbook style for 2–3 pictures / a clean 2×2 grid for 4 (session 014, user decisions). The website switched to showing the originals the same session: \"I want the full size, non collage images … on the website.\"",
+    gotchas: "Emoji are stripped from ad text before you ever see it (they flip an SMS digest to pricier encoding and read badly on flip phones) — the sender's exact original stays in the message log.",
+  },
+  "review.editText": {
+    title: "Editing before approval",
+    what: "The text box is live — fix typos, trim length, or remove a link, then Approve. Your edit becomes the public/broadcast text.",
+    why: "Admin ad-editing was in the founding spec (session 001). The seller's original message is never lost: every inbound text is kept verbatim in the message audit log (\"I want absolutely every message logged\" — session 001).",
+  },
+  "review.category": {
+    title: "Assigning the category",
+    what: "You pick the category at review; it decides which selective subscribers get the ad and where it files on the website. Web posters may suggest one — it only pre-fills your dropdown.",
+    why: "User decision, session 009: \"You, at review\" won over seller-assigned — the operator judges what a thing is, same ethos as manual review. Uncategorized is safe by design: an uncategorized ad rides EVERY subscriber's digest and shows under All, so a skipped dropdown can never make an ad unsendable.",
+  },
+  "review.reject": {
+    title: "The two reject buttons",
+    what: "Reject–refund returns what was paid (credits back, or the free pass restored) and texts the seller your reason. Reject–violation keeps the charge and records a strike; three strikes bans the number from posting (reversible on their user page).",
+    why: "Verbatim founding rules (session 001): \"If their ad gets rejected for something inappropriate, use their credits. If its a false positive, don't use credits\" and \"If they offend 3 times, they're banned.\" Refunds are idempotent (guarded by a ledger reference) so a double-click or a race with the seller deleting can never refund twice (sessions 002, 009).",
+    gotchas: "Leave the reason blank and a sensible default is texted. For an ad that must simply disappear, this is still the right flow — Delete on the Ads tab never refunds and never notifies.",
+  },
+  "review.chatReports": {
+    title: "Reported chat messages",
+    what: "A member pressed \"Report this message\" in a website conversation. You see the message, both parties, and a resolve/dismiss choice — resolving only clears the report; any real action (strikes, bans, blocks) stays yours on the sender's user page.",
+    why: "Part of the session-009 chat rebuild (FEATURES item 13). It reversed an earlier privacy stance: session 008 deliberately kept chat OUT of the audit log, but an operator asked to act on a reported message has to be able to read the conversation — so since session 009 every chat message is logged, and the reversal is documented on the help page.",
+  },
+  "review.townHall": {
+    title: "Town hall event approvals",
+    what: "Free community-event listings for the /town-hall board and the homepage right sidebar. Approve or decline — nothing was charged, so declining owes nothing. Approved events drop off by themselves the day after the event date.",
+    why: "The user's session-009 ask: a Town hall where people add upcoming events, \"an approval process same as the regular ads.\" v1 is deliberately the free board only — the paid SMS/email event blast is a later phase whose pricing (\"probably just $19.99 a listing\") was never settled, so nothing about events sends messages today.",
+  },
+
+  /* ---------------- Digests (/admin/digests) ---------------- */
+
+  "digests.slots": {
+    title: "Slots, and what they cost",
+    what: "Digests compose at the slot hours (Eastern Time) set on Settings; the email edition mirrors the SMS edition 1:1 at the same times. An empty slot sends nothing.",
+    why: "Email mirroring was a session-007 user decision (before that, email had its own schedule and union-of-digests content). A fact worth remembering from session 003 — the user spotted it: slot COUNT is nearly cost-neutral, because each ad broadcasts only once per day regardless of slots; the real cost driver is ads × subscribers. And from session 011: slots [7, 12, 16, 20] is a zero-code change that matches every registered 10DLC word (\"up to 4 digests/day … morning, noon, afternoon, evening\") if faster delivery is ever wanted.",
+    gotchas: "Digests staying (rather than per-ad send-on-approval) was an explicit session-011 decision — the registered frequency promise is the blocker, not cost. The full analysis is in Session log/011.",
+  },
+  "digests.queue": {
+    title: "The queue is the truth",
+    what: "This list shares its selection code with the real composer, so what you see is literally what the next digest will carry: new ads first in approval order, queued bumps filling what's left, capped at the per-digest maximum set on Settings.",
+    why: "Built in session 007 so the page can never disagree with reality — the same function (selectDigestItems) drives both. New-ads-outrank-bumps is a founding rule (session 001).",
+  },
+  "digests.reorder": {
+    title: "Move up / Move down",
+    what: "Swaps the ad's place in the approval order, which is the order the digest prints.",
+    why: "Part of the session-007 queue-controls batch, built the day real SMS went live and the queue needed hands-on control.",
+  },
+  "digests.skipNext": {
+    title: "Skip next digest",
+    what: "Holds the ad out of the next digest only; it returns to the queue automatically afterward (the Held section shows it, with a Release button to bring it back early).",
+    why: "Session-007 queue controls. Its migration (ads.hold_until) caused that day's second migration race — the deploy read a column that wasn't pasted yet, the cron crashed, and the 4 PM digest was missed. That incident is why schema-dependent features now degrade gracefully and /api/health probes each migration.",
+  },
+  "digests.backToReview": {
+    title: "Back to review",
+    what: "Reverts the ad to pending — it leaves the queue and the website and waits in the Review tab again. Any queued bump is dropped.",
+    why: "Session-007 queue controls: the undo for an approval you thought better of, without the finality of rejecting or deleting.",
+  },
+  "digests.sendEarly": {
+    title: "Send early vs Send extra",
+    what: "Send early composes the UPCOMING slot right now, under that slot's identity — the scheduled run then no-ops, and the queue is consumed. Send extra sends an extra edition right now consuming NOTHING — the same queue still rides at the regular slot. Both are labeled in the SMS header and the email subject.",
+    why: "Built in session 007 for breaking-news moments (an auction tomorrow, a found dog). The two-button split exists because \"send it now\" means two different things: move the slot up, or add an edition.",
+    gotchas: "Send extra means subscribers get the same ads twice that day — that's the point, but remember it counts against the segment budget like any digest.",
+  },
+  "digests.draining": {
+    title: "Queued deliveries draining",
+    what: "Sent digests deliver through an outbox: one row per subscriber per message part, drained in bounded batches by the 5-minute cron, columnar (every subscriber gets part 1 before anyone gets part 2), resuming across ticks. This counter is what's still in flight.",
+    why: "The session-003 delivery rework — before it, a timeout could half-send a digest. The outbox made sending resumable, idempotent, and race-safe, and it's where the segment-budget breaker and STOP-purging hook in (a STOP or block cancels that number's queued rows at SEND time, not just compose time — session 004 security fix).",
+    gotchas: "If this number sits still, check Settings: a pause or a tripped segment budget parks the drain (rows wait, nothing is lost — it resumes on its own).",
+  },
+  "digests.history": {
+    title: "Digest numbers & history",
+    what: "Every digest that actually carried ads gets the next number (\"Plain Exchange No. 3 …\"); skipped empty slots consume nothing. The email edition mirrors the number. \"Composed\" means built and enqueued — delivery state lives in the outbox.",
+    why: "Numbering was FEATURES item 5 (session 008), with the counter reset to 1 at build per the user's ask — it gives subscribers and the operator a shared way to say \"that was in No. 12.\"",
+  },
+
+  /* ---------------- Reports (/admin/reports) ---------------- */
+
+  "reports.overview": {
+    title: "What Reports is for",
+    what: "The pulse page: subscriber counts, website visits, and ad volume at a glance. Deeper who-does-what tables live on Insights; the raw lists live on Subscribers.",
+    why: "Built in session 002, the first session after deploy, so the operator could watch the service grow without touching the database.",
+  },
+  "reports.visits": {
+    title: "How visits are counted",
+    what: "Counted server-side on the homepage and ad pages — no cookies, no JavaScript required, no tracking scripts.",
+    why: "Built in session 002 to fit the audience and the ethos: plain-community visitors on old browsers or with JS off still count, and there is nothing for a privacy policy to apologize for.",
+  },
+  "reports.subscriberDates": {
+    title: "Subscriber counts",
+    what: "\"Active\" means currently subscribed. A STOP clears the subscription; re-subscribing starts a fresh date.",
+    why: "Session 002 (counts) and session 007 (the Subscribers tab with per-number dates). SMS and email are separate editions — one person can be both (a merge/link on their user page records that).",
+  },
+
+  /* ---------------- Insights (/admin/insights) ---------------- */
+
+  "insights.purpose": {
+    title: "What Insights is for",
+    what: "Who uses the service — and who abuses it. Top advertisers, heaviest texters, picture-pull volume, number look-ups, engagement, most-bumped ads, over a 7/30/90-day window. Always computed fresh.",
+    why: "Built in session 003 alongside the first abuse controls. The tables double as the blocklist's front door: the worst offenders surface here ranked, each with a one-click Block.",
+  },
+  "insights.block": {
+    title: "One-click Block",
+    what: "A blocked number is dropped the instant it texts — no reply, no account, no charge — and never receives a digest. The incoming text is still recorded for your records. Unblock lives on Settings.",
+    why: "Part of the session-004 operator-safety build (with the pause switches and UNDER ATTACK mode), designed after the threat-modeling decision that trust and cost-safety come first. Logging-then-dropping keeps the forensics trail the audit ethos requires.",
+  },
+  "insights.picFlags": {
+    title: "The Excessive picture flag",
+    what: "Numbers pulling more than the Settings threshold of PIC photos in 24 hours are flagged red. The real cost control is the PIC daily allowance + bank (also on Settings); this flag is the human-attention layer on top.",
+    why: "Picture texts (MMS) are the most expensive thing the service sends per message. The flag arrived in session 003; the hard quota arrived in session 006 after brutal abuse testing (\"PIC hammer 5 days → exactly 3 MMS/day\" — the suite proved the ceiling holds).",
+  },
+  "insights.revealFlags": {
+    title: "Number look-ups: the scraper signature",
+    what: "Each count is DISTINCT sellers' numbers revealed by that member (re-viewing an ad they already revealed is free and uncounted). More than the Settings threshold in 24 hours flags them — with the usual one-click Block.",
+    why: "The user spotted the risk in session 009: \"technically anyone could create a web profile and log in to start scraping numbers out.\" The answer (user-picked): metered click-to-reveal — numbers never render in the page code at all, each member gets a daily allowance that banks like PIC pulls, and every reveal is recorded. A real buyer never notices the meter; a scraper hits it in minutes and shows up here.",
+  },
+  "insights.engagement": {
+    title: "The engagement score",
+    what: "A weighted blend of texting, posting, picture pulls, bumps, and purchases — the people most alive on the service float to the top.",
+    why: "From the session-003 insights build: meant for spotting champions (and future verified members) as much as problems.",
+  },
+  "insights.mostBumped": {
+    title: "Most-bumped ads",
+    what: "Which ads keep riding digests via bumps. Admin bumps are free; seller-texted BUMPs charge whatever bump cost Settings sets.",
+    why: "Worth watching because of a proven leak: with bump cost at 0, the session-005 abuse suite kept a 1-credit ad alive five months for $0. Raising bump cost was recommended then and the decision is still open — this table shows whether it matters yet.",
+  },
+
+  /* ---------------- All ads (/admin/ads) ---------------- */
+
+  "ads.list": {
+    title: "The all-ads ledger",
+    what: "Every ad in every status, searchable by text or ad number, filterable by status — including deleted, because deletion is a soft state, not an erasure.",
+    why: "Ad-number search was fixed in the session-005 correctness audit; the deleted filter came with soft deletion (session 008). History is never rewritten here — past digests and the message log keep their ad numbers forever.",
+  },
+  "ads.bump": {
+    title: "Admin Bump",
+    what: "Queues the ad to ride the next digest (after new ads). An expired ad relists first, exactly like a seller's BUMP would. Free when you do it.",
+    why: "Session 007, deliberate: bump cost applies to seller-texted BUMPs; the operator bumping an ad is curation, not revenue. One queued bump per ad is a founding rule (session 001 — \"let the user know they already have a bump scheduled\").",
+  },
+  "ads.edit": {
+    title: "Inline edit",
+    what: "Change the public text or category any time — pending, approved, or expired. The seller's original stays in the message log.",
+    why: "Inline editing arrived in session 007 when the digest queue needed hands-on control; the category joined in session 009 with the category system.",
+  },
+  "ads.delete": {
+    title: "Delete vs Reject",
+    what: "Delete removes an ad in ANY status: off the website and out of the digest queue immediately, queued bump dropped, photo removed from storage. It is a soft delete — past digests and the message log keep the number. No refund, no text to the seller.",
+    why: "Requested at the end of session 007, built in session 008. Soft-by-design because broadcast history must never be rewritten (the digest_items record is append-only, same ethos as the money ledger). Delete stays refund-free deliberately: the confirm box shows what the seller paid so a deserved refund goes through Grant credits on their page — YOUR judgement, not automation.",
+    gotchas: "For an ad still in review, prefer Reject — that's the flow that refunds (benign) or strikes (violation) and tells the seller. Members deleting their OWN ads follow a stricter matrix (session 009, user's words): pending → refund; approved but never digested → refund; ever ridden a digest → \"game over,\" no refund.",
+  },
+  "ads.photoSubmissions": {
+    title: "Emailed-in pictures",
+    what: "Pictures emailed to the ads@ address with the ad number in the subject wait here per ad. Approve → the picture joins the ad's WEBSITE gallery (positions 1+); the paid MMS picture keeps position 0 and stays what SMS/PIC/digests carry. A \"replacement listing picture\" submission (from the member's My ads page) swaps position 0 instead — after your approval.",
+    why: "FEATURES item 1 (session 008): flip-phone sellers often have a relative with email. Review is the gate because an email From line is easy to fake; keeping extras web-only means emailed pictures can never add MMS cost or bypass picture-ad pricing. The replacement flow rides the same review because a silent swap would bypass moderation (session 009, item 16 decision).",
+    gotchas: "The address was renamed in session 013: ads@theplainexchange.com is the pictures-in address; the old photos@ still works (routing is by the part before the @, domain-wide in Resend — no config needed for new addresses).",
+  },
+
+  /* ---------------- Business (/admin/business) ---------------- */
+
+  "business.model": {
+    title: "How business packages work",
+    what: "Businesses pay up front on the public /advertising page (the prices and tiers were set by you in session 009), then land here for review — paying never skips the human gate. Approving starts the run that day.",
+    why: "FEATURES item 17, the user's ask verbatim: \"a package of running in a digest once a day for 1 week, 2 weeks or a month.\" Stripe self-serve, the labeled sponsor line, and links-allowed-after-review were all explicit user picks that session. Same-approval-as-ads was its own instruction: \"for business listings, I want an approval process same as the regular ads.\"",
+  },
+  "business.sponsorLine": {
+    title: "The Sponsor line",
+    what: "An active package rides the FIRST digest of each day as a clearly-labeled \"Sponsor:\" line placed above the member ads — never consuming one of the member slots. The email edition mirrors it with the link clickable. Sponsor text goes through the same character cleaning as everything else and counts against the segment budget.",
+    why: "\"Labeled sponsor line\" was the user's pick (session 009) over giving businesses a member slot: advertisers get guaranteed daily placement, members lose nothing, and the label keeps the digest honest about what's paid.",
+  },
+  "business.missedDays": {
+    title: "Missed days extend the run",
+    what: "A package is done when its ad has ridden the bought number of days — not on a calendar date. A day with no digest (pause, tripped budget, no member ads) doesn't count; the schedule column shows \"N missed days — run extends.\"",
+    why: "Designed so a guaranteed-daily promise can't be silently eaten by the segment-budget breaker or a pause — the session-009 adversarial review flagged exactly that failure mode, and the answer was to extend rather than swallow.",
+  },
+  "business.refundDue": {
+    title: "Declined = refund by hand",
+    what: "A declined package never ran, so per the refund policy the money goes back — but nothing refunds automatically. Do it in the Stripe dashboard (Payments → search the payment ref → Refund), then press \"mark done.\"",
+    why: "Deliberate: no code path in this app can move money OUT. Every refund of real dollars is a human in the Stripe dashboard — the same reasoning that keeps credit adjustments note-required and ledgered.",
+    gotchas: "If someone pays while the business migration is missing, the package can't be stored — the Stripe webhook then 503s ON PURPOSE so Stripe retries until the migration lands (session-009 review fix), and the server log carries \"PAID PACKAGE COULD NOT BE STORED.\"",
+  },
+
+  /* ---------------- Featured (/admin/featured) ---------------- */
+
+  "featured.concept": {
+    title: "The Featured sidebar",
+    what: "Two homepage slots stacked on the left, each rotating every 8 seconds through up to 3 image ads — six sellable spots, posted only by you. When nothing is active the sidebar disappears.",
+    why: "The user's spec, nearly verbatim (session 009): \"two side bar ad spots that will rotate every 8 seconds … up to 3 ads on each … I will manually post these Featured advertisers … image ads, capable of linking to external websites.\" Selling the spots has no flow yet because pricing was never set — today you place them for whoever you've arranged it with.",
+  },
+  "featured.links": {
+    title: "Why these links are allowed",
+    what: "A spot may link out to an external website — the one sanctioned exception to the no-links rule — and the link is marked as a paid placement (rel=\"sponsored\") so search engines treat it honestly.",
+    why: "Safe because only you can post here (session 009): the walled garden is enforced by who holds the pen, not by a filter. Images ride the same byte-checked 8 MB upload pipeline as every other picture in the app.",
+  },
+  "featured.rotation": {
+    title: "Order, rotation, and motion",
+    what: "Order sets the rotation sequence inside a slot; only the first 3 active spots rotate (a warning shows if more are on). Rotation pauses when the browser tab is hidden, and visitors who prefer reduced motion get dots to page through instead.",
+    why: "The reduced-motion fallback is part of the site's accessibility posture (WCAG AA aim, session 009's accessibility statement) — motion never traps a reader.",
+  },
+
+  /* ---------------- Users (/admin/users) ---------------- */
+
+  "users.invite": {
+    title: "Add a member",
+    what: "Creates the account immediately, optionally grants starting credits (a ledger entry, noted as an invite grant), and texts ONE compliant invite: who we are, \"to sign up, reply START,\" rates/frequency disclosure, HELP/STOP. One invite per number per day; already-subscribed numbers are refused.",
+    why: "FEATURES item 8 (session 008). The strictness is the point: this is outreach to someone who never texted us first — one polite knock, not a campaign. Everything about the wording matches the registered 10DLC program, and nothing else is ever sent unless they reply START.",
+  },
+  "users.memberId": {
+    title: "Member IDs",
+    what: "Every member gets a unique random 6-digit ID (leading zeros allowed). Chat and the website identify people by this number so nobody's phone number is exposed.",
+    why: "FEATURES item 0 (session 008): \"a way of identifying people beyond phone/email.\" IDs freed by an account merge are tombstoned for a full year before they can be reissued — so a recycled number can't inherit someone else's reputation or conversations.",
+  },
+  "users.verified": {
+    title: "The green check",
+    what: "Grant or revoke ✓ Verified here — nowhere else, and there is deliberately no self-serve path. It shows on the ad page, the member's account, and in chat.",
+    why: "FEATURES item 7 (session 008): the check means a human vouched for a real, known buyer or seller. Perks for verified members are deliberately unbuilt — the mark is the foundation, and it's also the enforcement seam for the long-term plain-community-membership vision (session 011, LONG_TERM_VISION.md).",
+  },
+  "users.ratings": {
+    title: "Where ratings come from",
+    what: "Star averages here and on ad pages come only from CONFIRMED sales: a seller texts SOLD, names the buyer's phone number, and then each side may RATE 1–5 the other — once per ad, matching parties only.",
+    why: "FEATURES item 2 (session 008). Store-enforced matching is what makes the stars mean something: nobody can rate a stranger, so \"rated ★ 4.8 by 5 confirmed buyers\" is real.",
+  },
+  "users.freeAds": {
+    title: "Free ads (the starter grant)",
+    what: "New sellers get a flat grant of free ad passes — but only when they post their first ad, not when the account is created. A pass covers either kind of ad, text or picture.",
+    why: "\"Starter grant is 3 ads flat. Pics or text\" (session 001). Deferring the grant to first AD NEW was a session-005 user decision: a number that only subscribes or lurks mints zero liability.",
+  },
+  "users.credits": {
+    title: "Adjust credits (and why the note is required)",
+    what: "Credits are an append-only ledger: every grant, purchase, spend, and refund is a line, and the balance is the sum. Adjusting requires a non-zero amount AND a note (\"phone order,\" \"check #204\") — the note is the audit trail.",
+    why: "Money histories should be append-only (a bug can't silently overwrite a balance, and you can always see exactly what happened) — same session-001 log-everything ethos as the message log. Cash or check payments go through here, deliberately outside Stripe.",
+  },
+  "users.phoneOrder": {
+    title: "Phone order",
+    what: "A caller pays by card: bill the saved card on their verbal OK (same discount as texting BUYCREDIT, double-click-safe), or collect a card — open Stripe's checkout here and key it in as they read it, or text them the link. Credits land automatically; the card is saved for future BUYCREDIT texts.",
+    why: "FEATURES item 29 (session 011): a review of the credit system found everything existed EXCEPT call-in card capture — and callers who can't text a smartphone are exactly this audience. The card number goes straight into Stripe and is never seen or stored by this site.",
+    gotchas: "The pay-by-phone keypad service (FEATURES item 31, under pay-by-phone/ in the repo) is the PCI-safe upgrade — the caller keys the card themselves and the operator never hears it. It is deployed separately and NOT yet wired to member accounts; wiring it needs a decision recorded in FEATURES item 31.",
+  },
+  "users.merge": {
+    title: "Merge / link identities",
+    what: "A PHONE does a full merge: ads, credits, passes, strikes, saved card, and subscription state move to this account; the other account is deleted; its message history stays under the old number in the log (never rewritten). An EMAIL links the address here — the member then gets both editions.",
+    why: "Built in session 007 when real signups made duplicates real (the same person texting in and signing up by email). The user's call: SMS + email identities are one person; a phone means full merge.",
+  },
+  "users.moderation": {
+    title: "Strikes and the posting ban",
+    what: "Strikes count rejected-for-violation ads; at three, posting is banned automatically. Both are editable here — set strikes, lift or impose the ban. A ban stops posting/selling only; browsing and buying still work.",
+    why: "Session-001 founding rules: \"If they offend 3 times, they're banned … I want to be able to reverse bans on the admin portal.\"",
+  },
+
+  /* ---------------- Subscribers (/admin/subscribers) ---------------- */
+
+  "subscribers.list": {
+    title: "Reading this list",
+    what: "Everyone currently receiving digests, newest first. The date is when the CURRENT subscription started — a STOP clears it, a later re-subscribe starts fresh.",
+    why: "Built in session 007, the day real SMS went live, so \"who exactly is getting this\" always has an answer. The email edition is confirmed opt-in (the address only counts after its confirmation link is clicked — that's what keeps the sending domain's reputation clean).",
+  },
+
+  /* ---------------- Messages (/admin/messages) ---------------- */
+
+  "messages.log": {
+    title: "The audit log",
+    what: "Every message in and out, forever: commands and replies, each subscriber's copy of every digest, MMS attachments (the 📷 links), and — since the chat rebuild — every on-site chat message. Filter by number to reconstruct any conversation.",
+    why: "A founding order, verbatim: \"I want all communication gets logged in an audit trail. I want absolutely every message logged\" (session 001). Chat joining the log was a documented stance reversal (session 009): reports can't be judged without reading the conversation. This log is the forensics record — it is deliberately never trimmed or rate-limited.",
+    gotchas: "A reply shown here proves the app SENT it, not that the carrier delivered it. For delivery truth, use SMS diagnostics (/admin/sms-diag) — the session-007 outage looked exactly like \"replies sent\" here while nothing real existed.",
+  },
+
+  /* ---------------- Settings (/admin/settings) ---------------- */
+
+  "settings.pause": {
+    title: "The two pauses",
+    what: "Partial pause stops the expensive bulk sends (digests + new-subscriber catch-up) but keeps the service conversational — replies, PIC, sign-in codes, STOP confirmations. FULL pause stops every subscriber-facing text and email; you still get alerts and sign in by password. Queued digests wait and resume.",
+    why: "Built in session 004's operator-safety batch after the threat-modeling decision (\"harden against all four adversary classes; priority = trust, then money, then uptime\"). Two levels exist because the two emergencies differ: a runaway bill wants partial; a true incident wants everything dark.",
+  },
+  "settings.underAttack": {
+    title: "UNDER ATTACK mode",
+    what: "One switch, four levers: stop replying to unknown/gibberish texts, skip new-subscriber catch-up, auto-tighten the per-number and service-wide reply caps, and throttle ALL outbound to the per-minute ceiling below. Pair it with the blocklist.",
+    why: "Session 004: designed for a spam flood or a hostile actor, where each lever alone is too slow. The abuse suite (sessions 005–006) verified the caps hold under sustained hammering — worst case one number costs about $0.58/hour in replies, and this mode cuts that further.",
+  },
+  "settings.costs": {
+    title: "Ad pricing",
+    what: "What a text ad and a picture ad cost in credits. Changes apply immediately, to SMS and web posting alike (one price, both lanes — a session-008 decision).",
+    why: "\"I forget the costs off hand but I think pictures are 5x as expensive\" (session 001) set the original 1/5; the user raised the live values to 2/10 in session 011. The profitability model (docs/profitability.md, session 005) ties break-even to subscriber count — pricing is a live lever, not a constant.",
+  },
+  "settings.bumpCost": {
+    title: "Bump cost — the open decision",
+    what: "What a seller-texted BUMP charges. At 0, bumps are free (admin bumps are always free regardless).",
+    why: "\"I want bumps free for now\" (session 001) — but the session-005 abuse suite proved the leak: at bump cost 0, a 1-credit ad was kept riding digests for five months for $0. Raising it was recommended then; the decision has been open since. This one number closes the free-rebroadcast loophole whenever you're ready.",
+  },
+  "settings.digestCap": {
+    title: "Max ads per digest",
+    what: "The FIFO cap on member ads per digest; overflow waits for the next slot. Sponsor lines ride OUTSIDE this cap.",
+    why: "From the founding spec (session 001). The cap bounds the digest's size in SMS segments — which is the bill — while first-in-first-out keeps it fair.",
+  },
+  "settings.maxChars": {
+    title: "Max ad length",
+    what: "One cap for both lanes: texted ads and web-posted ads (the web form shows a live counter).",
+    why: "Session-008 user decision: web ads get the SAME cap the SMS path enforces, because the exact text rides the SMS digest either way — a long web ad would cost real segment money.",
+  },
+  "settings.expiryDays": {
+    title: "Ad run time",
+    what: "How long an approved ad stays live on the website before expiring (an expired ad can relist via bump).",
+    why: "From the founding spec. Worth knowing: Supabase originally never expired ads at all — live-on-site-forever — until the session-005 audit caught it and wired expiry into the digest cron.",
+  },
+  "settings.replyCaps": {
+    title: "The three reply caps",
+    what: "Per-number replies/hour (past it, that number gets silence for the hour — inbound still logged), per-number pictures/hour (a burst limit), and a service-wide replies/hour circuit breaker. Digests never count against these; STOP is always answered.",
+    why: "Built in session 002, before launch, because every reply costs money and an attacker texting the number thousands of times must hit a ceiling. Verified live in dev: 22×HELP → exactly 20 replies, then silence, STOP still confirmed.",
+  },
+  "settings.picQuota": {
+    title: "PIC allowance & bank",
+    what: "Each number gets N picture pulls per Eastern day; unused pulls bank up to the cap, like a sinking fund. 0 turns the daily quota off (the hourly cap still applies). Denials are a friendly text, deduped.",
+    why: "The user's session-006 ask, numbers included: \"how many pulls a number gets per day and how many they can bank … e.g. 3/day, bank 20.\" MMS is the priciest send, and PIC pulls are free to the buyer — this is the real cost control. The abuse suite proved it: a 5-day PIC hammer got exactly 3 MMS/day; two idle weeks then a burst delivered exactly the bank cap.",
+    gotchas: "A mistyped ad number never burns a pull (the quota is charged only when a photo is actually about to send). With the default ON, a photo-heavy buyer hits the wall — raising the daily number or the bank is a live product decision, flagged since session 006.",
+  },
+  "settings.reveals": {
+    title: "Number look-up metering",
+    what: "How many \"Show number\" reveals a signed-in member gets per day, the bank cap, and the Insights flag threshold. Re-viewing an already-revealed ad is free. 0 turns metering off.",
+    why: "The user's session-009 realization: \"anyone could create a web profile and log in to start scraping numbers out.\" Numbers never render in the page code at all; this meter is why one burner account can't walk the whole list. Chat stays unmetered on purpose — messaging a seller is never the thing to throttle.",
+  },
+  "settings.categoryThrottle": {
+    title: "Category confirmation throttle",
+    what: "After N confirmed category toggles/LIST checks in an hour, the member gets one \"changes still apply\" notice and further confirmations go silent for the hour — the toggles STILL apply, they just cost nothing outbound. 0 = unthrottled.",
+    why: "The user's session-009 worry, verbatim: \"if people just text gibberish, or say horses endlessly, it could spike our usage. I need a way of preventing that but still allowing legitimate use.\" Silent-but-applied was the answer: abuse costs nothing, legitimate use always works.",
+    gotchas: "One exception is never silenced: the \"you're not getting any ads now\" warning when someone removes their last category — going quiet there would strand them dark without knowing.",
+  },
+  "settings.globalBreaker": {
+    title: "The service-wide breaker",
+    what: "The most command replies the whole service will send in an hour — the ceiling on reply spend if many numbers attack at once. Digests have their own budget and never count here.",
+    why: "Session 002: the worst case isn't one abuser, it's a coordinated flood. This is the circuit breaker for that day.",
+  },
+  "settings.segmentBudget": {
+    title: "The digest segment budget",
+    what: "Digests are billed per SMS segment (~153 characters), and a broadcast is segments × subscribers — the biggest bill in the system. This caps billed segments per ROLLING 24 hours; at the cap, digest sending pauses, rows wait, you get one email, and it resumes as the window frees room. 0 pauses digests entirely.",
+    why: "The session-003 circuit breaker. Two deliberate details: the window rolls (a midnight-reset budget can be gamed at the boundary), and 0 means OFF-as-in-paused, never unlimited (fat-fingering a 0 must fail safe). The alert fires exactly once per trip, not every 5 minutes.",
+    gotchas: "As the list grows this number needs deliberate raising — the budget is doing its job when a digest waits.",
+  },
+  "settings.picAbuseFlag": {
+    title: "Excessive-picture flag",
+    what: "The threshold for the red \"Excessive\" flag on Insights' picture table. A flag, not a block — the quota above does the enforcing.",
+    why: "Session 003: the human-attention threshold, so a scraper-ish pattern gets your eyes before it needs your hand.",
+  },
+  "settings.savedCardDiscount": {
+    title: "Saved-card discount",
+    what: "Percent off a credit pack bought by texting BUYCREDIT with a card on file (the phone-order panel quotes the same discounted price).",
+    why: "Session 003, with BUYCREDIT itself — the founding spec's own idea: \"refill credits if they have a card saved on file by texting BUYCREDIT … reply YES to confirm\" (session 001). The discount rewards the lowest-friction, lowest-support-cost way to pay.",
+  },
+  "settings.throttlePerMin": {
+    title: "Under-attack throttle",
+    what: "A global sends-per-minute ceiling enforced ONLY while UNDER ATTACK mode is on; excess sends defer to the next minute rather than dropping.",
+    why: "Session 004: the flow-rate valve for an active incident — everything still eventually sends, just never in a flood.",
+  },
+  "settings.slots": {
+    title: "Digest send times",
+    what: "The hours (Eastern) digests compose; the email edition uses the same times. The Digests tab shows the next occurrence.",
+    why: "Remember two session findings before touching this: slot count is nearly COST-neutral (each ad broadcasts once a day regardless — session 003, the user's own catch), and [7, 12, 16, 20] matches every registered 10DLC word if faster delivery is wanted (session 011's standing offer). What slots must never exceed: the registered \"up to 4 digests/day\" promise.",
+  },
+  "settings.banner": {
+    title: "The homepage banner",
+    what: "Operator-set text at the top of the homepage, with a link that must point at a page on this site. Clear the text and save to hide it.",
+    why: "FEATURES item 30 (session 011), built for running credit sales. On-site links only, because the walled-garden rule applies to your own banner too.",
+  },
+  "settings.wordFilter": {
+    title: "The word filter",
+    what: "Flag-only words sort their ads to the top of review; auto-reject words bounce instantly — nothing charged, no strike, logged for the audit trail. Toggle a word between modes any time.",
+    why: "Session-001 founding ask, verbatim: \"a small rejection system to analyze for specific words … so I can add/remove words as I choose.\" Auto-reject charges nothing deliberately — a robot's judgement shouldn't cost a seller money; only your reject-violation does that.",
+  },
+  "settings.blocklist": {
+    title: "The blocklist",
+    what: "Blocked numbers are dropped at the door: no reply, no account, no charge, no digests — the inbound text is still recorded. Block from Insights (ranked) or by hand here; unblock any time.",
+    why: "Session 004's operator-safety batch. Log-then-drop keeps the forensics record intact — the audit ethos applies even to people we ignore.",
+  },
+
+  /* ---------------- SMS diagnostics (/admin/sms-diag) ---------------- */
+
+  "smsdiag.purpose": {
+    title: "Why this page exists",
+    what: "Ground truth for \"did it actually send?\" — it asks Telnyx directly with the account's own key, including for messages the portal's reports never show (a send stuck queued or held never finalizes, so it never appears there).",
+    why: "Born in the session-007 outage: texting the number did nothing, and the cause was TWO stacked failures — a missing migration 500'd every inbound, and the missing TELNYX_API_KEY silently flipped outbound to a dev echo, so the Messages log showed replies \"sent\" while nothing real existed. This page is the tool that would have caught both in minutes.",
+  },
+  "smsdiag.testSend": {
+    title: "The test send",
+    what: "Sends one real SMS through the app's exact payload, then fetches the message's live status by id. Read to[].status (delivered vs sending_failed/delivery_failed) and the errors array — a 4xxxx code there is the carrier's stated reason.",
+    why: "Built during session 007 because the Telnyx portal only reports finalized messages — a send stuck mid-10DLC-provisioning simply vanishes from every report, which reads as \"my messages disappeared.\"",
+  },
+  "smsdiag.rehost": {
+    title: "Photo attachment test",
+    what: "Paste an inbound MMS media URL (from a 📷 link in Messages) and this runs the exact re-host + validation pipeline a picture ad goes through, reporting the outcome.",
+    why: "From the session-007 attachment policy (user decision): only byte-proven jpg/png/gif/webp are accepted — headers and file extensions are never trusted — and a photo that can't be saved posts the ad as TEXT and tells the seller (never a silent drop; that honesty rule dates to the user's own picture ad silently losing its photo).",
+  },
+  "smsdiag.selftest": {
+    title: "Upload self-test",
+    what: "Generates a fresh image on the server, pushes it through the REAL photo-storage pipeline (including the corruption read-back guard), then independently re-downloads and verifies it byte-for-byte. One click answers \"are uploads healthy right now.\"",
+    why: "Session 014's corruption incident: Vercel's function runtime was mangling Node Buffer uploads (high bytes → EF BF BD, the UTF-8 replacement character), corrupting stored collages. The fix — ArrayBuffer bodies plus a post-upload read-back that deletes any corrupt object — lives in the one upload choke point every image uses; this button proves it end-to-end on the live deployment.",
+    gotchas: "A photo stored corrupt BEFORE the fix stays corrupt at its old URL forever — this tests new uploads, not old objects. Check old ones with \"Check a stored photo.\"",
+  },
+  "smsdiag.checkPhoto": {
+    title: "Check a stored photo",
+    what: "Paste one of our own storage URLs and the server fetches and verifies everything: HTTP status, served headers vs the actual bytes, format signatures, and a full image decode. Clean verdict = the stored file is good and the problem was that browser or its cache; a problem names the failing layer.",
+    why: "Built in session 014 for the \"image contains errors\" report. It's also the tool that CRACKED that case: the checker showed the stored collage's bytes were efbfbd… repeated — a JPEG lossily round-tripped through a UTF-8 string — which pinned the corruption to the upload transport in Vercel's runtime and led straight to the fix.",
+  },
+
+  /* ---------------- Cross-cutting concepts ---------------- */
+
+  "concepts.migrations": {
+    title: "Migrations, dormant features, and /api/health",
+    what: "Database changes are pasted by hand into the Supabase SQL Editor (never pushed by tooling), numbered DESCENDING — the lowest-numbered file under supabase/migrations/ is the newest, and the next one takes (lowest − 1). Every migration is written re-runnable, so pasting one twice is always safe. Until a feature's migration is pasted, the feature sits dormant-but-safe (hides, refuses politely, or warns — never a crash) and /api/health (with CRON_SECRET) probes each migration by name.",
+    why: "The discipline is scar tissue: prod auto-deploys main, so code reading a column that isn't pasted yet used to 500 the whole admin (session 003), missed the 4 PM digest (session 007), and ate every inbound text (session 007's outage cause #1). Descending numbering is the user's own convention (adopted session 009); graceful degradation + health probes became standing policy after being bitten twice in one day.",
+    gotchas: "Drift is sneakier than absence: migration 9980 was pasted mid-session then AMENDED later, so prod held a partial version for weeks (caught session 014). Health probes now check multiple columns per file — but when in doubt, re-paste the whole file: re-runnable means re-pasting is always safe.",
+  },
+  "concepts.chokePoint": {
+    title: "The outbound choke point",
+    what: "Every text and email the app sends goes through one gate that enforces the pauses, the blocklist, UNDER ATTACK throttling, and hourly caps, and strips non-GSM characters so no send silently costs Unicode rates. Sends are classed (reply, picture, digest, operator) — operator alerts to YOU are never blocked.",
+    why: "Built in session 004 so a safety control set on Settings is actually universal — before it, ten separate send sites each had to remember the rules. \"Reply-class\" in feature notes means exactly this: that send respects pause/blocklist/caps like any reply.",
+  },
+  "concepts.ledger": {
+    title: "Why money is append-only",
+    what: "Credit balances are never edited — every grant, spend, purchase, and refund is a ledger line, and the balance is the sum. Refunds and purchases carry a reference key, so a retried webhook or a double-click can't grant or refund twice.",
+    why: "Append-only money is the same ethos as the message log: you can always see exactly what happened, and a bug can't silently overwrite a balance. The idempotent references have caught real races — Stripe replays, reject-vs-delete races, upgrade-charge retries (sessions 002, 009, 013).",
+  },
+  "concepts.et": {
+    title: "The service clock is Eastern",
+    what: "Digest slots, daily quotas (PIC pulls, reveals), and \"per day\" everywhere mean Eastern Time — where the community lives — not UTC and not the server's clock.",
+    why: "Founding audience decision. The date math is kept in one pure module with unit tests pinning both 2026 daylight-saving transitions (session 004) — the classic way a 7 AM digest silently becomes 6 AM is exactly the bug those tests exist to stop.",
+  },
+  "concepts.devVsProd": {
+    title: "Why tests can miss prod-only bugs",
+    what: "The unit and abuse suites run against a file-based store, not Supabase — so database-only failures (a missing migration, a type mismatch inside an RPC) pass every test and only surface in prod.",
+    why: "Learned the hard way twice: the credit-charge outage (a text-vs-enum cast inside the spend RPC, session 011) and the collage corruption (Vercel's runtime mangling uploads, session 014) were both invisible to green test suites. Hence the belt-and-suspenders habit: /api/health probes, graceful degradation, read-back verification, and one real end-to-end exercise in prod after risky changes.",
+  },
+  "concepts.retrySwallow": {
+    title: "The retry-swallow trap (fixed)",
+    what: "Inbound texts are deduplicated by provider id BEFORE processing — so if processing then crashed, the carrier's retry found the message \"already handled\" and it was permanently eaten: the sender got silence.",
+    why: "This trap explained the worst outages (sessions 007 and 011 — \"texting the number does nothing\"). Since session 011 the inbound path is hardened: a processing crash is logged and the sender gets one friendly deduped heads-up instead of silence. If a sender ever reports \"I texted and nothing happened,\" the Messages log plus the server logs now always have the story.",
+  },
+} satisfies Record<string, HandbookEntry>;
+
+export type HandbookKey = keyof typeof ENTRIES;
+
+export const HANDBOOK: Record<HandbookKey, HandbookEntry> = ENTRIES;
+
+/** Entries grouped for the read-through view, in HANDBOOK_PAGES order. */
+export function handbookByPage(): { label: string; href: string; entries: [HandbookKey, HandbookEntry][] }[] {
+  const keys = Object.keys(ENTRIES) as HandbookKey[];
+  return HANDBOOK_PAGES.map((page) => ({
+    label: page.label,
+    href: page.href,
+    entries: keys
+      .filter((k) => k.startsWith(`${page.prefix}.`))
+      .map((k) => [k, HANDBOOK[k]] as [HandbookKey, HandbookEntry]),
+  })).filter((page) => page.entries.length > 0);
+}
