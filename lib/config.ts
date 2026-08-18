@@ -15,31 +15,20 @@ export const site = {
   adsPerPage: 15,
 } as const;
 
-export interface Pack {
-  id: string;
-  credits: number;
-  priceCents: number;
-}
+/**
+ * Add-money presets (dollar pricing overhaul, session 016): the amounts a
+ * member can put on their account in one Stripe checkout. Sized to the ad
+ * prices — one text ad, one picture ad, the starter-credit-sized bundle,
+ * and a big bundle. All values in CENTS, like every money value in the app.
+ */
+export const TOP_UP_PRESETS_CENTS: number[] = [4500, 6000, 15000, 30000];
 
-/** Credit packs — admin-configurable in production. */
-export const packs: Pack[] = [
-  { id: "pack5", credits: 5, priceCents: 500 },
-  { id: "pack10", credits: 10, priceCents: 900 },
-  { id: "pack25", credits: 25, priceCents: 2000 },
-];
-
-export function getPack(id: string): Pack | null {
-  return packs.find((p) => p.id === id) ?? null;
+export function isTopUpPreset(amountCents: number): boolean {
+  return TOP_UP_PRESETS_CENTS.includes(amountCents);
 }
 
 export function formatPrice(cents: number): string {
   return cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`;
-}
-
-/** Apply the saved-card discount to a price, rounded to whole cents. */
-export function discountedCents(priceCents: number, discountPercent: number): number {
-  const pct = Math.max(0, Math.min(100, discountPercent));
-  return Math.round((priceCents * (100 - pct)) / 100);
 }
 
 /**
@@ -47,9 +36,27 @@ export function discountedCents(priceCents: number, discountPercent: number): nu
  * settings store (lib/settings.ts). Mirrors supabase/seed.sql.
  */
 export const engineDefaults = {
-  costText: 2,
-  costPhoto: 10,
-  bumpCost: 0,
+  /**
+   * Ad prices in CENTS (dollar pricing overhaul, session 016 — see
+   * docs/pricing.md). These are NEW settings keys (ad_price_*_cents), so a
+   * stale credit-era config row (credit_cost_text = 2) can never be
+   * misread as $0.02: unmigrated prod falls back to these defaults.
+   */
+  costTextCents: 4500,
+  costPhotoCents: 6000,
+  /**
+   * Website-listing add-on in cents. 0 (launch value) = every ad lists on
+   * the website automatically, free. Set to 1500 to start charging +$15:
+   * web posts then buy it with a checkbox; SMS ads default to NOT listed
+   * (the operator can toggle per ad on /admin/ads).
+   */
+  webAddonCents: 0,
+  /**
+   * Starter credit in cents — granted ONCE, on a member's first real post
+   * (never at account creation; the session-005 anti-abuse rule). $150
+   * covers 3 text ads or 2 picture ads; set 18000 for "3 ads of any kind".
+   */
+  starterCreditCents: 15000,
   digestCap: 10,
   /**
    * SMS digest slots, hours in America/New_York — 2/day (morning + evening).
@@ -115,12 +122,7 @@ export const engineDefaults = {
    * reserve_sms reply cap stays on top as the hard backstop. 0 = unthrottled.
    */
   categoryConfirmsPerHour: 5,
-  /**
-   * Percent off a credit pack when it's bought with a saved card by text
-   * (BUYCREDIT) — the incentive to keep a card on file. 0 = no discount.
-   */
-  savedCardDiscountPercent: 10,
-  /** Homepage promo banner (credit sales). Empty text = hidden. */
+  /** Homepage promo banner (sales/announcements). Empty text = hidden. */
   promoBannerText: "",
   promoBannerLink: "/account#credits",
   /**

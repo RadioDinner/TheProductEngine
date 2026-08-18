@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { readSession } from "@/lib/session";
 import { hasLedgerRef } from "@/lib/store";
-import { formatPrice, getPack, site } from "@/lib/config";
+import { formatPrice, site } from "@/lib/config";
 import { getCheckoutSession, paymentsDevMode } from "@/lib/payments";
 
 export const metadata: Metadata = {
@@ -32,7 +32,6 @@ export default async function CheckoutSuccessPage({
   // Only the buyer sees their own receipt.
   if (order.phone !== session.phone) redirect("/account");
 
-  const pack = getPack(order.packId ?? "");
   const paid = order.paymentStatus === "paid";
   const credited =
     paid && order.paymentIntent ? await hasLedgerRef(order.paymentIntent) : false;
@@ -41,15 +40,9 @@ export default async function CheckoutSuccessPage({
     <div className="container auth">
       <h1>Order complete</h1>
       <dl className="account-facts">
-        {pack && (
-          <div>
-            <dt>Credit pack</dt>
-            <dd>{pack.credits} credits</dd>
-          </div>
-        )}
         {order.amountTotal !== null && (
           <div>
-            <dt>Paid</dt>
+            <dt>Added to your ad credit</dt>
             <dd>{formatPrice(order.amountTotal)}</dd>
           </div>
         )}
@@ -60,10 +53,10 @@ export default async function CheckoutSuccessPage({
       </dl>
       <p className="notice" role="status">
         {credited
-          ? "Thank you! The credits are in your account and ready to use."
+          ? "Thank you! The money is on your account and ready to use."
           : paid
-            ? "Thank you! Your payment went through — the credits will appear in your account within a minute."
-            : "Your payment is still processing. The credits are added the moment it completes."}
+            ? "Thank you! Your payment went through — the money will show on your account within a minute."
+            : "Your payment is still processing. The money is added the moment it completes."}
       </p>
       <p>
         Ready to post? Text <span className="cmd">AD NEW</span> and your ad to{" "}

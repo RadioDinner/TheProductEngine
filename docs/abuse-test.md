@@ -2,7 +2,9 @@
 
 Adversarial stress/abuse testing of the SMS engine. Started session 005; extended
 session 006 (2026-07-09) with the SOLD-repeat / AD-parse cases and the new PIC
-daily-allowance + rolling-bank control.
+daily-allowance + rolling-bank control; reworked session 016 (2026-08-18) for the
+DOLLAR pricing overhaul (docs/pricing.md): money is cents, the member BUMP
+feature is REMOVED, and the starter grant is $150 of ad credit on first post.
 Run it: **`npm run test:abuse`** (harness: `test/abuse/brute.mjs`).
 
 ## Method
@@ -15,28 +17,27 @@ rate caps and the ET-day PIC accrual. Cost is read from the actual outbound audi
 log (segments × $0.008, MMS × $0.035). Each scenario resets state and reports
 measured damage.
 
-## Result: 19/19 attack vectors bounded
+## Result: 19/19 attack vectors bounded (18 scenarios since the session-016 rework)
 
 | # | Attack | Measured outcome |
 |---|---|---|
 | 1 | Compulsive `STATUS` ×500 (one hour) | 19 replies, **$0.18**; ~480 logged, no reply/cost |
 | 1b | `STATUS` every 30s for 2h (×240) | 41 replies over 2h, **$0.34** — cap holds across the window |
-| 2 | `BUMP` every 5 min for 2h (×24), free | 26 replies; only **1** bump queued per ad at a time |
-| 3 | `BUMP` flood with `bumpCost=1` | Charged 1 credit/bump, **refused when broke** — leak closed |
-| 4 | Expired-ad revival loop ×5, free | **5/5 free revivals** — a 1-credit ad kept alive 5 months for $0 |
+| 2 | `BUMP` every 5 min for 2h (×24) | **Feature removed**: 0 queued, $0 charged, one redirect/day |
+| 4 | Expired-ad revival loop ×5 via BUMP | **0/5 revivals** — the free-revival leak is closed with the feature |
 | 5 | `PIC`/MMS flood ×500 (one hour, **quota OFF**) | **12 MMS** — hourly cap alone; scenario 18 tightens it |
-| 6 | `AD NEW` flood ×50 | Stops when credits+free-ads spent; **balance never negative** |
-| 7 | Concurrent `AD NEW` ×10 on 1 credit | 1 posted (file store); **prod uses advisory-lock RPCs** |
+| 6 | `AD NEW` flood ×50 | 4 ads posted ($200 at $45); stops when the money is spent; **balance never negative** |
+| 7 | Concurrent `AD NEW` ×10 on one ad's worth | 1 posted (file store); **prod uses advisory-lock RPCs** |
 | 8 | `STOP`/`START` loop ×50 (3.3h) | STOP conf + catch-up deduped to 1/day; only cheap START confs |
-| 9 | Subscribe flood ×300 spoofed numbers | **Zero** free-ad liability minted (starter grant deferred) |
+| 9 | Subscribe flood ×300 spoofed numbers | **Zero** starter-credit liability minted (grant deferred to first post) |
 | 10 | Gibberish flood ×500 | 1 reply normal / **0 under UNDER ATTACK** |
 | 11 | Adversarial ad bodies | 10k-char **rejected**; emoji **stripped** (no UCS-2 cost flip) |
 | 12 | 600 numbers × `HELP` (one hour) | **Exactly 500** replies — service-wide cap holds ($8/hr ceiling) |
-| 13 | Cross-user griefing (`SOLD`/`BUMP` victim's ad) | **Refused** — ownership check, no state change, no charge |
+| 13 | Cross-user griefing (`SOLD` victim's ad) | **Refused** — ownership check, no state change, no charge |
 | 14 | Webhook replay (same provider-id ×5) | **1** post, charged once — inbound idempotency holds |
 | 15 | Blocklisted number floods | **0** SMS / **0** MMS — dropped after logging |
 | 16 | `SOLD` same ad ×20 in a row | **1** state transition; the rest idempotent no-ops, tail silenced by the cap |
-| 17 | `AD SOLD <id>` ×20 (the parse case) | **0** junk ads, **0** credits burned — re-routes to the SOLD command |
+| 17 | `AD SOLD <id>` ×20 (the parse case) | **0** junk ads, **$0** charged — re-routes to the SOLD command |
 | 18 | `PIC` hammer for 5 days, **quota ON** (3/day) | **[3,3,3,3,3] MMS** — daily allowance caps picture cost per day |
 | 19 | `PIC` rolling bank: idle 2 weeks then burst | **20 MMS** (the bank cap) — unused pulls stack but stop at the ceiling |
 
@@ -51,7 +52,7 @@ measured damage.
   9989) so a concurrent burst can't overspend the bank. Admin-tunable on Settings;
   set the daily number to 0 to turn it off.
 - **Per-number reply cap (20/hr)** bounds any single-number command flood
-  (STATUS, BUMP, SOLD, gibberish) to ~20 cheap replies/hr regardless of how hard
+  (STATUS, SOLD, gibberish) to ~20 cheap replies/hr regardless of how hard
   they hammer.
 - **Per-number hourly PIC cap (12/hr)** is now a burst limiter on top of the daily
   quota.
@@ -62,15 +63,15 @@ measured damage.
   once / 3h / number.
 - **Idempotency**: inbound provider-id dedup blocks webhook replay double-posts/charges;
   `SOLD` on an already-sold ad is a no-op ("already marked sold").
-- **Ownership checks** block cross-user griefing (marking/bumping someone else's ad).
+- **Ownership checks** block cross-user griefing (marking someone else's ad sold).
 - **Ingest guards**: `maxChars` rejects giant bodies; the content filter strips emoji.
-- **Command re-route**: `AD SOLD 1325` (and `AD BUMP/STATUS/PIC <id>`) now parse as the
+- **Command re-route**: `AD SOLD 1325` (and `AD STATUS/PIC <id>`) now parse as the
   owner command, not an ad body, so a mistyped SOLD can't silently post a junk ad and
-  burn a credit.
+  charge the seller.
 - **Operator levers** are decisive: **UNDER ATTACK** tightens caps + suppresses unknowns;
   the **blocklist** drops a number entirely.
-- **Starter-grant deferral** (session 005): a spoofed-number subscribe flood mints **zero**
-  free-ad liability.
+- **Starter-grant deferral** (session 005; $150 ad credit since session 016): a
+  spoofed-number subscribe flood mints **zero** liability.
 
 ## Worst-case cost ceilings
 
@@ -82,9 +83,9 @@ measured damage.
 
 ## Residual leaks (known from Round 3)
 
-- **Free bumps / free infinite revival** (`bumpCost=0`): scenario 4 kept a 1-credit ad
-  alive 5 months for $0. **Setting `bumpCost` > 0 closes it** (scenario 3 proves it). Still
-  open pending a pricing decision.
+- ~~Free bumps / free infinite revival~~ **CLOSED (session 016)**: the member BUMP
+  feature was removed entirely (user decision) — scenarios 2 and 4 now prove no
+  queue entry, no charge, and no revival; only the operator can re-run an ad.
 - **PIC/MMS per-ad and service-wide cap** — the daily allowance now bounds a single number
   to N/day (scenario 18), which is the dominant lever. A *many-number swarm* each pulling one
   popular photo is still bounded only by the hourly per-number cap and the global 500/hr
@@ -97,5 +98,5 @@ measured damage.
 ## Caveat
 
 Concurrency races (scenario 7) are shown against the file store only, which has no atomic
-guard. **Production uses Supabase RPCs** (`spend_credits`, `consumeFreeAd`, `reserveSms`, and
-now `reserve_pic_quota`) with advisory locks — that is the path that runs in prod.
+guard. **Production uses Supabase RPCs** (`spend_credits`, `reserveSms`, and
+`reserve_pic_quota`) with advisory locks — that is the path that runs in prod.

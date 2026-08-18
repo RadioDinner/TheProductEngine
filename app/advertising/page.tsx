@@ -13,7 +13,7 @@ import { paymentsDevMode } from "@/lib/payments";
 
 export const metadata: Metadata = {
   title: `Advertising for Businesses — ${site.name}`,
-  description: `Put your business in front of every ${site.name} subscriber: a labeled sponsor line in the daily text digest, once a day. 1 week $39.99, 2 weeks $59.99, 1 month $89.99.`,
+  description: `Put your business in front of every ${site.name} subscriber: a labeled sponsor line in the daily text digest, once a day. 1 week $199, 2 weeks $349, 1 month $599.`,
 };
 
 export default async function AdvertisingPage({

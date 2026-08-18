@@ -55,7 +55,33 @@ function toAd(row: AdRowDb): Ad {
   };
 }
 
-export async function listAds({
+/**
+ * Web-listing add-on (dollar pricing, session 016): an ad whose web_listing
+ * flag is FALSE stays off the PUBLIC site (its owner still manages it under
+ * /account/ads and it still rides SMS). NULL/true = listed, so every ad from
+ * before migration 9973 keeps listing. Before the migration the column
+ * doesn't exist — the first 42703 drops the filter for the process lifetime,
+ * which matches the launch state (web_addon_cents = 0, everything listed).
+ */
+let webListingFilterUnsupported = false;
+
+function isMissingWebListing(error: { code?: string } | null | undefined): boolean {
+  return error?.code === "42703" && !webListingFilterUnsupported;
+}
+
+export async function listAds(query: AdQuery = {}): Promise<AdPage> {
+  try {
+    return await listAdsInner(query);
+  } catch (e) {
+    if (isMissingWebListing(e as { code?: string })) {
+      webListingFilterUnsupported = true;
+      return listAdsInner(query);
+    }
+    throw e;
+  }
+}
+
+async function listAdsInner({
   q,
   category,
   page = 1,
@@ -70,6 +96,9 @@ export async function listAds({
       .not("broadcast_at", "is", null)
       .order("approved_at", { ascending: false })
       .order("id", { ascending: false });
+    if (!webListingFilterUnsupported) {
+      query = query.or("web_listing.is.null,web_listing.eq.true");
+    }
     // Homepage browse filter (item 25). Callers gate on categoriesSupported(),
     // so the column exists whenever this arrives.
     if (category) query = query.eq("category", category);
@@ -104,14 +133,24 @@ export async function listAds({
 }
 
 export async function getAd(id: number): Promise<Ad | null> {
-  const { data, error } = await db()
-    .from("ads")
-    .select(SELECT)
-    .eq("id", id)
-    .in("status", ["approved", "sold", "expired"])
-    // Hidden from the public site until it has ridden a digest.
-    .not("broadcast_at", "is", null)
-    .maybeSingle();
+  const fetchAd = () => {
+    let query = db()
+      .from("ads")
+      .select(SELECT)
+      .eq("id", id)
+      .in("status", ["approved", "sold", "expired"])
+      // Hidden from the public site until it has ridden a digest.
+      .not("broadcast_at", "is", null);
+    if (!webListingFilterUnsupported) {
+      query = query.or("web_listing.is.null,web_listing.eq.true");
+    }
+    return query.maybeSingle();
+  };
+  let { data, error } = await fetchAd();
+  if (isMissingWebListing(error)) {
+    webListingFilterUnsupported = true;
+    ({ data, error } = await fetchAd());
+  }
   if (error) {
     console.error("[ads-supabase] getAd failed:", error.code, error.message);
     throw error;

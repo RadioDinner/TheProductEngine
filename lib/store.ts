@@ -40,15 +40,19 @@ export interface Account {
   emailSubscribedAt?: string | null;
   /** Stripe customer id, set after the first completed checkout. */
   stripeCustomerId?: string | null;
-  /** Starter-grant ad passes: consumed before credits, either ad type. */
-  freeAds: number;
   /**
-   * When the one-time starter free-ad grant was applied — set on the seller's
-   * FIRST `AD NEW`, not on account creation. Null = not yet granted (a number
-   * that only ever subscribes/checks balance never mints free-ad passes). Once
-   * set, the grant never re-fires (even after the passes are used up).
+   * When the one-time starter credit was granted — set on the seller's FIRST
+   * real post (`AD NEW` or web), not on account creation. Null = not yet
+   * granted (a number that only ever subscribes/checks balance never mints
+   * starter money). Once set, the grant never re-fires — even after the
+   * dollars are spent. (Pre-session-016 this stamped the free-ad-pass grant;
+   * same column, same anti-abuse rule, now a dollar grant.)
    */
   starterGrantedAt?: string | null;
+  /** Automatic top-up with the saved card (dollar pricing, session 016) —
+   * file store only; Supabase reads it lazily via getAutoTopUp so core
+   * lookups never depend on migration 9973. */
+  autoTopUp?: boolean | null;
   offenseCount?: number;
   postingBannedAt?: string | null;
   /** PIC daily-quota bank — pulls available right now (lib/pic-quota.ts). */
@@ -244,7 +248,13 @@ export interface LedgerSince {
   at: string;
 }
 
-export const STARTER_FREE_ADS = 3;
+/** Ledger note for the one-time starter credit — shared by both stores so
+ * the grant reads identically everywhere (amount in dollars via formatPrice
+ * at the call site; the note itself is not a refund-matcher token). */
+export function starterCreditNote(amountLabel: string): string {
+  return `Welcome credit — ${amountLabel} to spend on ads`;
+}
+
 export const CODE_TTL_MS = 5 * 60 * 1000;
 export const CODE_MAX_ATTEMPTS = 5;
 export const RATE_WINDOW_MS = 60 * 60 * 1000;
@@ -349,29 +359,24 @@ function hashCode(code: string): string {
 
 const file = {
   getAccount(phone: string): Account | null {
-    const account = load().accounts[phone];
-    if (!account) return null;
-    account.freeAds ??= 0;
-    return account;
+    return load().accounts[phone] ?? null;
   },
 
   ensureAccount(phone: string): Account {
     const store = load();
     let account = store.accounts[phone];
     if (!account) {
-      // No starter grant here — a bare first contact mints an account but ZERO
-      // free-ad passes. The grant is applied lazily on the first AD NEW
-      // (grantStarterAdsIfFirst), so numbers that never post cost nothing.
+      // No starter grant here — a bare first contact mints an account with NO
+      // starter credit. The grant is applied lazily on the first real post
+      // (grantStarterCreditIfFirst), so numbers that never post cost nothing.
       account = {
         phone,
         createdAt: new Date().toISOString(),
-        freeAds: 0,
         starterGrantedAt: null,
       };
       store.accounts[phone] = account;
       save(store);
     }
-    account.freeAds ??= 0;
     return account;
   },
 
@@ -759,49 +764,48 @@ const file = {
     save(store);
   },
 
-  consumeFreeAd(phone: string): boolean {
-    const store = load();
-    const account = store.accounts[phone];
-    if (!account) return false;
-    account.freeAds ??= 0;
-    if (account.freeAds <= 0) return false;
-    account.freeAds -= 1;
-    save(store);
-    return true;
-  },
-
   /**
-   * Apply the one-time starter free-ad grant if it hasn't been given yet, and
+   * Apply the one-time starter credit if it hasn't been granted yet, and
    * return the (updated) account. Idempotent: the second call is a no-op even
-   * after the passes are spent, so first-post-only — never on account creation
-   * and never again. Writes the "Welcome" ledger note at grant time.
+   * after the dollars are spent, so first-post-only — never on account
+   * creation and never again. Writes the welcome ledger grant at grant time.
    */
-  grantStarterAdsIfFirst(phone: string): Account {
+  grantStarterCreditIfFirst(
+    phone: string,
+    amountCents: number,
+    amountLabel: string,
+  ): { account: Account; granted: boolean } {
     const store = load();
     const account = store.accounts[phone];
-    if (!account) throw new Error(`grantStarterAdsIfFirst: no account for ${phone}`);
-    account.freeAds ??= 0;
-    if (!account.starterGrantedAt) {
-      const at = new Date().toISOString();
-      account.freeAds += STARTER_FREE_ADS;
-      account.starterGrantedAt = at;
+    if (!account) throw new Error(`grantStarterCreditIfFirst: no account for ${phone}`);
+    if (account.starterGrantedAt) return { account, granted: false };
+    const at = new Date().toISOString();
+    account.starterGrantedAt = at;
+    if (amountCents > 0) {
       (store.ledgers[phone] ??= []).push({
         at,
-        delta: 0,
+        delta: amountCents,
         kind: "grant",
-        note: `Welcome — ${STARTER_FREE_ADS} free ads, picture or plain`,
+        note: starterCreditNote(amountLabel),
       });
-      save(store);
     }
-    return account;
+    save(store);
+    return { account, granted: amountCents > 0 };
   },
 
-  grantFreeAd(phone: string): void {
+  getAutoTopUp(phone: string): boolean {
+    // Dev store is always "migrated": a saved card means auto top-up unless
+    // the member turned it off.
+    return load().accounts[phone]?.autoTopUp ?? true;
+  },
+
+  setAutoTopUp(phone: string, on: boolean): "saved" | "unsupported" {
     const store = load();
     const account = store.accounts[phone];
-    if (!account) return;
-    account.freeAds = (account.freeAds ?? 0) + 1;
+    if (!account) return "unsupported";
+    account.autoTopUp = on;
     save(store);
+    return "saved";
   },
 
   reservePicQuota(
@@ -1028,7 +1032,6 @@ const file = {
       if (loser.userId) {
         (store.retiredUserIds ??= {})[loser.userId] = new Date().toISOString();
       }
-      survivor.freeAds += loser.freeAds;
       survivor.offenseCount = (survivor.offenseCount ?? 0) + (loser.offenseCount ?? 0);
       survivor.picBalance = (survivor.picBalance ?? 0) + (loser.picBalance ?? 0);
       survivor.subscribedAt ??= loser.subscribedAt;
@@ -1141,19 +1144,18 @@ const file = {
       })
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
       .slice(0, limit)
-      .map((a) => ({ ...a, freeAds: a.freeAds ?? 0 }));
+      .map((a) => ({ ...a }));
   },
 
   upsertAccountPassword(phone: string, passwordHash: string): Account {
     const store = load();
     let account = store.accounts[phone];
     if (!account) {
-      // Claiming an account (setting a password) does not grant free ads — like
-      // every other creation path, the starter grant waits for the first AD NEW.
+      // Claiming an account (setting a password) grants no starter credit —
+      // like every other creation path, the grant waits for the first post.
       account = {
         phone,
         createdAt: new Date().toISOString(),
-        freeAds: 0,
         starterGrantedAt: null,
       };
       store.accounts[phone] = account;
@@ -1523,25 +1525,38 @@ export async function setVerified(
   return supabaseConfigured ? remote.setVerified(phone, on) : file.setVerified(phone, on);
 }
 
-/** Spend one starter pass if any remain. */
-export async function consumeFreeAd(phone: string): Promise<boolean> {
-  return supabaseConfigured ? remote.consumeFreeAd(phone) : file.consumeFreeAd(phone);
+/**
+ * Apply the one-time starter credit on the seller's first real post (not on
+ * account creation). Idempotent and race-safe — exactly one caller ever
+ * grants; the loser sees granted:false. Call it in the posting paths only.
+ * `amountLabel` is the display string ("$150") baked into the ledger note.
+ */
+export async function grantStarterCreditIfFirst(
+  phone: string,
+  amountCents: number,
+  amountLabel: string,
+): Promise<{ account: Account; granted: boolean }> {
+  return supabaseConfigured
+    ? remote.grantStarterCreditIfFirst(phone, amountCents, amountLabel)
+    : file.grantStarterCreditIfFirst(phone, amountCents, amountLabel);
 }
 
 /**
- * Apply the one-time starter free-ad grant on the seller's first AD NEW (not on
- * account creation). Idempotent — returns the account with the grant applied,
- * or unchanged if it was already granted. Call it in the AD-NEW path only.
+ * Whether this member's saved card may be auto-charged to cover a posting
+ * shortfall (dollar pricing, session 016). FAIL-CLOSED: before migration
+ * 9973 (no users.auto_topup column) this is false — no card is ever charged
+ * without the member being able to see and flip the toggle.
  */
-export async function grantStarterAdsIfFirst(phone: string): Promise<Account> {
-  return supabaseConfigured
-    ? remote.grantStarterAdsIfFirst(phone)
-    : file.grantStarterAdsIfFirst(phone);
+export async function getAutoTopUp(phone: string): Promise<boolean> {
+  return supabaseConfigured ? remote.getAutoTopUp(phone) : file.getAutoTopUp(phone);
 }
 
-/** Return a starter pass (benign rejection refund). */
-export async function grantFreeAd(phone: string): Promise<void> {
-  return supabaseConfigured ? remote.grantFreeAd(phone) : file.grantFreeAd(phone);
+/** Member/admin toggle for automatic top-up. "unsupported" pre-9973. */
+export async function setAutoTopUp(
+  phone: string,
+  on: boolean,
+): Promise<"saved" | "unsupported"> {
+  return supabaseConfigured ? remote.setAutoTopUp(phone, on) : file.setAutoTopUp(phone, on);
 }
 
 /**

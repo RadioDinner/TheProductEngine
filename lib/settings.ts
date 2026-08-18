@@ -10,9 +10,14 @@ import { db, supabaseConfigured } from "@/lib/db";
 import { engineDefaults } from "@/lib/config";
 
 export interface EngineSettings {
-  costText: number;
-  costPhoto: number;
-  bumpCost: number;
+  /** Text-ad price in CENTS (dollar pricing, session 016 — docs/pricing.md). */
+  costTextCents: number;
+  /** Picture-ad price in CENTS (up to 4 pictures). */
+  costPhotoCents: number;
+  /** Website-listing add-on in CENTS. 0 = included free for every ad. */
+  webAddonCents: number;
+  /** Starter credit in CENTS, granted once on a member's first real post. */
+  starterCreditCents: number;
   digestCap: number;
   /** Digest slots, hours in America/New_York (the email edition mirrors these). */
   slots: number[];
@@ -39,9 +44,7 @@ export interface EngineSettings {
   /** Category/LIST confirmations per number per hour before the one throttle
    * notice + silence (item 24; toggles still apply). 0 = unthrottled. */
   categoryConfirmsPerHour: number;
-  /** Percent off a credit pack bought by text with a saved card (BUYCREDIT). */
-  savedCardDiscountPercent: number;
-  /** Homepage promo banner text (credit sales etc). Empty = banner hidden. */
+  /** Homepage promo banner text (sales/announcements). Empty = banner hidden. */
   promoBannerText: string;
   /** Where the banner links (site-relative path). */
   promoBannerLink: string;
@@ -60,9 +63,13 @@ export interface WordRule {
 
 /** EngineSettings key ↔ config-table key (matches supabase/seed.sql). */
 const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
-  costText: "credit_cost_text",
-  costPhoto: "credit_cost_photo",
-  bumpCost: "bump_cost",
+  // Dollar pricing (session 016): NEW keys, deliberately not the credit-era
+  // credit_cost_text/credit_cost_photo/bump_cost — a stale 2/10 row in prod
+  // must never be read as cents. Migration 9973 seeds the new keys.
+  costTextCents: "ad_price_text_cents",
+  costPhotoCents: "ad_price_photo_cents",
+  webAddonCents: "web_addon_cents",
+  starterCreditCents: "starter_credit_cents",
   digestCap: "digest_ad_cap",
   slots: "digest_slots_sms",
   maxChars: "ad_max_chars",
@@ -78,7 +85,6 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   revealBankCap: "reveal_bank_cap",
   revealAbusePerDay: "reveal_abuse_per_day",
   categoryConfirmsPerHour: "category_confirms_per_hour",
-  savedCardDiscountPercent: "saved_card_discount_percent",
   promoBannerText: "promo_banner_text",
   promoBannerLink: "promo_banner_link",
   pauseMode: "pause_mode",
@@ -116,9 +122,10 @@ function defaultWords(): WordRule[] {
 
 export async function getEngineSettings(): Promise<EngineSettings> {
   const defaults: EngineSettings = {
-    costText: engineDefaults.costText,
-    costPhoto: engineDefaults.costPhoto,
-    bumpCost: engineDefaults.bumpCost,
+    costTextCents: engineDefaults.costTextCents,
+    costPhotoCents: engineDefaults.costPhotoCents,
+    webAddonCents: engineDefaults.webAddonCents,
+    starterCreditCents: engineDefaults.starterCreditCents,
     digestCap: engineDefaults.digestCap,
     slots: [...engineDefaults.slots],
     maxChars: engineDefaults.maxChars,
@@ -134,7 +141,6 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     revealBankCap: engineDefaults.revealBankCap,
     revealAbusePerDay: engineDefaults.revealAbusePerDay,
     categoryConfirmsPerHour: engineDefaults.categoryConfirmsPerHour,
-    savedCardDiscountPercent: engineDefaults.savedCardDiscountPercent,
     promoBannerText: engineDefaults.promoBannerText,
     promoBannerLink: engineDefaults.promoBannerLink,
     pauseMode: engineDefaults.pauseMode,

@@ -20,7 +20,7 @@ import { categoriesSupported, getLedger } from "@/lib/store";
 import { CATEGORIES, categoryLabel } from "@/lib/categories";
 import { isPicReplaceSubmission } from "@/lib/myads";
 import { formatPhone } from "@/lib/phone";
-import { site } from "@/lib/config";
+import { formatPrice, site } from "@/lib/config";
 import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
@@ -83,8 +83,8 @@ export default async function AdminAds({
       chargeLine = !charge
         ? "No charge is on record for this ad."
         : charge.delta < 0
-          ? `The seller paid ${-charge.delta} credit${-charge.delta === 1 ? "" : "s"} for this ad.`
-          : "The seller used a free ad pass for this ad.";
+          ? `The seller paid ${formatPrice(-charge.delta)} for this ad.`
+          : "The seller used a legacy free ad pass for this ad.";
     }
   }
 
@@ -122,8 +122,8 @@ export default async function AdminAds({
           </p>
           <p className="sim-body">{confirmTarget.body}</p>
           <p className="fine">
-            {chargeLine} Deleting does <strong>not</strong> refund — if a refund is deserved, grant
-            credits on the seller&apos;s page first. The seller is not notified. The ad leaves the
+            {chargeLine} Deleting does <strong>not</strong> refund — if a refund is deserved,
+            adjust the balance on the seller&apos;s page first. The seller is not notified. The ad leaves the
             website and the digest queue immediately
             {confirmTarget.photo ? ", and its photo is removed from storage" : ""}. Past digests
             and the message log keep the ad number. <Tip k="ads.delete" />

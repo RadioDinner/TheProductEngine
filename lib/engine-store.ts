@@ -48,6 +48,11 @@ export interface StoredAd {
   photo?: { src: string; alt: string; width: number; height: number };
   /** Approved emailed-in extras (FEATURES item 1) — website gallery only. */
   morePhotos?: { src: string; alt: string; width: number; height: number }[];
+  /** Website-listing add-on flag (session 016, migration 9973). false = off
+   * the public site; null/undefined = listed (legacy + included-free ads).
+   * NOT part of the shared Supabase AD_SELECT — the public queries filter on
+   * it with their own graceful pre-migration fallback (lib/ads-supabase). */
+  webListing?: boolean | null;
 }
 
 /** An emailed-in picture awaiting admin review (FEATURES item 1). */
@@ -108,6 +113,10 @@ export interface NewAdInput {
   /** Individual source pictures of a combined photo (item 32) — website
    * gallery, ad_photos positions 1+. */
   morePhotos?: StoredAd["morePhotos"];
+  /** Website-listing add-on (session 016): false = the ad stays off the
+   * public site. Omitted/true = listed — the default, and the only value
+   * while web_addon_cents is 0. */
+  webListing?: boolean;
 }
 
 /**
@@ -283,8 +292,14 @@ export async function fileListAds({
   const store = load();
   sweep(store);
   let ads = store.ads
-    // Only ads that have gone out in a digest are shown on the public site.
-    .filter((ad) => (ad.status === "approved" || ad.status === "sold") && ad.broadcastAt)
+    // Only ads that have gone out in a digest are shown on the public site —
+    // and never one whose website-listing add-on was declined (session 016).
+    .filter(
+      (ad) =>
+        (ad.status === "approved" || ad.status === "sold") &&
+        ad.broadcastAt &&
+        ad.webListing !== false,
+    )
     .sort(
       (a, b) =>
         Date.parse(b.approvedAt ?? b.createdAt) - Date.parse(a.approvedAt ?? a.createdAt) ||
@@ -317,6 +332,7 @@ export async function fileGetAd(id: number): Promise<Ad | null> {
     (a) =>
       a.id === id &&
       Boolean(a.broadcastAt) &&
+      a.webListing !== false &&
       (a.status === "approved" || a.status === "sold" || a.status === "expired"),
   );
   return ad ? toSiteAd(ad) : null;
@@ -373,6 +389,7 @@ const file = {
       }),
       ...(input.photo && { photo: input.photo }),
       ...(input.morePhotos?.length && { morePhotos: input.morePhotos }),
+      ...(input.webListing === false && { webListing: false }),
     });
     save(store);
     return id;

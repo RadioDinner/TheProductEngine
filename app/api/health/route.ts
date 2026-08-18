@@ -259,6 +259,24 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/9974_collage_confirmation.sql in the SQL editor",
           }
         : { applied: true };
+      // 9973 (dollar pricing): users.auto_topup and ads.web_listing ship in
+      // the same paste as the cents conversion and the new price config keys,
+      // so these two column probes plus the money_unit marker stand in for
+      // the whole migration. Until it's applied: prices fall back to the
+      // code defaults (correct dollars), auto top-up stays OFF (fail-closed),
+      // and legacy balances/free passes are still credit-denominated —
+      // balances will display wrong by 100x, so paste it before launch.
+      const topup = await db().from("users").select("auto_topup", { count: "exact", head: true });
+      const moneyUnit = await db().from("config").select("value").eq("key", "money_unit").maybeSingle();
+      report.migration9973 =
+        topup.error || moneyUnit.error || !moneyUnit.data
+          ? {
+              applied: false,
+              ...(topup.error && { code: topup.error.code, error: topup.error.message }),
+              ...(!topup.error && { error: "money_unit config marker missing (ledger not converted)" }),
+              fix: "run supabase/migrations/9973_dollar_pricing.sql in the SQL editor",
+            }
+          : { applied: true };
     } catch (e) {
       report.db = { ok: false, thrown: e instanceof Error ? e.message : String(e) };
     }

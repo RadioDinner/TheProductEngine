@@ -178,9 +178,9 @@ export function computeInsights(
       s.picTimes.push(Date.parse(m.createdAt));
     } else if (cmd.kind === "ad") {
       s.adsTexted++;
-    } else if (cmd.kind === "bump") {
-      s.bumpTexted++;
     }
+    // Member-texted BUMPs no longer exist (session 016) — bumpTexted stays 0;
+    // the engagement blend below keeps its shape.
   }
 
   const topSenders: TopSender[] = [...sender.entries()]

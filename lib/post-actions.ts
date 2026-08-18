@@ -20,12 +20,14 @@ import { redirect } from "next/navigation";
 import { readSession } from "@/lib/session";
 import {
   addLedgerEntry,
-  consumeFreeAd,
   ensureAccount,
+  getAutoTopUp,
   getCreditBalance,
-  grantStarterAdsIfFirst,
+  grantStarterCreditIfFirst,
   spendCredits,
 } from "@/lib/store";
+import { autoTopUpShortfall } from "@/lib/payments";
+import { formatPrice } from "@/lib/config";
 import {
   addPhotoSubmission,
   countAdPhotos,
@@ -134,15 +136,42 @@ async function postAdInner(formData: FormData): Promise<void> {
   const hasPhoto = isAllowedPhotoSrc(photoSrc);
   const photoDropped = listing instanceof File && listing.size > 0 && !hasPhoto;
 
-  const cost = hasPhoto ? settings.costPhoto : settings.costText;
-  // One-time starter grant fires here — on the FIRST real post, past the
+  // Website-listing add-on (session 016): while web_addon_cents is 0 every ad
+  // is listed free; when priced, the form's checkbox buys it as its own
+  // ledger line (`Ad #<id> (website listing)` — the refund matchers' `Ad #<id> (`
+  // token, so a benign rejection or never-ran delete returns it too).
+  const wantsWebListing = settings.webAddonCents === 0 || formData.get("weblisting") === "on";
+  const addonCost = settings.webAddonCents > 0 && wantsWebListing ? settings.webAddonCents : 0;
+
+  const cost = (hasPhoto ? settings.costPhotoCents : settings.costTextCents) + addonCost;
+  // One-time starter credit fires here — on the FIRST real post, past the
   // empty/too-long/auto-reject gates — exactly like the SMS lane.
-  const posting = await grantStarterAdsIfFirst(phone);
-  const canPass = posting.freeAds > 0;
-  const balance = await getCreditBalance(phone);
+  const starterLabel = formatPrice(settings.starterCreditCents);
+  const starter = await grantStarterCreditIfFirst(
+    phone,
+    settings.starterCreditCents,
+    starterLabel,
+  );
+  let balance = await getCreditBalance(phone);
+  // Automatic top-up: the saved card (toggle on) covers the shortfall before
+  // any ad record exists — a declined card is a clean refusal.
+  let toppedUp = 0;
+  if (balance < cost && starter.account.stripeCustomerId && (await getAutoTopUp(phone))) {
+    const topUp = await autoTopUpShortfall({
+      phone,
+      customerId: starter.account.stripeCustomerId,
+      shortfallCents: cost - balance,
+    });
+    if (topUp.ok) {
+      toppedUp = topUp.chargedCents;
+      balance += toppedUp;
+    } else {
+      console.warn(`[post] auto top-up failed for ${phone}: ${topUp.reason}`);
+    }
+  }
   // Fast reject for the clearly-unfunded; the atomic charge below is the
   // authority under concurrency.
-  if (!canPass && balance < cost) {
+  if (balance < cost) {
     redirect(`/account/post?error=funds&cost=${cost}&balance=${balance}`);
   }
 
@@ -157,26 +186,39 @@ async function postAdInner(formData: FormData): Promise<void> {
     ...(hasPhoto && {
       photo: { src: photoSrc!, alt: deriveTitle(body), width: 800, height: 600 },
     }),
+    // Only meaningful once the add-on is priced: an unchecked box keeps the
+    // ad off the public site.
+    webListing: wantsWebListing,
   });
 
-  // Charge atomically — free pass first, else atomic credit debit. The ledger
-  // note strings are an API (refunds and the admin delete view match on them):
-  // they MUST stay byte-identical to the SMS lane's. A THROWN charge (store
-  // hiccup — spendCredits/consumeFreeAd throw on any RPC error in prod) must
-  // not strand an unpaid `pending` ad in the review queue for the admin to
-  // approve and broadcast free: undo via benign rejection, then rethrow. The
-  // redirect()s stay OUTSIDE the try — NEXT_REDIRECT throws by design.
+  // Charge atomically — the base ad price as the atomic debit, the website
+  // add-on as its own ledger line. The ledger note strings are an API
+  // (refunds and the admin delete view match on them): they MUST stay
+  // byte-identical to the SMS lane's. A THROWN charge (store hiccup —
+  // spendCredits throws on any RPC error in prod) must not strand an unpaid
+  // `pending` ad in the review queue for the admin to approve and broadcast
+  // free: undo via benign rejection, then rethrow. The redirect()s stay
+  // OUTSIDE the try — NEXT_REDIRECT throws by design.
+  const baseCost = cost - addonCost;
   let charge = "";
   try {
-    if (canPass && (await consumeFreeAd(phone))) {
-      await addLedgerEntry(phone, {
-        delta: 0,
-        kind: "spend",
-        note: `Free ad used — ad #${id} (${kind})`,
-      });
-      charge = `charge=free&left=${Math.max(0, posting.freeAds - 1)}`;
-    } else if (await spendCredits(phone, cost, `Ad #${id} (${kind})`)) {
-      charge = `charge=credits&cost=${cost}&left=${Math.max(0, balance - cost)}`;
+    if (await spendCredits(phone, baseCost, `Ad #${id} (${kind})`)) {
+      if (addonCost > 0) {
+        // Non-atomic follow-on debit, mirroring the picture-upgrade pattern:
+        // the fast check above covered base + add-on, so the worst concurrent
+        // case is a small visible negative balance — never a lost charge (the
+        // ref makes a retried submit idempotent).
+        await addLedgerEntry(phone, {
+          delta: -addonCost,
+          kind: "spend",
+          note: `Ad #${id} (website listing)`,
+          ref: `ad-${id}-web-addon`,
+        });
+      }
+      charge =
+        `charge=paid&cost=${cost}&left=${Math.max(0, balance - cost)}` +
+        (toppedUp > 0 ? `&topup=${toppedUp}` : "") +
+        (starter.granted ? `&welcome=${settings.starterCreditCents}` : "");
     }
   } catch (e) {
     await rejectAdRecord(id, "Charge failed at submission.", "benign").catch(() => {});
@@ -185,7 +227,7 @@ async function postAdInner(formData: FormData): Promise<void> {
   if (!charge) {
     // The balance was spent between the check and here — undo the ad instead
     // of leaving an unpaid pending record in the review queue.
-    await rejectAdRecord(id, "Not enough credits at submission.", "benign");
+    await rejectAdRecord(id, "Not enough money at submission.", "benign");
     redirect(`/account/post?error=funds&cost=${cost}&balance=${await getCreditBalance(phone)}`);
   }
 

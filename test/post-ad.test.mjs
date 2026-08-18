@@ -1,58 +1,45 @@
 // Web ad posting (FEATURES item 9) — the pricing preview shown BEFORE posting
-// and the confirmation charge note. The note strings must match the SMS lane
-// (lib/engine.ts) byte for byte: refunds and admin views key off them.
+// and the confirmation charge note, in DOLLARS (session-016 pricing: all
+// values are cents). The note strings must match the SMS lane (lib/engine.ts)
+// byte for byte: refunds and admin views key off them.
 import { chargeNoteLine, postingPreview } from "../lib/post-ad.ts";
 
 export const name = "post-ad";
 
+const PRICES = [4500, 6000, 15000]; // text, picture, starter credit
+
 export function run(t) {
-  // Brand-new member: the first post mints the starter passes, so the preview
-  // must say a pass covers it even with a zero balance.
+  // Brand-new member: the first post mints the $150 starter credit, so the
+  // preview must say the money covers it even with a zero balance.
   t.eq(
-    "first post — starter grant covers it",
-    postingPreview({ freeAds: 0, starterGranted: false, balance: 0 }, 1, 5, 3),
+    "first post — starter credit covers it",
+    postingPreview({ starterGranted: false, balanceCents: 0, autoTopUp: false }, ...PRICES),
     {
-      freeAdsAtPost: 3,
-      usesFreePass: true,
+      balanceAtPostCents: 15000,
       starterGrantApplies: true,
       canAffordText: true,
       canAffordPicture: true,
     },
   );
 
-  // Starter already granted, passes remain: a pass covers it, no starter note.
+  // Starter already granted: only the real balance counts.
   t.eq(
-    "passes left — free pass, no starter note",
-    postingPreview({ freeAds: 2, starterGranted: true, balance: 0 }, 1, 5, 3),
+    "granted — balance covers both",
+    postingPreview({ starterGranted: true, balanceCents: 6000, autoTopUp: false }, ...PRICES),
     {
-      freeAdsAtPost: 2,
-      usesFreePass: true,
+      balanceAtPostCents: 6000,
       starterGrantApplies: false,
       canAffordText: true,
       canAffordPicture: true,
     },
   );
 
-  // Passes spent: credits are the lane; balance 5 covers both kinds at 1/5.
+  // $45.01 short of the picture price: text yes, picture no.
   t.eq(
-    "no passes, balance covers both",
-    postingPreview({ freeAds: 0, starterGranted: true, balance: 5 }, 1, 5, 3),
+    "text only affordable",
+    postingPreview({ starterGranted: true, balanceCents: 5999, autoTopUp: false }, ...PRICES),
     {
-      freeAdsAtPost: 0,
-      usesFreePass: false,
-      starterGrantApplies: false,
-      canAffordText: true,
-      canAffordPicture: true,
-    },
-  );
-
-  // Balance 4: text yes, picture no.
-  t.eq(
-    "no passes, text only affordable",
-    postingPreview({ freeAds: 0, starterGranted: true, balance: 4 }, 1, 5, 3),
-    {
-      freeAdsAtPost: 0,
-      usesFreePass: false,
+      balanceAtPostCents: 5999,
       starterGrantApplies: false,
       canAffordText: true,
       canAffordPicture: false,
@@ -61,41 +48,62 @@ export function run(t) {
 
   // Broke: neither.
   t.eq(
-    "no passes, no credits",
-    postingPreview({ freeAds: 0, starterGranted: true, balance: 0 }, 1, 5, 3),
+    "broke — neither affordable",
+    postingPreview({ starterGranted: true, balanceCents: 0, autoTopUp: false }, ...PRICES),
     {
-      freeAdsAtPost: 0,
-      usesFreePass: false,
+      balanceAtPostCents: 0,
       starterGrantApplies: false,
       canAffordText: false,
       canAffordPicture: false,
     },
   );
 
-  // Defensive: negative/garbage inputs never produce a phantom pass.
+  // Automatic top-up: a saved card with the toggle on affords everything —
+  // the shortfall goes on the card at posting time.
   t.eq(
-    "negative freeAds clamps to zero",
-    postingPreview({ freeAds: -2, starterGranted: true, balance: 1 }, 1, 5, 3).freeAdsAtPost,
+    "auto top-up affords everything",
+    postingPreview({ starterGranted: true, balanceCents: 0, autoTopUp: true }, ...PRICES),
+    {
+      balanceAtPostCents: 0,
+      starterGrantApplies: false,
+      canAffordText: true,
+      canAffordPicture: true,
+    },
+  );
+
+  // Defensive: negative/garbage inputs never mint phantom money.
+  t.eq(
+    "negative balance clamps to zero",
+    postingPreview({ starterGranted: true, balanceCents: -200, autoTopUp: false }, ...PRICES)
+      .balanceAtPostCents,
     0,
   );
   t.eq(
-    "starter grant of zero never applies",
-    postingPreview({ freeAds: 0, starterGranted: false, balance: 0 }, 1, 5, 0)
+    "starter credit of zero never applies",
+    postingPreview({ starterGranted: false, balanceCents: 0, autoTopUp: false }, 4500, 6000, 0)
       .starterGrantApplies,
     false,
   );
 
-  // Charge notes — EXACT SMS-lane wording (lib/engine.ts:213,215).
-  t.eq("free-pass note", chargeNoteLine({ kind: "free", left: 2 }), "Used 1 free ad — 2 left.");
-  t.eq("free-pass note, none left", chargeNoteLine({ kind: "free", left: 0 }), "Used 1 free ad — 0 left.");
+  // Charge notes — EXACT SMS-lane wording (lib/engine.ts handleAdSubmission).
   t.eq(
-    "credits note, singular",
-    chargeNoteLine({ kind: "credits", cost: 1, left: 0 }),
-    "1 credit — 0 left.",
+    "dollar note",
+    chargeNoteLine({ costCents: 4500, leftCents: 10500, toppedUpCents: 0 }),
+    "$45 — $105 of ad credit left.",
   );
   t.eq(
-    "credits note, plural",
-    chargeNoteLine({ kind: "credits", cost: 5, left: 3 }),
-    "5 credits — 3 left.",
+    "dollar note with cents",
+    chargeNoteLine({ costCents: 4500, leftCents: 1050, toppedUpCents: 0 }),
+    "$45 — $10.50 of ad credit left.",
+  );
+  t.eq(
+    "welcome-credit note",
+    chargeNoteLine({ costCents: 6000, leftCents: 9000, toppedUpCents: 0, welcomeLabel: "$150" }),
+    "$60 of your $150 welcome credit — $90 left.",
+  );
+  t.eq(
+    "top-up note",
+    chargeNoteLine({ costCents: 4500, leftCents: 0, toppedUpCents: 3300 }),
+    "$45 — $0 of ad credit left. $33 was charged to your card to cover it.",
   );
 }

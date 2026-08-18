@@ -3,7 +3,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   addMyExtras,
-  bumpMine,
   deleteMine,
   markMineSold,
   replaceMyPic,
@@ -13,7 +12,6 @@ import {
   adEverBroadcast,
   getAdRecord,
   getPendingAds,
-  getQueuedBumps,
   listPhotoSubmissions,
   photoSubmissionsSupported,
   type PhotoSubmission,
@@ -26,19 +24,17 @@ import {
   deleteRefundDecision,
   adRefundableTotal,
   findAdCharge,
-  findUnrefundedBumpCharge,
   hasBenignRejectRefund,
   isPicReplaceSubmission,
+  legacyPassRefundCents,
 } from "@/lib/myads";
 import { MAX_PHOTOS_PER_AD } from "@/lib/email-photos";
-import { site } from "@/lib/config";
+import { formatPrice, site } from "@/lib/config";
 
 export const metadata: Metadata = {
   title: `My ads — ${site.name}`,
   robots: { index: false },
 };
-
-const credits = (n: number) => `${n} credit${n === 1 ? "" : "s"}`;
 
 function shortDate(date: Date | string): string {
   return new Date(date).toLocaleDateString("en-US", {
@@ -56,13 +52,10 @@ export default async function MyAdsPage({
     deleted?: string;
     refund?: string;
     amount?: string;
-    bumprefund?: string;
     why?: string;
     sold?: string;
     buyer?: string;
     rate?: string;
-    bump?: string;
-    cost?: string;
     pic?: string;
     extras?: string;
     extraskip?: string;
@@ -80,7 +73,6 @@ export default async function MyAdsPage({
   // number so a just-posted ad is manageable too (same as SMS MYADS).
   const pendingAds = (await getPendingAds()).filter((ad) => ad.ownerPhone === phone);
   const myAds = await listAdsByOwner(phone);
-  const bumpQueued = new Set((await getQueuedBumps()).map((b) => b.adId));
   // Picture actions degrade away entirely when migration 9985 is missing.
   const picsSupported = await photoSubmissionsSupported();
   const myAdIds = new Set([...pendingAds.map((a) => a.id), ...myAds.map((a) => a.id)]);
@@ -120,20 +112,17 @@ export default async function MyAdsPage({
         confirmMoney = "This ad's charge was already refunded once, so deleting returns nothing more.";
       } else if (adRefundableTotal(ledger, target.id) > 0) {
         const owed = adRefundableTotal(ledger, target.id);
-        confirmMoney = `This ad hasn't run in any digest yet. Delete it and your ${credits(owed)} come${owed === 1 ? "s" : ""} back.`;
+        confirmMoney = `This ad hasn't run in any digest yet. Delete it and your ${formatPrice(owed)} comes back.`;
       } else if (charge) {
-        confirmMoney =
-          "This ad hasn't run in any digest yet. Delete it and your free ad pass comes back.";
+        // Legacy free-ad-pass ad — refunded at the current price of its kind.
+        const owed = legacyPassRefundCents(
+          charge.note,
+          settings.costTextCents,
+          settings.costPhotoCents,
+        );
+        confirmMoney = `This ad hasn't run in any digest yet. Delete it and ${formatPrice(owed)} comes back.`;
       } else {
         confirmMoney = "No charge is on record for this ad, so there's nothing to refund.";
-      }
-      // A still-queued PAID bump is refunded on delete regardless of the ad
-      // matrix — the re-broadcast never happens (deleteMine mirrors this).
-      const bumpCharge = bumpQueued.has(target.id)
-        ? findUnrefundedBumpCharge(ledger, target.id)
-        : undefined;
-      if (bumpCharge) {
-        confirmMoney += ` Your scheduled bump hasn't run yet either, so its ${credits(-bumpCharge.delta)} come${-bumpCharge.delta === 1 ? "s" : ""} back too.`;
       }
     }
   }
@@ -145,7 +134,7 @@ export default async function MyAdsPage({
     <div className="container account">
       <h1>My ads</h1>
       <p>
-        Everything you can do by text — SOLD, BUMP, new pictures, delete — right here.{" "}
+        Everything you can do by text — SOLD, new pictures, delete — right here.{" "}
         <Link className="btn btn-sm" href="/account/post">
           Post a new ad
         </Link>
@@ -156,10 +145,9 @@ export default async function MyAdsPage({
         <p className="notice" role="status">
           Ad #{deletedId} is deleted — it&rsquo;s off the website and out of the digests.{" "}
           {params.refund === "credits" && (
-            <>Your {credits(Number(params.amount) || 0)} came back — see your{" "}
-            <Link href="/account#credits">credit history</Link>.</>
+            <>Your {formatPrice(Number(params.amount) || 0)} came back — see your{" "}
+            <Link href="/account#credits">account history</Link>.</>
           )}
-          {params.refund === "pass" && <>Your free ad pass came back.</>}
           {params.refund === "none" && (
             <>Its charge was already refunded (or none was on record), so nothing more was returned.</>
           )}
@@ -167,13 +155,6 @@ export default async function MyAdsPage({
             (params.why === "ran"
               ? "It had already run in a digest, so there's no refund."
               : "It was already closed, so there's no refund.")}
-          {Number(params.bumprefund) > 0 && (
-            <>
-              {" "}
-              Its scheduled bump never ran, so those {credits(Number(params.bumprefund))} came
-              back too.
-            </>
-          )}
         </p>
       )}
       {params.sold === "done" && (
@@ -195,37 +176,6 @@ export default async function MyAdsPage({
         <p className="form-error" role="alert">
           Ad #{params.id} is still waiting for review — you can mark it sold once it&rsquo;s
           approved.
-        </p>
-      )}
-      {params.bump === "queued" && (
-        <p className="notice" role="status">
-          Ad #{params.id} will run again in the next digest.
-        </p>
-      )}
-      {params.bump === "relisted" && (
-        <p className="notice" role="status">
-          Ad #{params.id} is relisted and will run again in the next digest.
-        </p>
-      )}
-      {params.bump === "already" && (
-        <p className="notice" role="status">
-          You already have a bump scheduled for ad #{params.id}.
-        </p>
-      )}
-      {params.bump === "nofunds" && (
-        <p className="form-error" role="alert">
-          A bump costs {credits(Number(params.cost) || 0)} and you don&rsquo;t have enough —{" "}
-          <Link href="/account#credits">buy credits</Link> and try again.
-        </p>
-      )}
-      {params.bump === "sold" && (
-        <p className="form-error" role="alert">
-          Ad #{params.id} is marked sold — nothing to bump.
-        </p>
-      )}
-      {params.bump === "pending" && (
-        <p className="form-error" role="alert">
-          Ad #{params.id} is still waiting for review — it runs automatically once approved.
         </p>
       )}
       {params.pic === "submitted" && (
@@ -323,9 +273,8 @@ export default async function MyAdsPage({
           </p>
           <p>{confirmMoney}</p>
           <p className="fine">
-            Deleting also removes the ad&rsquo;s pictures and drops any scheduled bump (a
-            paid bump that never ran is refunded). Past digests keep the ad number. This
-            can&rsquo;t be undone.
+            Deleting also removes the ad&rsquo;s pictures. Past digests keep the ad number.
+            This can&rsquo;t be undone.
           </p>
           <form action={deleteMine} className="sim-actions">
             <input type="hidden" name="id" value={confirmAd.id} />
@@ -356,7 +305,7 @@ export default async function MyAdsPage({
               </p>
               <p className="myad-dates">
                 Submitted {shortDate(ad.createdAt)} — you&rsquo;ll get a text when it&rsquo;s
-                approved. Marking sold and bumping open up after approval.
+                approved. Marking sold opens up after approval.
               </p>
               {(extrasPending.get(ad.id) ?? 0) > 0 && (
                 <p className="fine">
@@ -418,9 +367,6 @@ export default async function MyAdsPage({
                     {sold ? "Sold" : expired ? "Ended" : "Available"}
                   </span>
                   {ad.photo && <span className="status-muted"> · 📷 picture</span>}
-                  {bumpQueued.has(ad.id) && (
-                    <span className="status-muted"> · bump scheduled</span>
-                  )}
                 </p>
                 <p className="myad-dates">
                   Posted {shortDate(ad.approvedAt)}
@@ -461,17 +407,6 @@ export default async function MyAdsPage({
                       </div>
                     </form>
                   </details>
-                )}
-
-                {(available || expired) && !bumpQueued.has(ad.id) && (
-                  <form action={bumpMine} className="sim-actions">
-                    <input type="hidden" name="id" value={ad.id} />
-                    <button className="btn btn-sm btn-secondary" type="submit">
-                      Bump — run again in the next digest
-                      {expired ? " (relists)" : ""}
-                      {settings.bumpCost > 0 ? ` — ${credits(settings.bumpCost)}` : ""}
-                    </button>
-                  </form>
                 )}
 
                 {picsSupported && available && ad.photo && !replaceWaiting.has(ad.id) && (
@@ -529,8 +464,8 @@ export default async function MyAdsPage({
 
       <p className="fine">
         Deleting an ad that hasn&rsquo;t been approved yet — or was approved but never ran in a
-        digest — returns what you paid (credits or a free ad pass). Once an ad has ridden a
-        digest, the run is spent and deleting doesn&rsquo;t refund. See the{" "}
+        digest — returns what you paid. Once an ad has ridden a digest, the money is spent and
+        deleting doesn&rsquo;t refund. See the{" "}
         <Link href="/refund-policy">refund policy</Link>.
       </p>
 

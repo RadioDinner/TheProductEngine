@@ -1,7 +1,7 @@
 -- ============================================================
 -- The Plain Exchange — development seed
 -- Fixture sellers + the 20 demo ads the website ships with,
--- plus config defaults, packs, and starter word-filter rows.
+-- plus config defaults and starter word-filter rows.
 -- Dates are relative to the day the seed runs.
 -- ============================================================
 
@@ -74,11 +74,11 @@ insert into config (key, value) values
   ('digest_slots_sms',        '[7, 18]'),
   ('digest_slots_email',      '[7, 16]'),
   ('digest_ad_cap',           '10'),
-  ('credit_cost_text',        '2'),
-  ('credit_cost_photo',       '10'),
-  ('bump_cost',               '0'),
-  ('max_queued_bumps_per_ad', '1'),
-  ('starter_free_ads',        '3'),
+  ('money_unit',              '"cents"'),
+  ('ad_price_text_cents',     '4500'),
+  ('ad_price_photo_cents',    '6000'),
+  ('web_addon_cents',         '0'),
+  ('starter_credit_cents',    '15000'),
   ('ad_expiry_days',          '30'),
   ('ad_max_chars',            '250'),
   ('offense_ban_threshold',   '3'),
@@ -93,17 +93,8 @@ insert into config (key, value) values
   ('reveal_bank_cap',          '30'),
   ('reveal_abuse_per_day',     '25'),
   ('promo_banner_text',       ''),
-  ('promo_banner_link',       '/account#credits'),
-  ('saved_card_discount_percent', '10')
+  ('promo_banner_link',       '/account#credits')
 on conflict (key) do nothing;
-
--- ---------- credit packs ----------
-
-insert into packs (id, credits, price_cents, active, position) values
-  ('pack5',  5,  500,  true, 1),
-  ('pack10', 10, 900,  true, 2),
-  ('pack25', 25, 2000, true, 3)
-on conflict (id) do nothing;
 
 -- ---------- starter word filter (flag-for-review; auto_reject stays false) ----------
 

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
 import { getEngineSettings } from "@/lib/settings";
-import { site } from "@/lib/config";
+import { formatPrice, site } from "@/lib/config";
 import { handbookByPage } from "@/lib/admin-handbook";
 
 export const metadata: Metadata = {
@@ -189,7 +189,7 @@ export default async function AdminHelp() {
         ad number stays in past digests and in the message log, because history is never
         rewritten (filter the Ads tab by &ldquo;deleted&rdquo; to see removed ads). Deleting
         <strong> does not refund</strong> and <strong>does not text the seller</strong> — the
-        confirm step shows what the seller paid so you can grant credits on their page first if
+        confirm step shows what the seller paid so you can adjust their balance first if
         a refund is deserved. For a bad ad still in review, prefer <strong>Reject</strong>: that
         is the flow that refunds (benign) or records a strike (violation) and tells the seller.
       </p>
@@ -345,39 +345,39 @@ export default async function AdminHelp() {
         you type in and texts them a one-time invite: who we are, &ldquo;to sign up, reply
         START,&rdquo; the message-frequency and rates disclosure, and HELP/STOP instructions —
         the same compliance language as everything else we send. You can grant{" "}
-        <strong>starting credits</strong> in the same step (they land in the ledger
+        <strong>starting ad credit in dollars</strong> in the same step (it lands in the ledger
         immediately, noted as an admin invite grant). The invite never repeats — one per
         number per day, and already-subscribed numbers are refused — because it&apos;s
         outreach to someone who hasn&apos;t texted us first: one polite knock, not a campaign.
         Nothing else is ever sent unless they reply START.
       </p>
 
-      <h2 className="section-h">Why credits are a ledger</h2>
+      <h2 className="section-h">Why the money is a ledger</h2>
       <p>
-        Credit balances aren&rsquo;t a single number that gets edited. Every grant, purchase,
-        spend, and refund is a separate line, and the balance is the sum of all lines. Money
-        histories should be append-only: you can always see exactly what happened and when,
-        and a bug can&rsquo;t silently overwrite someone&rsquo;s balance. Purchases record the
-        Stripe payment id, which is also how a repeated payment notification is prevented from
-        adding credits twice.
+        Balances aren&rsquo;t a single number that gets edited. Every grant, purchase,
+        spend, and refund is a separate line (stored in cents), and the balance is the sum of
+        all lines. Money histories should be append-only: you can always see exactly what
+        happened and when, and a bug can&rsquo;t silently overwrite someone&rsquo;s balance.
+        Purchases record the Stripe payment id, which is also how a repeated payment
+        notification is prevented from adding money twice.
       </p>
 
       <h2 className="section-h">Taking payment over the phone (Phone order)</h2>
       <p>
         On a member&rsquo;s page (Users tab) the <strong>Phone order</strong> section handles a
         caller paying by card. If a card is already on file it says so, and{" "}
-        <strong>Bill their saved card</strong> charges it on their verbal OK — same price and
-        saved-card discount as texting BUYCREDIT, and a double-click can&rsquo;t charge twice.
-        No card yet? Pick the pack, then either <strong>Open checkout here</strong> —
-        Stripe&rsquo;s secure payment page opens in your browser and you key the card in as the
-        caller reads it out — or <strong>Text them the link</strong> so they finish it
-        themselves (the link lasts 24 hours). The card number goes straight into Stripe and is
-        never seen or stored by this site, so don&rsquo;t write it down either. When the payment
-        goes through, the credits are granted to that member automatically and the card is
-        saved to their account — from then on they can top up by texting{" "}
-        <span className="cmd">BUYCREDIT</span> (a YES confirms and charges the saved card, with
-        the saved-card discount). For cash or a check, skip Stripe entirely and use{" "}
-        <strong>Adjust credits</strong> with a note like &ldquo;check #204&rdquo;.
+        <strong>Bill their saved card</strong> charges it on their verbal OK — a double-click
+        can&rsquo;t charge twice. No card yet? Pick the amount, then either{" "}
+        <strong>Open checkout here</strong> — Stripe&rsquo;s secure payment page opens in your
+        browser and you key the card in as the caller reads it out — or{" "}
+        <strong>Text them the link</strong> so they finish it themselves (the link lasts 24
+        hours). The card number goes straight into Stripe and is never seen or stored by this
+        site, so don&rsquo;t write it down either. When the payment goes through, the money is
+        granted to that member automatically and the card is saved to their account — from
+        then on their ads <strong>top up automatically</strong> when the balance runs short
+        (the confirmation text states the charge; the member can turn it off on their account
+        page). For cash or a check, skip Stripe entirely and use{" "}
+        <strong>Adjust balance</strong> with a note like &ldquo;check #204&rdquo;.
       </p>
 
       <h2 className="section-h">Why the website can&rsquo;t read the database directly</h2>
@@ -434,8 +434,8 @@ export default async function AdminHelp() {
       <h2 className="section-h">Business advertising packages (the Business tab)</h2>
       <p>
         Businesses buy a package on the public <span className="cmd">/advertising</span>{" "}
-        page (the &ldquo;Advertising for Businesses&rdquo; footer link): 1&nbsp;week $39.99,
-        2&nbsp;weeks $59.99, 1&nbsp;month $89.99. They pay by card up front (Stripe), and the
+        page (the &ldquo;Advertising for Businesses&rdquo; footer link): 1&nbsp;week $199,
+        2&nbsp;weeks $349, 1&nbsp;month $599. They pay by card up front (Stripe), and the
         ad then lands on the <strong>Business</strong> tab waiting for review — paying never
         skips the human gate, same as every member ad. Business ads MAY carry one website
         link (members can&rsquo;t); the review is where you judge it.
@@ -514,9 +514,10 @@ export default async function AdminHelp() {
       <p>All editable on the Settings page; changes take effect immediately.</p>
       <table className="cmd-table">
         <tbody>
-          <tr><td>Text ad cost</td><td>{s.costText} credit(s)</td></tr>
-          <tr><td>Picture ad cost</td><td>{s.costPhoto} credits</td></tr>
-          <tr><td>Bump cost</td><td>{s.bumpCost} credit(s)</td></tr>
+          <tr><td>Text ad price</td><td>{formatPrice(s.costTextCents)}</td></tr>
+          <tr><td>Picture ad price</td><td>{formatPrice(s.costPhotoCents)}</td></tr>
+          <tr><td>Website listing add-on</td><td>{s.webAddonCents > 0 ? formatPrice(s.webAddonCents) : "included free"}</td></tr>
+          <tr><td>Starter credit (first post)</td><td>{formatPrice(s.starterCreditCents)}</td></tr>
           <tr><td>Max ads per digest</td><td>{s.digestCap}</td></tr>
           <tr><td>Max ad length</td><td>{s.maxChars} characters</td></tr>
           <tr><td>Ad run time</td><td>{s.expiryDays} days</td></tr>

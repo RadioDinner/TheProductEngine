@@ -28,11 +28,12 @@ export function run(t) {
   t.eq("SOLD with phone in text -> full run", parseCommand("SOLD call 3305550142").id, 3305550142);
   t.eq("PIC no id -> null", parseCommand("PIC").id, null);
   t.eq("STATUS no id -> null", parseCommand("STATUS").id, null);
-  t.eq("BUMP 1042", parseCommand("BUMP 1042").id, 1042);
-  t.eq("buycredit 10", parseCommand("buycredit 10").amount, 10);
-  t.eq("BUYCREDIT 25", parseCommand("BUYCREDIT 25").amount, 25);
-  t.eq("yes -> confirm", parseCommand("yes").kind, "confirm");
-  t.eq("y -> confirm", parseCommand("y").kind, "confirm");
+  // The bump feature is REMOVED (session 016, user decision: "completely
+  // gone, from everywhere") — BUMP and the old purchase keywords are plain
+  // unknown words now, answered by the automated-system redirect.
+  t.eq("BUMP 1042 -> unknown (feature removed)", parseCommand("BUMP 1042").kind, "unknown");
+  t.eq("buycredit 10 -> unknown (feature removed)", parseCommand("buycredit 10").kind, "unknown");
+  t.eq("yes -> unknown (BUYCREDIT confirm removed)", parseCommand("yes").kind, "unknown");
   t.eq("credits (no arg)", parseCommand("credits").kind, "credits");
   t.eq("credits with junk -> unknown", parseCommand("credits foo").kind, "unknown");
   t.eq("gibberish -> unknown", parseCommand("asdf qwer").kind, "unknown");
@@ -54,22 +55,20 @@ export function run(t) {
   t.eq("'End table for sale' is NOT a stop", parseCommand("End table for sale $30").kind, "unknown");
   t.eq("'Revoke my ad' is NOT a stop", parseCommand("Revoke my ad 1042").kind, "unknown");
   t.eq("'opt for the buggy' is NOT a stop", parseCommand("opt for the buggy").kind, "unknown");
-  t.eq("YES. -> confirm", parseCommand("YES.").kind, "confirm");
   t.eq("SUBSCRIBE, -> subscribe", parseCommand("SUBSCRIBE,").kind, "subscribe");
   t.eq("credits! (no arg) -> credits", parseCommand("credits!").kind, "credits");
   t.eq("SOLD. 1042 keeps id", parseCommand("SOLD. 1042").id, 1042);
   // Slash followed by a space still routes to the keyword.
   t.eq("/ help (slash+space) -> help", parseCommand("/ help").kind, "help");
   t.eq("all-punctuation token -> unknown", parseCommand("...").kind, "unknown");
-  // Known quirk (harmless — no pack is 100, so it's rejected downstream):
-  t.eq("buycredit 1000 parses first 3 digits = 100", parseCommand("buycredit 1000").amount, 100);
 
-  // "AD <verb> <id>" re-routes to the owner command (a mistyped SOLD/BUMP must
-  // not silently post a junk ad + burn a credit). Only the exact keyword+number
-  // shape re-routes; a real ad that merely starts with the word does not.
+  // "AD <verb> <id>" re-routes to the owner command (a mistyped SOLD must
+  // not silently post a junk ad + charge the seller). Only the exact
+  // keyword+number shape re-routes; a real ad that merely starts with the
+  // word does not. BUMP left the re-route set with the feature (session 016).
   t.eq("AD SOLD 1325 -> sold command", parseCommand("AD SOLD 1325").kind, "sold");
   t.eq("AD SOLD 1325 -> id 1325", parseCommand("AD SOLD 1325").id, 1325);
-  t.eq("AD BUMP 1042 -> bump", parseCommand("AD BUMP 1042").kind, "bump");
+  t.eq("AD BUMP 1042 -> ad (bump removed)", parseCommand("AD BUMP 1042").kind, "ad");
   t.eq("AD STATUS 1042 -> status", parseCommand("AD STATUS 1042").kind, "status");
   t.eq("ad pic 900 -> pic", parseCommand("ad pic 900").kind, "pic");
   // Even explicit "AD NEW SOLD 1325" re-routes — the body is the exact

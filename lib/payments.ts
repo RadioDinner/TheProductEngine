@@ -4,24 +4,26 @@
  * to a hosted Stripe Checkout session and the webhook
  * (/api/stripe/webhook) grants the credits when payment completes.
  */
-import { site } from "@/lib/config";
+import { randomUUID } from "node:crypto";
+import { formatPrice, site } from "@/lib/config";
+import { addLedgerEntry } from "@/lib/store";
+import { devToolsEnabled } from "@/lib/env";
 
 export const paymentsDevMode = !process.env.STRIPE_SECRET_KEY;
 
-export function checkoutUrl(packId: string): string {
-  return `/account/checkout?pack=${encodeURIComponent(packId)}`;
+export function checkoutUrl(amountCents: number): string {
+  return `/account/checkout?amount=${amountCents}`;
 }
 
 /**
- * Create a hosted Stripe Checkout session for a credit pack and return its
- * redirect URL. The card is saved for future off-session charges (the
- * planned /BUYCREDIT text-to-buy flow); the customer id is captured by the
+ * Create a hosted Stripe Checkout session that adds dollars to a member's
+ * ad-credit balance (dollar pricing, session 016 — packs are gone) and
+ * return its redirect URL. The card is saved for future off-session charges
+ * (automatic top-up at posting time); the customer id is captured by the
  * webhook when payment completes.
  */
 export async function createCheckoutSession(args: {
-  packId: string;
-  credits: number;
-  priceCents: number;
+  amountCents: number;
   phone: string;
   origin: string;
   /** Where the payer's browser lands after paying/cancelling. Defaults to the
@@ -39,13 +41,14 @@ export async function createCheckoutSession(args: {
     cancel_url: args.cancelUrl ?? `${args.origin}/account?checkout=cancelled#credits`,
     "line_items[0][quantity]": "1",
     "line_items[0][price_data][currency]": "usd",
-    "line_items[0][price_data][unit_amount]": String(args.priceCents),
-    "line_items[0][price_data][product_data][name]": `${args.credits} ad credits — ${site.name}`,
+    "line_items[0][price_data][unit_amount]": String(args.amountCents),
+    "line_items[0][price_data][product_data][name]": `${formatPrice(args.amountCents)} ad credit — ${site.name}`,
     "metadata[phone]": args.phone,
-    "metadata[pack]": args.packId,
+    "metadata[kind]": "topup",
+    "metadata[topup_cents]": String(args.amountCents),
     "payment_intent_data[setup_future_usage]": "off_session",
     "payment_intent_data[metadata][phone]": args.phone,
-    "payment_intent_data[metadata][pack]": args.packId,
+    "payment_intent_data[metadata][topup_cents]": String(args.amountCents),
   });
   const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
     method: "POST",
@@ -153,19 +156,18 @@ async function firstSavedCard(
 }
 
 /**
- * Charge a customer's saved card off-session for a credit pack (the BUYCREDIT
- * text flow). `ref` is used as both the Stripe idempotency key and the ledger
- * ref, so a retried confirmation never double-charges or double-grants. A
- * declined or authentication-required card returns ok:false — we can't do 3-D
- * Secure over SMS, so the reply steers them to the website.
+ * Charge a customer's saved card off-session for a dollar amount (automatic
+ * top-up, admin phone billing). `ref` is used as both the Stripe idempotency
+ * key and the ledger ref, so a retry never double-charges or double-grants.
+ * A declined or authentication-required card returns ok:false — we can't do
+ * 3-D Secure over SMS, so callers steer the payer to the website.
  */
 export async function chargeSavedCard(args: {
   customerId: string;
   amountCents: number;
   ref: string;
   phone: string;
-  packId: string;
-  credits: number;
+  description: string;
 }): Promise<ChargeResult> {
   if (!process.env.STRIPE_SECRET_KEY) return { ok: false, reason: "payments not configured" };
   const card = await firstSavedCard(args.customerId);
@@ -177,9 +179,8 @@ export async function chargeSavedCard(args: {
     payment_method: card.id,
     off_session: "true",
     confirm: "true",
-    description: `${args.credits} ad credits — ${site.name}`,
+    description: args.description,
     "metadata[phone]": args.phone,
-    "metadata[pack]": args.packId,
     "metadata[ref]": args.ref,
   });
   const response = await fetch("https://api.stripe.com/v1/payment_intents", {
@@ -205,10 +206,53 @@ export async function chargeSavedCard(args: {
   return { ok: false, reason: `payment ${body.status ?? "not completed"}` };
 }
 
+export type TopUpOutcome =
+  | { ok: true; chargedCents: number; last4?: string }
+  | { ok: false; reason: string };
+
+/**
+ * Automatic top-up (dollar pricing, session 016): charge the member's saved
+ * card for exactly the posting shortfall and grant it to the ledger, so the
+ * ad charge that follows can clear. The caller has ALREADY checked the
+ * member's auto-top-up consent (getAutoTopUp — fail-closed pre-9973) and
+ * that a Stripe customer exists. The ref is unique per attempt: handleInbound
+ * is deduped per provider message, so one inbound = at most one attempt; a
+ * fetch-level retry inside Stripe is caught by the idempotency key. If the
+ * subsequent spend loses a race, the money stays on the balance — never lost.
+ */
+export async function autoTopUpShortfall(args: {
+  phone: string;
+  customerId: string;
+  shortfallCents: number;
+}): Promise<TopUpOutcome> {
+  const ref = `topup:${args.phone}:${randomUUID()}`;
+  let charge: ChargeResult;
+  if (!paymentsDevMode) {
+    charge = await chargeSavedCard({
+      customerId: args.customerId,
+      amountCents: args.shortfallCents,
+      ref,
+      phone: args.phone,
+      description: `Ad credit top-up — ${site.name}`,
+    });
+  } else if (devToolsEnabled) {
+    charge = { ok: true, last4: "0000" }; // dev simulation (never in a real prod deploy)
+  } else {
+    return { ok: false, reason: "payments not configured" };
+  }
+  if (!charge.ok) return { ok: false, reason: charge.reason ?? "charge failed" };
+  await addLedgerEntry(args.phone, {
+    delta: args.shortfallCents,
+    kind: "purchase",
+    note: `Automatic top-up — ${formatPrice(args.shortfallCents)} charged to your saved card`,
+    ref,
+  });
+  return { ok: true, chargedCents: args.shortfallCents, last4: charge.last4 };
+}
+
 export interface CompletedCheckout {
   paymentStatus: string;
   phone: string | null;
-  packId: string | null;
   paymentIntent: string | null;
   amountTotal: number | null;
 }
@@ -226,12 +270,11 @@ export async function getCheckoutSession(sessionId: string): Promise<CompletedCh
     payment_status?: string;
     payment_intent?: string | null;
     amount_total?: number | null;
-    metadata?: { phone?: string; pack?: string };
+    metadata?: { phone?: string };
   };
   return {
     paymentStatus: session.payment_status ?? "unknown",
     phone: session.metadata?.phone ?? null,
-    packId: session.metadata?.pack ?? null,
     paymentIntent: session.payment_intent ?? null,
     amountTotal: session.amount_total ?? null,
   };

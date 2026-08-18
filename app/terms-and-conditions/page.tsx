@@ -24,7 +24,7 @@ export default function TermsAndConditions() {
         {site.name} gathers classified ads from local sellers and sends them out in short
         digests by text message, and by email for those who prefer it. Approved ads are
         also listed on this website, typically for 30 days. Subscribing and browsing are
-        free; posting ads uses credits. How it all works, step by step, is on the{" "}
+        free; posting ads costs money. How it all works, step by step, is on the{" "}
         <Link href="/how-it-works">how it works</Link> page.
       </p>
 
@@ -55,7 +55,7 @@ export default function TermsAndConditions() {
         On the website you sign in with your number, a texted code, and a password. Keep
         your password to yourself — what happens under your account is your
         responsibility. One person, one account. You must be at least 18 to post ads or
-        buy credits.
+        pay for anything here.
       </p>
 
       <h2>Posting ads</h2>
@@ -63,7 +63,7 @@ export default function TermsAndConditions() {
         Every ad is read by a person before it runs. We may lightly edit ad text for
         clarity or length without changing its meaning. We may decline any ad. If we
         decline an ad for an ordinary reason — too long, unclear, not a good fit — your
-        credit or free ad is returned. If an ad breaks the rules below, the credit is
+        money is returned in full. If an ad breaks the rules below, the charge is
         kept and the ad counts as a strike; three strikes and you can no longer post,
         though you can still browse and subscribe. Sold something? Say so —{" "}
         <strong>SOLD</strong> plus your ad number keeps the listings honest.
@@ -86,19 +86,21 @@ export default function TermsAndConditions() {
         judgment. Our judgment on what runs is final.
       </p>
 
-      <h2>Credits and payments</h2>
+      <h2>Ad credit and payments</h2>
       <p>
-        Posting an ad uses credits (a picture ad uses more than a plain one — current
-        prices are shown when you post and by texting <strong>CREDITS</strong>). Your
-        first few ads are free. Credit packs are sold on this website and, with a
-        saved card, by texting <strong>BUYCREDIT</strong> — you will always be asked to
-        confirm before anything is charged. Payments are processed by Stripe.
+        Posting an ad comes off your prepaid ad-credit balance (a picture ad costs more
+        than a plain one — current prices are shown when you post and by texting{" "}
+        <strong>CREDITS</strong>). Every new member&rsquo;s first post comes with a
+        welcome credit. You add money on this website; with a saved card, your balance
+        can also top up automatically when an ad costs more than what&rsquo;s on the
+        account — the confirmation text always states the charge, and you can turn
+        automatic top-up off under your account. Payments are processed by Stripe.
       </p>
       <p>
-        Credits have no cash value, don&rsquo;t expire, and can&rsquo;t be transferred or
-        redeemed for money. Refunds of credit purchases are at our discretion, except
-        where the law says otherwise; credits spent on declined-for-ordinary-reasons ads
-        are returned as described above.
+        Ad credit has no cash value, doesn&rsquo;t expire, and can&rsquo;t be transferred
+        or redeemed for money. Refunds of money you added are at our discretion, except
+        where the law says otherwise; charges for declined-for-ordinary-reasons ads are
+        returned as described above.
       </p>
 
       <h2>Buying and selling</h2>

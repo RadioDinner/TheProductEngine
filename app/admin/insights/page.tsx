@@ -4,7 +4,7 @@ import { getInsights, type Insights } from "@/lib/insights";
 import { listBlocked } from "@/lib/blocklist";
 import { adminBlockNumber } from "@/lib/admin-actions";
 import { formatPhone } from "@/lib/phone";
-import { site } from "@/lib/config";
+import { formatPrice, site } from "@/lib/config";
 import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
@@ -107,8 +107,8 @@ export default async function AdminInsights({
             {stat("People who texted", data.totals.uniqueSenders.toLocaleString())}
             {stat("Ads posted", data.totals.adsInWindow.toLocaleString())}
             {stat("Bumps", data.totals.bumpsInWindow.toLocaleString())}
-            {stat("Credits spent", data.totals.creditsSpentInWindow.toLocaleString())}
-            {stat("Credits purchased", data.totals.creditsPurchasedInWindow.toLocaleString())}
+            {stat("Money spent on ads", formatPrice(data.totals.creditsSpentInWindow))}
+            {stat("Money added", formatPrice(data.totals.creditsPurchasedInWindow))}
           </dl>
 
           <h2 className="section-h">Ads (all time)</h2>
@@ -131,7 +131,7 @@ export default async function AdminInsights({
                     <th>Ads</th>
                     <th>Sold</th>
                     <th>Bumps</th>
-                    <th>Credits spent ({data.windowDays}d)</th>
+                    <th>Spent ({data.windowDays}d)</th>
                     <th>Last active</th>
                   </tr>
                 </thead>
@@ -142,7 +142,7 @@ export default async function AdminInsights({
                       <td>{a.adsPosted}</td>
                       <td>{a.adsSold}</td>
                       <td>{a.bumps}</td>
-                      <td>{a.creditsSpent}</td>
+                      <td>{formatPrice(a.creditsSpent)}</td>
                       <td className="status-muted">{when(a.lastActiveAt)}</td>
                     </tr>
                   ))}

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { site } from "@/lib/config";
+import { formatPrice, site } from "@/lib/config";
 import { getEngineSettings } from "@/lib/settings";
 
 export const metadata: Metadata = {
@@ -37,11 +37,18 @@ export default async function Faq() {
 
       <h2>What does it cost?</h2>
       <p>
-        Getting the ads is free. Browsing the website is free. Posting an ad uses ad
-        credits — a plain ad costs {s.costText} credit{s.costText === 1 ? "" : "s"}, a
-        picture ad costs {s.costPhoto} — and <strong>the first 200 subscribers get
-        their first 3 ads free</strong>, picture or plain. Credit packs are sold on
-        this website under <Link href="/account">your account</Link>.
+        Getting the ads is free. Browsing the website is free. Posting an ad costs money —
+        a plain ad is {formatPrice(s.costTextCents)}, a picture ad (up to four pictures) is{" "}
+        {formatPrice(s.costPhotoCents)} — and{" "}
+        <strong>
+          every new member&rsquo;s first post comes with {formatPrice(s.starterCreditCents)}{" "}
+          of ad credit on the house
+        </strong>
+        . Your ads run in the text digest and list on this website
+        {s.webAddonCents > 0
+          ? ` (the website listing is ${formatPrice(s.webAddonCents)} more)`
+          : ""}
+        .
       </p>
 
       <h2>How do I start getting the ads?</h2>
@@ -76,8 +83,8 @@ export default async function Faq() {
       <h2>Why wasn&rsquo;t my ad accepted?</h2>
       <p>
         Most often it&rsquo;s something ordinary — too long, unclear, or not a fit for the
-        service. When that happens, your credit or free ad is returned and you can fix it
-        and resend. Ads that break the rules (see the{" "}
+        service. When that happens, your money is returned in full and you can fix it and
+        resend. Ads that break the rules (see the{" "}
         <Link href="/terms-and-conditions">terms</Link>) keep the charge and count as a
         strike.
       </p>
@@ -89,12 +96,6 @@ export default async function Faq() {
         listings keep the service worth reading.
       </p>
 
-      <h2>Can I run my ad again?</h2>
-      <p>
-        Yes — text <span className="cmd">BUMP</span> and your ad number and it runs again
-        in the next digest. Bumps are free for now.
-      </p>
-
       <h2>Is my phone number shown to everyone?</h2>
       <p>
         Whatever you write in your ad goes out in the digests — most sellers include their
@@ -103,11 +104,13 @@ export default async function Faq() {
         marketers; the details are in the <Link href="/privacy">privacy policy</Link>.
       </p>
 
-      <h2>How do I pay for credits?</h2>
+      <h2>How do I pay?</h2>
       <p>
-        Buy a credit pack on this website — sign in, pick a pack, and pay by card on a
-        secure checkout page. Prefer to handle it by phone or mail? Call{" "}
-        <strong>{site.supportPhone}</strong>{" "}and we&rsquo;ll set it up.
+        Add money to your account on this website — sign in, pick an amount, and pay by
+        card on a secure checkout page. Once a card is saved, ads can top up automatically:
+        if your balance comes up a little short, the difference goes on your card and the
+        confirmation text says so. Prefer to handle it by phone or check? Call{" "}
+        <strong>{site.supportPhone}</strong> and we&rsquo;ll set it up.
       </p>
 
       <h2>How do I stop the texts?</h2>

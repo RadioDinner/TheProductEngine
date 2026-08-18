@@ -14,13 +14,10 @@ import {
   getAdRecord,
   getPendingAds,
   latestPendingAdFor,
-  listMessages,
   logMessage,
-  queueBump,
   recordInboundOnce,
   rejectAdRecord,
   reserveSms,
-  reviveAd,
   markAdSold,
   type StoredAd,
 } from "@/lib/engine-store";
@@ -30,15 +27,14 @@ import {
   addLedgerEntry,
   addRating,
   clearSmsContext,
-  consumeFreeAd,
   ensureAccount,
   getAccount,
+  getAutoTopUp,
   getCreditBalance,
   getLedger,
   getSmsContext,
   getSubscriberCategories,
-  grantStarterAdsIfFirst,
-  hasLedgerRef,
+  grantStarterCreditIfFirst,
   recordSale,
   reserveCategoryConfirm,
   reservePicQuota,
@@ -46,6 +42,7 @@ import {
   setSubscriberCategories,
   setSubscribed,
   spendCredits,
+  type Account,
 } from "@/lib/store";
 import {
   ALL_CATEGORIES_SMS,
@@ -58,7 +55,7 @@ import {
 } from "@/lib/categories";
 import { gsmSanitize } from "@/lib/sms-segments";
 import { normalizePhone } from "@/lib/phone";
-import { discountedCents, formatPrice, packs, site } from "@/lib/config";
+import { formatPrice, site } from "@/lib/config";
 import { getEngineSettings, getWordRules, matchWordRules, effectiveSmsCaps } from "@/lib/settings";
 import type { EngineSettings } from "@/lib/settings";
 import { stripEmoji, hasLink, mayPostLinks } from "@/lib/content-filter";
@@ -77,8 +74,7 @@ import { MAX_COMBINED_PHOTOS, collageDimensions, combineImageBuffers } from "@/l
 import { sniffImage } from "@/lib/image-sniff";
 import { siteUrl } from "@/lib/email";
 import { supabaseConfigured } from "@/lib/db";
-import { chargeSavedCard, paymentsDevMode } from "@/lib/payments";
-import { devToolsEnabled } from "@/lib/env";
+import { autoTopUpShortfall } from "@/lib/payments";
 import { dispatchSms } from "@/lib/outbound";
 import { isBlockedNumber } from "@/lib/blocklist";
 import { notifyAdminNewAd } from "@/lib/notify";
@@ -151,6 +147,37 @@ function statusWord(ad: Ad): string {
   if (ad.status === "sold") return "Sold";
   if (ad.status === "expired") return "Expired";
   return "Available";
+}
+
+/**
+ * Automatic top-up (dollar pricing, session 016): when a posting charge comes
+ * up short, cover exactly the shortfall from the member's saved card — with
+ * their standing consent (getAutoTopUp, fail-closed before migration 9973).
+ * charged 0 with no declineReason = no card / top-up off; a declineReason is
+ * worth telling the seller (their card was tried and refused).
+ */
+async function coverShortfallWithCard(
+  from: string,
+  account: Account,
+  shortfallCents: number,
+): Promise<{ charged: number; last4?: string; declineReason?: string }> {
+  if (!account.stripeCustomerId) return { charged: 0 };
+  if (!(await getAutoTopUp(from))) return { charged: 0 };
+  const result = await autoTopUpShortfall({
+    phone: from,
+    customerId: account.stripeCustomerId,
+    shortfallCents,
+  });
+  if (!result.ok) {
+    console.warn(`[engine] auto top-up failed for ${from}: ${result.reason}`);
+    return { charged: 0, declineReason: result.reason };
+  }
+  return { charged: result.chargedCents, last4: result.last4 };
+}
+
+/** The add-money instructions every cannot-pay reply carries. */
+function payInstructions(): string {
+  return `Add money at ThePlainExchange.com, or call ${site.supportPhone} to pay by card or check`;
 }
 
 async function handleAdSubmission(from: string, rawBody: string, media?: string[]): Promise<Reply> {
@@ -239,19 +266,33 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   // still posts (as text, at text price) but the seller must be TOLD — a
   // silent drop reads as "my picture ad is live" when it isn't.
   const photoDropped = sentPictures > 0 && !hasPhoto;
-  const cost = hasPhoto ? settings.costPhoto : settings.costText;
-  // Apply the one-time starter free-ad grant now — on the seller's FIRST real
-  // AD NEW (past the empty/too-long/auto-reject gates), not on account creation.
-  // A number that only ever subscribes or checks its balance never mints passes.
-  // Idempotent: once granted it never re-fires, even after the passes run out.
-  const posting = await grantStarterAdsIfFirst(from);
-  const canPass = posting.freeAds > 0;
-  const balance = await getCreditBalance(from);
+  const cost = hasPhoto ? settings.costPhotoCents : settings.costTextCents;
+  // Apply the one-time starter credit now — on the seller's FIRST real AD NEW
+  // (past the empty/too-long/auto-reject gates), not on account creation. A
+  // number that only ever subscribes or checks its balance never mints money.
+  // Idempotent: once granted it never re-fires, even after the money is spent.
+  const starterLabel = formatPrice(settings.starterCreditCents);
+  const starter = await grantStarterCreditIfFirst(from, settings.starterCreditCents, starterLabel);
+  let balance = await getCreditBalance(from);
+  // Automatic top-up: a saved card (with the toggle on) covers the shortfall,
+  // and the confirmation below states the charge. Runs BEFORE the ad record
+  // exists, so a declined card is a clean refusal, not a rejected ad.
+  let topUpNote = "";
+  let declineReason: string | undefined;
+  if (balance < cost) {
+    const topUp = await coverShortfallWithCard(from, starter.account, cost - balance);
+    declineReason = topUp.declineReason;
+    if (topUp.charged > 0) {
+      balance += topUp.charged;
+      topUpNote = ` ${formatPrice(topUp.charged)} was charged to your card${topUp.last4 ? ` ending ${topUp.last4}` : ""} to cover it.`;
+    }
+  }
   // Fast reject for the clearly-unfunded; the atomic charge below is the
   // authority under concurrency.
-  if (!canPass && balance < cost) {
+  if (balance < cost) {
+    const cardNote = declineReason ? ` We tried your saved card but it didn't go through (${declineReason}).` : "";
     return {
-      body: `That ad needs ${cost} credit${cost === 1 ? "" : "s"} and you have ${balance}. Buy credits at ThePlainExchange.com, or call ${site.supportPhone}. Text CREDITS to check your balance.`,
+      body: `That ad costs ${formatPrice(cost)} and you have ${formatPrice(balance)} of ad credit.${cardNote} ${payInstructions()}. Text CREDITS to check your balance.`,
     };
   }
 
@@ -280,31 +321,29 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
     }),
   });
 
-  // Charge atomically. Free pass first (its decrement is race-safe); else an
-  // atomic credit debit. If both fail — the balance was spent by a concurrent
-  // AD NEW between the check and here — undo the ad instead of posting unpaid.
-  // A THROWN charge (store hiccup) gets the same undo, then rethrows: an
-  // unpaid `pending` ad must never sit in the review queue looking payable.
+  // Charge atomically. If the debit fails — the balance was spent by a
+  // concurrent AD NEW between the check and here — undo the ad instead of
+  // posting unpaid. A THROWN charge (store hiccup) gets the same undo, then
+  // rethrows: an unpaid `pending` ad must never sit in the review queue
+  // looking payable. (The ledger note `Ad #<id> (<kind>)` is an API — the
+  // refund matchers key on it — only the delta's unit changed to cents.)
   let chargeNote = "";
   try {
-    if (canPass && (await consumeFreeAd(from))) {
-      await addLedgerEntry(from, {
-        delta: 0,
-        kind: "spend",
-        note: `Free ad used — ad #${id} (${kind})`,
-      });
-      chargeNote = `Used 1 free ad — ${Math.max(0, posting.freeAds - 1)} left.`;
-    } else if (await spendCredits(from, cost, `Ad #${id} (${kind})`)) {
-      chargeNote = `${cost} credit${cost === 1 ? "" : "s"} — ${Math.max(0, balance - cost)} left.`;
+    if (await spendCredits(from, cost, `Ad #${id} (${kind})`)) {
+      const left = formatPrice(Math.max(0, balance - cost));
+      chargeNote = starter.granted
+        ? `${formatPrice(cost)} of your ${starterLabel} welcome credit — ${left} left.`
+        : `${formatPrice(cost)} — ${left} of ad credit left.`;
+      chargeNote += topUpNote;
     }
   } catch (e) {
     await rejectAdRecord(id, "Charge failed at submission.", "benign").catch(() => {});
     throw e;
   }
   if (!chargeNote) {
-    await rejectAdRecord(id, "Not enough credits at submission.", "benign");
+    await rejectAdRecord(id, "Not enough money at submission.", "benign");
     return {
-      body: `That ad needs ${cost} credit${cost === 1 ? "" : "s"} and you don't have enough right now. Buy credits at ThePlainExchange.com, or call ${site.supportPhone}.`,
+      body: `That ad costs ${formatPrice(cost)} and your balance couldn't cover it just now — nothing was posted, and your money is still on your account. Text CREDITS to check it, then try again. ${payInstructions()}.`,
     };
   }
 
@@ -448,7 +487,7 @@ async function handlePhotoFollowup(
   let upgradeAttempt = 0;
   if (!ad.photo) {
     const upgradeToken = `Ad #${ad.id} (picture upgrade)`;
-    const delta = Math.max(0, settings.costPhoto - settings.costText);
+    const delta = Math.max(0, settings.costPhotoCents - settings.costTextCents);
     if (delta > 0) {
       const ledger = await getLedger(from);
       const charges = ledger.filter(
@@ -457,12 +496,28 @@ async function handlePhotoFollowup(
       const refunds = ledger.filter(
         (e) => e.kind === "refund" && e.note?.includes(`ad #${ad.id} (picture upgrade)`),
       ).length;
+      // Legacy free-ad-pass ads (pre-session-016): a pass covered either kind,
+      // so the upgrade stays free for an ad it paid for.
       const paidByPass = ledger.some((e) => e.note?.includes(`Free ad used — ad #${ad.id} (`));
       if (charges <= refunds && !paidByPass) {
-        const balance = await getCreditBalance(from);
+        let balance = await getCreditBalance(from);
+        let topUpNote = "";
+        let declineReason: string | undefined;
         if (balance < delta) {
+          const account = await ensureAccount(from);
+          const topUp = await coverShortfallWithCard(from, account, delta - balance);
+          declineReason = topUp.declineReason;
+          if (topUp.charged > 0) {
+            balance += topUp.charged;
+            topUpNote = ` ${formatPrice(topUp.charged)} was charged to your card${topUp.last4 ? ` ending ${topUp.last4}` : ""} to cover it.`;
+          }
+        }
+        if (balance < delta) {
+          const cardNote = declineReason
+            ? ` We tried your saved card but it didn't go through (${declineReason}).`
+            : "";
           return {
-            body: `Adding a picture to ad #${ad.id} takes ${delta} more credit${delta === 1 ? "" : "s"} (picture ads cost ${settings.costPhoto}) and you have ${balance}. Buy credits at ThePlainExchange.com, or call ${site.supportPhone}, then send the picture again.`,
+            body: `Adding a picture to ad #${ad.id} costs ${formatPrice(delta)} more (picture ads are ${formatPrice(settings.costPhotoCents)}) and you have ${formatPrice(balance)}.${cardNote} ${payInstructions()}, then send the picture again.`,
           };
         }
         upgradeAttempt = refunds;
@@ -473,7 +528,7 @@ async function handlePhotoFollowup(
           ref: `ad-${ad.id}-pic-upgrade-r${upgradeAttempt}`,
         });
         upgradeCharged = delta;
-        chargeNote = ` (${delta} credit${delta === 1 ? "" : "s"} — ${Math.max(0, balance - delta)} left.)`;
+        chargeNote = ` (${formatPrice(delta)} — ${formatPrice(Math.max(0, balance - delta))} of ad credit left.${topUpNote})`;
       }
     }
   }
@@ -628,196 +683,42 @@ async function handlePhotoFollowup(
   }
 }
 
-async function handleOwnerCommand(
-  from: string,
-  id: number | null,
-  verb: "sold" | "bump",
-): Promise<Reply> {
+async function handleSold(from: string, id: number | null): Promise<Reply> {
   if (!id) {
-    return { body: `Include the ad number — for example: ${verb.toUpperCase()} 1042.` };
+    return { body: `Include the ad number — for example: SOLD 1042.` };
   }
   const ad = await getAdRecord(id);
   if (!ad || ad.ownerPhone !== from) {
     return { body: `Ad #${id} doesn't belong to this number.` };
   }
 
-  // An admin-deleted ad is gone: never mark it sold or charge a bump for it.
+  // An admin-deleted ad is gone: never mark it sold.
   if (ad.status === "deleted") {
     return { body: `Ad #${id} was removed and is no longer listed.` };
   }
 
-  if (verb === "sold") {
-    if (ad.status === "sold") return { body: `Ad #${id} is already marked sold.` };
-    if (ad.status === "rejected") return { body: `Ad #${id} was not accepted, so there's nothing to mark sold.` };
-    // Only a live listing can be sold. Blocking `pending` closes a moderation
-    // bypass: SOLD on an unreviewed ad would publish it to the site as "sold".
-    if (ad.status === "pending") {
-      return { body: `Ad #${id} is still waiting for review — you can mark it sold once it's approved.` };
-    }
-    await markAdSold(id);
-    // Ratings flow (FEATURES item 2): ask who bought it, so buyer and seller
-    // become CONFIRMED parties who may rate each other. If contexts aren't
-    // available yet (migration 9984), the plain confirmation stands alone.
-    const opened = await setSmsContext(from, {
-      kind: "buyer_phone",
-      adId: id,
-      expiresAt: new Date(Date.now() + BUYER_PHONE_CONTEXT_MS).toISOString(),
-    });
-    if (opened === "set") {
-      return {
-        body: `Ad #${id} marked SOLD. Congratulations! What was the phone number of the buyer? Reply with their number and you can rate each other — or reply SKIP.`,
-      };
-    }
-    return { body: `Ad #${id} marked SOLD. Congratulations!` };
-  }
-
-  // bump
-  if (ad.status === "sold") return { body: `Ad #${id} is marked sold — nothing to bump.` };
-  if (ad.status === "rejected") return { body: `Ad #${id} was not accepted and can't be bumped.` };
+  if (ad.status === "sold") return { body: `Ad #${id} is already marked sold.` };
+  if (ad.status === "rejected") return { body: `Ad #${id} was not accepted, so there's nothing to mark sold.` };
+  // Only a live listing can be sold. Blocking `pending` closes a moderation
+  // bypass: SOLD on an unreviewed ad would publish it to the site as "sold".
   if (ad.status === "pending") {
-    return { body: `Ad #${id} is still waiting for review — it runs automatically once approved.` };
+    return { body: `Ad #${id} is still waiting for review — you can mark it sold once it's approved.` };
   }
-
-  const settings = await getEngineSettings();
-  // Charge the admin-set bump cost before re-broadcasting. At the default of 0
-  // bumps stay free; above 0 this stops unlimited free re-runs to the whole list.
-  if (settings.bumpCost > 0) {
-    const paid = await spendCredits(from, settings.bumpCost, `Bump — ad #${id}`);
-    if (!paid) {
-      return {
-        body: `A bump costs ${settings.bumpCost} credit${settings.bumpCost === 1 ? "" : "s"} and you don't have enough. Buy credits at ThePlainExchange.com.`,
-      };
-    }
-  }
-  const refundBump = async () => {
-    if (settings.bumpCost > 0) {
-      await addLedgerEntry(from, {
-        delta: settings.bumpCost,
-        kind: "refund",
-        note: `Bump not applied — ad #${id}`,
-      });
-    }
-  };
-
-  if (ad.status === "expired") {
-    await reviveAd(id, settings.expiryDays);
-    // Refund if a bump was already queued (starved past the old TTL) so this
-    // BUMP doesn't charge a second time for a broadcast that's already pending.
-    const revivedQueued = await queueBump(id);
-    if (!revivedQueued) await refundBump();
-    return { body: `Ad #${id} is relisted and will run again in the next digest.` };
-  }
-  const queued = await queueBump(id);
-  if (!queued) {
-    await refundBump();
-    return { body: `You already have a bump scheduled for ad #${id}.` };
-  }
-  return { body: `Ad #${id} will run again in the next digest.` };
-}
-
-/** The credit pack whose size matches a requested credit count, if any. */
-function packByCredits(credits: number | null): (typeof packs)[number] | null {
-  if (!credits) return null;
-  return packs.find((p) => p.credits === credits) ?? null;
-}
-
-const BUYCREDIT_WINDOW_MS = 15 * 60 * 1000;
-
-/** BUYCREDIT <n>: quote a saved-card purchase and ask for a YES to confirm. */
-async function handleBuyCredit(from: string, amount: number | null): Promise<Reply> {
-  const account = await ensureAccount(from);
-  if (!account.stripeCustomerId) {
-    return {
-      body: `No card is saved for this number yet. Buy credits at ThePlainExchange.com, or call ${site.supportPhone} to set up payment by phone, check, or a saved card.`,
-    };
-  }
-  const pack = packByCredits(amount);
-  if (!pack) {
-    const sizes = packs.map((p) => p.credits).join(", ");
-    return {
-      body: `Text BUYCREDIT and a pack size (${sizes}) — for example BUYCREDIT ${packs[0]?.credits ?? 10}.`,
-    };
-  }
-  const settings = await getEngineSettings();
-  const price = discountedCents(pack.priceCents, settings.savedCardDiscountPercent);
-  const discount =
-    settings.savedCardDiscountPercent > 0
-      ? ` (${settings.savedCardDiscountPercent}% saved-card discount)`
-      : "";
-  return {
-    body: `Buy ${pack.credits} credits for ${formatPrice(price)}${discount} on your saved card? Reply YES within 15 minutes to confirm. Reply anything else to cancel.`,
-  };
-}
-
-/** YES: confirm the most recent BUYCREDIT quote and charge the saved card. */
-async function handleConfirmPurchase(from: string): Promise<Reply> {
-  const account = await getAccount(from);
-  const cancel = {
-    body: `Nothing to confirm. Text BUYCREDIT ${packs[0]?.credits ?? 10} to buy credits with your saved card.`,
-  };
-  if (!account?.stripeCustomerId) return cancel;
-
-  // Find the newest still-valid BUYCREDIT quote in the audit log (no extra
-  // state needed): the message this YES is confirming.
-  const recent = await listMessages(from, 50);
-  const cutoff = Date.now() - BUYCREDIT_WINDOW_MS;
-  let buy: { pack: (typeof packs)[number]; msgId: number } | null = null;
-  for (let i = recent.length - 1; i >= 0; i--) {
-    const m = recent[i];
-    if (m.direction !== "inbound") continue;
-    if (Date.parse(m.createdAt) < cutoff) break;
-    const cmd = parseCommand(m.body || "");
-    if (cmd.kind === "buycredit") {
-      const pack = packByCredits(cmd.amount);
-      if (pack) buy = { pack, msgId: m.id };
-      break; // the most recent BUYCREDIT wins, valid pack or not
-    }
-  }
-  if (!buy) return cancel;
-
-  const settings = await getEngineSettings();
-  const price = discountedCents(buy.pack.priceCents, settings.savedCardDiscountPercent);
-  // Deterministic ref (the quote message) → idempotent charge AND grant.
-  const ref = `buycredit:${from}:${buy.msgId}`;
-  if (await hasLedgerRef(ref)) {
-    return {
-      body: `Those ${buy.pack.credits} credits were already added — you have ${await getCreditBalance(from)}.`,
-    };
-  }
-
-  let result: { ok: boolean; last4?: string; reason?: string };
-  if (!paymentsDevMode) {
-    result = await chargeSavedCard({
-      customerId: account.stripeCustomerId,
-      amountCents: price,
-      ref,
-      phone: from,
-      packId: buy.pack.id,
-      credits: buy.pack.credits,
-    });
-  } else if (devToolsEnabled) {
-    result = { ok: true, last4: "0000" }; // dev simulation (never in a real prod deploy)
-  } else {
-    return {
-      body: `Buying by text isn't available right now. Buy credits at ThePlainExchange.com or call ${site.supportPhone}.`,
-    };
-  }
-
-  if (!result.ok) {
-    return {
-      body: `We couldn't charge your saved card${result.reason ? ` (${result.reason})` : ""}. Buy at ThePlainExchange.com or call ${site.supportPhone}.`,
-    };
-  }
-  await addLedgerEntry(from, {
-    delta: buy.pack.credits,
-    kind: "purchase",
-    note: `Purchased ${buy.pack.credits} credits (${formatPrice(price)}) — saved card`,
-    ref,
+  await markAdSold(id);
+  // Ratings flow (FEATURES item 2): ask who bought it, so buyer and seller
+  // become CONFIRMED parties who may rate each other. If contexts aren't
+  // available yet (migration 9984), the plain confirmation stands alone.
+  const opened = await setSmsContext(from, {
+    kind: "buyer_phone",
+    adId: id,
+    expiresAt: new Date(Date.now() + BUYER_PHONE_CONTEXT_MS).toISOString(),
   });
-  const last4 = result.last4 ? ` to your card ending ${result.last4}` : "";
-  return {
-    body: `Charged ${formatPrice(price)}${last4}. ${buy.pack.credits} credits added — you have ${await getCreditBalance(from)}.`,
-  };
+  if (opened === "set") {
+    return {
+      body: `Ad #${id} marked SOLD. Congratulations! What was the phone number of the buyer? Reply with their number and you can rate each other — or reply SKIP.`,
+    };
+  }
+  return { body: `Ad #${id} marked SOLD. Congratulations!` };
 }
 
 /**
@@ -957,7 +858,7 @@ async function route(
         body:
           `${site.name} classifieds by text. Up to 4 digests/day. Msg&data rates may apply. ` +
           `Cmds: SUBSCRIBE for ads. AD NEW your ad to post. PIC 1234 for a picture. ` +
-          `SOLD/BUMP/STATUS/MYADS/CREDITS. Reply STOP to cancel. ` +
+          `SOLD/STATUS/MYADS/CREDITS. Reply STOP to cancel. ` +
           `Help: call ${site.supportPhone} or ThePlainExchange.com/sms`,
       };
     case "ad":
@@ -1014,16 +915,14 @@ async function route(
       return { body: `Photo for ad #${command.id} — ${deriveTitle(ad.body)}:`, media: [mediaUrl] };
     }
     case "credits": {
-      const account = await ensureAccount(from);
+      await ensureAccount(from);
       const balance = await getCreditBalance(from);
       return {
-        body: `You have ${account.freeAds} free ad${account.freeAds === 1 ? "" : "s"} and ${balance} credit${balance === 1 ? "" : "s"} available.`,
+        body: `You have ${formatPrice(balance)} of ad credit. A plain ad is ${formatPrice(settings.costTextCents)}, a picture ad ${formatPrice(settings.costPhotoCents)}. ${payInstructions()}.`,
       };
     }
     case "sold":
-      return handleOwnerCommand(from, command.id, "sold");
-    case "bump":
-      return handleOwnerCommand(from, command.id, "bump");
+      return handleSold(from, command.id);
     case "status": {
       if (!command.id) return { body: `Include the ad number — for example: STATUS 1042.` };
       const ad = await getAdRecord(command.id);
@@ -1064,10 +963,6 @@ async function route(
       }
       return { body: `Your ads: ${lines.join(" · ")}` };
     }
-    case "buycredit":
-      return handleBuyCredit(from, command.amount);
-    case "confirm":
-      return handleConfirmPurchase(from);
     case "rate": {
       const context = await getSmsContext(from);
       if (!context || context.kind !== "rate" || !context.otherPhone || !context.ratedRole) {

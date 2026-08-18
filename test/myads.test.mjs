@@ -3,15 +3,13 @@
 // pages share. The matrix: pending → refund; approved and never in any digest
 // → refund; ever broadcast → NO refund; rejected/sold/expired/deleted → no.
 import {
-  deleteBumpRefundNote,
-  deleteBumpRefundRef,
   deleteRefundDecision,
   deleteRefundRef,
   adRefundableTotal,
   findAdCharge,
-  findUnrefundedBumpCharge,
   hasBenignRejectRefund,
   isPicReplaceSubmission,
+  legacyPassRefundCents,
   picReplaceFrom,
   PIC_REPLACE_MARKER,
 } from "../lib/myads.ts";
@@ -75,110 +73,69 @@ export function run(t) {
   // ---- the deterministic idempotency ref ----
   t.eq("refund ref shape", deleteRefundRef(1042), "member-delete-refund-ad-1042");
 
-  // ---- finding the original charge (the ledger-note API) ----
+  // ---- finding the original charge (the ledger-note API; deltas in CENTS) ----
   const ledger = [
-    { kind: "grant", delta: 3, note: "Welcome — 3 free ads, picture or plain" },
-    { kind: "spend", delta: 0, note: "Free ad used — ad #12 (text)" },
-    { kind: "spend", delta: -5, note: "Ad #125 (picture)" },
-    { kind: "spend", delta: -1, note: "Ad #1042 (text)" },
-    { kind: "refund", delta: 1, note: "Bump not applied — ad #1042" },
+    { kind: "grant", delta: 15000, note: "Welcome credit — $150 to spend on ads" },
+    { kind: "spend", delta: 0, note: "Free ad used — ad #12 (text)" }, // legacy pass ad
+    { kind: "spend", delta: -6000, note: "Ad #125 (picture)" },
+    { kind: "spend", delta: -4500, note: "Ad #1042 (text)" },
   ];
-  t.eq("finds a credit charge", findAdCharge(ledger, 1042)?.delta, -1);
-  t.eq("finds a free-pass charge (delta 0)", findAdCharge(ledger, 12)?.delta, 0);
+  t.eq("finds a dollar charge", findAdCharge(ledger, 1042)?.delta, -4500);
+  t.eq("finds a legacy free-pass charge (delta 0)", findAdCharge(ledger, 12)?.delta, 0);
   t.eq("ad #12 does not match ad #125", findAdCharge(ledger, 12)?.note, "Free ad used — ad #12 (text)");
-  t.eq("#125 finds its own charge", findAdCharge(ledger, 125)?.delta, -5);
+  t.eq("#125 finds its own charge", findAdCharge(ledger, 125)?.delta, -6000);
   t.eq("no charge → undefined", findAdCharge(ledger, 999), undefined);
 
-  // ---- the refundable total (base + picture upgrade, item 32) ----
-  t.eq("total for a plain credit charge", adRefundableTotal(ledger, 1042), 1);
-  t.eq("total for a pass-paid ad is 0", adRefundableTotal(ledger, 12), 0);
+  // ---- the refundable total (base + picture upgrade + web add-on) ----
+  t.eq("total for a plain dollar charge", adRefundableTotal(ledger, 1042), 4500);
+  t.eq("total for a legacy pass-paid ad is 0", adRefundableTotal(ledger, 12), 0);
   t.eq("total for no charge is 0", adRefundableTotal(ledger, 999), 0);
   const upgraded = [
     ...ledger,
-    { kind: "spend", delta: -8, note: "Ad #1042 (picture upgrade)" },
+    { kind: "spend", delta: -1500, note: "Ad #1042 (picture upgrade)" },
   ];
-  t.eq("upgrade joins the refund total", adRefundableTotal(upgraded, 1042), 9);
+  t.eq("upgrade joins the refund total", adRefundableTotal(upgraded, 1042), 6000);
   t.eq("#104 does not absorb #1042's upgrade", adRefundableTotal(upgraded, 104), 0);
   const upgradeReturned = [
     ...upgraded,
-    { kind: "refund", delta: 8, note: "Refund — ad #1042 (picture upgrade) didn't attach" },
+    { kind: "refund", delta: 1500, note: "Refund — ad #1042 (picture upgrade) didn't attach" },
   ];
-  t.eq("a failed-attach refund nets out of the total", adRefundableTotal(upgradeReturned, 1042), 1);
+  t.eq("a failed-attach refund nets out of the total", adRefundableTotal(upgradeReturned, 1042), 4500);
+  const withAddon = [
+    ...ledger,
+    { kind: "spend", delta: -1500, note: "Ad #1042 (website listing)" },
+  ];
+  t.eq("the website add-on joins the refund total", adRefundableTotal(withAddon, 1042), 6000);
 
   // ---- the never-refund-twice guard ----
   const refunded = [
     ...ledger,
-    { kind: "refund", delta: 1, note: "Refund — ad #1042 not accepted" },
+    { kind: "refund", delta: 4500, note: "Refund — ad #1042 not accepted" },
   ];
   t.eq("benign-reject refund blocks a second refund", hasBenignRejectRefund(refunded, 1042), true);
-  t.eq("free-pass benign refund also blocks", hasBenignRejectRefund(
+  t.eq("legacy free-pass benign refund also blocks", hasBenignRejectRefund(
     [{ kind: "refund", delta: 0, note: "Free ad returned — ad #7 not accepted" }],
     7,
   ), true);
-  t.eq("a bump refund does NOT block the delete refund", hasBenignRejectRefund(ledger, 1042), false);
   t.eq("#104 does not match #1042's refund", hasBenignRejectRefund(refunded, 104), false);
   t.eq("clean ledger → no block", hasBenignRejectRefund(ledger, 12), false);
 
-  // ---- the dropped-queued-bump refund (delete gives a paid bump back) ----
-  t.eq("bump refund ref shape", deleteBumpRefundRef(1042), "member-delete-bump-refund-ad-1042");
+  // ---- the legacy free-pass dollar refund (session 016: passes are gone;
+  // a delta-0 pass ad refunds the CURRENT price of its kind) ----
   t.eq(
-    "bump refund note shape",
-    deleteBumpRefundNote(1042),
-    "Bump refunded — ad #1042 deleted before it ran",
+    "legacy picture-pass ad refunds the picture price",
+    legacyPassRefundCents("Free ad used — ad #12 (picture)", 4500, 6000),
+    6000,
   );
   t.eq(
-    "bump refund note never reads as a benign-reject refund",
-    hasBenignRejectRefund([{ kind: "refund", delta: 1, note: deleteBumpRefundNote(1042) }], 1042),
-    false,
-  );
-  // Ledgers are newest-first (getLedger in both stores).
-  const bumpLedger = [
-    { kind: "spend", delta: -2, note: "Bump — ad #1042" },
-    { kind: "refund", delta: 1, note: "Bump not applied — ad #1042" },
-    { kind: "spend", delta: -1, note: "Bump — ad #1042" },
-    { kind: "spend", delta: -1, note: "Ad #1042 (text)" },
-  ];
-  t.eq(
-    "finds the newest uncompensated bump spend (recorded amount, not settings)",
-    findUnrefundedBumpCharge(bumpLedger, 1042)?.delta,
-    -2,
+    "legacy text-pass ad refunds the text price",
+    legacyPassRefundCents("Free ad used — ad #12 (text)", 4500, 6000),
+    4500,
   );
   t.eq(
-    "a fully compensated history finds nothing",
-    findUnrefundedBumpCharge(
-      [
-        { kind: "spend", delta: -2, note: "Bump — ad #1042" },
-        { kind: "refund", delta: 2, note: deleteBumpRefundNote(1042) },
-      ],
-      1042,
-    ),
-    undefined,
-  );
-  t.eq(
-    "queue-failure refund also compensates",
-    findUnrefundedBumpCharge(
-      [
-        { kind: "refund", delta: 1, note: "Bump not applied — ad #1042" },
-        { kind: "spend", delta: -1, note: "Bump — ad #1042" },
-      ],
-      1042,
-    ),
-    undefined,
-  );
-  t.eq(
-    "free bumps (no spend) refund nothing",
-    findUnrefundedBumpCharge([{ kind: "spend", delta: -1, note: "Ad #1042 (text)" }], 1042),
-    undefined,
-  );
-  t.eq(
-    "#104's bump spend does not match #1042",
-    findUnrefundedBumpCharge([{ kind: "spend", delta: -1, note: "Bump — ad #104" }], 1042),
-    undefined,
-  );
-  t.eq(
-    "the ad submission charge is never mistaken for a bump",
-    findUnrefundedBumpCharge([{ kind: "spend", delta: -5, note: "Ad #1042 (picture)" }], 1042),
-    undefined,
+    "unparseable note falls back to the text price",
+    legacyPassRefundCents("Free ad used — ad #12", 4500, 6000),
+    4500,
   );
 
   // ---- the replacement-picture marker ----

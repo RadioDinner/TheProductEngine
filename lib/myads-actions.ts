@@ -22,23 +22,18 @@ import {
   countAdPhotos,
   deleteAdRecord,
   getAdRecord,
-  getQueuedBumps,
   listPhotoSubmissions,
   logMessage,
   markAdSold,
-  queueBump,
-  reviveAd,
   type StoredAd,
 } from "@/lib/engine-store";
 import {
   addLedgerEntry,
   ensureAccount,
   getLedger,
-  grantFreeAd,
   hasLedgerRef,
   recordSale,
   setSmsContext,
-  spendCredits,
 } from "@/lib/store";
 import { getEngineSettings } from "@/lib/settings";
 import { deriveTitle } from "@/lib/ads";
@@ -50,15 +45,13 @@ import { CONTENT_TYPE_BY_EXT, sniffImage } from "@/lib/image-sniff";
 import { supabaseConfigured } from "@/lib/db";
 import { MAX_PHOTOS_PER_AD } from "@/lib/email-photos";
 import {
-  deleteBumpRefundNote,
-  deleteBumpRefundRef,
   deleteRefundDecision,
   deleteRefundRef,
   adRefundableTotal,
   findAdCharge,
-  findUnrefundedBumpCharge,
   hasBenignRejectRefund,
   isPicReplaceSubmission,
+  legacyPassRefundCents,
   picReplaceFrom,
 } from "@/lib/myads";
 
@@ -147,51 +140,6 @@ export async function markMineSold(formData: FormData): Promise<void> {
     await logMessage({ direction: "outbound", channel: "sms", address: buyer, body: invite });
   }
   redirect(`${BACK}?sold=done&id=${ad.id}&buyer=recorded`);
-}
-
-/**
- * Bump one of my ads — exact SMS BUMP semantics (lib/engine.ts): bumpCost
- * charged when > 0 (refunded if no bump was actually queued), one queued bump
- * per ad, and an expired ad is relisted first.
- */
-export async function bumpMine(formData: FormData): Promise<void> {
-  const { phone, ad } = await requireMyAd(formData);
-  if (ad.status === "deleted") redirect(`${BACK}?error=gone&id=${ad.id}`);
-  if (ad.status === "sold") redirect(`${BACK}?bump=sold&id=${ad.id}`);
-  if (ad.status === "rejected") redirect(`${BACK}?error=rejected&id=${ad.id}`);
-  if (ad.status === "pending") redirect(`${BACK}?bump=pending&id=${ad.id}`);
-
-  const settings = await getEngineSettings();
-  // Charge the admin-set bump cost before re-broadcasting — same order and
-  // same ledger note as the SMS lane.
-  if (settings.bumpCost > 0) {
-    const paid = await spendCredits(phone, settings.bumpCost, `Bump — ad #${ad.id}`);
-    if (!paid) redirect(`${BACK}?bump=nofunds&cost=${settings.bumpCost}&id=${ad.id}`);
-  }
-  const refundBump = async () => {
-    if (settings.bumpCost > 0) {
-      await addLedgerEntry(phone, {
-        delta: settings.bumpCost,
-        kind: "refund",
-        note: `Bump not applied — ad #${ad.id}`,
-      });
-    }
-  };
-
-  if (ad.status === "expired") {
-    await reviveAd(ad.id, settings.expiryDays);
-    // Refund if a bump was already queued (starved past the old TTL) so this
-    // bump doesn't charge twice for a broadcast that's already pending.
-    const revivedQueued = await queueBump(ad.id);
-    if (!revivedQueued) await refundBump();
-    redirect(`${BACK}?bump=relisted&id=${ad.id}`);
-  }
-  const queued = await queueBump(ad.id);
-  if (!queued) {
-    await refundBump();
-    redirect(`${BACK}?bump=already&id=${ad.id}`);
-  }
-  redirect(`${BACK}?bump=queued&id=${ad.id}`);
 }
 
 /**
@@ -335,10 +283,6 @@ export async function deleteMine(formData: FormData): Promise<void> {
     redirect(`${BACK}?error=gone&id=${ad.id}`);
   }
 
-  // Capture BEFORE the delete drops it: a still-queued bump that was charged
-  // gets its money back below whatever the ad-charge decision says.
-  const hadQueuedBump = (await getQueuedBumps()).some((b) => b.adId === ad.id);
-
   let current: StoredAd = ad;
   let decision = deleteRefundDecision(current.status, await adEverBroadcast(current.id));
   let outcome: "deleted" | "noop" | "unsupported" = "noop";
@@ -359,7 +303,7 @@ export async function deleteMine(formData: FormData): Promise<void> {
   if (outcome === "unsupported") redirect(`${BACK}?error=unsupported&id=${ad.id}`);
   if (outcome !== "deleted") redirect(`${BACK}?error=gone&id=${ad.id}`);
 
-  const ledger = decision.refund || hadQueuedBump ? await getLedger(phone) : [];
+  const ledger = decision.refund ? await getLedger(phone) : [];
   let refundParam = "no";
   if (decision.refund) {
     const ref = deleteRefundRef(ad.id);
@@ -367,8 +311,8 @@ export async function deleteMine(formData: FormData): Promise<void> {
       refundParam = "none"; // refunded once already — never twice
     } else {
       const charge = findAdCharge(ledger, ad.id);
-      // Base charge + picture upgrade (item 32), net of any upgrade already
-      // returned by a failed attach.
+      // Base charge + picture upgrade (item 32) + website add-on, net of any
+      // upgrade already returned by a failed attach.
       const owed = adRefundableTotal(ledger, ad.id);
       if (owed > 0) {
         await addLedgerEntry(phone, {
@@ -379,36 +323,26 @@ export async function deleteMine(formData: FormData): Promise<void> {
         });
         refundParam = `credits&amount=${owed}`;
       } else if (charge) {
-        // A delta-0 spend = the ad was covered by a free ad pass.
-        await grantFreeAd(phone);
+        // A delta-0 spend = a legacy free-ad-pass ad (pre-session-016).
+        // Passes are gone; give back the CURRENT dollar price of that ad kind.
+        const settings = await getEngineSettings();
+        const legacyOwed = legacyPassRefundCents(
+          charge.note,
+          settings.costTextCents,
+          settings.costPhotoCents,
+        );
         await addLedgerEntry(phone, {
-          delta: 0,
+          delta: legacyOwed,
           kind: "refund",
-          note: `Free ad returned — ad #${ad.id} deleted before it ran`,
+          note: `Refund — ad #${ad.id} deleted before it ran`,
           ref,
         });
-        refundParam = "pass";
+        refundParam = `credits&amount=${legacyOwed}`;
       } else {
         refundParam = "none"; // no charge on record — nothing to give back
       }
     }
   }
 
-  // The dropped queued bump: if a `Bump — ad #N` spend has no compensation on
-  // record (queue-failure refund or an earlier run of this one), give the
-  // RECORDED amount back — idempotent via the deterministic ref.
-  let bumpParam = "";
-  if (hadQueuedBump && !(await hasLedgerRef(deleteBumpRefundRef(ad.id)))) {
-    const bumpCharge = findUnrefundedBumpCharge(ledger, ad.id);
-    if (bumpCharge) {
-      await addLedgerEntry(phone, {
-        delta: -bumpCharge.delta,
-        kind: "refund",
-        note: deleteBumpRefundNote(ad.id),
-        ref: deleteBumpRefundRef(ad.id),
-      });
-      bumpParam = `&bumprefund=${-bumpCharge.delta}`;
-    }
-  }
-  redirect(`${BACK}?deleted=${ad.id}&refund=${refundParam}&why=${decision.reason}${bumpParam}`);
+  redirect(`${BACK}?deleted=${ad.id}&refund=${refundParam}&why=${decision.reason}`);
 }

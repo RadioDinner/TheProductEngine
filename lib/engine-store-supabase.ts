@@ -105,22 +105,36 @@ async function userIdByPhone(phone: string): Promise<string | null> {
 export async function createAd(input: NewAdInput, options: CreateAdOptions = {}): Promise<number> {
   const userId = await userIdByPhone(input.ownerPhone);
   if (!userId) throw new Error(`no user for phone ${input.ownerPhone}`);
-  const { data, error } = await db()
+  const row = (withWebListing: boolean) => ({
+    user_id: userId,
+    original_body: input.body,
+    body: input.body,
+    status: options.status ?? "pending",
+    flagged: input.flagged,
+    ...(options.status === "rejected" && {
+      rejected_reason: options.rejectedReason,
+      rejection_kind: "violation",
+    }),
+    // web_listing rides the insert ONLY when explicitly false (session 016):
+    // true is the column default, and omitting it keeps this insert working
+    // before migration 9973 lands.
+    ...(withWebListing && { web_listing: false }),
+  });
+  let { data, error } = await db()
     .from("ads")
-    .insert({
-      user_id: userId,
-      original_body: input.body,
-      body: input.body,
-      status: options.status ?? "pending",
-      flagged: input.flagged,
-      ...(options.status === "rejected" && {
-        rejected_reason: options.rejectedReason,
-        rejection_kind: "violation",
-      }),
-    })
+    .insert(row(input.webListing === false))
     .select("id")
     .single();
-  if (error) throw error;
+  if (error && input.webListing === false && (error.code === "PGRST204" || error.code === "42703")) {
+    // Column missing (9973 pending) but the caller wanted the ad OFF the
+    // website — store it anyway (listed) and shout: the operator set a web
+    // add-on price without pasting the migration.
+    console.error(
+      "[engine-store] ads.web_listing missing (migration 9973) — ad stored WITHOUT the off-website flag",
+    );
+    ({ data, error } = await db().from("ads").insert(row(false)).select("id").single());
+  }
+  if (error || !data) throw error ?? new Error("ad insert returned no row");
   const id = data.id as number;
   if (input.photo) {
     const { error: photoError } = await db().from("ad_photos").insert({
