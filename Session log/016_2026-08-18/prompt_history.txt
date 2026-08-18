@@ -27,3 +27,6 @@ Q "Lock the core price sheet ..." -> "$45 text / $60 picture (Recommended)"
 Q "BUMP re-broadcasts an ad ... What does a re-run cost?" -> "I want to take away the bump feature for now. Completely gone, from everywhere, including the FAQ"
 Q "The business package ... New tiers?" -> "$199 / $349 / $599"
 Q "At $45-60 an ad, how does a seller actually hand you money?" -> "Every new account ships with $150 ad credit. People can add cards to automatically top up, or they can send a check after a phone conversation"
+
+--- 2026-08-18 (follow-up) ---
+Can I use an AI answering service to take down credit card numbers?
