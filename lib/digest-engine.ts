@@ -600,11 +600,13 @@ async function composeSmsEdition(args: {
     ? undefined
     : new Set(await smsDigestOutboxPhonesOnDay(day));
   const digestNo = await allocateDigestNumber(digestId);
-  // Business sponsor lines (item 17): every active package rides the FIRST
-  // edition of each ET day (listDueSponsors excludes ones that already rode
-  // today), as labeled extra lines — on every subscriber's copy regardless
-  // of category prefs.
-  const sponsors = await listDueSponsors(day);
+  // Business sponsor lines (item 17, reworked session 016): each scheduled
+  // sponsor rides ONE ad text a day — "a ride once a day, throughout the
+  // day" — so an edition carries at most ONE sponsor and the day's sponsors
+  // spread across the day's ads instead of stacking on the 7am text.
+  // listDueSponsors already excludes packages that rode today and those
+  // whose reserved week isn't running.
+  const sponsors = (await listDueSponsors(day)).slice(0, 1);
   // Blocked numbers get no broadcast (the drain sends via the raw transport,
   // so filtering here is the blocklist's enforcement point).
   const blocked = new Set((await listBlocked()).map((b) => b.phone));

@@ -5,6 +5,61 @@ this every session. Per-session detail lives in `Session log/`.
 
 **Last updated:** 2026-08-19 (session 016 addendum 2).
 
+## Session 016 addendum 3 (2026-08-19) — INSTANT SEND, and sponsorship by the week
+
+Two overhauls, both user decisions, both live on `main`.
+
+**1. SMS is no longer a digest.** An approved ad is texted at once, one text
+per ad, 7am-9pm Mon-Sat (`sms_window_*` config, `smsWindowOpen` in
+lib/digest-engine.ts). Outside the window it queues; every cron tick calls
+`runQueuedBroadcasts`, which is what empties the overnight and Sunday queue
+at 7am. Approval itself broadcasts and then drains for up to 10s, so
+"approved" really means "on its way". **The digest survives for EMAIL only**
+(3 editions: 7am, noon, 5pm), carrying the ads already texted but not yet
+emailed (`ads.emailed_at`) — the user's reasoning: "if I send an email every
+time an ad is listed, it'll get spammy."
+
+- **Picture ads broadcast WITH the picture** (MMS, `digest_outbox.media`);
+  "Reply PIC 12" is gone from broadcasts, PIC survives as a command.
+- **A picture ad waits out of the review queue** until its pictures settle
+  (10 quiet minutes) or it hits the 4-picture max (`ads.photos_settle_at`) —
+  instant send made this necessary, because an early approval used to be
+  harmless (the 6pm digest gave photos time) and now sends immediately.
+  /admin shows a count of ads still collecting.
+- **Sellers are told the timing** when it matters: an ad texted at 5am gets
+  the hours and when it will actually send (`nextSendLabel`). Deliberately
+  omitted while the window is open — every sentence is a billed segment.
+- ⚠️ **The 10DLC campaign description still says "up to 4 digests a day".**
+  Every page now says frequency varies with the window; the carrier filing
+  is the user's to update.
+- Migration **9971** (pasted): emailed_at, photos_settle_at, outbox media,
+  window config.
+
+**2. Sponsorship is sold by the WEEK, with a fair queue.** $199/$349/$479/$599
+for 1-4 weeks (per-week price must fall as the term grows — unit-tested).
+A running sponsor gets a line on ONE ad text a day ("a ride once a day,
+throughout the day" — one sponsor per text, so they spread) plus a banner in
+the email editions, one sponsor per edition, rotated fewest-first (~4 of 21
+weekly editions at a full roster).
+
+- **Only 5 sponsors run per week** (`sponsor_weekly_slots`). Unlimited
+  businesses may BUY; approval books the earliest week with room in EVERY
+  week of the term, so a 2-week buyer holds both weeks and later buyers wait.
+  Pure arithmetic in **`lib/sponsor-schedule.ts`**, unit-tested against the
+  user's own worked example. /admin/business shows which week a pending
+  package would run BEFORE you approve it.
+- A week = 6 sending days (Sunday is quiet); days remain the ride ledger, so
+  a quiet day costs the sponsor nothing and the run extends.
+- Migration **9970 — USER MUST PASTE** (weeks_purchased, start_week,
+  email_rides, last_email_key, sponsor_weekly_slots). Until pasted,
+  pre-existing packages keep their old always-on behaviour (`runsOn` treats a
+  null weeksPurchased as legacy) rather than going dark.
+- ⚠️ **USER: set /admin/settings → Email edition times to `7, 12, 17`** — the
+  saved config still holds the old 2-slot schedule.
+
+Verified across both: tsc + build clean, unit 629 → **658** (new suites
+`send-window` 26 and `sponsor-schedule` 27), abuse 17/17.
+
 ## Session 016 addendum 2 (2026-08-19) — the call-in card line moved INTO the app
 
 Stripe went live in production this day (user set both keys; a real $45

@@ -98,9 +98,9 @@ const ENTRIES = {
 
   "digests.slots": {
     title: "Slots, and what they cost",
-    what: "Digests compose at the slot hours (Eastern Time) set on Settings; the email edition mirrors the SMS edition 1:1 at the same times. An empty slot sends nothing.",
+    what: "EMAIL edition times (Eastern Time), set on Settings — 7am, noon and 5pm by default. SMS no longer uses these: since session 016 each ad is TEXTED the moment you approve it. An email edition carries the ads texted since the last one, so email stays a summary; an empty edition sends nothing.",
     why: "Email mirroring was a session-007 user decision (before that, email had its own schedule and union-of-digests content). A fact worth remembering from session 003 — the user spotted it: slot COUNT is nearly cost-neutral, because each ad broadcasts only once per day regardless of slots; the real cost driver is ads × subscribers. And from session 011: slots [7, 12, 16, 20] is a zero-code change that matches every registered 10DLC word (\"up to 4 digests/day … morning, noon, afternoon, evening\") if faster delivery is ever wanted.",
-    gotchas: "Digests staying (rather than per-ad send-on-approval) was an explicit session-011 decision — the registered frequency promise is the blocker, not cost. The full analysis is in Session log/011.",
+    gotchas: "Session 011 kept digests over per-ad sending because of the registered \"up to 4 digests a day\" frequency promise; session 016 REVERSED that on the user's decision — the published copy now says frequency varies with a 7am-9pm Mon-Sat window, so the 10DLC campaign description has to say the same. Each email edition carries one sponsor banner, rotated by fewest-so-far.",
   },
   "digests.queue": {
     title: "The queue is the truth",

@@ -18,13 +18,20 @@ export const name = "business";
 
 export function run(t) {
   // ---- tiers: the user-recorded pricing, exactly ----
-  t.eq("three tiers", BUSINESS_TIERS.length, 3);
+  // Sold by the WEEK since session 016; a week is six SENDING days, because
+  // Sunday never sends and a sponsor should not pay for a silent day.
+  t.eq("four tiers", BUSINESS_TIERS.length, 4);
   t.eq("1 week price", getBusinessTier("week")?.priceCents, 19900);
-  t.eq("1 week days", getBusinessTier("week")?.days, 7);
+  t.eq("1 week is 1 week / 6 ride days", [getBusinessTier("week")?.weeks, getBusinessTier("week")?.days], [1, 6]);
   t.eq("2 weeks price", getBusinessTier("twoweeks")?.priceCents, 34900);
-  t.eq("2 weeks days", getBusinessTier("twoweeks")?.days, 14);
-  t.eq("1 month price", getBusinessTier("month")?.priceCents, 59900);
-  t.eq("1 month days", getBusinessTier("month")?.days, 30);
+  t.eq("2 weeks is 2 weeks / 12 ride days", [getBusinessTier("twoweeks")?.weeks, getBusinessTier("twoweeks")?.days], [2, 12]);
+  t.eq("3 weeks price", getBusinessTier("threeweeks")?.priceCents, 47900);
+  t.eq("4 weeks price", getBusinessTier("month")?.priceCents, 59900);
+  t.eq("4 weeks is 4 weeks / 24 ride days", [getBusinessTier("month")?.weeks, getBusinessTier("month")?.days], [4, 24]);
+  // Longer terms must stay cheaper per week, or there is no reason to lock a
+  // scarce weekly slot for one.
+  const perWeek = BUSINESS_TIERS.map((tier) => tier.priceCents / tier.weeks);
+  t.eq("the per-week price only falls", perWeek.every((p, i) => i === 0 || p < perWeek[i - 1]), true);
   t.eq("unknown tier is null", getBusinessTier("year"), null);
 
   // ---- sponsor line: clearly labeled, fields in order ----

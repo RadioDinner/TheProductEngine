@@ -13,7 +13,7 @@ import { paymentsDevMode } from "@/lib/payments";
 
 export const metadata: Metadata = {
   title: `Advertising for Businesses — ${site.name}`,
-  description: `Put your business in front of every ${site.name} subscriber: a labeled sponsor line in the daily text digest, once a day. 1 week $199, 2 weeks $349, 1 month $599.`,
+  description: `Put your business in front of every ${site.name} subscriber: a labeled sponsor line on a classified-ad text every day, plus your banner in the email editions. Five sponsors a week. 1 week $199, 2 weeks $349, 3 weeks $479, 4 weeks $599.`,
 };
 
 export default async function AdvertisingPage({
@@ -28,9 +28,9 @@ export default async function AdvertisingPage({
     <div className="container account">
       <h1>Advertising for Businesses</h1>
       <p>
-        Every day, {site.name} texts its digest of classified ads to every subscriber in{" "}
+        Every day, {site.name} texts classified ads to every subscriber in{" "}
         {site.region} — people who read their texts, not banner ads. A business package
-        puts your ad in that digest <strong>once a day</strong> as a clearly labeled
+        puts your ad on one of those texts <strong>every day</strong> as a clearly labeled
         sponsor line, like this:
       </p>
       <p className="sms-example">
@@ -52,12 +52,22 @@ export default async function AdvertisingPage({
             <li key={tier.id} className="pack-row">
               <span className="pack-name">{tier.label}</span>
               <span className="pack-price">{formatPrice(tier.priceCents)}</span>
-              <span className="fine">your ad in the digest once a day, {tier.days} days</span>
+              <span className="fine">
+                {tier.weeks === 1 ? "1 week" : `${tier.weeks} weeks`} — a sponsor line on a
+                classified-ad text every day, plus your banner in the email editions
+              </span>
             </li>
           ))}
         </ul>
         <p className="fine">
-          Every package is the same ad, once a day — the tiers only set how many days it
+          <strong>Only five businesses sponsor in any one week.</strong> That keeps the
+          sponsor line worth reading — and it means a week can sell out. If it has, your
+          package is queued for the first week with room and you&rsquo;re told which week
+          that is when it&rsquo;s approved; a longer package holds its slot in every week of
+          its run, so buying two weeks also books the second one now.
+        </p>
+        <p>
+          Every package is the same ad, once a day — the tiers only set how many weeks it
           runs.
         </p>
       </section>
@@ -74,22 +84,22 @@ export default async function AdvertisingPage({
           </li>
           <li>
             <strong>Your run starts when your ad is approved</strong> — not when you pay.
-            A 1-week package is 7 days in the digest counted from approval.
+            A 1-week package is six sending days (Sunday is quiet) in the week you are scheduled.
           </li>
           <li>
-            <strong>You get every day you paid for.</strong> If a day&rsquo;s digest
+            <strong>You get every day you paid for.</strong> If a day&rsquo;s ads
             doesn&rsquo;t go out for any reason, that day isn&rsquo;t counted — your run
             simply extends until your ad has ridden the full number of days.
           </li>
           <li>
             <strong>One link allowed.</strong> Unlike member ads, a business ad may carry
             one website link (it&rsquo;s reviewed like everything else). In the text
-            digest the link appears as plain text; in the email edition it&rsquo;s
+            text the link appears as plain text; in the email edition it&rsquo;s
             clickable.
           </li>
           <li>
             <strong>Declined ads are refunded in full.</strong> If we can&rsquo;t run your
-            ad, it never rides a digest and your payment is returned to your card — see
+            ad, it never rides and your payment is returned to your card — see
             the <Link href="/refund-policy">refund policy</Link>.
           </li>
         </ul>
@@ -198,7 +208,7 @@ export default async function AdvertisingPage({
                 />
               </div>
               <p className="fine">
-                Your exact words ride the text digest after the label
+                Your exact words ride a classified-ad text after the label
                 &ldquo;Sponsor: <em>your business name</em> -&rdquo;. Emoji are removed;
                 keep the link for the field below.
               </p>

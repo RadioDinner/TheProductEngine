@@ -16,9 +16,10 @@ pictures, $45 per text ad under 160 characters, print distribution.
 | Website listing add-on | **+$15 — FREE at launch** (`web_addon_cents` = 0; flip to 1500 to charge) | `/admin/settings` |
 | Starter credit (every new member, granted on FIRST post) | **$150** | `/admin/settings` (`starter_credit_cents`) |
 | Re-runs (BUMP) | **REMOVED — feature gone** (user decision: "completely gone, from everywhere") | — |
-| Business package: sponsor line in every daily digest, 1 week | **$199** | `lib/business-packages.ts` (code) |
-| Business package, 2 weeks | **$349** | code |
-| Business package, 1 month | **$599** | code |
+| Sponsorship, 1 week | **$199** | `lib/business-packages.ts` (code) |
+| Sponsorship, 2 weeks | **$349** | code |
+| Sponsorship, 3 weeks | **$479** | code |
+| Sponsorship, 4 weeks | **$599** | code |
 | Subscribing (SMS + email), browsing, PIC pulls | free (unchanged) | — |
 
 All money is stored in **cents** in the credit ledger (`credit_ledger.delta`);
@@ -66,10 +67,33 @@ The real bet is conversion: will Holmes County sellers pay $45–60? The
 $150 starter credit is the test instrument — watch the paid-ad conversion
 rate after starter credit burns down.
 
+## Sponsorship (reworked session 016)
+
+Sold **by the week**, not by the day. A running sponsor gets:
+
+- a labeled sponsor line on **one classified-ad text every day** — one
+  sponsor per text, so the day's sponsors spread across the day's ads rather
+  than stacking on the first one;
+- their **banner in the email editions**, one sponsor per edition, rotated by
+  fewest-banners-so-far, which works out to roughly 4 of the 21 weekly
+  editions when all five slots are sold.
+
+**Only five sponsors run in any one week** (`sponsor_weekly_slots`).
+Unlimited businesses may buy; approval books the earliest week with room in
+EVERY week of the term, so a two-week buyer holds both weeks at once and
+later buyers wait for the first free week. The arithmetic lives in
+`lib/sponsor-schedule.ts` and is unit-tested against the user's own worked
+example (four one-week buyers, then a two-week buyer taking the fifth slot).
+
+A "week" is **six sending days** — Sunday never sends, and a sponsor should
+not pay for a silent day. Days are the ride ledger: a day with no ads costs
+the sponsor nothing, so the run simply extends.
+
 ## Coherence rules (keep these when repricing)
 
-- The business package must always cost MORE than a single ad (user
-  decision) — it buys 7/14/30 daily sponsor-line insertions.
+- A sponsorship must always cost MORE than a single ad (user decision), and
+  the per-week price must FALL as the term lengthens (unit-tested) — a longer
+  term is what makes locking one of five scarce weekly slots worth it.
 - The website add-on price must stay below the text-ad price (it's an
   add-on, not a product). While `web_addon_cents` = 0 every ad lists on
   the website automatically; when > 0, web-posted ads buy it with a

@@ -13,6 +13,15 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { db, supabaseConfigured } from "@/lib/db";
+import { SPONSOR_WEEKLY_SLOTS, getBusinessTier } from "@/lib/business-packages";
+import {
+  dayWithinRun,
+  earliestStartWeek,
+  pickEmailSponsor,
+  weekStart,
+  type Reservation,
+} from "@/lib/sponsor-schedule";
+import { etParts } from "@/lib/et";
 
 export type BusinessPackageStatus = "pending_review" | "active" | "declined" | "expired";
 
@@ -38,6 +47,15 @@ export interface BusinessPackage {
   lastRanOn: string | null;
   /** That digest's slot key — the email edition mirrors the sponsor by this. */
   lastRanKey: string | null;
+  /** Weeks bought (session 016: sponsorship is sold by the week). */
+  weeksPurchased: number | null;
+  /** The Monday (ET) this package's reserved run begins. Null = queued,
+   * waiting for the first week with room under the weekly slot limit. */
+  startWeek: string | null;
+  /** Email editions this package's banner has ridden, and the last one — the
+   * rotation's fairness counter and its idempotency key. */
+  emailRides: number;
+  lastEmailKey: string | null;
   declinedAt: string | null;
   /** Operator marked the manual Stripe refund done (decline = manual refund in v1). */
   refundedAt: string | null;
@@ -97,7 +115,8 @@ function schemaMissing(error: { code?: string } | null): boolean {
 const ROW_SELECT =
   "id, business_name, ad_text, link, phone, tier, days_purchased, price_cents, " +
   "stripe_ref, status, paid_at, approved_at, starts_at, ends_at, days_ran, " +
-  "last_ran_on, last_ran_key, declined_at, refunded_at, created_at";
+  "last_ran_on, last_ran_key, declined_at, refunded_at, created_at, " +
+  "weeks_purchased, start_week, email_rides, last_email_key";
 
 // Supabase rows come back loosely typed; one mapper keeps the shape honest.
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -120,6 +139,10 @@ function toPackage(r: any): BusinessPackage {
     daysRan: Number(r.days_ran ?? 0),
     lastRanOn: (r.last_ran_on as string | null) ?? null,
     lastRanKey: (r.last_ran_key as string | null) ?? null,
+    weeksPurchased: r.weeks_purchased == null ? null : Number(r.weeks_purchased),
+    startWeek: (r.start_week as string | null) ?? null,
+    emailRides: Number(r.email_rides ?? 0),
+    lastEmailKey: (r.last_email_key as string | null) ?? null,
     declinedAt: (r.declined_at as string | null) ?? null,
     refundedAt: (r.refunded_at as string | null) ?? null,
     createdAt: (r.created_at as string) ?? new Date(0).toISOString(),
@@ -165,6 +188,10 @@ export async function createBusinessPackage(
       phone: input.phone,
       tier: input.tier,
       daysPurchased: input.daysPurchased,
+      weeksPurchased: getBusinessTier(input.tier)?.weeks ?? null,
+      startWeek: null,
+      emailRides: 0,
+      lastEmailKey: null,
       priceCents: input.priceCents,
       stripeRef: input.stripeRef,
       status: "pending_review",
@@ -244,8 +271,39 @@ export async function getBusinessPackage(id: number): Promise<BusinessPackage | 
  * clock starts NOW (user decision: approval, not payment) — starts_at set,
  * scheduled ends_at = now + days. Only pending_review transitions.
  */
+/** Every week already spoken for — the input to the capacity question. */
+async function currentReservations(): Promise<Reservation[]> {
+  const all = await listBusinessPackages();
+  return all
+    .filter((p) => (p.status === "active" || p.status === "pending_review") && p.startWeek)
+    .map((p) => ({ startWeek: p.startWeek!, weeks: p.weeksPurchased ?? 1 }));
+}
+
+/**
+ * Which week a package would run, if approved right now: the earliest one
+ * with room in EVERY week of its term (only five sponsors run per week).
+ * null = nothing free inside the horizon, which the operator sees rather
+ * than the package being silently scheduled a year out.
+ */
+export async function proposedStartWeek(pkg: BusinessPackage): Promise<string | null> {
+  if (pkg.startWeek) return pkg.startWeek;
+  return earliestStartWeek({
+    reservations: await currentReservations(),
+    weeks: pkg.weeksPurchased ?? getBusinessTier(pkg.tier)?.weeks ?? 1,
+    fromWeek: weekStart(etParts(new Date()).day),
+    capacity: SPONSOR_WEEKLY_SLOTS,
+  });
+}
+
 export async function approveBusinessPackage(id: number): Promise<boolean> {
   const now = new Date();
+  // Book the run before flipping to active: unlimited businesses may buy, but
+  // only five RUN in a week, so approval is where a package learns which weeks
+  // are actually its own (session 016 user rules). A package that finds no
+  // room simply keeps waiting — it is approved and paid, just not yet
+  // scheduled, and the next approval pass will place it.
+  const pending = await getBusinessPackage(id);
+  const startWeek = pending ? await proposedStartWeek(pending) : null;
   if (!supabaseConfigured) {
     const shape = load();
     const p = shape.packages.find((x) => x.id === id);
@@ -253,6 +311,8 @@ export async function approveBusinessPackage(id: number): Promise<boolean> {
     p.status = "active";
     p.approvedAt = now.toISOString();
     p.startsAt = now.toISOString();
+    p.startWeek = startWeek;
+    p.weeksPurchased = p.weeksPurchased ?? getBusinessTier(p.tier)?.weeks ?? 1;
     p.endsAt = new Date(now.getTime() + p.daysPurchased * 86_400_000).toISOString();
     save(shape);
     return true;
@@ -265,6 +325,8 @@ export async function approveBusinessPackage(id: number): Promise<boolean> {
       status: "active",
       approved_at: now.toISOString(),
       starts_at: now.toISOString(),
+      start_week: startWeek,
+      weeks_purchased: existing.weeksPurchased ?? getBusinessTier(existing.tier)?.weeks ?? 1,
       ends_at: new Date(now.getTime() + existing.daysPurchased * 86_400_000).toISOString(),
     })
     .eq("id", id)
@@ -338,7 +400,11 @@ export async function listDueSponsors(day: string): Promise<BusinessPackage[]> {
   if (!supabaseConfigured) {
     return load()
       .packages.filter(
-        (p) => p.status === "active" && p.daysRan < p.daysPurchased && p.lastRanOn !== day,
+        (p) =>
+          p.status === "active" &&
+          p.daysRan < p.daysPurchased &&
+          p.lastRanOn !== day &&
+          runsOn(p, day),
       )
       .sort((a, b) => a.id - b.id);
   }
@@ -353,8 +419,56 @@ export async function listDueSponsors(day: string): Promise<BusinessPackage[]> {
     if (schemaMissing(error)) return [];
     throw error;
   }
-  // days_ran < days_purchased is a column-to-column compare — cheapest done here.
-  return (data ?? []).map(toPackage).filter((p) => p.daysRan < p.daysPurchased);
+  // days_ran < days_purchased is a column-to-column compare — cheapest done
+  // here. The week gate is the fairness rule: a package only rides during the
+  // weeks it actually reserved, so a queued one waits its turn instead of
+  // quietly running alongside the five that are scheduled.
+  return (data ?? []).map(toPackage).filter((p) => p.daysRan < p.daysPurchased && runsOn(p, day));
+}
+
+/** Is this package entitled to run on this ET day? Unscheduled (queued)
+ * packages are not — and a package written before migration 9970 has no week
+ * recorded, so it keeps its old always-on behaviour rather than going dark. */
+export function runsOn(p: BusinessPackage, day: string): boolean {
+  if (!p.startWeek) return p.weeksPurchased == null;
+  return dayWithinRun(day, p.startWeek, p.weeksPurchased ?? 1);
+}
+
+/**
+ * The one sponsor whose banner rides an email edition (user rule: "one
+ * sponsor on an email at a time"). Fewest banners so far wins, so five
+ * sponsors share the week's editions evenly; re-composing an edition keeps
+ * whoever already had it. Returns null when nobody is scheduled.
+ */
+export async function pickEmailSponsorFor(
+  day: string,
+  editionKey: string,
+): Promise<BusinessPackage | null> {
+  const active = (await listBusinessPackages()).filter(
+    (p) => p.status === "active" && p.daysRan < p.daysPurchased && runsOn(p, day),
+  );
+  return pickEmailSponsor(active, editionKey);
+}
+
+/** Count one email banner against a sponsor's rotation (idempotent per key). */
+export async function markEmailSponsorRan(id: number, editionKey: string): Promise<void> {
+  if (!supabaseConfigured) {
+    const shape = load();
+    const p = shape.packages.find((x) => x.id === id);
+    if (!p || p.lastEmailKey === editionKey) return;
+    p.emailRides = (p.emailRides ?? 0) + 1;
+    p.lastEmailKey = editionKey;
+    save(shape);
+    return;
+  }
+  const existing = await getBusinessPackage(id);
+  if (!existing || existing.lastEmailKey === editionKey) return;
+  const { error } = await db()
+    .from("business_packages")
+    .update({ email_rides: existing.emailRides + 1, last_email_key: editionKey })
+    .eq("id", id)
+    .or(`last_email_key.is.null,last_email_key.neq.${editionKey}`);
+  if (error && !schemaMissing(error)) throw error;
 }
 
 /**

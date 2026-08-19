@@ -26,16 +26,32 @@
 export interface BusinessTier {
   id: string;
   label: string;
+  /** Weeks of sponsorship — the unit sponsorship is sold in (session 016). */
+  weeks: number;
+  /** Sending days bought: six per week, because Sunday never sends. This is
+   * the ride ledger's unit — a sponsor's line rides one ad text per day, so a
+   * day the exchange is quiet costs the sponsor nothing. */
   days: number;
   priceCents: number;
 }
 
-/** The three packages (user-recorded pricing, session 016). */
+/**
+ * Sponsorship is sold BY THE WEEK, with the discount deepening as the term
+ * gets longer — that is what makes a business worth giving one of only five
+ * weekly slots to (user decisions, session 016; ladder built out from the
+ * $199/$349/$599 sheet already agreed).
+ */
 export const BUSINESS_TIERS: BusinessTier[] = [
-  { id: "week", label: "1 week", days: 7, priceCents: 19900 },
-  { id: "twoweeks", label: "2 weeks", days: 14, priceCents: 34900 },
-  { id: "month", label: "1 month", days: 30, priceCents: 59900 },
+  { id: "week", label: "1 week", weeks: 1, days: 6, priceCents: 19900 },
+  { id: "twoweeks", label: "2 weeks", weeks: 2, days: 12, priceCents: 34900 },
+  { id: "threeweeks", label: "3 weeks", weeks: 3, days: 18, priceCents: 47900 },
+  { id: "month", label: "4 weeks", weeks: 4, days: 24, priceCents: 59900 },
 ];
+
+/** Only this many sponsors may RUN in any one week (user rule, session 016:
+ * "to keep it fair, limit it to 5 sponsors a week"). Unlimited businesses may
+ * BUY — the rest wait in the queue for the first week with room. */
+export const SPONSOR_WEEKLY_SLOTS = 5;
 
 export function getBusinessTier(id: string): BusinessTier | null {
   return BUSINESS_TIERS.find((t) => t.id === id) ?? null;

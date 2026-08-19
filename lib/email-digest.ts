@@ -26,7 +26,7 @@ import { listEmailRecipientsWithCategories } from "@/lib/store";
 import { adMatchesCategories } from "@/lib/categories";
 import { getEngineSettings } from "@/lib/settings";
 import { site } from "@/lib/config";
-import { listDueSponsors, markSponsorRan } from "@/lib/business";
+import { markEmailSponsorRan, pickEmailSponsorFor } from "@/lib/business";
 import { formatPhone } from "@/lib/phone";
 
 /** A business sponsor riding this edition (FEATURES item 17) — the fields the
@@ -169,7 +169,11 @@ export async function runDueEmailDigests(now = new Date()): Promise<SlotResult[]
     // and its sponsor lines (item 17): whatever sponsors rode THIS slot's SMS
     // digest (recorded by slot key at markSponsorRan) appear here too, with
     // the link clickable. [] pre-migration or on sponsor-free days.
-    const sponsors = await listDueSponsors(day);
+    // One sponsor banner per email edition (user rule, session 016), picked
+    // by fewest banners so far so the week's sponsors share the editions
+    // evenly. Re-composing an edition keeps whoever already had it.
+    const banner = await pickEmailSponsorFor(day, slotKey);
+    const sponsors = banner ? [banner] : [];
     const digestNo = await allocateDigestNumber(digestId);
     const dateLabel =
       now.toLocaleDateString("en-US", {
@@ -212,9 +216,10 @@ export async function runDueEmailDigests(now = new Date()): Promise<SlotResult[]
     // the ads unstamped and the next edition picks them up again (the outbox
     // unique key dedups any row that did make it in).
     await markAdsEmailed(ads.map((a) => a.id));
-    if (rows.length) {
-      for (const sp of sponsors) await markSponsorRan(sp.id, day, slotKey);
-    }
+    // The email banner is counted against the rotation, NOT against the
+    // sponsor's paid days — a paid day is the SMS ride. Otherwise a sponsor
+    // would burn its term three times as fast on email alone.
+    if (rows.length && banner) await markEmailSponsorRan(banner.id, slotKey);
     results.push({
       slotKey,
       items: ads.length,

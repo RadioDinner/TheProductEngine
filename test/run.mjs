@@ -7,6 +7,7 @@ const SUITES = [
   "config",
   "voice",
   "send-window",
+  "sponsor-schedule",
   "segments",
   "commands",
   "dst",

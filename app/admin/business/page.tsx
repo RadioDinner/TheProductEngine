@@ -10,6 +10,10 @@ import {
   listBusinessPackages,
   type BusinessPackage,
 } from "@/lib/business";
+import { proposedStartWeek } from "@/lib/business";
+import { SPONSOR_WEEKLY_SLOTS } from "@/lib/business-packages";
+import { weekStart } from "@/lib/sponsor-schedule";
+import { etParts } from "@/lib/et";
 import {
   behindDays,
   getBusinessTier,
@@ -18,7 +22,7 @@ import {
 } from "@/lib/business-packages";
 import { formatPrice, site } from "@/lib/config";
 import { formatPhone } from "@/lib/phone";
-import { etParts } from "@/lib/et";
+
 import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
@@ -75,6 +79,11 @@ export default async function AdminBusinessPage() {
   const { day: today } = etParts(new Date());
 
   const pending = packages.filter((p) => p.status === "pending_review");
+  // Which week each pending package would actually run, given who is already
+  // booked — the operator should see that before approving, not after.
+  const thisWeek = weekStart(etParts(new Date()).day);
+  const proposedWeeks = new Map<number, string | null>();
+  for (const pkg of pending) proposedWeeks.set(pkg.id, await proposedStartWeek(pkg));
   const active = packages.filter((p) => p.status === "active");
   const refundDue = packages.filter((p) => p.status === "declined" && !p.refundedAt);
   const finished = packages.filter(
@@ -111,9 +120,17 @@ export default async function AdminBusinessPage() {
             <li key={pkg.id} className="myad-row">
               <PackageFacts pkg={pkg} />
               <p className="fine">
-                Approving starts the {pkg.daysPurchased}-day run <strong>today</strong>.
-                Declining does <strong>not</strong> refund automatically — it flags the
-                package below for a manual refund in Stripe.
+                Approving books this package&rsquo;s{" "}
+                {pkg.weeksPurchased ?? 1}-week run{" "}
+                {proposedWeeks.get(pkg.id)
+                  ? proposedWeeks.get(pkg.id) === thisWeek
+                    ? "starting THIS week"
+                    : `starting the week of ${proposedWeeks.get(pkg.id)}`
+                  : "— no week has room inside the next year"}
+                . Only {SPONSOR_WEEKLY_SLOTS} sponsors run in a week, so a sold-out week
+                pushes the run to the first one with room. Declining does{" "}
+                <strong>not</strong> refund automatically — it flags the package below for
+                a manual refund in Stripe.
               </p>
               <div className="sim-actions">
                 <form action={adminApproveBusiness}>
