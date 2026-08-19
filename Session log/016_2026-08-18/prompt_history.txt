@@ -103,3 +103,9 @@ I hafe the voice confioguration webhook saved
 --- prompt (2026-08-19, continued session) ---
 [screenshot: 1Console Account settings -> SECURITY tab shows only HIPAA and
 Public key validation, no auth token] these are my options...
+
+--- prompt (2026-08-19, continued session) ---
+[screenshot: 1Console Settings -> Account settings -> API keys & auth tokens,
+on the API KEYS tab ("You don't have any API keys"); an AUTH TOKENS tab sits
+beside it. Sidebar also shows Settings -> Product settings, the likely home of
+Voice/PCI Mode in this console.]
