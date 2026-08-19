@@ -20,22 +20,41 @@ by text.
 
 ## What you do once, in the consoles
 
-1. **Twilio → Voice → Settings → General → Enable PCI Mode.** Required before
-   `<Pay>` will run. **This is irreversible and redacts sensitive data from
-   logs account-wide**, which is why the card line should live on its own
-   Twilio account or subaccount — your Telnyx messaging setup is untouched
-   either way.
-2. **Twilio → Voice → Manage → Pay Connectors → Stripe → Install**, and
-   connect it to **the same Stripe account the website uses**. Name the
-   connector `Default` (or set `TWILIO_PAY_CONNECTOR` to the name you chose).
-3. **Twilio → Phone Numbers → Active numbers → your number → Voice
-   Configuration.** "A call comes in" → **Webhook** →
+> **Console note (2026-08):** this account is on Twilio's new **1Console**,
+> whose navigation differs from every older guide. What we actually found:
+> Voice lives under **Products and Services → Communications → Voice**, Pay
+> Connectors under **Products and Services → Builder Tools → Marketplace →
+> Installed**, and the auth token under **Settings → Account settings → API
+> keys & auth tokens → AUTH TOKENS tab**. Old `console.twilio.com/...` URLs
+> 404 here.
+
+1. **Voice settings → Enable PCI Mode.** Required before `<Pay>` will run.
+   **This is irreversible and redacts sensitive data from logs account-wide**,
+   which is why the card line should live on its own Twilio account or
+   subaccount — your Telnyx messaging setup is untouched either way.
+2. **Install the Stripe Pay Connector** (Marketplace → Installed shows it once
+   added) and point it at **the same Stripe account AND the same mode (live)
+   as the website's `STRIPE_SECRET_KEY`**. Name the connector `Default` (or
+   set `TWILIO_PAY_CONNECTOR` to the name you chose).
+
+   **This is the one that bites.** A connector wired to a different Stripe
+   account — or to test mode while the app's key is live — captures the card
+   perfectly and *then* fails at the last step, because a payment method from
+   one account cannot be attached to a customer in another. The symptom is a
+   404 `resource_missing` / `No such PaymentMethod: 'pm_…'` in the function
+   log (and "Card failed" on /admin/calls), with the caller hearing "something
+   went wrong on our end." Confirm from the Stripe side: switch the Stripe
+   dashboard to **test mode → Customers** — if the caller's phone number shows
+   up there, the connector is on test while the app is on live.
+3. **Phone Numbers → Active numbers → your number → Voice Configuration.** "A call comes in" → **Webhook** →
    `https://www.theplainexchange.com/api/voice` → **HTTP POST** → Save. That
    one URL runs the whole call; every later stage is an address the app hands
    back. (Until you do this, callers hear Twilio's "configure your number's
    voice URL" demo greeting.)
 4. **Vercel → Environment Variables**, then redeploy:
-   - `TWILIO_AUTH_TOKEN` — Twilio Console → Account Info → Auth Token.
+   - `TWILIO_AUTH_TOKEN` — Settings → Account settings → API keys & auth
+     tokens → **AUTH TOKENS** tab (an API key is a different credential and
+     will NOT work: Twilio signs webhooks with the auth token).
      **Required in production**: without it every voice webhook is rejected,
      because a forged one could attach a card to any phone number.
    - `VOICE_RING_TO` — comma-separated 10-digit numbers to ring before the

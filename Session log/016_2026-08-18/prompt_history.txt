@@ -130,3 +130,7 @@ Also, I don't have any logging on this. I want to know when someone calls, how l
 Stripe payment_methods/pm_1U6DUN3eQFZkVuVoxHxtsadD/attach failed (404):
 resource_missing — No such PaymentMethod" — the Pay Connector tokenized into a
 different Stripe account/mode than the app's live key (acct_1RssKyRoXyr86YS9)]
+
+--- prompt (2026-08-19, continued session) ---
+I don't have Twilio > Voice > Manage > Pay Connectors > Stripe. Closest I have is Products and Services > Communications > Voice.
+I found the stripe connector in Products and Services > Builder Tools > Marketplace > Installed
