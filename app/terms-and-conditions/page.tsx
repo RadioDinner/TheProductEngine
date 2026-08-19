@@ -21,8 +21,8 @@ export default function TermsAndConditions() {
 
       <h2>The service</h2>
       <p>
-        {site.name} gathers classified ads from local sellers and sends them out in short
-        digests by text message, and by email for those who prefer it. Approved ads are
+        {site.name} gathers classified ads from local sellers and texts each one out as it
+        is approved, and collects them into email editions for those who prefer it. Approved ads are
         also listed on this website, typically for 30 days. Subscribing and browsing are
         free; posting ads costs money. How it all works, step by step, is on the{" "}
         <Link href="/how-it-works">how it works</Link> page.
@@ -45,7 +45,7 @@ export default function TermsAndConditions() {
           depends on your carrier and coverage.
         </li>
         <li>
-          Consent to receive digests is not a condition of buying anything.
+          Consent to receive the ads is not a condition of buying anything.
         </li>
       </ul>
 
@@ -79,7 +79,7 @@ export default function TermsAndConditions() {
         <li>Dishonest, misleading, or deliberately incomplete ads.</li>
         <li>Offensive or hateful content.</li>
         <li>Ads for someone else&rsquo;s business posted as if it were a private sale.</li>
-        <li>Anything that risks the safety or trust of the people reading the digests.</li>
+        <li>Anything that risks the safety or trust of the people reading the ads.</li>
       </ul>
       <p>
         Some categories may be flagged for extra review or declined outright at our
@@ -115,14 +115,14 @@ export default function TermsAndConditions() {
       <h2>Your ads, our service</h2>
       <p>
         Your ads stay yours. By submitting an ad you give us permission to run it — in
-        the digests, in the email edition, and on this website — and to keep the record
+        by text, in the email edition, and on this website — and to keep the record
         of it. We may remove any ad or listing at any time. The service&rsquo;s own text,
         design, and name belong to us.
       </p>
 
       <h2>Ending accounts</h2>
       <p>
-        You can stop using the service any time — reply STOP to leave the digests, or ask
+        You can stop using the service any time — reply STOP to stop the texts, or ask
         us to close your account. We may suspend or close accounts that break these
         terms, abuse the service, or put other members at risk — immediately and without
         notice when we judge that necessary to protect the service or its members. When
@@ -172,7 +172,7 @@ export default function TermsAndConditions() {
       <h2>Changes to these terms</h2>
       <p>
         If we change these terms, we will post the new version here with a new effective
-        date. A meaningful change will be announced in the digest or by email — where
+        date. A meaningful change will be announced by text or by email — where
         practical, before it takes effect. Using the service after a change means you
         accept it.
       </p>

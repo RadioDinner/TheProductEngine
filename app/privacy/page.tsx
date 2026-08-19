@@ -32,7 +32,7 @@ export default function PrivacyPolicy() {
 
       <h2>What we collect</h2>
       <p>
-        <strong>Your phone number.</strong> It is how the service knows you — for digests,
+        <strong>Your phone number.</strong> It is how the service knows you — for the ads,
         for posting ads, and for signing in to this website.
       </p>
       <p>
@@ -81,7 +81,7 @@ export default function PrivacyPolicy() {
 
       <h2>How we use it</h2>
       <ul>
-        <li>To send the ad digests you signed up for, by text or email.</li>
+        <li>To send you the ads you signed up for, by text or email.</li>
         <li>To run your ads and let buyers reach you.</li>
         <li>To review every ad before it runs, and keep the service safe and honest.</li>
         <li>To handle payments, credits, and refunds.</li>
@@ -100,7 +100,7 @@ export default function PrivacyPolicy() {
         commands you send. Message and data rates may apply, charged by your phone company.
       </p>
       <p>
-        Reply <strong>STOP</strong> any time to stop the digests. Reply{" "}
+        Reply <strong>STOP</strong> any time to stop the texts. Reply{" "}
         <strong>HELP</strong> for help, or call or text{" "}
         <strong>{site.supportPhone}</strong> for support.
       </p>
@@ -145,7 +145,7 @@ export default function PrivacyPolicy() {
       <h2>What&rsquo;s public</h2>
       <p>
         Ads are public — that is the point of an ad. The ad text and picture you submit
-        appear in the digests, in the email edition, and on this website. On the website
+        appear in the texts, in the email edition, and on this website. On the website
         your contact details inside an ad are masked: a signed-in member presses
         &ldquo;Show number&rdquo; to see a seller&rsquo;s number one ad at a time, and
         there is a daily limit on look-ups. Town hall event listings are public the same
@@ -196,7 +196,7 @@ export default function PrivacyPolicy() {
       <h2>Your choices</h2>
       <ul>
         <li>
-          <strong>Stop the texts:</strong> reply STOP to any digest, or text STOP to{" "}
+          <strong>Stop the texts:</strong> reply STOP to any text from us, or text STOP to{" "}
           {site.smsNumber}.
         </li>
         <li>

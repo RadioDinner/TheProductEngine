@@ -9,8 +9,8 @@ export const metadata: Metadata = {
 };
 
 const COMMANDS: { cmd: string; what: string }[] = [
-  { cmd: "SUBSCRIBE", what: "Start getting the ad digests. Free." },
-  { cmd: "STOP", what: "Stop getting digests. Reply START to come back." },
+  { cmd: "SUBSCRIBE", what: "Start getting the ads by text. Free." },
+  { cmd: "STOP", what: "Stop getting the ads. Reply START to come back." },
   { cmd: "HELP", what: "Get this list of commands by text." },
   { cmd: "AD NEW your ad text", what: "Post an ad. Attach a picture if you have one." },
   { cmd: "PIC 1234", what: "Get the picture for ad number 1234." },
@@ -42,7 +42,7 @@ export default async function HowItWorks() {
         <Link href="/privacy">privacy policy</Link>.
       </p>
       <p>
-        When an ad has a picture, the digest says so. Reply{" "}
+        When an ad has a picture, the text says so. Reply{" "}
         <span className="cmd">PIC 1234</span> (the ad’s number) and the picture comes back to
         you by text.
       </p>
@@ -87,7 +87,7 @@ export default async function HowItWorks() {
 
       <h2>Paying for ads</h2>
       <p>
-        Ads come off your ad-credit balance; checking, browsing, and getting digests are
+        Ads come off your ad-credit balance; checking, browsing, and receiving ads are
         free. Text <span className="cmd">BAL</span> any time to see your balance. Add
         money on this website under <Link href="/account">your account</Link> — once a card
         is saved there, ads can top up automatically when your balance runs short (the

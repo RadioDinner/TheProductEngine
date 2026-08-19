@@ -44,7 +44,7 @@ export default async function Faq() {
           every new member&rsquo;s first post comes with {formatPrice(s.starterCreditCents)}{" "}
           of ad credit on the house
         </strong>
-        . Your ads run in the text digest and list on this website
+        . Your ads go out by text and list on this website
         {s.webAddonCents > 0
           ? ` (the website listing is ${formatPrice(s.webAddonCents)} more)`
           : ""}
@@ -75,7 +75,7 @@ export default async function Faq() {
 
       <h2>How do pictures work?</h2>
       <p>
-        When a digest says an ad has a picture, reply <span className="cmd">PIC</span>{" "}and
+        When a text says an ad has a picture, reply <span className="cmd">PIC</span>{" "}and
         the ad&rsquo;s number — like <span className="cmd">PIC 1042</span> — and the picture
         comes back to you by text, free. On the website, pictures show right on the ad.
       </p>
@@ -98,7 +98,7 @@ export default async function Faq() {
 
       <h2>Is my phone number shown to everyone?</h2>
       <p>
-        Whatever you write in your ad goes out in the digests — most sellers include their
+        Whatever you write in your ad goes out with it — most sellers include their
         number so buyers can reach them. On the website, contact details in ads are masked
         until a visitor signs in. We never sell your information or share your number with
         marketers; the details are in the <Link href="/privacy">privacy policy</Link>.
@@ -115,9 +115,9 @@ export default async function Faq() {
 
       <h2>How do I stop the texts?</h2>
       <p>
-        Reply <span className="cmd">STOP</span> to any digest, or text{" "}
+        Reply <span className="cmd">STOP</span> to any text from us, or text{" "}
         <span className="cmd">STOP</span> to <strong>{site.smsNumber}</strong>. That ends
-        the digests immediately. Reply <span className="cmd">START</span> if you change
+        the ads immediately. Reply <span className="cmd">START</span> if you change
         your mind. Message and data rates may apply while subscribed.
       </p>
 

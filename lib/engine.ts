@@ -119,11 +119,14 @@ function slotTimeShort(hour: number): string {
 }
 
 function welcomeMessage(settings: EngineSettings): string {
-  const times = [...settings.slots].sort((a, b) => a - b).map(slotTimeShort);
-  const timeList =
-    times.length > 1 ? `${times.slice(0, -1).join(", ")} and ${times[times.length - 1]}` : times[0] ?? "";
+  // The fallback welcome, used only where the category menu can't be offered.
+  // It describes the SEND WINDOW, not settings.slots: since session 016 slots
+  // are the EMAIL edition times, and an SMS member's ads arrive one at a time
+  // as they're approved. Telling them "digests at 7, 12, 4 and 8" would name
+  // hours nothing texts them at.
   return (
-    `Welcome to ${site.name}! Ad digests go out daily at ${timeList} ET. ` +
+    `Welcome to ${site.name}! Ads go out as soon as they're approved, ` +
+    `${hourLabel(settings.smsWindowStartHour)} to ${hourLabel(settings.smsWindowEndHour)} Mon-Sat. ` +
     `To place your own ad, text AD NEW and your ad - for example: ` +
     `AD NEW Hay for sale, $5/bale. Call 330-555-0142. Text HELP for all commands.`
   );
@@ -823,7 +826,10 @@ async function route(
       const account = await ensureAccount(from);
       if (account.subscribedAt) {
         return {
-          body: `You're already subscribed. Ads come up to ${settings.slots.length} times a day. Reply STOP to cancel, HELP for help.`,
+          body:
+            `You're already subscribed. Ads come as they're posted, ` +
+            `${hourLabel(settings.smsWindowStartHour)} to ${hourLabel(settings.smsWindowEndHour)} Mon-Sat. ` +
+            `Reply STOP to cancel, HELP for help.`,
         };
       }
       await setSubscribed(from, true);
@@ -848,7 +854,7 @@ async function route(
       // this number so a broadcast composed before the STOP can't still send.
       await cancelQueuedOutboxFor(from);
       return {
-        body: `${site.name}: you're unsubscribed and won't get more digests. Reply START any time to come back.`,
+        body: `${site.name}: you're unsubscribed and won't get more ads. Reply START any time to come back.`,
       };
     }
     case "start": {
@@ -870,7 +876,15 @@ async function route(
     case "help":
       return {
         body:
-          `${site.name} classifieds by text. Up to 4 digests/day. Msg&data rates may apply. ` +
+          // "Up to 4 digests/day" until session 016, when ads stopped being
+          // batched. It now describes the SEND WINDOW, which is the honest
+          // version of the same promise: the hours we will and won't text
+          // you. See docs/ — the registered 10DLC campaign wording needs to
+          // match this, and describing a cadence we no longer send is exactly
+          // what carrier audits look for.
+          `${site.name} classifieds by text. Ads sent ` +
+          `${hourLabel(settings.smsWindowStartHour)}-${hourLabel(settings.smsWindowEndHour)} Mon-Sat. ` +
+          `Msg&data rates may apply. ` +
           `Cmds: SUBSCRIBE for ads. AD NEW your ad to post. PIC 1234 for a picture. ` +
           `SOLD/STATUS/MY ADS/BAL. Reply STOP to cancel. ` +
           `Help: call ${site.supportPhone} or ThePlainExchange.com/sms`,
