@@ -47,3 +47,6 @@ What happened?
 
 --- prompt (2026-08-19, continued session) ---
 working now. commit to main from here on. Whats my stripe chekclist again?
+
+--- prompt (2026-08-19, continued session) ---
+all the webhooks are set up and the part C test money path is good and working. I'll be working on parts d and e next. Do I need Twilio or can I setup the number that sends out the digests so taht they can call it? I don't really want a separate number. Also, Can I set it up that it's an auto attendant unless I manually answer it? Then I could either let it go to auto or I could answer it myself. Plus, I would want this number to ring to multiple devices since my wife will help with customer support
