@@ -175,3 +175,12 @@ What api version 2026-07-29.dahlia?
 
 --- prompt (2026-08-19, continued session) ---
 ok I have that made, I copied the signing secret, what next
+
+--- prompt (2026-08-19, continued session) ---
+I rotated STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET
+
+--- prompt (2026-08-19, continued session) ---
+[pasted Supabase error: they pasted the curl health-check command into the SQL editor]
+
+--- prompt (2026-08-19, continued session) ---
+I ran that and I tried a test payment. It opened the stripe checkout and it looked like it worked but it didn't go to my stripe accounts, I didn't get an email receipt and my card wasn't charged
