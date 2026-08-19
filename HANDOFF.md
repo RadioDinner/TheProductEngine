@@ -3,7 +3,92 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-19 (session 016 addendum 2).
+**Last updated:** 2026-08-19 (session 016 addendum 4).
+
+## Session 016 addendum 4 (2026-08-19) — the upload outage, the word-filter tab, settings honesty
+
+**1. PROD BUG, now fixed: every upload over ~4.5 MB was a blank error page.**
+The user hit it adding a Featured spot ("This page couldn't load";
+Vercel logged `FUNCTION_PAYLOAD_TOO_LARGE`). It was never a Featured bug —
+every upload path declared an 8 MB per-file cap and next.config.ts allowed
+an 80 MB action body, but **Vercel rejects request bodies over ~4.5 MB at
+the edge, before any of our code runs**. So a normal phone photo (3–6 MB)
+never reached our friendly validation: the POST died at the platform and
+nothing appeared in our logs. It was live on the seller-facing web ad post,
+extra pictures, profile photos and chat photos — not just admin.
+
+- **The browser now shrinks pictures before upload** —
+  `components/ImageUpload.tsx`, a drop-in for all eight file inputs. 1600px
+  longest edge, JPEG q0.82, EXIF rotation baked into pixels. A phone photo
+  becomes 200–400 KB, which also turns a slow rural upload into a second.
+  Every failure path (no canvas, undecodable HEIC, encode comes out bigger,
+  no DataTransfer) falls back to the original rather than blocking the post;
+  animated GIFs ride untouched so a canvas pass can't flatten them.
+- **`lib/upload-limits.ts` is now the single source** for the ceilings,
+  replacing four copies of `8 * 1024 * 1024`, all set BELOW the platform cap.
+  New: a whole-POST ceiling, because eight individually-legal files can still
+  bust one request — a per-file check alone cannot see that. `bodySizeLimit`
+  80mb → 4mb so dev and prod fail the same way.
+- The unit suite pins **"our caps stay under the platform cap"** as an
+  invariant, so this cannot silently regress.
+
+**2. The word filter moved to its own tab** (`/admin/words`, user request).
+Two comma-separated boxes — auto-reject and flag-for-review — replacing the
+one-word-at-a-time widget on Settings, which made a real list unmanageable.
+The boxes ARE the state. Parsing details that matter: newlines and semicolons
+split too (paste from a spreadsheet works), punctuation becomes a SEPARATOR
+so `gun/rifle` is two entries rather than the phrase "gun rifle" that would
+match neither, spaces are kept so `free money` stays one phrase, and a word
+in both boxes resolves to auto-reject exactly once. **Saving applies a diff,
+never wipe-and-reinsert** — a wipe dying halfway would leave the filter empty
+and every banned word suddenly allowed. Clearing both boxes needs an explicit
+tick. Pure arithmetic in `lib/word-filter.ts`, unit-tested.
+
+**3. Settings now describes the post-digest world.** Six items the user
+flagged:
+
+- "Picture ad price" was one field against a three-rung price sheet — now
+  three (`photoPrice1/2/3Cents`), editing `photoPricesCents` directly. A rung
+  left blank keeps its value, so a half-filled form can't zero a price; rung 1
+  mirrors into `costPhotoCents`. All three now carry the $1000 ceiling the
+  single field had (the price-sheet rework had missed it).
+- **`digestCap` is NOT deprecated** — relabelled "Max ads per pass". It no
+  longer shapes a single message; it bounds how many queued ads one drain
+  handles, and is still the length control on email editions.
+- **`expiryDays` → "Website listing length"**, because that is all it does.
+  The text goes out once, at approval; nothing re-sends it.
+- Two new Insights figures over a fixed 24h: **people who ran out of picture
+  pulls** (counted from the outbound "out of pulls" replies — the only place
+  the limit actually bites) and **number-look-up usage**.
+- `smsGlobalPerHour` is unaffected by the digest retirement: it caps the
+  `reply` class; ads are `bulk` via the outbox drain.
+- **Email edition times ARE honored** — `runDueEmailDigests` iterates
+  `settings.slots`. The user runs `7,12,16,20` (4 editions), not the `7,12,17`
+  addendum 3 asked for. This is fine: `pickEmailSponsor` picks fewest-ridden,
+  so the rotation self-balances at any edition count. **Addendum 3's request
+  to set `7, 12, 17` is withdrawn.**
+
+**4. Member copy stopped calling the texts "digests."** Four LIVE SMS replies
+were wrong, two of them naming hours nothing texts at: the fallback welcome
+("Ad digests go out daily at 7 AM, 12 PM, 4 PM and 8 PM ET") and the
+already-subscribed reply ("Ads come up to 4 times a day") were both reading
+`settings.slots`, which are now the EMAIL times. Plus STOP and HELP. All four
+now describe the send window from Settings, so editing the hours moves the
+copy. Public prose swept too (how-it-works, FAQ, terms, privacy) — the
+compliance disclosures were already correct.
+
+⚠️ **STILL THE OPERATOR'S: the 10DLC campaign description says "up to 4
+digests/day".** The app no longer sends that, and a registered description
+that doesn't match real traffic is what carrier audits look for. Carries over
+from addendum 3, still open.
+
+**Migrations: the user confirms ALL are pasted** (9968–9972 inclusive), which
+closes addendum 3's open 9970 item. No new migration this addendum — the word
+filter reuses the existing `word_filter` table and the upload fix is code only.
+
+Verified: tsc + build clean, unit 706 → **781** (new suites `word-filter` 42
+and `upload-limits` 32), abuse 17/17 (the two 🔴 are the pre-existing
+annotated notes, not regressions).
 
 ## Session 016 addendum 3 (2026-08-19) — INSTANT SEND, and sponsorship by the week
 
@@ -1344,6 +1429,11 @@ on-screen — anyone with the URL can log in as any number, and `/dev/sms` /
 configured (which disables all of it automatically).
 
 ## Product rules (grilled + confirmed 2026-07-06; do not relitigate)
+
+> **⚠️ FROZEN — describes the CREDIT era.** Session 016 replaced credits with
+> dollars, retired BUMP, and made SMS instant instead of a 4-slot digest. Read
+> the session 016 addendums at the top of this file for what is true now; this
+> section is kept as the record of what was decided when.
 
 - One credit = one broadcast in the next digest; ad lists on site 30 days
   (config). Text ad 2 credits, picture 10 (defaults raised session 011; the user
