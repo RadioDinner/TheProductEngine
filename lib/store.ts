@@ -770,6 +770,11 @@ const file = {
    * after the dollars are spent, so first-post-only — never on account
    * creation and never again. Writes the welcome ledger grant at grant time.
    */
+  starterCreditAvailable(limit: number): boolean {
+    if (limit <= 0) return true;
+    return Object.values(load().accounts).filter((a) => a.starterGrantedAt).length < limit;
+  },
+
   grantStarterCreditIfFirst(
     phone: string,
     amountCents: number,
@@ -1536,6 +1541,13 @@ export async function setVerified(
  * grants; the loser sees granted:false. Call it in the posting paths only.
  * `amountLabel` is the display string ("$150") baked into the ledger note.
  */
+/** Is the launch starter-credit offer still open? */
+export async function starterCreditAvailable(limit: number): Promise<boolean> {
+  return supabaseConfigured
+    ? remote.starterCreditAvailable(limit)
+    : file.starterCreditAvailable(limit);
+}
+
 export async function grantStarterCreditIfFirst(
   phone: string,
   amountCents: number,

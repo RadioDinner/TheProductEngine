@@ -4,24 +4,32 @@
  */
 export const site = {
   name: "The Plain Exchange",
-  region: "Holmes County, Ohio",
+  /**
+   * The service area, in words. Deliberately BROAD since session 016 — an
+   * Amish seller told the user that naming one county reads as "not for me"
+   * two townships over, and the ads travel as far as the subscribers do.
+   * Never put a county name here.
+   */
+  region: "Ohio's Plain communities",
   /** The provisioned Telnyx number people TEXT ads to. */
   smsNumber: "(330) 960-7170",
   smsNumberPlain: "3309607170",
   /** The number people CALL for support or to arrange payment (phone/check/saved card). */
   supportPhone: "(234) 301-0048",
   supportPhonePlain: "2343010048",
+  /** The address people are told to visit — no scheme, it is spoken copy. */
+  webHost: "ThePlainExchange.com",
   tagline: "Buy and sell by text message",
   adsPerPage: 15,
 } as const;
 
 /**
  * Add-money presets (dollar pricing overhaul, session 016): the amounts a
- * member can put on their account in one Stripe checkout. Sized to the ad
- * prices — one text ad, one picture ad, the starter-credit-sized bundle,
- * and a big bundle. All values in CENTS, like every money value in the app.
+ * member can put on their account in one Stripe checkout. Sized to the price
+ * sheet: one text ad, one two-picture ad, one three-picture ad with change,
+ * and a bundle worth a handful. All values in CENTS.
  */
-export const TOP_UP_PRESETS_CENTS: number[] = [4500, 6000, 15000, 30000];
+export const TOP_UP_PRESETS_CENTS: number[] = [2000, 4000, 6000, 10000];
 
 export function isTopUpPreset(amountCents: number): boolean {
   return TOP_UP_PRESETS_CENTS.includes(amountCents);

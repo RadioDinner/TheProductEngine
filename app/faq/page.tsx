@@ -24,7 +24,7 @@ export default async function Faq() {
       <h2>What is {site.name}?</h2>
       <p>
         Local classified ads for {site.region}, delivered by text message. Sellers text
-        their ads in; everyone who subscribes gets the ads in short digests, up to four
+        their ads in; everyone who subscribes gets each ad by text as it’s posted, up to four
         times a day. The ads are also listed on this website, and there&rsquo;s an email
         edition if you prefer email.
       </p>
@@ -38,7 +38,7 @@ export default async function Faq() {
       <h2>What does it cost?</h2>
       <p>
         Getting the ads is free. Browsing the website is free. Posting an ad costs money —
-        a plain ad is {formatPrice(s.costTextCents)}, a picture ad (up to four pictures) is{" "}
+        a plain ad is {formatPrice(s.costTextCents)}, a picture ad (up to three pictures) starts at{" "}
         {formatPrice(s.costPhotoCents)} — and{" "}
         <strong>
           every new member&rsquo;s first post comes with {formatPrice(s.starterCreditCents)}{" "}
@@ -54,8 +54,8 @@ export default async function Faq() {
       <h2>How do I start getting the ads?</h2>
       <p>
         Text <span className="cmd">SUBSCRIBE</span> to <strong>{site.smsNumber}</strong>.
-        That&rsquo;s it. Digests arrive up to four times a day — morning, noon, afternoon,
-        and evening — and slots with no new ads are skipped. Reply{" "}
+        That&rsquo;s it. Each ad arrives as a text the moment it&rsquo;s approved, between
+        7am and 9pm Monday through Saturday — nothing overnight or on Sunday. Reply{" "}
         <span className="cmd">STOP</span> any time to quit.
       </p>
 

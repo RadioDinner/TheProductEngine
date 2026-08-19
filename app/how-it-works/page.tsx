@@ -34,7 +34,7 @@ export default async function HowItWorks() {
       <h2>Get the ads</h2>
       <p>
         Text <span className="cmd">SUBSCRIBE</span> to <strong>{site.smsNumber}</strong>.
-        You’ll get new ads bundled into short digests, up to four times a day — morning, noon,
+        You’ll get each new ad by text as soon as it’s posted — 7am to 9pm, Monday through Saturday,
         afternoon, and evening. It’s free, though message and data rates may apply from your
         phone company. Reply <span className="cmd">STOP</span> any time to quit, or{" "}
         <span className="cmd">HELP</span> for help. See the{" "}

@@ -174,7 +174,7 @@ export default async function PostAdPage({
                 <dd>{formatPrice(settings.costTextCents)}</dd>
               </div>
               <div>
-                <dt>Picture ad (up to 4 pictures)</dt>
+                <dt>Picture ad (up to 3 pictures)</dt>
                 <dd>{formatPrice(settings.costPhotoCents)}</dd>
               </div>
               <div>

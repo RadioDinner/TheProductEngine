@@ -54,13 +54,67 @@ export function categoryLabel(key: string): string {
  * word per line, like the competitor example it reformats). GSM-7 throughout;
  * the engine still passes it through gsmSanitize like every digest line.
  */
-export function welcomeMenu(siteName: string): string {
+/**
+ * The welcome text (SUBSCRIBE / START). Rewritten session 016 on the user's
+ * decision, after seeing a competitor lead with its free-credit offer:
+ *
+ * - the CATEGORIES ARE NUMBERED. "Reply 1" is a far smaller ask on a flip
+ *   phone than spelling LIVESTOCK, and the words still work (see menuChoice);
+ * - the free ad credit is STATED. The competitor advertises $20 and this
+ *   service was quietly giving more while saying nothing about it;
+ * - the website is named, because it answers "can I see more pictures?" and
+ *   carries the email sign-up;
+ * - the sending window is stated, so nobody wonders why an ad texted at
+ *   10pm went quiet.
+ *
+ * Every number comes from Settings — none of this copy hardcodes a price,
+ * an hour or an amount.
+ */
+export function welcomeMenu(args: {
+  siteName: string;
+  siteUrl: string;
+  starterCreditLabel: string | null;
+  windowLabel: string;
+  priceLine: string;
+}): string {
   return [
-    `Welcome to ${siteName}! Pick what you want ads for - text one word per message:`,
-    "ALL - every ad",
-    ...CATEGORIES.map((c) => `${c.key.toUpperCase()} - ${c.menu}`),
+    `Welcome to ${args.siteName}! Ads come by text as soon as they're posted, ${args.windowLabel}.`,
+    args.starterCreditLabel
+      ? `Your first ads are on us: ${args.starterCreditLabel} of free ad credit when you post your first one. ${args.priceLine}`
+      : args.priceLine,
+    `Every ad is also on ${args.siteUrl} with all its pictures, where you can sign up for email too.`,
+    "",
+    "Pick what you want ads for - reply with a number (or the word):",
+    ...menuLines(),
     "Text HELP for help. Text STOP to end.",
   ].join("\n");
+}
+
+/** The numbered menu lines: 1 is ALL, then the categories in order. */
+export function menuLines(): string[] {
+  return [
+    "1 - ALL, every ad",
+    ...CATEGORIES.map((c, i) => `${i + 2} - ${c.menu} (${c.key.toUpperCase()})`),
+  ];
+}
+
+/**
+ * What a member's reply picks: a category key, "all", or null if it is
+ * neither. Numbers are the headline way in (1 = ALL, 2.. = the categories in
+ * menu order) and the WORDS keep working — anyone who learned them, or who
+ * reads the menu's parenthesis, must not be told they typed nonsense.
+ */
+export function menuChoice(raw: string): string | "all" | null {
+  const word = raw.trim().toLowerCase();
+  if (!word) return null;
+  if (/^\d+$/.test(word)) {
+    const n = Number(word);
+    if (n === 1) return "all";
+    const category = CATEGORIES[n - 2];
+    return category ? category.key : null;
+  }
+  if (word === "all") return "all";
+  return isCategoryKey(word) ? word : null;
 }
 
 // ---------- toggle decision ----------

@@ -241,7 +241,7 @@ export default async function AdminSettings({
             type="text"
             maxLength={200}
             defaultValue={settings.promoBannerText}
-            placeholder={'e.g. "SPRING SALE — picture ads $45 through Saturday"'}
+            placeholder={'e.g. "SPRING SALE — picture ads $20 through Saturday"'}
           />
           <p className="fine">
             Shows as a banner at the top of the homepage. <strong>Clear the text and save to

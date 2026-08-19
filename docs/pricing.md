@@ -6,26 +6,47 @@ credit-pack system. The competitor is deliberately not named in the repo
 (session 010 standing order); their sheet: $65 per ad with up to four
 pictures, $45 per text ad under 160 characters, print distribution.
 
-## The price sheet (user decisions, session 016)
+## The price sheet (user decisions, session 016 — SECOND revision)
 
 | Product | Price | Where set |
 |---|---|---|
-| Text ad (up to 250 chars, one digest broadcast + website) | **$45** | `/admin/settings` (`ad_price_text_cents`) |
-| Picture ad (up to 4 pictures, collage on SMS, originals on web) | **$60** | `/admin/settings` (`ad_price_photo_cents`) |
-| Picture upgrade on a text ad (photo texted later) | price difference ($15) | derived |
-| Website listing add-on | **+$15 — FREE at launch** (`web_addon_cents` = 0; flip to 1500 to charge) | `/admin/settings` |
-| Starter credit (every new member, granted on FIRST post) | **$150** | `/admin/settings` (`starter_credit_cents`) |
-| Re-runs (BUMP) | **REMOVED — feature gone** (user decision: "completely gone, from everywhere") | — |
+| Text ad (up to 250 chars) | **$20** | `/admin/settings` (`ad_price_text_cents`) |
+| Picture ad, 1 picture | **$30** | `ad_price_photo_cents_by_count` |
+| Picture ad, 2 pictures | **$40** | same |
+| Picture ad, 3 pictures | **$50** | same |
+| Starter credit — LAUNCH OFFER, first 200 members to post | **$40** | `starter_credit_cents` / `starter_credit_limit` |
+| Website listing add-on | **+$15 — FREE at launch** (`web_addon_cents` = 0) | `/admin/settings` |
+| Re-runs (BUMP) | **REMOVED — feature gone** | — |
 | Sponsorship, 1 week | **$199** | `lib/business-packages.ts` (code) |
 | Sponsorship, 2 weeks | **$349** | code |
 | Sponsorship, 3 weeks | **$479** | code |
 | Sponsorship, 4 weeks | **$599** | code |
-| Subscribing (SMS + email), browsing, PIC pulls | free (unchanged) | — |
+| Subscribing (SMS + email), browsing, PIC pulls | free | — |
 
-All money is stored in **cents** in the credit ledger (`credit_ledger.delta`);
-the balance is dollar-denominated "ad credit". Migration `9973` converts
-legacy credit-era rows (×100) and legacy free-ad passes ($60 each — a pass
-covered any ad type).
+**Three pictures is the maximum** an ad can carry: the sheet stops there, so
+an ad must never carry a picture nobody was charged for.
+
+### Why it changed twice in one day
+
+The first sheet ($45/$60) was priced against the PRINT competitor ($65 with
+pictures, $45 text). Then a second competitor surfaced doing exactly what
+this service does — classifieds by text — at **$15 text / $20 one picture /
+$30 two-to-three, with $20 of free credit**. Being 3x a direct substitute in
+a community that compares notes is not a position worth holding, so the sheet
+was rebuilt around picture count and the starter credit became a bounded
+launch offer. $150-then-$45 was the worst of both worlds: a generous trial
+ending in a cliff exactly where a free user becomes a paying one.
+
+### Pictures do NOT ride the broadcast
+
+`photos_in_broadcast` is **false**. An ad says "Reply PIC 12" and the picture
+goes only to those who ask. The arithmetic: MMS costs ~$0.035 per subscriber,
+so auto-sending a $30 picture ad stops breaking even near **850
+subscribers**, while an on-demand pull costs that only for the few who want
+it. The website carries every picture, which is what makes the trade
+comfortable — and the welcome text says so.
+
+All money is stored in **cents** in the credit ledger (`credit_ledger.delta`).
 
 ## How sellers pay (user decision, session 016)
 

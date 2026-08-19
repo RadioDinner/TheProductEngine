@@ -14,29 +14,78 @@ import {
   partitionKey,
   toggleCategory,
   welcomeMenu,
+  menuChoice,
+  menuLines,
 } from "../lib/categories.ts";
 import { parseCommand } from "../lib/commands.ts";
 
 export const name = "categories";
 
 export function run(t) {
-  // ---- the approved welcome menu (item 22) — verbatim guard ----
+  // ---- the welcome menu (item 22, renumbered session 016) — verbatim ----
+  // Every number in this text comes from Settings; hardcoding a price, an
+  // hour or an amount here is what the guard exists to catch.
   t.eq(
     "welcome menu verbatim",
-    welcomeMenu("The Plain Exchange"),
-    "Welcome to The Plain Exchange! Pick what you want ads for - text one word per message:\n" +
-      "ALL - every ad\n" +
-      "BUGGIES - buggies & bikes\n" +
-      "DOGS - dogs & puppies\n" +
-      "GARDEN - lawn & garden\n" +
-      "HORSES - horses & tack\n" +
-      "HOUSEHOLD - household, furniture, realty\n" +
-      "HUNTING - hunting, fishing, camping\n" +
-      "LIVESTOCK - goats, ponies, small animals\n" +
-      "MACHINERY - machinery & equipment\n" +
-      "WANTED - wanted & everything else\n" +
+    welcomeMenu({
+      siteName: "The Plain Exchange",
+      siteUrl: "ThePlainExchange.com",
+      starterCreditLabel: "$40",
+      windowLabel: "7am-9pm Mon-Sat",
+      priceLine: "Text ad $20; 1 pic $30, 2 pics $40, 3 pics $50.",
+    }),
+    "Welcome to The Plain Exchange! Ads come by text as soon as they're posted, 7am-9pm Mon-Sat.\n" +
+      "Your first ads are on us: $40 of free ad credit when you post your first one. Text ad $20; 1 pic $30, 2 pics $40, 3 pics $50.\n" +
+      "Every ad is also on ThePlainExchange.com with all its pictures, where you can sign up for email too.\n" +
+      "\n" +
+      "Pick what you want ads for - reply with a number (or the word):\n" +
+      "1 - ALL, every ad\n" +
+      "2 - buggies & bikes (BUGGIES)\n" +
+      "3 - dogs & puppies (DOGS)\n" +
+      "4 - lawn & garden (GARDEN)\n" +
+      "5 - horses & tack (HORSES)\n" +
+      "6 - household, furniture, realty (HOUSEHOLD)\n" +
+      "7 - hunting, fishing, camping (HUNTING)\n" +
+      "8 - goats, ponies, small animals (LIVESTOCK)\n" +
+      "9 - machinery & equipment (MACHINERY)\n" +
+      "10 - wanted & everything else (WANTED)\n" +
       "Text HELP for help. Text STOP to end.",
   );
+  // Once the launch offer is spent the welcome must stop advertising it.
+  t.eq(
+    "no offer -> no free-credit line",
+    welcomeMenu({
+      siteName: "X",
+      siteUrl: "x.com",
+      starterCreditLabel: null,
+      windowLabel: "7am-9pm Mon-Sat",
+      priceLine: "Text ad $20.",
+    }).includes("free ad credit"),
+    false,
+  );
+
+  // ---- numbered picks: the headline way in on a flip phone ----
+  t.eq("1 is ALL", menuChoice("1"), "all");
+  t.eq("2 is the first category", menuChoice("2"), "buggies");
+  t.eq("10 is the last category", menuChoice("10"), "wanted");
+  t.eq("0 is nothing", menuChoice("0"), null);
+  t.eq("11 is past the end", menuChoice("11"), null);
+  // The words never stop working — people who learned them, and the menu's
+  // own parentheses, both depend on it.
+  t.eq("the word still works", menuChoice("HORSES"), "horses");
+  t.eq("all by word", menuChoice("all"), "all");
+  t.eq("nonsense is nothing", menuChoice("banana"), null);
+  // The numbering must follow the menu it prints, or a reply picks the wrong
+  // category — the one bug in here that silently mis-subscribes people.
+  const lines = menuLines();
+  t.eq("a line per choice", lines.length, CATEGORY_KEYS.length + 1);
+  for (let i = 2; i <= CATEGORY_KEYS.length + 1; i += 1) {
+    t.eq(`menu line ${i} matches choice ${i}`, lines[i - 1].startsWith(`${i} - `), true);
+    t.eq(`choice ${i} is a real category`, CATEGORY_KEYS.includes(menuChoice(String(i))), true);
+  }
+  // A bare number must reach the toggle through the real parser too.
+  t.eq("parser accepts a number", parseCommand("3"), { kind: "category", category: "dogs" });
+  t.eq("number with words -> unknown", parseCommand("3 horses").kind, "unknown");
 
   // ---- parsing (case-insensitive, exact word) ----
   t.eq("HORSES parses", parseCommand("HORSES"), { kind: "category", category: "horses" });

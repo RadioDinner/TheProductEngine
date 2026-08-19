@@ -501,7 +501,7 @@ export default async function AccountPage({
         {subscribed ? (
           <>
             <p>
-              You’re subscribed — new ads come to {formatPhone(session.phone)} up to four
+              You’re subscribed — new ads come to {formatPhone(session.phone)} as they’re posted, seven
               times a day.
             </p>
             <form action={toggleSubscription}>

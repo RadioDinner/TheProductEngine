@@ -35,6 +35,7 @@ import {
   getSmsContext,
   getSubscriberCategories,
   grantStarterCreditIfFirst,
+  starterCreditAvailable,
   recordSale,
   reserveCategoryConfirm,
   reservePicQuota,
@@ -132,7 +133,19 @@ function welcomeMessage(settings: EngineSettings): string {
 async function welcomeFor(from: string, settings: EngineSettings): Promise<string> {
   const categories = await getSubscriberCategories(from);
   if (categories === "unsupported") return welcomeMessage(settings);
-  return gsmSanitize(welcomeMenu(site.name));
+  // Whether the launch offer is still open decides whether the welcome
+  // advertises it — promising free credit past the 200th member would be a
+  // lie the very next message corrects.
+  const offerOpen = await starterCreditAvailable(settings.starterCreditLimit);
+  return gsmSanitize(
+    welcomeMenu({
+      siteName: site.name,
+      siteUrl: site.webHost,
+      starterCreditLabel: offerOpen ? formatPrice(settings.starterCreditCents) : null,
+      windowLabel: `${hourLabel(settings.smsWindowStartHour)}-${hourLabel(settings.smsWindowEndHour)} Mon-Sat`,
+      priceLine: priceSheetLine(settings),
+    }),
+  );
 }
 
 function fmtDate(d: Date): string {

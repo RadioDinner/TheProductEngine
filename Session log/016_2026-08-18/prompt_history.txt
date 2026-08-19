@@ -239,3 +239,9 @@ I want that changed to honor my 7am to 8pm sending times. And I want my categori
 Should I change the picture management? One competitor has vastly more expensive ads ($65 for a picture ad, $45 for text) and he sends the pictures automatically with each one. My other competitor has users send PIC for a picture. How should I handle mine? I want it to scale well, and part of me says I should go back to the send /PIC for a picture.
 I also want to enhance my welcome message. I want to tell people that the ads also get posted to the website, where they can see more pictures if they want to. And maybe that decides the picture question. People could see unlimited pictures on the website if my system has people reply /PIC for pictures. All they need to do is go to ThePlainExchange.com for more pictures and to sign up for optional email subscription as well. I want to completely remove the Holmes County from the branding, as that would limit my reach (per an amish guy I spoke with today about it).
 Actually I've decided on my pricing. I want a text ad to be $20, 1 pic $30, 2 pics $40 and 3 pics $50. The first 200 subscribers get $40 free ad credit.
+
+--- prompt (2026-08-19, continued session) ---
+Send window 7am to 9pm.
+Ok well I am going to say that people need to use /PIC to get the picture of the ad they want.
+also, rewrite the add money slots.
+Now, you said the welcome message isn't yours to change, but it is, where else does this "Welcome to The Plain Exchange! Pick what you want ads for - text one word per message: [menu]" come from?

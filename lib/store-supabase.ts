@@ -998,6 +998,24 @@ export async function markChatRead(chatId: number, phone: string): Promise<void>
   if (error && !chatSchemaMissing(error)) throw error;
 }
 
+/** Is the launch offer still open? Used by the welcome copy so it never
+ * advertises credit the 201st member will not receive. Errors read as OPEN:
+ * the offer is the friendlier failure, and the grant itself re-checks. */
+export async function starterCreditAvailable(limit: number): Promise<boolean> {
+  if (limit <= 0) return true;
+  try {
+    const { count, error } = await db()
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .not("starter_granted_at", "is", null);
+    if (error) throw error;
+    return (count ?? 0) < limit;
+  } catch (e) {
+    console.error("[store] starter-offer count failed:", e);
+    return true;
+  }
+}
+
 export async function grantStarterCreditIfFirst(
   phone: string,
   amountCents: number,

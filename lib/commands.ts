@@ -2,6 +2,7 @@
  * Tolerant SMS command parser (spec Q13): case-insensitive, slash optional,
  * forgiving about the AD NEW keyword and stray whitespace.
  */
+import { menuChoice } from "@/lib/categories";
 
 export type Command =
   | { kind: "subscribe" }
@@ -145,12 +146,16 @@ export function parseCommand(raw: string): Command {
       if (m) return parseCommand(`AD NEW ${rest.slice(m[0].length)}`);
       return { kind: "unknown", text };
     }
-    default:
-      // Category words (item 22) — exact single word only, so a real message
+    default: {
+      // Category picks (item 22) — exact single token only, so a real message
       // that merely STARTS with one ("horses for sale?") is never a toggle.
-      if (!rest && CATEGORY_WORDS.has(word)) {
-        return { kind: "category", category: word };
-      }
+      // Since session 016 the welcome menu is NUMBERED, so a bare "3" is a
+      // pick too; menuChoice maps numbers and words to the same keys.
+      if (rest) return { kind: "unknown", text };
+      if (CATEGORY_WORDS.has(word)) return { kind: "category", category: word };
+      const numbered = /^\d+$/.test(word) ? menuChoice(word) : null;
+      if (numbered) return { kind: "category", category: numbered };
       return { kind: "unknown", text };
+    }
   }
 }
