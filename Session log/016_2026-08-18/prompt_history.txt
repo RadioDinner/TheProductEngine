@@ -148,3 +148,9 @@ This is what I see when I click "Connect with stripe"
 
 --- prompt (2026-08-19, continued session) ---
 It just creates another stripe account :(
+
+--- prompt (2026-08-19, continued session) ---
+[screenshot: same Stripe OAuth screen, now showing "The Plain Exchange - Created
+Aug 5, 2025" selected among 6 entries; signed in as derricktwengerd@gmail.com]
+Bro, I renamed the "right" account and I can see it, but it only gives me the
+option to create or create new account. Those two options alone
