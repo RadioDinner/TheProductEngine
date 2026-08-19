@@ -14,12 +14,12 @@ import { ensureAccount, reserveRevealQuota } from "@/lib/store";
 import { getEngineSettings } from "@/lib/settings";
 import { isAdminPhone } from "@/lib/admin";
 import { etParts } from "@/lib/et";
+import { requireMemberPhone } from "@/lib/member-gate";
 
 export async function revealNumber(formData: FormData): Promise<void> {
   const adId = Number(formData.get("adId"));
   if (!Number.isInteger(adId) || adId <= 0) redirect("/");
-  const session = await readSession();
-  if (!session) redirect(`/login?next=${encodeURIComponent(`/ad/${adId}`)}`);
+  const session = { phone: await requireMemberPhone(`/ad/${adId}`) };
   const ad = await getAd(adId);
   if (!ad) redirect("/");
   // Owners and the operator already see their numbers unmetered — nothing to do.

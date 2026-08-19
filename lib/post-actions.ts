@@ -47,6 +47,7 @@ import { MAX_PHOTOS_PER_AD } from "@/lib/email-photos";
 import { notifyAdminNewAd } from "@/lib/notify";
 import { formatPhone } from "@/lib/phone";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
+import { requireMemberPhone } from "@/lib/member-gate";
 
 
 /**
@@ -90,9 +91,7 @@ export async function postAd(formData: FormData): Promise<void> {
 }
 
 async function postAdInner(formData: FormData): Promise<void> {
-  const session = await readSession();
-  if (!session) redirect("/login?next=%2Faccount%2Fpost");
-  const phone = session.phone;
+  const phone = await requireMemberPhone("/account/post");
 
   // Mirrors lib/engine.ts handleAdSubmission step for step from here on.
   const account = await ensureAccount(phone);

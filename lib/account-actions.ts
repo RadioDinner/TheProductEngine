@@ -23,12 +23,9 @@ import { getAd } from "@/lib/ads";
 import { storeImageBytes } from "@/lib/photos";
 import { sniffImage, CONTENT_TYPE_BY_EXT } from "@/lib/image-sniff";
 import { supabaseConfigured } from "@/lib/db";
+import { requireMemberPhone } from "@/lib/member-gate";
 
-async function requirePhone(): Promise<string> {
-  const session = await readSession();
-  if (!session) redirect("/login?next=%2Faccount");
-  return session.phone;
-}
+const requirePhone = () => requireMemberPhone("/account");
 
 // ---------- profile + chat entry (FEATURES items 3 & 4) ----------
 // Sending/reporting inside a thread lives in lib/chat-actions.ts (items 13–15).

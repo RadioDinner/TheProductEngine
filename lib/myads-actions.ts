@@ -55,6 +55,7 @@ import {
   picReplaceFrom,
 } from "@/lib/myads";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
+import { requireMemberPhone } from "@/lib/member-gate";
 
 const BACK = "/account/ads";
 const HOUR_MS = 60 * 60 * 1000;
@@ -67,12 +68,11 @@ const RATE_CONTEXT_MS = 7 * 24 * HOUR_MS;
  * signed out.
  */
 async function requireMyAd(formData: FormData): Promise<{ phone: string; ad: StoredAd }> {
-  const session = await readSession();
-  if (!session) redirect("/login?next=%2Faccount%2Fads");
+  const phone = await requireMemberPhone("/account/ads");
   const id = Number(formData.get("id"));
   const ad = Number.isInteger(id) && id > 0 ? await getAdRecord(id) : null;
-  if (!ad || ad.ownerPhone !== session.phone) redirect(`${BACK}?error=notyours`);
-  return { phone: session.phone, ad };
+  if (!ad || ad.ownerPhone !== phone) redirect(`${BACK}?error=notyours`);
+  return { phone, ad };
 }
 
 /**

@@ -24,6 +24,7 @@ import {
 import { site } from "@/lib/config";
 import { devToolsEnabled } from "@/lib/env";
 import { safeNextPath } from "@/lib/safe-next";
+import { isBlockedNumber } from "@/lib/blocklist";
 
 const safeNext = (raw: FormDataEntryValue | null) => safeNextPath(raw);
 
@@ -38,6 +39,12 @@ function landing(next: string): string {
 }
 
 async function issueCode(phone: string, next: string): Promise<never> {
+  // Refuse before spending a code (and a segment) on a number we already
+  // threw out. dispatchSms would drop the text anyway, but the member would
+  // see a generic "couldn't send" and keep retrying.
+  if (await isBlockedNumber(phone)) {
+    redirect(loginUrl({ phone, next, error: "blocked" }));
+  }
   // Only persist the plaintext OTP for on-screen echo when dev tools are on —
   // never store it in a production DB just because Telnyx isn't wired yet.
   const result = await createCode(phone, smsDevEcho && devToolsEnabled);
@@ -113,6 +120,13 @@ export async function submitPassword(formData: FormData): Promise<void> {
   const account = await getAccount(phone);
   if (!account?.passwordHash || !verifyPassword(password, account.passwordHash)) {
     redirect(loginUrl({ step: "password", phone, next, error: "password" }));
+  }
+  // The password lane sends no SMS, so the outbound blocklist check never sees
+  // it — without this, a blocked number that had ever set a password could
+  // still sign in and act on the website. Checked AFTER the password so a
+  // wrong guess can't be used to probe who is blocked.
+  if (await isBlockedNumber(phone)) {
+    redirect(loginUrl({ phone, next, error: "blocked" }));
   }
   await createSession(phone);
   redirect(landing(next));

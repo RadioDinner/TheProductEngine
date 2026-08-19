@@ -31,6 +31,10 @@ const ERRORS: Record<string, string> = {
   weak: "Passwords need at least 8 characters.",
   ticket: "That step timed out — start again with your phone number.",
   sms: "We couldn't send a text message just now. Wait a few minutes and try again, or call us for help.",
+  // Deliberately vague about WHY, and it names a way to reach a person: the
+  // operator blocks numbers by hand, so a mistake is possible and the member
+  // needs somewhere to go that isn't this page.
+  blocked: "This number can't sign in. If you think that's a mistake, call us and we'll sort it out.",
 };
 
 export default async function LoginPage({

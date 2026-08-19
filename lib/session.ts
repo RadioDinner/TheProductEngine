@@ -28,21 +28,35 @@ function getSecret(): string {
   return "dev-secret-not-for-production";
 }
 
-function sign(payload: string): string {
-  return createHmac("sha256", getSecret()).update(payload).digest("hex");
+/**
+ * The signature is bound to the token's KIND, not just its contents.
+ *
+ * Without this, a session cookie and a set-password ticket were byte-identical
+ * constructions — same payload shape, same key — so either verified as the
+ * other. Nothing exploitable followed today (both are httpOnly and only the
+ * verified owner ever holds one, and a ticket holder can mint a session
+ * legitimately anyway), but two token types that are cryptographically
+ * interchangeable is a trap waiting for the third token type: the moment one
+ * is added with different privileges or a different lifetime, swapping them
+ * becomes a real escalation. Domain separation costs one string.
+ */
+type TokenKind = "session" | "ticket";
+
+function sign(kind: TokenKind, payload: string): string {
+  return createHmac("sha256", getSecret()).update(`${kind}.${payload}`).digest("hex");
 }
 
-function pack(phone: string): string {
+function pack(kind: TokenKind, phone: string): string {
   const payload = `${phone}.${Date.now()}`;
-  return `${payload}.${sign(payload)}`;
+  return `${payload}.${sign(kind, payload)}`;
 }
 
-function unpack(value: string, maxAgeMs: number): string | null {
+function unpack(kind: TokenKind, value: string, maxAgeMs: number): string | null {
   const parts = value.split(".");
   if (parts.length !== 3) return null;
   const [phone, issuedAt, mac] = parts;
   const payload = `${phone}.${issuedAt}`;
-  const expected = Buffer.from(sign(payload));
+  const expected = Buffer.from(sign(kind, payload));
   const actual = Buffer.from(mac);
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null;
   if (Date.now() - Number(issuedAt) > maxAgeMs) return null;
@@ -57,14 +71,14 @@ export async function readSession(): Promise<Session | null> {
   const jar = await cookies();
   const value = jar.get(SESSION_COOKIE)?.value;
   if (!value) return null;
-  const phone = unpack(value, SESSION_TTL_S * 1000);
+  const phone = unpack("session", value, SESSION_TTL_S * 1000);
   return phone ? { phone } : null;
 }
 
 /** Call from a Server Action only. */
 export async function createSession(phone: string): Promise<void> {
   const jar = await cookies();
-  jar.set(SESSION_COOKIE, pack(phone), {
+  jar.set(SESSION_COOKIE, pack("session", phone), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -81,7 +95,7 @@ export async function destroySession(): Promise<void> {
 /** Short-lived proof that a code was just verified (gates set-password). */
 export async function createTicket(phone: string): Promise<void> {
   const jar = await cookies();
-  jar.set(TICKET_COOKIE, pack(phone), {
+  jar.set(TICKET_COOKIE, pack("ticket", phone), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -93,7 +107,7 @@ export async function createTicket(phone: string): Promise<void> {
 export async function readTicket(): Promise<string | null> {
   const jar = await cookies();
   const value = jar.get(TICKET_COOKIE)?.value;
-  return value ? unpack(value, TICKET_TTL_S * 1000) : null;
+  return value ? unpack("ticket", value, TICKET_TTL_S * 1000) : null;
 }
 
 export async function destroyTicket(): Promise<void> {

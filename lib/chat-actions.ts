@@ -38,6 +38,7 @@ import { storeImageBytes } from "@/lib/photos";
 import { supabaseConfigured } from "@/lib/db";
 import { site } from "@/lib/config";
 import { siteUrl } from "@/lib/email";
+import { requireMemberPhone } from "@/lib/member-gate";
 
 export type ChatActionResult =
   | { ok: true; message: ChatMessageView }
@@ -47,11 +48,7 @@ export type ChatActionResult =
  * scan still greps for it; post-9980 the users.chat_nudged_at column rules. */
 const CHAT_NUDGE_MARKER = "message waiting for you";
 
-async function requirePhone(): Promise<string> {
-  const session = await readSession();
-  if (!session) redirect("/login?next=%2Faccount%2Fmessages");
-  return session.phone;
-}
+const requirePhone = () => requireMemberPhone("/account/messages");
 
 /**
  * Audit copy of a chat message into the operator's message log (item 13 —

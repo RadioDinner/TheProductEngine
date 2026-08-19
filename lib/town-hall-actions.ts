@@ -27,10 +27,10 @@ import {
   eventDateVerdict,
 } from "@/lib/town-hall";
 import { submitEvent } from "@/lib/town-hall-store";
+import { requireMemberPhone } from "@/lib/member-gate";
 
 export async function submitTownHallEvent(formData: FormData): Promise<void> {
-  const session = await readSession();
-  if (!session) redirect("/login?next=%2Ftown-hall");
+  const session = { phone: await requireMemberPhone("/town-hall") };
 
   // Same posting-ban gate as every submission lane.
   const account = await ensureAccount(session.phone);
