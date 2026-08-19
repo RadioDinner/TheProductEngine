@@ -33,3 +33,10 @@ Can I use an AI answering service to take down credit card numbers?
 
 --- 2026-08-18 (follow-up) ---
 ok lets go back to testing the stripe thing or whatever you said wasn't working. Also at one point I had a system planned or created for people to call in and add a card. Is this all one thing? Make another to do list to work on these items
+
+--- 2026-08-18 (follow-up) ---
+I ran the migration and I'm getting a 500: This page couldn't load
+
+A server error occurred. Reload to try again.
+
+What happened?
