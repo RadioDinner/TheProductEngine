@@ -129,8 +129,12 @@ live payments, or checkout starts erroring.**
    money without granting credit), and set the statement descriptor so
    members recognize the charge on a bank statement.
 2. Developers → API keys → copy the new `sk_live_…`.
-3. Developers → Webhooks → add `https://<site>/api/stripe/webhook` with the
-   `checkout.session.completed` event → copy the new `whsec_…`.
+3. Workbench → Webhooks → **Add destination** ("event destination" is
+   Stripe's current name for a webhook endpoint): event
+   `checkout.session.completed`, payload style **Snapshot** (NOT "thin" —
+   the handler reads the full session's amount and metadata), destination
+   type **Webhook endpoint**, URL `https://<site>/api/stripe/webhook`. Reveal
+   and copy the new `whsec_…`. Confirm the dashboard is in LIVE mode first.
 4. Vercel → replace `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` → redeploy.
 5. Supabase SQL editor: `update users set stripe_customer_id = null;` — those
    ids point into the OLD account and would fail with "No such customer".

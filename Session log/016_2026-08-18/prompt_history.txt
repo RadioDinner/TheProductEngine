@@ -163,3 +163,6 @@ No, I want to keep the call in 1 card capture. the text them the link won't work
 
 --- prompt (2026-08-19, continued session) ---
 Ok, the stripe account on Twilio is now acct_1U6DyY3cJ9GPOvgC and I'm working on that one in stripe atm. I dont see a Developers > Webhooks > Add endpoint option
+
+--- prompt (2026-08-19, continued session) ---
+Ok, I'm there now and it has teh option to "Add destination"
