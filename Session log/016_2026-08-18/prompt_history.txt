@@ -112,3 +112,6 @@ Voice/PCI Mode in this console.]
 
 --- prompt (2026-08-19, continued session) ---
 found it and added it
+
+--- prompt (2026-08-19, continued session) ---
+ADded those other ring to and redployed
