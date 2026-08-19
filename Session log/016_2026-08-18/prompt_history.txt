@@ -99,3 +99,7 @@ is this the TWILIO_AUTH_TOKEN?
 
 --- prompt (2026-08-19, continued session) ---
 I hafe the voice confioguration webhook saved
+
+--- prompt (2026-08-19, continued session) ---
+[screenshot: 1Console Account settings -> SECURITY tab shows only HIPAA and
+Public key validation, no auth token] these are my options...
