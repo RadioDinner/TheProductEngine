@@ -74,7 +74,7 @@ import { MAX_COMBINED_PHOTOS, collageDimensions, combineImageBuffers } from "@/l
 import { sniffImage } from "@/lib/image-sniff";
 import { siteUrl } from "@/lib/email";
 import { supabaseConfigured } from "@/lib/db";
-import { autoTopUpShortfall } from "@/lib/payments";
+import { autoTopUpShortfall, resolveStripeCustomer } from "@/lib/payments";
 import { dispatchSms } from "@/lib/outbound";
 import { isBlockedNumber } from "@/lib/blocklist";
 import { notifyAdminNewAd } from "@/lib/notify";
@@ -161,11 +161,14 @@ async function coverShortfallWithCard(
   account: Account,
   shortfallCents: number,
 ): Promise<{ charged: number; last4?: string; declineReason?: string }> {
-  if (!account.stripeCustomerId) return { charged: 0 };
   if (!(await getAutoTopUp(from))) return { charged: 0 };
+  // A member with no stored customer may still have a card saved by PHONE
+  // (the pay-by-phone IVR) — resolveStripeCustomer adopts it on first use.
+  const customerId = await resolveStripeCustomer(from, account.stripeCustomerId);
+  if (!customerId) return { charged: 0 };
   const result = await autoTopUpShortfall({
     phone: from,
-    customerId: account.stripeCustomerId,
+    customerId,
     shortfallCents,
   });
   if (!result.ok) {

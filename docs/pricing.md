@@ -44,6 +44,15 @@ covered any ad type).
    a phone conversation (Adjust balance), or bills the saved card, or texts
    a checkout link. BUYCREDIT/YES by text was REMOVED (auto top-up replaces
    it); the saved-card discount was removed with it.
+5. **Call-in card capture** (FEATURES item 31, bridge built session 016) —
+   the standalone pay-by-phone IVR (`pay-by-phone/`) saves a card the caller
+   keys on their phone keypad; the app then ADOPTS that card automatically
+   (`resolveStripeCustomer` searches Stripe by `metadata['phone']` = the
+   E.164 caller id and stamps the member's `stripeCustomerId`) wherever a
+   charge is attempted: auto top-up, admin "Bill their saved card", and the
+   admin user view. Hard requirement: the IVR service and the app must use
+   the SAME Stripe account/secret key. The IVR deploy itself (Twilio number,
+   PCI Mode, Stripe Pay Connector) is ops — see pay-by-phone/README.md.
 
 ## Why these numbers hold up (delivery-cost reality)
 

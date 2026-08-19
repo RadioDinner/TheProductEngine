@@ -50,6 +50,18 @@ tokens (`Ad #<id> (<kind>)`) unchanged — they're an API.
 - **Environment note:** the Workflow tool is STILL broken in this container
   class (session-015 permission-handler bug, reproduced 7/7 agents +
   critic). Everything was mined/built inline again.
+- **Pay-by-phone bridge BUILT (same session, follow-up):** the session-012
+  seam is closed — `resolveStripeCustomer` (lib/payments.ts) adopts an
+  IVR-saved card by searching Stripe `metadata['phone']:'+1<ten>'` and
+  stamping the member's `stripeCustomerId`; wired into engine auto top-up,
+  web-post top-up, admin Bill-their-saved-card, and the admin user view
+  (card shows as "on file" as soon as the call-in card lands). Requires the
+  IVR service and the app to share ONE Stripe account. `/api/health` env now
+  reports STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET presence. The IVR deploy
+  itself (own Twilio number/subaccount + PCI Mode + Stripe Pay Connector,
+  per pay-by-phone/README.md) is still on the user; its confirmation-SMS
+  copy ("Text us what you need and we'll order it") predates this product —
+  reword at deploy time.
 - Ops queue: **Stripe prod config remains the launch blocker** (checklist
   re-delivered in chat this session); migration 9974 paste + 9980 re-paste
   still on the user (see Session 014), now joined by **9973**.

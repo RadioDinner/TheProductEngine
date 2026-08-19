@@ -110,3 +110,29 @@ too). Mined and built inline instead, same as session 015.
 4. FAQ's old "first 200 subscribers" cap was never enforced in code and was
    dropped from the copy — the starter credit now goes to every new member's
    first post. Flag if the 200-member cap should be real.
+
+## Follow-up (same session): the pay-by-phone ↔ member-account bridge
+
+The user asked whether "the Stripe thing" and the call-in add-a-card system
+are one thing (they're three related pieces — clarified in chat) and for a
+combined to-do list. Built the code half on the spot (the session-012 seam):
+
+- `resolveStripeCustomer(phone, storedId)` / `adoptPhoneSavedCustomer` in
+  lib/payments.ts — searches Stripe customers by `metadata['phone']:'+1<ten>'`
+  (exactly how pay-by-phone/server.js keys them; verified against the file)
+  and stamps the member's stripeCustomerId. Best-effort: search-index lag
+  (~1 min) or any error reads as "no card yet". Only IVR customers carry the
+  phone metadata, so web-checkout customers can't be mis-adopted.
+- Wired everywhere a charge is attempted: engine coverShortfallWithCard,
+  web-post auto top-up, adminBillSavedCard, and the /admin/users card
+  display (the operator sees "Card on file" as soon as the call-in card
+  lands). The member /account page shows the auto-top-up toggle only after
+  first adoption (deliberate — no Stripe search per page render).
+- /api/health env section now reports STRIPE_SECRET_KEY and
+  STRIPE_WEBHOOK_SECRET presence (the launch-blocker at a glance).
+- pay-by-phone/server.js deliberately UNTOUCHED (separate deploy); flagged:
+  its confirmation-SMS copy predates this product — reword at deploy time.
+- Hard requirement documented everywhere: BOTH deployments must share ONE
+  Stripe account/secret key.
+
+Verified: tsc clean, build clean, unit 522/522, abuse 19/19.

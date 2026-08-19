@@ -30,3 +30,6 @@ Q "At $45-60 an ad, how does a seller actually hand you money?" -> "Every new ac
 
 --- 2026-08-18 (follow-up) ---
 Can I use an AI answering service to take down credit card numbers?
+
+--- 2026-08-18 (follow-up) ---
+ok lets go back to testing the stripe thing or whatever you said wasn't working. Also at one point I had a system planned or created for people to call in and add a card. Is this all one thing? Make another to do list to work on these items

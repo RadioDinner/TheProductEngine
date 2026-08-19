@@ -62,6 +62,10 @@ export async function GET(req: NextRequest) {
       TELNYX_FROM_NUMBER: fromNumberKind(process.env.TELNYX_FROM_NUMBER),
       TELNYX_MESSAGING_PROFILE_ID: Boolean(process.env.TELNYX_MESSAGING_PROFILE_ID),
       RESEND_API_KEY: Boolean(process.env.RESEND_API_KEY),
+      // The launch blocker (LAUNCH §A2/A6): both must be true for ANY money
+      // to move — checkout, auto top-up, business packages, phone orders.
+      STRIPE_SECRET_KEY: Boolean(process.env.STRIPE_SECRET_KEY),
+      STRIPE_WEBHOOK_SECRET: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
     },
   };
 

@@ -26,7 +26,7 @@ import {
   grantStarterCreditIfFirst,
   spendCredits,
 } from "@/lib/store";
-import { autoTopUpShortfall } from "@/lib/payments";
+import { autoTopUpShortfall, resolveStripeCustomer } from "@/lib/payments";
 import { formatPrice } from "@/lib/config";
 import {
   addPhotoSubmission,
@@ -154,19 +154,23 @@ async function postAdInner(formData: FormData): Promise<void> {
   );
   let balance = await getCreditBalance(phone);
   // Automatic top-up: the saved card (toggle on) covers the shortfall before
-  // any ad record exists — a declined card is a clean refusal.
+  // any ad record exists — a declined card is a clean refusal. A card saved
+  // by PHONE (pay-by-phone IVR) is adopted here too, via resolveStripeCustomer.
   let toppedUp = 0;
-  if (balance < cost && starter.account.stripeCustomerId && (await getAutoTopUp(phone))) {
-    const topUp = await autoTopUpShortfall({
-      phone,
-      customerId: starter.account.stripeCustomerId,
-      shortfallCents: cost - balance,
-    });
-    if (topUp.ok) {
-      toppedUp = topUp.chargedCents;
-      balance += toppedUp;
-    } else {
-      console.warn(`[post] auto top-up failed for ${phone}: ${topUp.reason}`);
+  if (balance < cost && (await getAutoTopUp(phone))) {
+    const customerId = await resolveStripeCustomer(phone, starter.account.stripeCustomerId);
+    if (customerId) {
+      const topUp = await autoTopUpShortfall({
+        phone,
+        customerId,
+        shortfallCents: cost - balance,
+      });
+      if (topUp.ok) {
+        toppedUp = topUp.chargedCents;
+        balance += toppedUp;
+      } else {
+        console.warn(`[post] auto top-up failed for ${phone}: ${topUp.reason}`);
+      }
     }
   }
   // Fast reject for the clearly-unfunded; the atomic charge below is the

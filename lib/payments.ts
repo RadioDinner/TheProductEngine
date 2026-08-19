@@ -6,7 +6,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { formatPrice, site } from "@/lib/config";
-import { addLedgerEntry } from "@/lib/store";
+import { addLedgerEntry, setStripeCustomerId } from "@/lib/store";
 import { devToolsEnabled } from "@/lib/env";
 
 export const paymentsDevMode = !process.env.STRIPE_SECRET_KEY;
@@ -135,6 +135,63 @@ export async function savedCardOnFile(
     console.error("[payments] saved-card lookup failed:", e);
     return null;
   }
+}
+
+/**
+ * The pay-by-phone bridge (FEATURES item 31, seam recorded session 012,
+ * built session 016). The standalone call-in card service (pay-by-phone/)
+ * saves cards onto Stripe customers it keys by the CALLER ID in
+ * metadata['phone'] — E.164, e.g. "+13305551234" — while this app knows
+ * members by their 10-digit phone and charges via the account's stored
+ * stripeCustomerId. This looks up the IVR-created customer for a member who
+ * has none stored, ADOPTS it (stamps users.stripe_customer_id), and returns
+ * it — after which auto top-up and admin billing work exactly as if the
+ * card had been saved through web checkout. Only IVR customers carry the
+ * phone metadata (web-checkout customers don't), so the search is
+ * unambiguous. Requires BOTH deployments to share ONE Stripe account.
+ * Best-effort by design: Stripe's search index can lag ~1 minute behind a
+ * just-saved card, and any error reads as "no card yet".
+ */
+export async function adoptPhoneSavedCustomer(phone: string): Promise<string | null> {
+  if (paymentsDevMode) return null;
+  const query = `metadata['phone']:'+1${phone}'`;
+  let found: { id: string }[];
+  try {
+    const response = await fetch(
+      `https://api.stripe.com/v1/customers/search?query=${encodeURIComponent(query)}&limit=2`,
+      { headers: { Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}` } },
+    );
+    if (!response.ok) {
+      console.error(`[payments] phone-customer search failed (${response.status}): ${await response.text()}`);
+      return null;
+    }
+    found = ((await response.json()) as { data?: { id: string }[] }).data ?? [];
+  } catch (e) {
+    console.error("[payments] phone-customer search failed:", e);
+    return null;
+  }
+  if (!found.length) return null;
+  if (found.length > 1) {
+    // The IVR finds-or-creates one customer per phone, so this is unexpected —
+    // adopt the first hit but leave a trail for the operator.
+    console.warn(`[payments] multiple Stripe customers carry phone +1${phone}; adopting ${found[0].id}`);
+  }
+  await setStripeCustomerId(phone, found[0].id);
+  return found[0].id;
+}
+
+/**
+ * The member's Stripe customer for charging: the account's stored id, else
+ * the pay-by-phone customer adopted by phone search (null = truly no card
+ * path). Every charge site goes through this so a call-in card works
+ * everywhere a web-saved card does.
+ */
+export async function resolveStripeCustomer(
+  phone: string,
+  storedId: string | null | undefined,
+): Promise<string | null> {
+  if (storedId) return storedId;
+  return adoptPhoneSavedCustomer(phone);
 }
 
 /** The customer's first saved card (id + last4), or null if none is on file. */

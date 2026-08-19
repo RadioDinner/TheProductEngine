@@ -18,7 +18,12 @@ import {
 import { headers } from "next/headers";
 import { dispatchSms } from "@/lib/outbound";
 import { formatPrice, isTopUpPreset, site } from "@/lib/config";
-import { chargeSavedCard, createCheckoutSession, paymentsDevMode } from "@/lib/payments";
+import {
+  chargeSavedCard,
+  createCheckoutSession,
+  paymentsDevMode,
+  resolveStripeCustomer,
+} from "@/lib/payments";
 import { devToolsEnabled } from "@/lib/env";
 import {
   addWordRule,
@@ -315,7 +320,11 @@ export async function adminBillSavedCard(formData: FormData): Promise<void> {
   const nonce = String(formData.get("nonce") ?? "").replace(/[^a-zA-Z0-9-]/g, "");
   if (!nonce) back("error=bill");
   const account = await getAccount(phone);
-  if (!account?.stripeCustomerId) back("error=bill_nocard");
+  // A card saved through the pay-by-phone line is adopted here on first use.
+  const customerId = account
+    ? await resolveStripeCustomer(phone, account.stripeCustomerId)
+    : null;
+  if (!customerId) back("error=bill_nocard");
 
   const ref = `adminbill:${phone}:${nonce}`;
   if (await hasLedgerRef(ref)) {
@@ -325,7 +334,7 @@ export async function adminBillSavedCard(formData: FormData): Promise<void> {
   let result: { ok: boolean; last4?: string; reason?: string };
   if (!paymentsDevMode) {
     result = await chargeSavedCard({
-      customerId: account.stripeCustomerId,
+      customerId: customerId!,
       amountCents,
       ref,
       phone,

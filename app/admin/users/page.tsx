@@ -23,7 +23,7 @@ import {
 import { listAdsByOwner } from "@/lib/ads";
 import { formatPhone, normalizePhone } from "@/lib/phone";
 import { TOP_UP_PRESETS_CENTS, formatPrice, site } from "@/lib/config";
-import { paymentsDevMode, savedCardOnFile } from "@/lib/payments";
+import { paymentsDevMode, resolveStripeCustomer, savedCardOnFile } from "@/lib/payments";
 import { getEngineSettings } from "@/lib/settings";
 import { Tip } from "@/components/Tip";
 
@@ -55,11 +55,18 @@ export default async function AdminUsers({
   const params = await searchParams;
   const phone = params.phone ? normalizePhone(params.phone) : null;
   const account = phone ? await getAccount(phone) : null;
-  // Phone-order panel: is a card on file? (best-effort; display only)
+  // Phone-order panel: is a card on file? (best-effort; display only). A card
+  // saved through the pay-by-phone line lives on a Stripe customer this
+  // account hasn't stored yet — resolveStripeCustomer adopts it right here,
+  // so the operator sees "Card on file" as soon as the call-in card lands.
+  const customerId =
+    account && phone && !paymentsDevMode
+      ? await resolveStripeCustomer(phone, account.stripeCustomerId)
+      : (account?.stripeCustomerId ?? null);
   const savedCard =
-    account?.stripeCustomerId && !paymentsDevMode
-      ? await savedCardOnFile(account.stripeCustomerId)
-      : account?.stripeCustomerId
+    customerId && !paymentsDevMode
+      ? await savedCardOnFile(customerId)
+      : customerId
         ? {}
         : null;
   const engineSettings = await getEngineSettings();
