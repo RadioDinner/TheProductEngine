@@ -13,7 +13,7 @@ import {
   listSms,
   partitionKey,
   toggleCategory,
-  welcomeMenu,
+  welcomeMessages,
   menuChoice,
   menuLines,
 } from "../lib/categories.ts";
@@ -22,45 +22,45 @@ import { parseCommand } from "../lib/commands.ts";
 export const name = "categories";
 
 export function run(t) {
-  // ---- the welcome menu (item 22, renumbered session 016) — verbatim ----
-  // Every number in this text comes from Settings; hardcoding a price, an
-  // hour or an amount here is what the guard exists to catch.
-  t.eq(
-    "welcome menu verbatim",
-    welcomeMenu({
-      siteName: "The Plain Exchange",
-      siteUrl: "ThePlainExchange.com",
-      starterCreditLabel: "$40",
-      windowLabel: "7am-9pm Mon-Sat",
-      priceLine: "Text ad $20; 1 pic $30, 2 pics $40, 3 pics $50.",
-    }),
-    "Welcome to The Plain Exchange! Ads come by text as soon as they're posted, 7am-9pm Mon-Sat.\n" +
-      "Your first ads are on us: $40 of free ad credit when you post your first one. Text ad $20; 1 pic $30, 2 pics $40, 3 pics $50.\n" +
-      "Every ad is also on ThePlainExchange.com with all its pictures, where you can sign up for email too.\n" +
-      "\n" +
-      "Pick what you want ads for - reply with a number (or the word):\n" +
-      "1 - ALL, every ad\n" +
-      "2 - buggies & bikes (BUGGIES)\n" +
-      "3 - dogs & puppies (DOGS)\n" +
-      "4 - lawn & garden (GARDEN)\n" +
-      "5 - horses & tack (HORSES)\n" +
-      "6 - household, furniture, realty (HOUSEHOLD)\n" +
-      "7 - hunting, fishing, camping (HUNTING)\n" +
-      "8 - goats, ponies, small animals (LIVESTOCK)\n" +
-      "9 - machinery & equipment (MACHINERY)\n" +
-      "10 - wanted & everything else (WANTED)\n" +
-      "Text HELP for help. Text STOP to end.",
-  );
+  // ---- the welcome SEQUENCE (session 016) ----
+  const WELCOME_ARGS = {
+    siteName: "The Plain Exchange",
+    siteUrl: "ThePlainExchange.com",
+    smsNumber: "(330) 960-7170",
+    supportPhone: "(234) 301-0048",
+    starterCreditLabel: "$40",
+    windowLabel: "7am-9pm Mon-Sat",
+    priceLine: "Text ad $20; 1 pic $30, 2 pics $40, 3 pics $50.",
+  };
+  const welcome = welcomeMessages(WELCOME_ARGS);
+  t.eq("four messages", welcome.length, 4);
+  // Each message has exactly one job, and the sequence must cover everything
+  // a new subscriber was promised.
+  t.eq("1: names the service", welcome[0].includes("Welcome to The Plain Exchange"), true);
+  t.eq("1: says when ads arrive", welcome[0].includes("7am-9pm Mon-Sat"), true);
+  t.eq("1: states the prices", welcome[0].includes("1 pic $30"), true);
+  t.eq("1: states the free credit", welcome[0].includes("$40 of free ad credit"), true);
+  t.eq("2: shows how to post", welcome[1].includes("AD NEW"), true);
+  t.eq("2: gives a real example", welcome[1].includes("$5/bale"), true);
+  for (const cmd of ["PIC 1022", "MY ADS", "STATUS 1022", "SOLD 1022", "CREDITS", "HELP"]) {
+    t.eq(`2: lists ${cmd}`, welcome[1].includes(cmd), true);
+  }
+  t.eq("3: names the website", welcome[2].includes("ThePlainExchange.com"), true);
+  t.eq("3: promises every picture", /all of its pictures/i.test(welcome[2]), true);
+  t.eq("3: mentions messaging sellers", /message sellers/i.test(welcome[2]), true);
+  t.eq("3: mentions email", /by email/i.test(welcome[2]), true);
+  t.eq("3: gives the card line", welcome[2].includes("(234) 301-0048"), true);
+  t.eq("3: says the card is stored securely", /stored securely/i.test(welcome[2]), true);
+  // The ASK goes last, so the question is the final thing on the screen.
+  t.eq("4: is the menu", welcome[3].includes("1 - ALL, every ad"), true);
+  t.eq("4: asks for a reply", /reply with a number/i.test(welcome[3]), true);
+  t.eq("4: carries STOP and HELP", welcome[3].includes("STOP") && welcome[3].includes("HELP"), true);
   // Once the launch offer is spent the welcome must stop advertising it.
   t.eq(
     "no offer -> no free-credit line",
-    welcomeMenu({
-      siteName: "X",
-      siteUrl: "x.com",
-      starterCreditLabel: null,
-      windowLabel: "7am-9pm Mon-Sat",
-      priceLine: "Text ad $20.",
-    }).includes("free ad credit"),
+    welcomeMessages({ ...WELCOME_ARGS, starterCreditLabel: null }).some((m) =>
+      m.includes("free ad credit"),
+    ),
     false,
   );
 

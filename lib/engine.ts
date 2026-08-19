@@ -52,7 +52,7 @@ import {
   categoryToggleSms,
   listSms,
   toggleCategory,
-  welcomeMenu,
+  welcomeMessages,
 } from "@/lib/categories";
 import { gsmSanitize } from "@/lib/sms-segments";
 import { normalizePhone } from "@/lib/phone";
@@ -89,6 +89,10 @@ export interface InboundSms {
 export interface Reply {
   body: string;
   media?: string[];
+  /** Follow-up texts sent, in order, right after `body` — the welcome is a
+   * short sequence rather than one wall of text (session 016). Each goes
+   * through the same outbound guard and is logged like any other reply. */
+  extra?: string[];
 }
 
 const REDIRECT_MARKER = "automated system";
@@ -130,22 +134,23 @@ function welcomeMessage(settings: EngineSettings): string {
  * migration 9976 is live; before it, the pre-category welcome stands — a menu
  * whose words don't work yet would strand people on unknown-word replies.
  */
-async function welcomeFor(from: string, settings: EngineSettings): Promise<string> {
+async function welcomeFor(from: string, settings: EngineSettings): Promise<Reply> {
   const categories = await getSubscriberCategories(from);
-  if (categories === "unsupported") return welcomeMessage(settings);
+  if (categories === "unsupported") return { body: welcomeMessage(settings) };
   // Whether the launch offer is still open decides whether the welcome
   // advertises it — promising free credit past the 200th member would be a
   // lie the very next message corrects.
   const offerOpen = await starterCreditAvailable(settings.starterCreditLimit);
-  return gsmSanitize(
-    welcomeMenu({
-      siteName: site.name,
-      siteUrl: site.webHost,
-      starterCreditLabel: offerOpen ? formatPrice(settings.starterCreditCents) : null,
-      windowLabel: `${hourLabel(settings.smsWindowStartHour)}-${hourLabel(settings.smsWindowEndHour)} Mon-Sat`,
-      priceLine: priceSheetLine(settings),
-    }),
-  );
+  const messages = welcomeMessages({
+    siteName: site.name,
+    siteUrl: site.webHost,
+    smsNumber: site.smsNumber,
+    supportPhone: site.supportPhone,
+    starterCreditLabel: offerOpen ? formatPrice(settings.starterCreditCents) : null,
+    windowLabel: `${hourLabel(settings.smsWindowStartHour)}-${hourLabel(settings.smsWindowEndHour)} Mon-Sat`,
+    priceLine: priceSheetLine(settings),
+  }).map((m) => gsmSanitize(m));
+  return { body: messages[0], ...(messages.length > 1 && { extra: messages.slice(1) }) };
 }
 
 function fmtDate(d: Date): string {
@@ -861,7 +866,7 @@ async function route(
           console.error("[engine] catch-up digest failed:", e);
         }
       }
-      return { body: await welcomeFor(from, settings) };
+      return welcomeFor(from, settings);
     }
     case "stop": {
       // No ensureAccount here: a STOP from an unknown number shouldn't mint an
@@ -888,7 +893,7 @@ async function route(
           console.error("[engine] catch-up digest failed:", e);
         }
       }
-      return { body: await welcomeFor(from, settings) };
+      return welcomeFor(from, settings);
     }
     case "help":
       return {
@@ -1134,6 +1139,15 @@ async function sendReply(to: string, reply: Reply, settings?: EngineSettings): P
       body: reply.body,
       ...(reply.media?.length && { media: reply.media }),
     });
+  }
+  // Follow-ups go one at a time, in order, so the sequence lands the way it
+  // reads. A suppressed first message (pause, blocklist) suppresses these too
+  // — dispatchSms is the single gate.
+  for (const body of reply.extra ?? []) {
+    const followUp = await dispatchSms(to, body, { cls: "reply", settings });
+    if (followUp.sent) {
+      await logMessage({ direction: "outbound", channel: "sms", address: to, body });
+    }
   }
   return reply;
 }

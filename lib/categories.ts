@@ -55,39 +55,58 @@ export function categoryLabel(key: string): string {
  * the engine still passes it through gsmSanitize like every digest line.
  */
 /**
- * The welcome text (SUBSCRIBE / START). Rewritten session 016 on the user's
- * decision, after seeing a competitor lead with its free-credit offer:
+ * The welcome, as a SEQUENCE of texts (user decision, session 016). One
+ * message cannot carry everything a new subscriber needs without becoming a
+ * wall on a flip-phone screen — and a long SMS is billed per 153-character
+ * segment anyway, so splitting costs nothing extra and reads far better.
+ * Four short texts, each with one job:
  *
- * - the CATEGORIES ARE NUMBERED. "Reply 1" is a far smaller ask on a flip
- *   phone than spelling LIVESTOCK, and the words still work (see menuChoice);
- * - the free ad credit is STATED. The competitor advertises $20 and this
- *   service was quietly giving more while saying nothing about it;
- * - the website is named, because it answers "can I see more pictures?" and
- *   carries the email sign-up;
- * - the sending window is stated, so nobody wonders why an ad texted at
- *   10pm went quiet.
+ *   1. what this is, when ads arrive, what they cost, the free credit
+ *   2. the commands, with a real example
+ *   3. the website (pictures, messaging, email) and the card line
+ *   4. the numbered category menu — the one that asks for a reply
  *
- * Every number comes from Settings — none of this copy hardcodes a price,
- * an hour or an amount.
+ * The menu goes LAST so the question is the final thing on screen. Every
+ * number comes from Settings; nothing here hardcodes a price or an hour.
  */
-export function welcomeMenu(args: {
+export function welcomeMessages(args: {
   siteName: string;
   siteUrl: string;
+  smsNumber: string;
+  supportPhone: string;
   starterCreditLabel: string | null;
   windowLabel: string;
   priceLine: string;
-}): string {
-  return [
-    `Welcome to ${args.siteName}! Ads come by text as soon as they're posted, ${args.windowLabel}.`,
+}): string[] {
+  const opener = [
+    `Welcome to ${args.siteName}! Local classified ads by text - ads reach you as soon as they're posted, ${args.windowLabel}.`,
+    args.priceLine,
     args.starterCreditLabel
-      ? `Your first ads are on us: ${args.starterCreditLabel} of free ad credit when you post your first one. ${args.priceLine}`
-      : args.priceLine,
-    `Every ad is also on ${args.siteUrl} with all its pictures, where you can sign up for email too.`,
-    "",
-    "Pick what you want ads for - reply with a number (or the word):",
+      ? `You have ${args.starterCreditLabel} of free ad credit waiting - it lands when you post your first ad.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const commands = [
+    "To post: text AD NEW and your ad, like:",
+    "AD NEW Hay for sale, $5/bale. Call 330-555-0142",
+    "Other commands: PIC 1022 (see that ad's picture), MY ADS, STATUS 1022, SOLD 1022, CREDITS, HELP.",
+  ].join("\n");
+
+  const website = [
+    `Every ad is also on ${args.siteUrl} - all of its pictures, not just one, and you can message sellers right there.`,
+    "You can sign up for the ads by email too, free.",
+    `To pay by card, call ${args.supportPhone} and enter it on your phone keypad - it's stored securely with our card processor, never by us, and your ads can then pay for themselves.`,
+  ].join(" ");
+
+  const menu = [
+    "Last thing - pick what you want ads for. Reply with a number (or the word):",
     ...menuLines(),
     "Text HELP for help. Text STOP to end.",
   ].join("\n");
+
+  return [opener, commands, website, menu];
 }
 
 /** The numbered menu lines: 1 is ALL, then the categories in order. */

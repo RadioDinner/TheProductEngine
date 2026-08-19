@@ -245,3 +245,13 @@ Send window 7am to 9pm.
 Ok well I am going to say that people need to use /PIC to get the picture of the ad they want.
 also, rewrite the add money slots.
 Now, you said the welcome message isn't yours to change, but it is, where else does this "Welcome to The Plain Exchange! Pick what you want ads for - text one word per message: [menu]" come from?
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+I want my welcome messages to do a few things...
+1) Welcome them to the plain exchange
+2) Tell them how the pricing works
+3) Tell them they have $40 or whatever in credits
+4) Tell them the commands to use to post an ad (AD NEW, STATUS SOLD, MY ADS, PIC 1022) etc
+5) tell them about the website with automatic pictures posting and messaging people there, and the optional email subscription
+6) tell them they can call the number to add a card to automatically charge when they want to post an ad, credit cards are securely saved.
+what is the limit for text sms messages before they become MMS? I want them split into a few SMS messages if necessary
