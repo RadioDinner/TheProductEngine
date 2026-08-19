@@ -10,6 +10,7 @@
  */
 import { parseCommand } from "@/lib/commands";
 import {
+  countDistinctOutboundContaining,
   listAdsLite,
   listBumpsSince,
   listInboundSince,
@@ -17,6 +18,7 @@ import {
   type InsightBump,
   type InsightMessage,
 } from "@/lib/engine-store";
+import { PIC_LIMIT_MARKER } from "@/lib/pic-quota";
 import { listLedgerSince, listRevealsSince, type LedgerSince, type RevealSince } from "@/lib/store";
 import { getEngineSettings } from "@/lib/settings";
 
@@ -66,6 +68,23 @@ export interface Insights {
   generatedAtMs: number;
   picThresholdPerDay: number;
   revealThresholdPerDay: number;
+  /**
+   * The two "is the daily allowance set right?" numbers (user ask, session
+   * 016), always a fixed 24 hours regardless of the page's window:
+   * - picLimit*: who ran out of picture pulls. Counted from the OUTBOUND
+   *   "you're out of picture pulls" replies, because that is the only place
+   *   the limit actually bites — inbound PIC texts alone can't tell a served
+   *   pull from a refused one. `people` is distinct numbers; `notices` is
+   *   replies sent (dedup keeps that near one per person per 3h).
+   * - reveal*: website number look-ups. `people` is distinct members,
+   *   `lookups` distinct sellers' numbers revealed.
+   */
+  last24h: {
+    picLimitPeople: number;
+    picLimitNotices: number;
+    revealPeople: number;
+    revealLookups: number;
+  };
   totals: {
     inboundMessages: number;
     uniqueSenders: number;
@@ -107,6 +126,10 @@ export function computeInsights(
     windowDays: number;
     picThresholdPerDay: number;
     revealThresholdPerDay: number;
+    /** Outbound "out of picture pulls" replies in the last 24h. Defaults to
+     * zero so a store that can't answer (or a caller that doesn't ask) shows
+     * a zero rather than breaking the page. */
+    picLimit24h?: { people: number; notices: number };
   },
 ): Insights {
   const { nowMs, windowDays, picThresholdPerDay, revealThresholdPerDay } = opts;
@@ -214,9 +237,16 @@ export function computeInsights(
     if (!times) revealTimes.set(r.phone, (times = []));
     times.push(Date.parse(r.at));
   }
+  // Service-wide look-up usage over a fixed 24h (not the page window).
+  let revealPeople24h = 0;
+  let revealLookups24h = 0;
   const revealHeavy: RevealHeavy[] = [...revealTimes.entries()]
     .map(([phone, times]) => {
       const reveals24h = times.filter((t) => t >= nowMs - DAY).length;
+      if (reveals24h > 0) {
+        revealPeople24h++;
+        revealLookups24h += reveals24h;
+      }
       return {
         phone,
         reveals24h,
@@ -289,6 +319,12 @@ export function computeInsights(
     generatedAtMs: nowMs,
     picThresholdPerDay,
     revealThresholdPerDay,
+    last24h: {
+      picLimitPeople: opts.picLimit24h?.people ?? 0,
+      picLimitNotices: opts.picLimit24h?.notices ?? 0,
+      revealPeople: revealPeople24h,
+      revealLookups: revealLookups24h,
+    },
     totals: {
       inboundMessages: data.inbound.length,
       uniqueSenders: sender.size,
@@ -314,12 +350,17 @@ export async function getInsights(windowDays = 30): Promise<Insights> {
   const nowMs = Date.now();
   const since = new Date(nowMs - windowDays * DAY).toISOString();
   const settings = await getEngineSettings();
-  const [inbound, bumpsAll, ads, ledgerWindow, reveals] = await Promise.all([
+  const [inbound, bumpsAll, ads, ledgerWindow, reveals, picLimit24h] = await Promise.all([
     listInboundSince(since),
     listBumpsSince(null),
     listAdsLite(),
     listLedgerSince(since),
     listRevealsSince(since), // degrades to [] when migration 9979 is unpasted
+    // A count, not a table — never worth failing the whole page over.
+    countDistinctOutboundContaining(PIC_LIMIT_MARKER, DAY).catch((e) => {
+      console.error("[insights] pic-limit count failed:", e);
+      return { people: 0, notices: 0 };
+    }),
   ]);
   return computeInsights(
     { inbound, bumpsAll, ads, ledgerWindow, reveals },
@@ -328,6 +369,7 @@ export async function getInsights(windowDays = 30): Promise<Insights> {
       windowDays,
       picThresholdPerDay: settings.picAbusePerDay,
       revealThresholdPerDay: settings.revealAbusePerDay,
+      picLimit24h,
     },
   );
 }

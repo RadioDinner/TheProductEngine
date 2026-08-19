@@ -1317,6 +1317,29 @@ export async function listMessages(address?: string, limit = 200): Promise<Messa
     }));
 }
 
+/**
+ * How many DISTINCT numbers were sent a message containing `needle` in the
+ * window, and how many such messages went out. Used by Insights to answer
+ * "how many people hit their picture limit today" — the limit notice is the
+ * only durable record that a pull was refused.
+ */
+export async function countDistinctOutboundContaining(
+  needle: string,
+  sinceMs: number,
+): Promise<{ people: number; notices: number }> {
+  const since = new Date(Date.now() - sinceMs).toISOString();
+  const { data, error } = await db()
+    .from("messages")
+    .select("address")
+    .eq("direction", "outbound")
+    .gte("created_at", since)
+    .ilike("body", `%${needle}%`)
+    .limit(5000);
+  if (error) throw error;
+  const rows = (data ?? []) as { address: string }[];
+  return { people: new Set(rows.map((r) => r.address)).size, notices: rows.length };
+}
+
 export async function countRecentOutboundContaining(
   address: string,
   needle: string,

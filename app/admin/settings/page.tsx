@@ -23,11 +23,25 @@ export const metadata: Metadata = {
 
 /** Money fields are entered in DOLLARS (decimals allowed) and stored in
  * cents — adminSaveSettings converts. */
-const DOLLAR_FIELDS = new Set(["costTextCents", "costPhotoCents", "webAddonCents", "starterCreditCents"]);
+const DOLLAR_FIELDS = new Set([
+  "costTextCents",
+  "photoPrice1Cents",
+  "photoPrice2Cents",
+  "photoPrice3Cents",
+  "webAddonCents",
+  "starterCreditCents",
+]);
 
 const FIELDS: { key: string; label: string; hint?: string; tip: HandbookKey }[] = [
   { key: "costTextCents", label: "Text ad price ($)", tip: "settings.costs" },
-  { key: "costPhotoCents", label: "Picture ad price ($)", tip: "settings.costs" },
+  { key: "photoPrice1Cents", label: "Picture ad — 1 picture ($)", tip: "settings.costs" },
+  { key: "photoPrice2Cents", label: "Picture ad — 2 pictures ($)", tip: "settings.costs" },
+  {
+    key: "photoPrice3Cents",
+    label: "Picture ad — 3 pictures ($)",
+    hint: "three is the most an ad can be charged for; extras beyond that ride the website free",
+    tip: "settings.costs",
+  },
   {
     key: "webAddonCents",
     label: "Website listing add-on ($)",
@@ -40,9 +54,19 @@ const FIELDS: { key: string; label: string; hint?: string; tip: HandbookKey }[] 
     hint: "granted once, on a member's first post — never at account creation",
     tip: "settings.starterCredit",
   },
-  { key: "digestCap", label: "Max ads per digest", tip: "settings.digestCap" },
+  {
+    key: "digestCap",
+    label: "Max ads per pass",
+    hint: "how many queued ads one send or email edition handles; the rest ride the next one",
+    tip: "settings.digestCap",
+  },
   { key: "maxChars", label: "Max ad length (characters)", tip: "settings.maxChars" },
-  { key: "expiryDays", label: "Ad run time (days)", tip: "settings.expiryDays" },
+  {
+    key: "expiryDays",
+    label: "Website listing length (days)",
+    hint: "how long an ad stays on the website and answers PIC — the text goes out once, when approved",
+    tip: "settings.expiryDays",
+  },
   {
     key: "smsRepliesPerHour",
     label: "Command replies per number per hour",
@@ -126,7 +150,14 @@ export default async function AdminSettings({
   const settings = await getEngineSettings();
   const words = await getWordRules();
   const blocked = await listBlocked();
-  const values = settings as unknown as Record<string, number>;
+  // The picture ladder is ONE setting (an array) but three form fields — the
+  // operator thinks in "what does a 2-picture ad cost", not in array indexes.
+  const values: Record<string, number> = {
+    ...(settings as unknown as Record<string, number>),
+    photoPrice1Cents: settings.photoPricesCents[0] ?? 0,
+    photoPrice2Cents: settings.photoPricesCents[1] ?? 0,
+    photoPrice3Cents: settings.photoPricesCents[2] ?? 0,
+  };
 
   return (
     <>

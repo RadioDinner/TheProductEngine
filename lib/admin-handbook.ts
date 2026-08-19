@@ -365,9 +365,10 @@ const ENTRIES = {
     why: "Session 016: \"Every new account ships with $150 ad credit.\" At $150 that covers 3 text ads or 2 picture ads; the user's earlier \"3 free ads of any kind\" promise would need $180 (3 × the picture price). First-post-only is the session-005 anti-abuse rule — minted numbers that never post cost nothing.",
   },
   "settings.digestCap": {
-    title: "Max ads per digest",
-    what: "The FIFO cap on member ads per digest; overflow waits for the next slot. Sponsor lines ride OUTSIDE this cap.",
-    why: "From the founding spec (session 001). The cap bounds the digest's size in SMS segments — which is the bill — while first-in-first-out keeps it fair.",
+    title: "Max ads per pass",
+    what: "The FIFO cap on how many queued ads ONE pass handles — one text-send run, or one email edition; the overflow rides the next one. Sponsor lines ride OUTSIDE this cap.",
+    why: "From the founding spec (session 001), when it capped a digest's size in SMS segments. Session 016 retired the SMS digest — ads now go out one text per ad, as soon as they're approved — so the cap stopped shaping any single message. It still earns its keep as a throughput bound: it is the most ads one drain can push, so a flood of approvals can't turn into a hundred texts at once, and it is still the literal length control on the email editions.",
+    gotchas: "Not a daily limit and never a reason an ad doesn't send — a capped pass just leaves the rest queued for the next one, minutes later. Set it too low and a busy morning trickles out slowly.",
   },
   "settings.maxChars": {
     title: "Max ad length",
@@ -375,9 +376,10 @@ const ENTRIES = {
     why: "Session-008 user decision: web ads get the SAME cap the SMS path enforces, because the exact text rides the SMS digest either way — a long web ad would cost real segment money.",
   },
   "settings.expiryDays": {
-    title: "Ad run time",
-    what: "How long an approved ad stays live on the website before expiring (you can relist an expired ad from the Ads tab).",
-    why: "From the founding spec. Worth knowing: Supabase originally never expired ads at all — live-on-site-forever — until the session-005 audit caught it and wired expiry into the digest cron.",
+    title: "Website listing length",
+    what: "How long an approved ad stays live ON THE WEBSITE before expiring (you can relist an expired ad from the Ads tab). It is also how long PIC keeps answering for that ad, since PIC serves what the website still holds.",
+    why: "From the founding spec. Worth knowing: Supabase originally never expired ads at all — live-on-site-forever — until the session-005 audit caught it and wired expiry into the cron.",
+    gotchas: "This is NOT how long the text runs. Since session 016 the text goes out exactly once, the moment the ad is approved — nothing re-sends it, so changing this number never changes what anyone receives by SMS. It only moves the website's expiry date and the PIC window.",
   },
   "settings.replyCaps": {
     title: "The three reply caps",

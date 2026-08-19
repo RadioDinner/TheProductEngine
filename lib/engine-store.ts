@@ -1105,6 +1105,17 @@ const file = {
     return filtered.slice(-limit);
   },
 
+  countDistinctOutboundContaining(needle: string, sinceMs: number): { people: number; notices: number } {
+    const cutoff = Date.now() - sinceMs;
+    const hits = load().messages.filter(
+      (m) =>
+        m.direction === "outbound" &&
+        Date.parse(m.createdAt) >= cutoff &&
+        m.body.toLowerCase().includes(needle.toLowerCase()),
+    );
+    return { people: new Set(hits.map((m) => m.address)).size, notices: hits.length };
+  },
+
   countRecentOutboundContaining(address: string, needle: string, sinceMs: number): number {
     const cutoff = Date.now() - sinceMs;
     return load().messages.filter(
@@ -1595,6 +1606,16 @@ export async function reserveSms(
 
 export async function listMessages(address?: string, limit = 200): Promise<MessageRecord[]> {
   return supabaseConfigured ? remote.listMessages(address, limit) : file.listMessages(address, limit);
+}
+
+/** Distinct numbers sent a notice containing `needle` in the window. */
+export async function countDistinctOutboundContaining(
+  needle: string,
+  sinceMs: number,
+): Promise<{ people: number; notices: number }> {
+  return supabaseConfigured
+    ? remote.countDistinctOutboundContaining(needle, sinceMs)
+    : file.countDistinctOutboundContaining(needle, sinceMs);
 }
 
 export async function countRecentOutboundContaining(

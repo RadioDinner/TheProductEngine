@@ -111,6 +111,21 @@ export default async function AdminInsights({
             {stat("Money added", formatPrice(data.totals.creditsPurchasedInWindow))}
           </dl>
 
+          <h2 className="section-h">Yesterday&rsquo;s limits (last 24 hours)</h2>
+          <p className="fine">
+            Two dials worth watching. If people are hitting the picture-pull limit every
+            day, the daily allowance is set too low for how they actually shop; if nobody
+            ever does, it is set higher than it needs to be. Number look-ups are the
+            website&rsquo;s &ldquo;Show number&rdquo; button. Both change on{" "}
+            <Link href="/admin/settings">Settings</Link>.
+          </p>
+          <dl className="account-facts">
+            {stat("People out of picture pulls", data.last24h.picLimitPeople.toLocaleString())}
+            {stat("Out-of-pulls replies sent", data.last24h.picLimitNotices.toLocaleString())}
+            {stat("People looking up numbers", data.last24h.revealPeople.toLocaleString())}
+            {stat("Numbers looked up", data.last24h.revealLookups.toLocaleString())}
+          </dl>
+
           <h2 className="section-h">Ads (all time)</h2>
           <dl className="account-facts">
             {stat("Waiting", data.adFunnel.pending.toLocaleString())}

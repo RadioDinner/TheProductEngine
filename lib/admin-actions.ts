@@ -551,7 +551,9 @@ export async function adminToggleWord(formData: FormData): Promise<void> {
 // ceilings here are in dollars.
 const SETTING_MAX: Record<string, number> = {
   costTextCents: 1000,
-  costPhotoCents: 1000,
+  photoPrice1Cents: 1000,
+  photoPrice2Cents: 1000,
+  photoPrice3Cents: 1000,
   webAddonCents: 500,
   starterCreditCents: 1000,
   digestCap: 15,
@@ -574,7 +576,9 @@ const SETTING_MAX: Record<string, number> = {
 /** Settings the admin types in DOLLARS (converted to cents on save). */
 const DOLLAR_SETTINGS = new Set([
   "costTextCents",
-  "costPhotoCents",
+  "photoPrice1Cents",
+  "photoPrice2Cents",
+  "photoPrice3Cents",
   "webAddonCents",
   "starterCreditCents",
 ]);
@@ -610,7 +614,6 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
   const update: Record<string, number | number[]> = {};
   for (const key of [
     "costTextCents",
-    "costPhotoCents",
     "webAddonCents",
     "starterCreditCents",
     "digestCap",
@@ -631,6 +634,18 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
   ]) {
     const value = num(key);
     if (value !== null) update[key] = value;
+  }
+  // The picture ladder is three form fields and one stored array. A rung left
+  // blank (or junk) keeps its current value, so a half-filled form can never
+  // zero a price — and costPhotoCents follows rung 1, since it IS the
+  // one-picture price everywhere a single number is still wanted.
+  const current = await getEngineSettings();
+  const rungs = [1, 2, 3].map(
+    (n, i) => num(`photoPrice${n}Cents`) ?? current.photoPricesCents[i] ?? 0,
+  );
+  if (rungs.some((v, i) => v !== current.photoPricesCents[i])) {
+    update.photoPricesCents = rungs;
+    update.costPhotoCents = rungs[0];
   }
   const slots = parseSlots("slots");
   if (slots.length) update.slots = [...new Set(slots)].sort((a, b) => a - b);
