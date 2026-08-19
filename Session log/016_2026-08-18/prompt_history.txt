@@ -184,3 +184,9 @@ I rotated STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET
 
 --- prompt (2026-08-19, continued session) ---
 I ran that and I tried a test payment. It opened the stripe checkout and it looked like it worked but it didn't go to my stripe accounts, I didn't get an email receipt and my card wasn't charged
+
+--- prompt (2026-08-19, continued session) ---
+I'm wondering if it isn't because I used my own email as the receipt and stripe just didn't charge it? Either way, I retried it now and it worked
+
+--- prompt (2026-08-19, continued session) ---
+BOOM. I called and it worked!

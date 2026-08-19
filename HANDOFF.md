@@ -82,6 +82,37 @@ to 0.34.x fixes it"). Two-part fix on the designated branch:
   the user merges this branch into `main`.** After deploy, `/api/health`
   should go green and /admin/sms-diag's upload self-test exercises sharp.
 
+### Outcome (same day): the card line is LIVE
+
+Verified on a real call: ring-through → attendant → press 1 → keypad capture →
+card attached to the member's account → confirmation text on the Telnyx line.
+Two things had to be fixed to get there:
+
+1. **A voicemail box answering counted as "a human took the call."** Found on
+   the first live call (the tester dialed from a number on `VOICE_RING_TO`, so
+   their own carrier mailbox picked up and asked the caller for a voicemail
+   password). Fixed with answer confirmation — the whisper now gathers a
+   keypress, and only a bridged conversation with non-zero duration counts as
+   answered. Without this, any cell that is off or busy would swallow a real
+   member's call.
+2. **The Pay Connector could not be attached to the existing Stripe account.**
+   Its OAuth screen only ever offered to CREATE accounts (six were created
+   before we stopped). A payment method tokenized in one Stripe account cannot
+   be attached to a customer in another — the symptom was a 404
+   `No such PaymentMethod` after a call that otherwise went perfectly. The
+   user chose to keep keypad capture ("the text-them-a-link path won't work
+   for the majority of my users. They're on flip phones"), so **the app was
+   moved to the connector's account `acct_1U6DyY3cJ9GPOvgC`**: new
+   `sk_live_`/`whsec_` in Vercel, `update users set stripe_customer_id = null`
+   in Supabase. Cheap because the original live account was one day old and
+   held only a refunded test payment. Procedure recorded in
+   `docs/call-in-card-line.md` — and note that Stripe now calls webhook
+   endpoints "event destinations" (scope **Your account**, **Snapshot**
+   payload, not thin).
+
+Payments made before the move stay in the OLD Stripe account — refund them
+there. Junk accounts from the OAuth loop should be closed.
+
 ## Session 016 (2026-08-18) — THE DOLLAR PRICING OVERHAUL (credits are gone)
 
 Branch `claude/pricing-structure-overhaul-5ckcku` (designated; awaiting the
