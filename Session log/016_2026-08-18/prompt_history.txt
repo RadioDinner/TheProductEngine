@@ -154,3 +154,6 @@ It just creates another stripe account :(
 Aug 5, 2025" selected among 6 entries; signed in as derricktwengerd@gmail.com]
 Bro, I renamed the "right" account and I can see it, but it only gives me the
 option to create or create new account. Those two options alone
+
+--- prompt (2026-08-19, continued session) ---
+it just keeps making new stripe account ids. If I create a new STRIPE_SECRET_KEY, my website will stop working, won't it?
