@@ -166,3 +166,12 @@ Ok, the stripe account on Twilio is now acct_1U6DyY3cJ9GPOvgC and I'm working on
 
 --- prompt (2026-08-19, continued session) ---
 Ok, I'm there now and it has teh option to "Add destination"
+
+--- prompt (2026-08-19, continued session) ---
+In the Event destination scope, should I choose "Your account" or "Connected accounts"? [+ Stripe's v2 routing note]
+
+--- prompt (2026-08-19, continued session) ---
+What api version 2026-07-29.dahlia?
+
+--- prompt (2026-08-19, continued session) ---
+ok I have that made, I copied the signing secret, what next
