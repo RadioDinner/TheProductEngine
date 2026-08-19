@@ -10,6 +10,7 @@ import { listFeaturedSpots, type FeaturedSpot } from "@/lib/featured-store";
 import { supabaseConfigured } from "@/lib/db";
 import { site } from "@/lib/config";
 import { Tip } from "@/components/Tip";
+import { ImageUpload } from "@/components/ImageUpload";
 
 export const metadata: Metadata = {
   title: `Featured spots — ${site.name} admin`,
@@ -50,7 +51,7 @@ export default async function AdminFeatured({
       )}
       {params.error === "photo" && (
         <p className="form-error" role="alert">
-          That image couldn&rsquo;t be used — jpg, png, gif, or webp up to 8 MB.
+          That image couldn&rsquo;t be used — jpg, png, gif, or webp. Big pictures are shrunk in your browser before they upload, so size is rarely the problem.
         </p>
       )}
       {params.error === "link" && (
@@ -163,8 +164,8 @@ export default async function AdminFeatured({
             )}
             <form action={adminAddFeaturedSpot}>
               <div className="field">
-                <label htmlFor="spot-image">Image (required — jpg/png/gif/webp, 8 MB)</label>
-                <input id="spot-image" name="image" type="file" accept="image/*" required />
+                <label htmlFor="spot-image">Image (required — jpg/png/gif/webp)</label>
+                <ImageUpload id="spot-image" name="image" required />
               </div>
               <div className="field">
                 <label htmlFor="spot-caption">Caption (optional, {FEATURED_CAPTION_MAX} chars)</label>

@@ -1,13 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
-  adminAddWord,
   adminBlockNumber,
-  adminRemoveWord,
   adminSaveSettings,
   adminSetPause,
   adminSetUnderAttack,
-  adminToggleWord,
   adminUnblockNumber,
 } from "@/lib/admin-actions";
 import { getEngineSettings, getWordRules } from "@/lib/settings";
@@ -304,44 +301,12 @@ export default async function AdminSettings({
         Word filter <Tip k="settings.wordFilter" />
       </h2>
       <p className="fine">
-        Flagged words sort their ads to the top of the review queue. Auto-reject words bounce
-        the ad instantly — nothing charged, no strike, kept for the audit trail.
+        The filter moved to its own tab, where both lists are editable as plain
+        comma-separated text: <Link href="/admin/words">Word filter</Link>. It currently
+        holds <strong>{words.length}</strong> {words.length === 1 ? "word" : "words"} —{" "}
+        {words.filter((w) => w.autoReject).length} auto-reject,{" "}
+        {words.filter((w) => !w.autoReject).length} flag-only.
       </p>
-      <ul className="myads">
-        {words.map((w) => (
-          <li key={w.word} className="myad-row">
-            <div className="sim-actions">
-              <span className="pack-name">{w.word}</span>
-              <span className={w.autoReject ? "ad-sold" : "status-muted"}>
-                {w.autoReject ? "auto-reject" : "flag only"}
-              </span>
-              <form action={adminToggleWord} className="inline-form">
-                <input type="hidden" name="word" value={w.word} />
-                <button className="btn btn-sm btn-secondary" type="submit">
-                  Make {w.autoReject ? "flag only" : "auto-reject"}
-                </button>
-              </form>
-              <form action={adminRemoveWord} className="inline-form">
-                <input type="hidden" name="word" value={w.word} />
-                <button className="btn btn-sm btn-secondary" type="submit">
-                  Remove
-                </button>
-              </form>
-            </div>
-          </li>
-        ))}
-      </ul>
-      <form action={adminAddWord} className="review-form">
-        <div className="inline-fields">
-          <input name="word" type="text" placeholder="Add a word…" required />
-          <label className="sim-photo-toggle">
-            <input type="checkbox" name="autoReject" /> auto-reject
-          </label>
-          <button className="btn btn-sm" type="submit">
-            Add
-          </button>
-        </div>
-      </form>
 
       <h2 className="section-h">
         Blocked numbers <Tip k="settings.blocklist" />

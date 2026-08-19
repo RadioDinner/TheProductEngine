@@ -30,6 +30,7 @@ import {
 } from "@/lib/myads";
 import { MAX_PHOTOS_PER_AD } from "@/lib/email-photos";
 import { formatPrice, site } from "@/lib/config";
+import { ImageUpload } from "@/components/ImageUpload";
 
 export const metadata: Metadata = {
   title: `My ads — ${site.name}`,
@@ -192,7 +193,7 @@ export default async function MyAdsPage({
       )}
       {params.pic === "badphoto" && (
         <p className="form-error" role="alert">
-          That picture couldn&rsquo;t be used — jpg, png, gif, or webp up to 8 MB.
+          That picture couldn&rsquo;t be used — jpg, png, gif, or webp.
         </p>
       )}
       {params.pic === "nostore" && (
@@ -217,7 +218,7 @@ export default async function MyAdsPage({
           review — once approved they appear in your ad&rsquo;s website gallery only (they
           never ride the text digest).
           {Number(params.extraskip) > 0 &&
-            ` ${params.extraskip} couldn't be used — jpg, png, gif, or webp up to 8 MB, at most ${MAX_PHOTOS_PER_AD} pictures per ad.`}
+            ` ${params.extraskip} couldn't be used — jpg, png, gif, or webp, at most ${MAX_PHOTOS_PER_AD} pictures per ad.`}
         </p>
       )}
       {params.extras === "noroom" && (
@@ -325,13 +326,7 @@ export default async function MyAdsPage({
                         <label htmlFor={`extras-${ad.id}`}>
                           Extra pictures — website gallery only, reviewed first, free
                         </label>
-                        <input
-                          id={`extras-${ad.id}`}
-                          name="extras"
-                          type="file"
-                          accept="image/*"
-                          multiple
-                        />
+                        <ImageUpload id={`extras-${ad.id}`} name="extras" multiple />
                       </div>
                       <button className="btn btn-sm" type="submit">
                         Send for review
@@ -419,7 +414,7 @@ export default async function MyAdsPage({
                           New listing picture — reviewed first, then it replaces the picture
                           that rides the digest and PIC replies
                         </label>
-                        <input id={`pic-${ad.id}`} name="photo" type="file" accept="image/*" />
+                        <ImageUpload id={`pic-${ad.id}`} name="photo" />
                       </div>
                       <button className="btn btn-sm" type="submit">
                         Send for review
@@ -438,13 +433,7 @@ export default async function MyAdsPage({
                           Extra pictures — website gallery only, reviewed first, free (room for{" "}
                           {room} more)
                         </label>
-                        <input
-                          id={`extras-${ad.id}`}
-                          name="extras"
-                          type="file"
-                          accept="image/*"
-                          multiple
-                        />
+                        <ImageUpload id={`extras-${ad.id}`} name="extras" multiple />
                       </div>
                       <button className="btn btn-sm" type="submit">
                         Send for review

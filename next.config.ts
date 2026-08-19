@@ -17,7 +17,13 @@ const nextConfig: NextConfig = {
   // any self-hosted deploy; the app-level 8 MB cap is the real per-file gate.)
   experimental: {
     serverActions: {
-      bodySizeLimit: "80mb",
+      // Above the app's own per-file and per-post ceilings (lib/upload-limits.ts)
+      // so OUR validation is what rejects an oversized picture, and below the
+      // ~4.5 MB Vercel enforces at the edge so dev and prod fail the same way.
+      // It was 80mb, which meant a 5 MB photo passed every check we wrote and
+      // then died at the platform with FUNCTION_PAYLOAD_TOO_LARGE — a blank
+      // "This page couldn't load" with nothing in our logs.
+      bodySizeLimit: "4mb",
     },
   },
   images: {

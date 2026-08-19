@@ -9,6 +9,7 @@ import { CATEGORIES } from "@/lib/categories";
 import { formatPrice, site } from "@/lib/config";
 import { chargeNoteLine, postingPreview } from "@/lib/post-ad";
 import { AdBodyField } from "@/components/AdBodyField";
+import { ImageUpload } from "@/components/ImageUpload";
 
 export const metadata: Metadata = {
   title: `Post an ad — ${site.name}`,
@@ -109,7 +110,7 @@ export default async function PostAdPage({
           {extrasSkipped > 0 && (
             <p>
               {extrasSkipped === 1 ? "1 extra picture" : `${extrasSkipped} extra pictures`}{" "}
-              couldn&rsquo;t be used — jpg, png, gif, or webp up to 8 MB, and at most 8
+              couldn&rsquo;t be used — jpg, png, gif, or webp, and at most 8
               pictures per ad in total.
             </p>
           )}
@@ -261,13 +262,13 @@ export default async function PostAdPage({
               )}
               <div className="field">
                 <label htmlFor="listing-photo">Listing picture (optional — picture price)</label>
-                <input id="listing-photo" name="photo" type="file" accept="image/*" />
+                <ImageUpload id="listing-photo" name="photo" />
               </div>
               <p className="fine">
                 This ONE picture is the paid picture: it makes this a picture ad (
                 {formatPrice(settings.costPhotoCents)} instead of{" "}
                 {formatPrice(settings.costTextCents)}) and rides the digest and PIC replies
-                with your ad. Jpg, png, gif, or webp up to 8 MB.
+                with your ad. Jpg, png, gif, or webp — a big photo is shrunk right in your browser, so it uploads fast even on a slow connection.
               </p>
               {settings.webAddonCents > 0 && (
                 <>
@@ -286,7 +287,7 @@ export default async function PostAdPage({
               )}
               <div className="field">
                 <label htmlFor="extra-photos">Extra pictures (optional — website only, free)</label>
-                <input id="extra-photos" name="extras" type="file" accept="image/*" multiple />
+                <ImageUpload id="extra-photos" name="extras" multiple />
               </div>
               <p className="fine">
                 Extra pictures show in your ad&rsquo;s <strong>website gallery only</strong>{" "}

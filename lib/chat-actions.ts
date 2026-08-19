@@ -175,7 +175,7 @@ export async function sendChatText(chatId: number, rawBody: string): Promise<Cha
 
 /**
  * Send a picture into a thread (item 14): byte-sniffed and re-hosted exactly
- * like every other image (storeImageBytes, 8 MB), stored on the chat message.
+ * like every other image (storeImageBytes, MAX_UPLOAD_BYTES), stored on the chat message.
  * Chat media NEVER rides an outbound SMS — see nudgeOtherParty.
  */
 export async function sendChatPhoto(formData: FormData): Promise<ChatActionResult> {

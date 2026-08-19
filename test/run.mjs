@@ -21,6 +21,8 @@ const SUITES = [
   "unread",
   "post-ad",
   "chat",
+  "word-filter",
+  "upload-limits",
   "myads",
   "reveal-quota",
   "business",

@@ -255,7 +255,7 @@ const ENTRIES = {
   "featured.links": {
     title: "Why these links are allowed",
     what: "A spot may link out to an external website — the one sanctioned exception to the no-links rule — and the link is marked as a paid placement (rel=\"sponsored\") so search engines treat it honestly.",
-    why: "Safe because only you can post here (session 009): the walled garden is enforced by who holds the pen, not by a filter. Images ride the same byte-checked 8 MB upload pipeline as every other picture in the app.",
+    why: "Safe because only you can post here (session 009): the walled garden is enforced by who holds the pen, not by a filter. Images ride the same byte-checked upload pipeline as every other picture in the app — shrunk in the browser first, so a phone photo uploads in a second.",
   },
   "featured.rotation": {
     title: "Order, rotation, and motion",
@@ -436,8 +436,9 @@ const ENTRIES = {
   },
   "settings.wordFilter": {
     title: "The word filter",
-    what: "Flag-only words sort their ads to the top of review; auto-reject words bounce instantly — nothing charged, no strike, logged for the audit trail. Toggle a word between modes any time.",
-    why: "Session-001 founding ask, verbatim: \"a small rejection system to analyze for specific words … so I can add/remove words as I choose.\" Auto-reject charges nothing deliberately — a robot's judgement shouldn't cost a seller money; only your reject-violation does that.",
+    what: "Two lists on their own tab, edited as plain comma-separated text. Flag-only words sort their ads to the top of review; auto-reject words bounce instantly — nothing charged, no strike, logged for the audit trail. Matching is whole-word and ignores capitals, so \"gun\" catches Gun but not shotgun; short phrases work too.",
+    why: "Session-001 founding ask, verbatim: \"a small rejection system to analyze for specific words … so I can add/remove words as I choose.\" Auto-reject charges nothing deliberately — a robot's judgement shouldn't cost a seller money; only your reject-violation does that. It moved off Settings into its own tab in session 016 (user decision) because the one-word-at-a-time widget made a real list unmanageable: you could not see it whole, paste one in, or move six words between lists without twelve clicks.",
+    gotchas: "The boxes ARE the filter — a word you delete from a box stops being filtered when you save. Emptying both needs the confirm tick, so a mis-click can't quietly disarm every rule. A word typed into both boxes counts as auto-reject.",
   },
   "settings.blocklist": {
     title: "The blocklist",

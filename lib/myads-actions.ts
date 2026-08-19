@@ -54,13 +54,12 @@ import {
   legacyPassRefundCents,
   picReplaceFrom,
 } from "@/lib/myads";
+import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
 
 const BACK = "/account/ads";
 const HOUR_MS = 60 * 60 * 1000;
 /** Rating window after a confirmed sale — same 7 days as the SMS flow. */
 const RATE_CONTEXT_MS = 7 * 24 * HOUR_MS;
-/** Per-picture byte ceiling — the same 8 MB every other ingest path enforces. */
-const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
 /**
  * Session + ownership guard for every action: the ad is read from the store

@@ -28,6 +28,7 @@ import { adExpiresAt, deriveTitle, listAdsByOwner, type Ad } from "@/lib/ads";
 import { getPendingAds } from "@/lib/engine-store";
 import { TOP_UP_PRESETS_CENTS, formatPrice, site } from "@/lib/config";
 import { checkoutUrl } from "@/lib/payments";
+import { ImageUpload } from "@/components/ImageUpload";
 
 export const metadata: Metadata = {
   title: `Your account — ${site.name}`,
@@ -329,7 +330,7 @@ export default async function AccountPage({
         )}
         {params.profile === "badphoto" && (
           <p className="form-error" role="alert">
-            That picture couldn&apos;t be used — jpg, png, gif, or webp up to 8 MB.
+            That picture couldn&apos;t be used — jpg, png, gif, or webp.
           </p>
         )}
         {params.profile === "unsupported" && (
@@ -351,7 +352,7 @@ export default async function AccountPage({
             )}
             <div className="field">
               <label htmlFor="profile-photo">Profile picture (shown to members you message)</label>
-              <input id="profile-photo" name="photo" type="file" accept="image/*" />
+              <ImageUpload id="profile-photo" name="photo" />
             </div>
             <div className="field">
               <label htmlFor="pickup-address">

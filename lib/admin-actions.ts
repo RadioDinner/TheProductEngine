@@ -1,5 +1,6 @@
 "use server";
 
+import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { approveAd, rejectAd } from "@/lib/moderation";
@@ -27,12 +28,11 @@ import {
 } from "@/lib/payments";
 import { devToolsEnabled } from "@/lib/env";
 import {
-  addWordRule,
   getEngineSettings,
-  removeWordRule,
+  replaceWordRules,
   saveEngineSettings,
-  toggleWordRule,
 } from "@/lib/settings";
+import { buildWordRules } from "@/lib/word-filter";
 import { blockNumber, unblockNumber } from "@/lib/blocklist";
 import {
   cancelQueuedOutboxFor,
@@ -525,24 +525,27 @@ export async function adminSetBan(formData: FormData): Promise<void> {
   redirect(phone ? `/admin/users?phone=${phone}` : "/admin/users");
 }
 
-export async function adminAddWord(formData: FormData): Promise<void> {
+/**
+ * Save the whole word filter from the two comma-separated boxes on
+ * /admin/words. The boxes ARE the state: a word deleted from a box is a word
+ * deleted from the filter, which is the point of editing a list as text.
+ *
+ * Both boxes empty is a legitimate save — "turn the filter off" has to be
+ * expressible — but it is also what a mangled form post looks like, so it is
+ * accepted only when the form says so explicitly with its hidden marker. A
+ * request missing either field leaves the filter untouched.
+ */
+export async function adminSaveWordFilter(formData: FormData): Promise<void> {
   await requireAdmin();
-  const word = String(formData.get("word") ?? "");
-  const autoReject = formData.get("autoReject") === "on";
-  await addWordRule(word, autoReject);
-  redirect("/admin/settings");
-}
-
-export async function adminRemoveWord(formData: FormData): Promise<void> {
-  await requireAdmin();
-  await removeWordRule(String(formData.get("word") ?? ""));
-  redirect("/admin/settings");
-}
-
-export async function adminToggleWord(formData: FormData): Promise<void> {
-  await requireAdmin();
-  await toggleWordRule(String(formData.get("word") ?? ""));
-  redirect("/admin/settings");
+  const reject = formData.get("reject");
+  const flag = formData.get("flag");
+  if (reject === null || flag === null) redirect("/admin/words");
+  const desired = buildWordRules(String(reject), String(flag));
+  if (!desired.length && formData.get("confirmEmpty") !== "yes") {
+    redirect("/admin/words?saved=empty");
+  }
+  await replaceWordRules(desired);
+  redirect(`/admin/words?saved=${desired.length}`);
 }
 
 // Sane ceilings so one fat-fingered save can't create a runaway-cost digest
@@ -797,8 +800,8 @@ export async function adminMarkBusinessRefunded(formData: FormData): Promise<voi
 
 // ---------- Featured sidebar spots (item 19 — operator-posted only) ----------
 
-/** Same 8 MB ceiling as every other image ingest path. */
-const MAX_FEATURED_IMAGE_BYTES = 8 * 1024 * 1024;
+/** Same ceiling as every other image ingest path (lib/upload-limits.ts). */
+const MAX_FEATURED_IMAGE_BYTES = MAX_UPLOAD_BYTES;
 
 /**
  * Add a Featured spot: image (required, byte-sniffed, re-hosted), optional

@@ -1,5 +1,6 @@
 "use server";
 
+import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { readSession } from "@/lib/session";
@@ -32,7 +33,7 @@ async function requirePhone(): Promise<string> {
 // ---------- profile + chat entry (FEATURES items 3 & 4) ----------
 // Sending/reporting inside a thread lives in lib/chat-actions.ts (items 13–15).
 
-const MAX_PROFILE_PHOTO_BYTES = 8 * 1024 * 1024;
+const MAX_PROFILE_PHOTO_BYTES = MAX_UPLOAD_BYTES;
 
 export async function saveProfile(formData: FormData): Promise<void> {
   const phone = await requirePhone();

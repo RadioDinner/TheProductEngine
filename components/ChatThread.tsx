@@ -29,6 +29,7 @@ import {
 } from "@/lib/chat-actions";
 import { chatSendNote } from "@/lib/chat";
 import { hasLink } from "@/lib/content-filter";
+import { ImageUpload } from "@/components/ImageUpload";
 
 type LocalMsg = ChatMessageView & { pending?: boolean };
 
@@ -247,7 +248,7 @@ export default function ChatThread({
           Send a picture — it shows here on the website only, never by text.
         </label>
         <div className="inline-fields">
-          <input id="chat-photo" name="photo" type="file" accept="image/*" required />
+          <ImageUpload id="chat-photo" name="photo" required />
           <button className="btn btn-sm btn-secondary" type="submit" disabled={photoBusy}>
             {photoBusy ? "Sending…" : "Send picture"}
           </button>

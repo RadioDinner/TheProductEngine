@@ -10,6 +10,7 @@ import {
   chatSendNote,
   nudgeWindowOpen,
 } from "../lib/chat.ts";
+import { MAX_UPLOAD_BYTES, PLATFORM_BODY_LIMIT_BYTES } from "../lib/upload-limits.ts";
 
 export const name = "chat";
 
@@ -30,7 +31,11 @@ export function run(t) {
 
   // Pictures in chat (item 14).
   t.eq("per-thread photo cap is a positive integer", Number.isInteger(CHAT_PHOTO_CAP) && CHAT_PHOTO_CAP > 0, true);
-  t.eq("photo byte cap matches the shared 8 MB ingest limit", MAX_CHAT_PHOTO_BYTES, 8 * 1024 * 1024);
+  t.eq("photo byte cap is the shared upload limit", MAX_CHAT_PHOTO_BYTES, MAX_UPLOAD_BYTES);
+  // It must stay under the host's request-body cap, or an oversized chat
+  // photo dies at the platform edge as a blank "page couldn't load"
+  // instead of reaching our friendly badphoto note.
+  t.eq("photo byte cap sits under the platform body cap", MAX_CHAT_PHOTO_BYTES < PLATFORM_BODY_LIMIT_BYTES, true);
 
   // Nudge dedup window math (item 15 — replaces the ILIKE scan).
   const now = Date.parse("2026-07-17T12:00:00Z");

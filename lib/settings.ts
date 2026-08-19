@@ -8,6 +8,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { db, supabaseConfigured } from "@/lib/db";
 import { engineDefaults } from "@/lib/config";
+import { diffWordRules } from "@/lib/word-filter";
 
 export interface EngineSettings {
   /** Text-ad price in CENTS (dollar pricing, session 016 — docs/pricing.md). */
@@ -271,6 +272,40 @@ export async function toggleWordRule(word: string): Promise<void> {
     .update({ auto_reject: !rule.autoReject })
     .eq("word", word);
   if (error) throw error;
+}
+
+/**
+ * Make the stored rules match `desired` exactly — the save behind the word
+ * filter tab, where the two text boxes ARE the state.
+ *
+ * Applied as a DIFF (see lib/word-filter.ts): a wipe-then-reinsert that died
+ * halfway would leave the filter empty and every banned word suddenly
+ * allowed. Untouched words are never rewritten, so a save is usually one or
+ * two statements even on a long list.
+ */
+export async function replaceWordRules(desired: WordRule[]): Promise<void> {
+  const { upserts, removes } = diffWordRules(await getWordRules(), desired);
+  if (!supabaseConfigured) {
+    const shape = load();
+    shape.words = [...desired].sort((a, b) => a.word.localeCompare(b.word));
+    save(shape);
+    return;
+  }
+  // Removals first: a word moving between lists is an upsert, never a
+  // remove+add, so these two sets can't collide.
+  if (removes.length) {
+    const { error } = await db().from("word_filter").delete().in("word", removes);
+    if (error) throw error;
+  }
+  if (upserts.length) {
+    const { error } = await db()
+      .from("word_filter")
+      .upsert(
+        upserts.map((r) => ({ word: r.word, auto_reject: r.autoReject })),
+        { onConflict: "word" },
+      );
+    if (error) throw error;
+  }
 }
 
 /**

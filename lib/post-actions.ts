@@ -46,9 +46,8 @@ import { supabaseConfigured } from "@/lib/db";
 import { MAX_PHOTOS_PER_AD } from "@/lib/email-photos";
 import { notifyAdminNewAd } from "@/lib/notify";
 import { formatPhone } from "@/lib/phone";
+import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
 
-/** Per-picture byte ceiling — the same 8 MB every other ingest path enforces. */
-const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
 /**
  * Store one web-only extra picture's bytes. Prod re-hosts via storeImageBytes
