@@ -7,10 +7,14 @@
  * level (so paused rows stay queued, never marked failed).
  *
  * Send classes and how each control treats them:
- *   bulk          digests + new-subscriber catch-up   (drain handles these)
+ *   bulk          ad broadcasts + new-subscriber catch-up (drain handles these)
  *   reply         command replies, moderation notices
  *   pic           PIC picture (MMS) replies
- *   transactional sign-in codes, email confirm/welcome
+ *   transactional sign-in codes, email confirm/welcome — CRITICAL, never
+ *                 stopped by a pause: a member locked out of their account
+ *                 during an outage is a second outage
+ *   critical      the outage notice itself, and anything else that must reach
+ *                 members WHILE outbound is paused (blocklist still applies)
  *   operator      alert emails to the business — never blocked by any control
  */
 import { sms } from "@/lib/sms";
@@ -20,20 +24,28 @@ import { gsmSanitize } from "@/lib/sms-segments";
 import { isBlockedNumber } from "@/lib/blocklist";
 import { countRecentOutbound } from "@/lib/engine-store";
 
-export type SendClass = "bulk" | "reply" | "pic" | "transactional" | "operator";
-export type PauseMode = EngineSettings["pauseMode"];
+export type SendClass = "bulk" | "reply" | "pic" | "transactional" | "critical" | "operator";
+
+export interface PauseState {
+  adsPaused: boolean;
+  outboundPaused: boolean;
+}
 
 export interface DispatchResult {
   sent: boolean;
   reason?: "paused" | "blocked" | "throttled";
 }
 
-/** Does this pause mode block this class of outbound? Operator alerts never are. */
-export function pauseBlocks(cls: SendClass, mode: PauseMode): boolean {
-  if (cls === "operator") return false;
-  if (mode === "all") return true; // FULL kill: everything else off
-  if (mode === "bulk") return cls === "bulk"; // PARTIAL: only bulk off
-  return false;
+/**
+ * Does an emergency stop block this class? The two stops are independent:
+ * pausing ads never silences a reply, and pausing replies never stops the
+ * ads. Operator alerts, sign-in codes and the outage notice always go —
+ * those are the messages an outage most needs to keep working.
+ */
+export function pauseBlocks(cls: SendClass, pause: PauseState): boolean {
+  if (cls === "operator" || cls === "critical" || cls === "transactional") return false;
+  if (cls === "bulk") return pause.adsPaused;
+  return pause.outboundPaused;
 }
 
 /**
@@ -48,7 +60,7 @@ async function gate(
 ): Promise<{ ok: boolean; reason?: DispatchResult["reason"]; settings: EngineSettings }> {
   const s = settings ?? (await getEngineSettings());
   if (cls === "operator") return { ok: true, settings: s };
-  if (pauseBlocks(cls, s.pauseMode)) return { ok: false, reason: "paused", settings: s };
+  if (pauseBlocks(cls, s)) return { ok: false, reason: "paused", settings: s };
   if (to && (await isBlockedNumber(to))) return { ok: false, reason: "blocked", settings: s };
   // Under-attack throttle: a global sends/minute ceiling on non-digest outbound
   // (replies/PIC/transactional). Count-based, so a rare concurrent overshoot is

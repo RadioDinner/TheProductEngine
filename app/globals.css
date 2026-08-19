@@ -700,7 +700,6 @@ input:focus-visible {
   color: var(--ink);
   background: var(--paper);
   border: 1px solid var(--border-input);
-  margin-top: var(--space-md);
 }
 
 .btn-secondary:hover {
@@ -753,8 +752,10 @@ input:focus-visible {
   text-decoration-thickness: 2px;
 }
 
+/* inline-flex, not inline: these forms are flex ITEMS in button rows, and an
+ * inline form leaves its button free to sit off the row's baseline. */
 .inline-form {
-  display: inline;
+  display: inline-flex;
 }
 
 /* ---------- Account hub ---------- */
@@ -1218,9 +1219,13 @@ a.btn-sm:hover {
   font-size: var(--text-sm);
 }
 
+/* A row of buttons, some wrapped in their own <form>. align-items: center
+ * keeps every button on one line whatever its variant — the default stretch
+ * let a taller neighbour drag the others out of alignment. */
 .sim-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-xs);
   margin-top: var(--space-xs);
 }

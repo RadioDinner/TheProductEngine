@@ -148,7 +148,7 @@ export const engineDefaults = {
    * and the admin is alerted. 12,000 ≈ 4 slots × ~430 subscribers × 7
    * segments — raise it deliberately as the list grows. 0 pauses SMS digests.
    * This is an SMS COST cap only — the 0-segment email edition is exempt and
-   * keeps flowing; use pauseMode to stop every channel.
+   * keeps flowing; use the outbound stops to quiet other channels.
    */
   digestDailySegmentBudget: 12000,
   /**
@@ -197,18 +197,24 @@ export const engineDefaults = {
   promoBannerText: "",
   promoBannerLink: "/account#credits",
   /**
-   * Master outbound kill switch (operator-flipped at /admin/settings):
-   *   "off"  — normal operation.
-   *   "bulk" — PARTIAL pause: digests + new-subscriber catch-up stop; command
-   *            replies, PIC MMS, sign-in codes and STOP confirmations still go.
-   *   "all"  — FULL pause: every subscriber/user-facing SMS+email stops
-   *            (digests, replies, PIC, sign-in codes, confirmations). Inbound is
-   *            still received and logged; operator alert emails still reach you;
-   *            you sign into admin with your password. Absolute spend stop.
-   * Queued digest rows wait (they're never dropped) and resume — under the
-   * segment budget — when you set this back to "off".
+   * The two emergency stops (session 016, replacing the old three-way
+   * pauseMode). They are INDEPENDENT because the failures are:
+   *
+   *   adsPaused      — no ad goes out. Approved ads queue and ride when it
+   *                    comes back off; nothing is dropped.
+   *   outboundPaused — every member-facing message that is NOT an ad stops:
+   *                    command replies, PIC pictures, moderation notices.
+   *                    Ads keep flowing (the user's decision — a wobble in
+   *                    the account plumbing is no reason to go silent), and
+   *                    so do CRITICAL sends: sign-in codes, operator alerts,
+   *                    and the technical-difficulties notice itself.
+   *
+   * Turning either ON texts subscribers a plain-language notice, so nobody
+   * is left wondering why the service went quiet. Queued ads wait; they are
+   * never dropped.
    */
-  pauseMode: "off",
+  adsPaused: false,
+  outboundPaused: false,
   /**
    * UNDER ATTACK mode (operator-flipped). While on: replies to unknown/gibberish
    * and new-subscriber catch-up are suppressed, the per-number and service-wide

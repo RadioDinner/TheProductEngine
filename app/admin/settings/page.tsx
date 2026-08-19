@@ -147,48 +147,49 @@ export default async function AdminSettings({
         <p>
           Outbound:{" "}
           <strong>
-            {settings.pauseMode === "all"
-              ? "FULL PAUSE — all outbound stopped"
-              : settings.pauseMode === "bulk"
-                ? "PARTIAL PAUSE — digests off, replies + sign-in on"
-                : "Normal"}
+            {settings.adsPaused && settings.outboundPaused
+              ? "ADS PAUSED · REPLIES PAUSED"
+              : settings.adsPaused
+                ? "ADS PAUSED — replies still going out"
+                : settings.outboundPaused
+                  ? "REPLIES PAUSED — ads still going out"
+                  : "Normal"}
           </strong>
           {settings.underAttack && <span className="ad-sold"> · UNDER ATTACK</span>}
         </p>
         <div className="sim-actions">
           <form action={adminSetPause} className="inline-form">
-            <input type="hidden" name="mode" value="off" />
-            <button className="btn btn-sm" type="submit" disabled={settings.pauseMode === "off"}>
-              Resume normal
+            <input type="hidden" name="which" value="ads" />
+            <input type="hidden" name="on" value={settings.adsPaused ? "no" : "yes"} />
+            <button
+              className={settings.adsPaused ? "btn btn-sm" : "btn btn-sm btn-secondary"}
+              type="submit"
+            >
+              {settings.adsPaused ? "Resume ads" : "Pause ads"}
             </button>
           </form>
           <form action={adminSetPause} className="inline-form">
-            <input type="hidden" name="mode" value="bulk" />
+            <input type="hidden" name="which" value="outbound" />
+            <input type="hidden" name="on" value={settings.outboundPaused ? "no" : "yes"} />
             <button
-              className="btn btn-sm btn-secondary"
+              className={settings.outboundPaused ? "btn btn-sm" : "btn btn-sm btn-secondary"}
               type="submit"
-              disabled={settings.pauseMode === "bulk"}
             >
-              Partial pause (digests off)
-            </button>
-          </form>
-          <form action={adminSetPause} className="inline-form">
-            <input type="hidden" name="mode" value="all" />
-            <button
-              className="btn btn-sm btn-secondary"
-              type="submit"
-              disabled={settings.pauseMode === "all"}
-            >
-              FULL pause (all outbound off)
+              {settings.outboundPaused ? "Resume replies" : "Pause replies (non-ad)"}
             </button>
           </form>
         </div>
         <p className="fine">
-          Partial pause stops digests + new-subscriber catch-up but still sends command replies,
-          picture (PIC) texts, sign-in codes and STOP confirmations. FULL pause stops every
-          subscriber- and user-facing SMS and email (you still sign into admin with your
-          password; alerts to you still arrive). Queued digests wait and resume when you set it
-          back to Normal.
+          <strong>Pause ads</strong> stops ads going out. Nothing is lost — approved ads
+          queue and ride as soon as you resume. <strong>Pause replies</strong> stops
+          member-facing messages that are NOT ads (command replies, PIC pictures,
+          moderation notices); the ads keep flowing, and so do sign-in codes, alerts to
+          you, and the outage notice itself. The two are independent — use either or both.
+        </p>
+        <p className="fine">
+          Turning either one ON <strong>texts every subscriber</strong> a plain-language
+          notice, so nobody is left wondering why the service went quiet. Turning it back
+          off is silent — the ads returning is its own announcement.
         </p>
         <div className="sim-actions">
           <form action={adminSetUnderAttack} className="inline-form">

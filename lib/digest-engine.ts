@@ -251,7 +251,7 @@ export async function sendRecentDigestTo(phone: string): Promise<number> {
   // Catch-up is a bulk send: skip it under any pause, and while UNDER ATTACK
   // (so a spoofed-number subscribe flood can't each pull a burst of SMS).
   const settings = await getEngineSettings();
-  if (pauseBlocks("bulk", settings.pauseMode) || settings.underAttack) return 0;
+  if (pauseBlocks("bulk", settings) || settings.underAttack) return 0;
   // At most one catch-up per number per day: a STOP/START (or STOP/SUBSCRIBE)
   // loop must not re-trigger repeated catch-up bursts — this lane otherwise
   // bypasses both SMS cost breakers.
@@ -361,7 +361,7 @@ export type SendNowResult =
 export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResult> {
   const now = new Date();
   const settings = await getEngineSettings();
-  if (pauseBlocks("bulk", settings.pauseMode)) {
+  if (pauseBlocks("bulk", settings)) {
     return { ok: false, reason: "Digest sending is paused (see Settings → System controls)." };
   }
   const { newAds, bumpAds, bumpRecords } = await selectDigestItems(settings.digestCap);
@@ -749,7 +749,7 @@ export async function drainDigestOutbox(
   const budget = settings.digestDailySegmentBudget;
   // Operator kill switch: a PARTIAL or FULL pause both stop bulk (digest)
   // sending. Rows stay queued and resume when the pause is lifted.
-  const paused = pauseBlocks("bulk", settings.pauseMode);
+  const paused = pauseBlocks("bulk", settings);
   // UNDER ATTACK throttle: cap how many rows a single run may send, so the
   // broadcast trickles out (≈ cap per cron tick) instead of firing at once.
   const runCap =

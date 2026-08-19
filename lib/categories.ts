@@ -78,20 +78,26 @@ export function welcomeMessages(args: {
   windowLabel: string;
   priceLine: string;
 }): string[] {
+  // Blank lines between the facts (user's own layout): a newline is one
+  // septet, so the breathing room costs nothing and a flip-phone screen shows
+  // four short lines instead of one paragraph to squint at.
   const opener = [
-    `Welcome to ${args.siteName}! Local classified ads by text - ads reach you as soon as they're posted, ${args.windowLabel}.`,
+    `Welcome to ${args.siteName}!`,
+    "",
+    `Ads post from ${args.windowLabel}.`,
+    "",
     args.priceLine,
-    args.starterCreditLabel
-      ? `You have ${args.starterCreditLabel} of free ad credit waiting - it lands when you post your first ad.`
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    ...(args.starterCreditLabel
+      ? ["", `You have ${args.starterCreditLabel} of free ad credit!`]
+      : []),
+  ].join("\n");
 
   const commands = [
-    "To post: text AD NEW and your ad, like:",
+    "To post, text AD NEW and your ad, like:",
+    "",
     "AD NEW Hay for sale, $5/bale. Call 330-555-0142",
-    "Other commands: PIC 1022 (see that ad's picture), MY ADS, STATUS 1022, SOLD 1022, CREDITS, HELP.",
+    "",
+    "You can reply PIC and the ad number like (PIC 1022) to receive the pictures for the ad",
   ].join("\n");
 
   const website = [

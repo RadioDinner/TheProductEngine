@@ -60,8 +60,11 @@ export interface EngineSettings {
   promoBannerText: string;
   /** Where the banner links (site-relative path). */
   promoBannerLink: string;
-  /** Master outbound kill switch: "off" | "bulk" (partial) | "all" (full). */
-  pauseMode: "off" | "bulk" | "all";
+  /** Emergency stop: no ad goes out (they queue and ride when it clears). */
+  adsPaused: boolean;
+  /** Emergency stop: member-facing NON-ad messages stop; ads and critical
+   * sends (sign-in codes, operator alerts, the outage notice) continue. */
+  outboundPaused: boolean;
   /** UNDER ATTACK mode: suppress+tighten+throttle outbound while true. */
   underAttack: boolean;
   /** Global outbound sends/minute ceiling, enforced only while underAttack. */
@@ -105,7 +108,8 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   categoryConfirmsPerHour: "category_confirms_per_hour",
   promoBannerText: "promo_banner_text",
   promoBannerLink: "promo_banner_link",
-  pauseMode: "pause_mode",
+  adsPaused: "ads_paused",
+  outboundPaused: "outbound_paused",
   underAttack: "under_attack",
   outboundThrottlePerMin: "outbound_throttle_per_min",
 };
@@ -167,7 +171,8 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     categoryConfirmsPerHour: engineDefaults.categoryConfirmsPerHour,
     promoBannerText: engineDefaults.promoBannerText,
     promoBannerLink: engineDefaults.promoBannerLink,
-    pauseMode: engineDefaults.pauseMode,
+    adsPaused: engineDefaults.adsPaused,
+    outboundPaused: engineDefaults.outboundPaused,
     underAttack: engineDefaults.underAttack,
     outboundThrottlePerMin: engineDefaults.outboundThrottlePerMin,
   };

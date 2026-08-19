@@ -255,3 +255,16 @@ I want my welcome messages to do a few things...
 5) tell them about the website with automatic pictures posting and messaging people there, and the optional email subscription
 6) tell them they can call the number to add a card to automatically charge when they want to post an ad, credit cards are securely saved.
 what is the limit for text sms messages before they become MMS? I want them split into a few SMS messages if necessary
+
+--- prompt (2026-08-19, continued session) ---
+[screenshot of System controls] the system controls panel has a weird artifact that cases the "resume normal" button to be out of alignment to the partial pause and full pause. I've seen this happen on other buttons too, see the screenshot.
+Also, I want the partial pause (digests off) to become (ads off). Full pause would put all outbound off. If I click the FULL pause, button, I want a warning message to go out to everyone that says "The Plain Exchange is experiencing technical difficulties and messaging has been temporarily disabled. You will still receive the ads but account controls are temporarily disabled yada yada" I want the ads still to go off. actually, I want this whole system controls thing to be reworked. I want a toggle for Ads to run or not run, (replace the partial pause) and a toggle for all, non-ad outbound to be paused aside from manual messages and critical system updates. If i toggle either of those ON, I want a message to go out about technical difficulties. UNDER ATTACK mode stays the same
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+Right now, the messages are too jumbled. [message 1 rewritten with blank lines between each fact]
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+Reworking message number 2 [twice: first with the command list, then replaced by the PIC sentence]
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+pricing migration is posted

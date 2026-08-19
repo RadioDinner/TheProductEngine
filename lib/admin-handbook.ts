@@ -338,9 +338,10 @@ const ENTRIES = {
   /* ---------------- Settings (/admin/settings) ---------------- */
 
   "settings.pause": {
-    title: "The two pauses",
-    what: "Partial pause stops the expensive bulk sends (digests + new-subscriber catch-up) but keeps the service conversational — replies, PIC, sign-in codes, STOP confirmations. FULL pause stops every subscriber-facing text and email; you still get alerts and sign in by password. Queued digests wait and resume.",
-    why: "Built in session 004's operator-safety batch after the threat-modeling decision (\"harden against all four adversary classes; priority = trust, then money, then uptime\"). Two levels exist because the two emergencies differ: a runaway bill wants partial; a true incident wants everything dark.",
+    title: "The two emergency stops",
+    what: "PAUSE ADS stops ads going out — approved ads queue and ride the moment you resume, nothing is lost. PAUSE REPLIES stops member-facing messages that are NOT ads (command replies, PIC pictures, moderation notices) while the ads keep flowing. They are independent; use either or both. Sign-in codes, alerts to you, and the outage notice itself are never stopped.",
+    why: "Reworked in session 016 from a three-way switch (off/partial/full). The user's reasoning: a wobble in the account plumbing is no reason to go silent on the ads — \"I want the ads still to go off\" — and an operator in a hurry should not have to work out which of three modes matches the failure.",
+    gotchas: "Turning either switch ON TEXTS EVERY SUBSCRIBER a technical-difficulties notice — real money and real attention, so flip it deliberately. Turning it back off is silent. The notice is sent once, on the off→on edge, so re-saving an already-paused switch never re-texts anyone.",
   },
   "settings.underAttack": {
     title: "UNDER ATTACK mode",

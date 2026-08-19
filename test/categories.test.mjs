@@ -36,15 +36,26 @@ export function run(t) {
   t.eq("four messages", welcome.length, 4);
   // Each message has exactly one job, and the sequence must cover everything
   // a new subscriber was promised.
-  t.eq("1: names the service", welcome[0].includes("Welcome to The Plain Exchange"), true);
+  t.eq("1: names the service", welcome[0].startsWith("Welcome to The Plain Exchange!"), true);
+  // The user's own layout: one fact per line, blank lines between. A newline
+  // is a single septet, so the breathing room is free.
+  t.eq(
+    "1: laid out with blank lines",
+    welcome[0],
+    "Welcome to The Plain Exchange!\n\nAds post from 7am-9pm Mon-Sat.\n\nText ad $20; 1 pic $30, 2 pics $40, 3 pics $50.\n\nYou have $40 of free ad credit!",
+  );
   t.eq("1: says when ads arrive", welcome[0].includes("7am-9pm Mon-Sat"), true);
   t.eq("1: states the prices", welcome[0].includes("1 pic $30"), true);
-  t.eq("1: states the free credit", welcome[0].includes("$40 of free ad credit"), true);
-  t.eq("2: shows how to post", welcome[1].includes("AD NEW"), true);
-  t.eq("2: gives a real example", welcome[1].includes("$5/bale"), true);
-  for (const cmd of ["PIC 1022", "MY ADS", "STATUS 1022", "SOLD 1022", "CREDITS", "HELP"]) {
-    t.eq(`2: lists ${cmd}`, welcome[1].includes(cmd), true);
-  }
+  t.eq("1: states the free credit", welcome[0].includes("$40 of free ad credit!"), true);
+  // The user's exact wording, blank lines and all.
+  t.eq(
+    "2: verbatim",
+    welcome[1],
+    "To post, text AD NEW and your ad, like:\n\nAD NEW Hay for sale, $5/bale. Call 330-555-0142\n\nYou can reply PIC and the ad number like (PIC 1022) to receive the pictures for the ad",
+  );
+  // HELP stays the escape hatch for every other command, and it lives in the
+  // final message — so the welcome never leaves someone without a way in.
+  t.eq("HELP is offered somewhere", welcome.some((m) => m.includes("HELP")), true);
   t.eq("3: names the website", welcome[2].includes("ThePlainExchange.com"), true);
   t.eq("3: promises every picture", /all of its pictures/i.test(welcome[2]), true);
   t.eq("3: mentions messaging sellers", /message sellers/i.test(welcome[2]), true);

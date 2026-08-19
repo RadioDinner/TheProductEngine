@@ -9,6 +9,7 @@ import {
   getAccount,
   getCreditBalance,
   hasLedgerRef,
+  listSubscribersWithCategories,
   mergeAccounts,
   resolveChatReport,
   setOffenseCount,
@@ -654,14 +655,66 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
 
 // ---------- operator kill switches (PAUSE + UNDER ATTACK) ----------
 
-/** Set the master outbound pause: "off" | "bulk" (partial) | "all" (full). */
+/**
+ * The two emergency stops (session 016). Each is a plain on/off, and turning
+ * one ON texts subscribers a notice — "nobody should be left wondering why
+ * the service went quiet." Turning one OFF is silent: the ads resuming, or a
+ * reply arriving, is its own announcement.
+ *
+ * The notice rides the CRITICAL class, so it goes out even while non-ad
+ * outbound is stopped — that is the whole point of it. It is sent ONLY on the
+ * off→on edge, so re-saving a already-paused switch never re-texts anyone.
+ */
 export async function adminSetPause(formData: FormData): Promise<void> {
   await requireAdmin();
-  const mode = String(formData.get("mode"));
-  if (mode === "off" || mode === "bulk" || mode === "all") {
-    await saveEngineSettings({ pauseMode: mode });
+  const which = String(formData.get("which"));
+  const on = String(formData.get("on")) === "yes";
+  if (which !== "ads" && which !== "outbound") redirect("/admin/settings?saved=pause");
+  const settings = await getEngineSettings();
+  const wasOn = which === "ads" ? settings.adsPaused : settings.outboundPaused;
+  await saveEngineSettings(which === "ads" ? { adsPaused: on } : { outboundPaused: on });
+  if (!on || wasOn) redirect("/admin/settings?saved=pause");
+
+  const notice =
+    which === "ads"
+      ? `${site.name}: we're having technical trouble and new ads are paused for a bit. Nothing you posted is lost - queued ads go out as soon as we're back. Sorry for the trouble.`
+      : `${site.name}: we're having technical trouble. You'll still get the ads, but replies to commands (MY ADS, STATUS, PIC and the rest) are paused for a bit. We're on it - sorry for the trouble.`;
+  const sent = await broadcastNotice(notice);
+  redirect(`/admin/settings?saved=pause&notice=${sent}`);
+}
+
+/**
+ * Text every subscriber one operational notice. Deliberately simple and
+ * bounded: this runs inside an admin action, so it sends a few at a time and
+ * reports how many it reached rather than pretending to be the digest
+ * pipeline. A failure to text one member must never abort the pause itself —
+ * the switch is already saved by the time this runs.
+ */
+async function broadcastNotice(body: string): Promise<number> {
+  let sent = 0;
+  try {
+    const subscribers = await listSubscribersWithCategories();
+    const deadline = Date.now() + 20_000;
+    for (let i = 0; i < subscribers.length; i += 8) {
+      if (Date.now() > deadline) {
+        console.error(`[admin] outage notice ran out of time after ${sent} of ${subscribers.length}`);
+        break;
+      }
+      const batch = subscribers.slice(i, i + 8);
+      const results = await Promise.all(
+        batch.map((s) =>
+          dispatchSms(s.phone, body, { cls: "critical" }).catch((e) => {
+            console.error(`[admin] outage notice to ${s.phone} failed:`, e);
+            return { sent: false };
+          }),
+        ),
+      );
+      sent += results.filter((r) => r.sent).length;
+    }
+  } catch (e) {
+    console.error("[admin] outage notice failed:", e);
   }
-  redirect("/admin/settings?saved=pause");
+  return sent;
 }
 
 /** Toggle UNDER ATTACK mode (suppress + auto-tighten caps + throttle). */
