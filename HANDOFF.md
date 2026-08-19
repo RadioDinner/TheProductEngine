@@ -3,7 +3,53 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-19 (session 016 addendum).
+**Last updated:** 2026-08-19 (session 016 addendum 2).
+
+## Session 016 addendum 2 (2026-08-19) — the call-in card line moved INTO the app
+
+Stripe went live in production this day (user set both keys; a real $45
+top-up + refund test passed — refunds are ledger-manual by design, see
+users.credits). The user then bought a Twilio voice number (their Trust Hub
+business profile had been REJECTED with error 18602 "Business ID could not be
+verified" — the fix on record: legal name + EIN exactly per IRS CP-575, a
+street address not the PO Box, sole-prop classification; they got a number
+anyway) and asked how to set it up.
+
+**Decision: the IVR is served by the main app at `/api/voice`, not by the
+standalone `pay-by-phone/` service** (which is now reference-only, its README
+flagged). Rationale, in order of weight: the app already holds
+STRIPE_SECRET_KEY so the "both deployments must share ONE Stripe account"
+hazard is structurally gone; the caller's member account is stamped with the
+Stripe customer id at capture time (no ~1 min search-index lag); and
+confirmation texts ride the REGISTERED Telnyx line instead of an
+unregistered Twilio number. One deploy, one repo, one test suite.
+
+- `lib/voice.ts` — Twilio request-signature check (HMAC-SHA1 over URL + sorted
+  params; fail-CLOSED in production exactly like the Telnyx webhook) and pure
+  TwiML builders. `app/api/voice/route.ts` — every stage on one URL via
+  `?step=`: ring → whisper → after-ring → menu → pay → pay-result →
+  voicemail. **User's asks, all built:** simultaneous ring to several phones
+  (`VOICE_RING_TO`), auto-attendant ONLY when nobody answers
+  (`VOICE_RING_SECONDS`, default 18 — must stay under the cells' voicemail
+  delay), voicemail texted to `ADMIN_PHONES`.
+- `savePhoneCapturedCard` (lib/payments.ts) find-or-creates the Stripe
+  customer keyed by `metadata['phone']` E.164 (same key the standalone service
+  used, so `adoptPhoneSavedCustomer` still works), attaches the token, sets
+  the default, stamps `card_consent_at`, and calls `setStripeCustomerId`.
+  A caller with no account gets one (`ensureAccount`).
+- Setup guide: **`docs/call-in-card-line.md`** (PCI Mode, Pay Connector,
+  the ONE webhook URL, the env vars, the Telnyx call-forward so the public
+  number never changes, the test script). `/api/health` now reports
+  `TWILIO_AUTH_TOKEN` and the `VOICE_RING_TO` count.
+- `npm test` now runs under the abuse suite's alias loader, so lib modules
+  with `@/` imports are unit-testable. Unit 543 → **592** (new `voice` suite:
+  49 checks — Twilio's own documented signature vector passes, forged-param
+  and missing-token rejections, and TwiML shape incl. "no `<Gather>` ever
+  collects card digits").
+- Also this day: admin phone orders take a **custom dollar amount** ($1–$5,000,
+  `customAmountCents`) beside the presets; the signed-in header link reads
+  **"My account"** instead of the member's phone number (user: the number was
+  the only way in and nothing said it was clickable).
 
 ## Session 016 addendum (2026-08-19) — PROD OUTAGE: sharp 0.35 broke every route on Vercel (fixed; merge to deploy)
 

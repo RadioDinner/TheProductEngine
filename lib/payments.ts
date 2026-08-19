@@ -181,6 +181,76 @@ export async function adoptPhoneSavedCustomer(phone: string): Promise<string | n
 }
 
 /**
+ * Save a card the caller keyed on their phone keypad (/api/voice) onto the
+ * member's Stripe customer, and make it the default for off-session charges.
+ *
+ * The app never sees the digits: Twilio's Pay Connector tokenizes them
+ * straight into Stripe and hands us only a `pm_…` id. We find-or-create the
+ * customer, keyed by `metadata['phone']` in E.164 — the SAME key the
+ * standalone IVR uses, so adoptPhoneSavedCustomer keeps working either way —
+ * then stamp the id on the member's account directly, which beats waiting on
+ * Stripe's search index. `card_consent_at` records that the spoken
+ * authorization was given (payTwiml says it before capture).
+ *
+ * Returns the customer id, or null if anything failed (the caller hears a
+ * "couldn't save it" line rather than a false confirmation).
+ */
+export async function savePhoneCapturedCard(args: {
+  phone: string;
+  paymentMethodId: string;
+  storedCustomerId?: string | null;
+}): Promise<string | null> {
+  if (paymentsDevMode) return null;
+  const auth = {
+    Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+  const post = async (path: string, body: URLSearchParams) => {
+    const response = await fetch(`https://api.stripe.com/v1/${path}`, {
+      method: "POST",
+      headers: auth,
+      body,
+    });
+    if (!response.ok) {
+      throw new Error(`Stripe ${path} failed (${response.status}): ${await response.text()}`);
+    }
+    return (await response.json()) as { id?: string };
+  };
+  try {
+    let customerId = args.storedCustomerId ?? (await adoptPhoneSavedCustomer(args.phone));
+    if (!customerId) {
+      const created = await post(
+        "customers",
+        new URLSearchParams({
+          phone: `+1${args.phone}`,
+          description: `${site.name} member +1${args.phone}`,
+          "metadata[phone]": `+1${args.phone}`,
+          "metadata[source]": "pay-by-phone",
+        }),
+      );
+      if (!created.id) throw new Error("Stripe customer create returned no id");
+      customerId = created.id;
+    }
+    await post(
+      `payment_methods/${encodeURIComponent(args.paymentMethodId)}/attach`,
+      new URLSearchParams({ customer: customerId }),
+    );
+    await post(
+      `customers/${encodeURIComponent(customerId)}`,
+      new URLSearchParams({
+        "invoice_settings[default_payment_method]": args.paymentMethodId,
+        "metadata[card_consent_at]": new Date().toISOString(),
+      }),
+    );
+    await setStripeCustomerId(args.phone, customerId);
+    return customerId;
+  } catch (e) {
+    console.error("[payments] saving a phone-captured card failed:", e);
+    return null;
+  }
+}
+
+/**
  * The member's Stripe customer for charging: the account's stored id, else
  * the pay-by-phone customer adopted by phone search (null = truly no card
  * path). Every charge site goes through this so a call-in card works

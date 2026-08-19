@@ -74,3 +74,9 @@ rats
 inaccurate/invalid/expired business ID. Twilio's advice: edit the profile,
 use the legal company name and EIN from tax records, or contact
 trusthub-verify@twilio.com. Bundle SID + Account SID included in the mail.]
+
+--- prompt (2026-08-19, continued session) ---
+somehow I was able to buy a number. How do  i set it up
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+I called the number and it said "Thanks for the call, confirguer your number..." something yadayada. Now I need to probably edit teh  voice configureaion in twilio?

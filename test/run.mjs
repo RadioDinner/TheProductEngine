@@ -5,6 +5,7 @@
 // a check. Exit code is non-zero if any check fails.
 const SUITES = [
   "config",
+  "voice",
   "segments",
   "commands",
   "dst",

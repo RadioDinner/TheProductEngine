@@ -9,6 +9,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { db, supabaseConfigured } from "@/lib/db";
 import { isProduction } from "@/lib/env";
+import { ringToPhones } from "@/lib/voice";
 
 function keyKind(key: string | undefined): string {
   if (!key) return "missing";
@@ -66,6 +67,10 @@ export async function GET(req: NextRequest) {
       // to move — checkout, auto top-up, business packages, phone orders.
       STRIPE_SECRET_KEY: Boolean(process.env.STRIPE_SECRET_KEY),
       STRIPE_WEBHOOK_SECRET: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
+      // The call-in card line: the token gates /api/voice entirely, and the
+      // ring list is what makes the phones ring before the attendant.
+      TWILIO_AUTH_TOKEN: Boolean(process.env.TWILIO_AUTH_TOKEN),
+      VOICE_RING_TO: ringToPhones().length,
     },
   };
 

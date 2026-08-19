@@ -1,3 +1,24 @@
+> ## ⚠️ Read this first — the card line now lives IN THE APP
+>
+> As of session 016 the whole flow is served by the main Next.js app at
+> **`/api/voice`** (`app/api/voice/route.ts` + `lib/voice.ts`), and it does
+> more than this service does: the operator's phones ring first, an
+> auto-attendant picks up only if nobody answers, and callers can leave a
+> voicemail. **Nothing in this folder needs to be deployed.** It stays as a
+> reference implementation (and a fallback if the card line is ever split
+> onto its own host).
+>
+> Why in-app: the app already holds `STRIPE_SECRET_KEY`, so the "both
+> deployments must use ONE Stripe account" hazard disappears — it is the same
+> account by construction; the caller's member account is stamped with the new
+> Stripe customer id instantly (no ~1 min search lag); and confirmation texts
+> go out over the **registered Telnyx line** members already text, instead of
+> an unregistered Twilio number.
+>
+> **Setup lives in `docs/call-in-card-line.md`.** Part 1 below (PCI Mode, the
+> Stripe Pay Connector) is still exactly right — only the webhook URL and the
+> "run this server" part changed.
+
 # Plain Exchange — Call-to-Add-a-Card (Twilio Pay + Stripe)
 
 Customers call a phone number from any phone — shanty landline or flip phone — key in
