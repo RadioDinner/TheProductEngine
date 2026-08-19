@@ -11,8 +11,9 @@
  *   corner-anchored region of the portrait 4:5 white page; regions are
  *   sized so typical photos overlap slightly (later pictures sit on top),
  *   with white showing through — a staggered photo-pile.
- * - 4 pictures → clean 2×2 GRID: each cell filled edge-to-edge (cover-crop
- *   — that's what makes it read as a grid) with thin white gutters.
+ * Three is the maximum since session 016 — the price sheet stops there, so an
+ * ad can never carry a picture nobody was charged for, and every collage is
+ * now a scrapbook (the old 2x2 grid was the four-picture layout).
  *
  * Output is baseline JPEG (old handsets choke on progressive), sized well
  * under carrier MMS limits. sharp does the decode/compose work. `.rotate()`
@@ -30,8 +31,10 @@ async function loadSharp() {
   return (await import("sharp")).default;
 }
 
-/** The most pictures one ad combines — extras beyond this are ignored. */
-export const MAX_COMBINED_PHOTOS = 4;
+/** The most pictures one ad combines — extras beyond this are ignored.
+ * Three since session 016: the price sheet ($30/$40/$50) stops at three, and
+ * an ad must never carry a picture nobody was charged for. */
+export const MAX_COMBINED_PHOTOS = 3;
 
 /** The public storage bucket every ad photo lives in (lib/photos.ts uploads
  * there; these path markers encode provenance so no schema change is needed):
@@ -122,9 +125,9 @@ export interface CollagePlacement {
   height: number;
 }
 
-/** The 4-picture layout (user decision): a fixed 2×2 grid, each cell filled
- * edge-to-edge — cover-cropped, which is what makes it read as a grid —
- * with a thin white gutter between cells. */
+/** The retired 4-picture 2x2 grid. Unused since the three-picture cap
+ * (session 016) but kept: it is the layout to restore if the price sheet ever
+ * grows a fourth rung. */
 export function gridCells(): CollagePlacement[] {
   const w = (W - GRID_GUTTER) / 2;
   const h = (H - GRID_GUTTER) / 2;
@@ -141,13 +144,12 @@ export function gridCells(): CollagePlacement[] {
  * pixel sizes. Pure — the unit suite pins the invariants. 2–3 pictures:
  * scrapbook fit — aspect ratios preserved exactly (nothing cropped, nothing
  * stretched), every placement on the page, input order kept. 4 pictures:
- * the fixed 2×2 grid — dims are ignored because grid cells COVER-crop.
+ * scrapbook fit at every count now that three pictures is the maximum.
  */
 export function collagePlacements(
   dims: { width: number; height: number }[],
 ): CollagePlacement[] {
   const use = dims.slice(0, MAX_COMBINED_PHOTOS);
-  if (use.length >= MAX_COMBINED_PHOTOS) return gridCells();
   const slots = slotsFor(Math.min(Math.max(use.length, 2), 3));
   return use.map((d, i) => {
     const s = slots[i];
@@ -181,10 +183,9 @@ export async function combineImageBuffers(images: Buffer[]): Promise<Buffer> {
   const placements = collagePlacements(
     normalized.map((n) => ({ width: n.info.width, height: n.info.height })),
   );
-  // Scrapbook (2–3): "fill" to the exact placement size — never distorts,
-  // collagePlacements preserved the ratio. Grid (4): "cover" fills each
-  // fixed cell edge-to-edge, cropping centered.
-  const fit = use.length >= MAX_COMBINED_PHOTOS ? ("cover" as const) : ("fill" as const);
+  // "fill" to the exact placement size — never distorts, because
+  // collagePlacements already preserved each picture's ratio.
+  const fit = "fill" as const;
   const cells = await Promise.all(
     normalized.map((n, i) =>
       sharp(n.data)

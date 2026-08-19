@@ -774,11 +774,16 @@ const file = {
     phone: string,
     amountCents: number,
     amountLabel: string,
+    limit = 0,
   ): { account: Account; granted: boolean } {
     const store = load();
     const account = store.accounts[phone];
     if (!account) throw new Error(`grantStarterCreditIfFirst: no account for ${phone}`);
     if (account.starterGrantedAt) return { account, granted: false };
+    if (limit > 0) {
+      const granted = Object.values(store.accounts).filter((a) => a.starterGrantedAt).length;
+      if (granted >= limit) return { account, granted: false };
+    }
     const at = new Date().toISOString();
     account.starterGrantedAt = at;
     if (amountCents > 0) {
@@ -1535,10 +1540,11 @@ export async function grantStarterCreditIfFirst(
   phone: string,
   amountCents: number,
   amountLabel: string,
+  limit = 0,
 ): Promise<{ account: Account; granted: boolean }> {
   return supabaseConfigured
-    ? remote.grantStarterCreditIfFirst(phone, amountCents, amountLabel)
-    : file.grantStarterCreditIfFirst(phone, amountCents, amountLabel);
+    ? remote.grantStarterCreditIfFirst(phone, amountCents, amountLabel, limit)
+    : file.grantStarterCreditIfFirst(phone, amountCents, amountLabel, limit);
 }
 
 /**

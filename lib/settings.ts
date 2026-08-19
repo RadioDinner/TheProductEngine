@@ -12,8 +12,14 @@ import { engineDefaults } from "@/lib/config";
 export interface EngineSettings {
   /** Text-ad price in CENTS (dollar pricing, session 016 — docs/pricing.md). */
   costTextCents: number;
-  /** Picture-ad price in CENTS (up to 4 pictures). */
+  /** One-picture price in CENTS (the first entry of photoPricesCents). */
   costPhotoCents: number;
+  /** Picture-ad prices in CENTS by picture count: [1 pic, 2 pics, 3 pics]. */
+  photoPricesCents: number[];
+  /** Broadcasts carry the photo (MMS) instead of "Reply PIC 12". */
+  photosInBroadcast: boolean;
+  /** Members who may ever receive the starter credit (0 = no cap). */
+  starterCreditLimit: number;
   /** Website-listing add-on in CENTS. 0 = included free for every ad. */
   webAddonCents: number;
   /** Starter credit in CENTS, granted once on a member's first real post. */
@@ -74,6 +80,9 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   // must never be read as cents. Migration 9973 seeds the new keys.
   costTextCents: "ad_price_text_cents",
   costPhotoCents: "ad_price_photo_cents",
+  photoPricesCents: "ad_price_photo_cents_by_count",
+  photosInBroadcast: "photos_in_broadcast",
+  starterCreditLimit: "starter_credit_limit",
   webAddonCents: "web_addon_cents",
   starterCreditCents: "starter_credit_cents",
   digestCap: "digest_ad_cap",
@@ -133,6 +142,9 @@ export async function getEngineSettings(): Promise<EngineSettings> {
   const defaults: EngineSettings = {
     costTextCents: engineDefaults.costTextCents,
     costPhotoCents: engineDefaults.costPhotoCents,
+    photoPricesCents: [...engineDefaults.photoPricesCents],
+    photosInBroadcast: engineDefaults.photosInBroadcast,
+    starterCreditLimit: engineDefaults.starterCreditLimit,
     webAddonCents: engineDefaults.webAddonCents,
     starterCreditCents: engineDefaults.starterCreditCents,
     digestCap: engineDefaults.digestCap,

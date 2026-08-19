@@ -232,3 +232,10 @@ Reply AD to place your first ad."
 I spoke with a guy that used it, and he said that if he runs over his balance, the company will CALL him to get payment. I don't want to do that. I want to send them a message saying to call the number to add a card to settle the balance. And I want you to make the system support that.
 
 The other thing I want you to do is analyze how competitive I am on price. Also, what is my welcome message? I want to re-work it
+
+--- prompt (2026-08-19, continued session) ---
+Actually, right now my message is "You're subscribed to The Plain Exchange - Holmes County, Ohio classifieds by text, up to 4 digests a day. Msg & data rates may apply. Reply STOP to cancel, HELP for help." and then it sends another one that says "Welcome to The Plain Exchange! Pick what you want ads for - text one word per message: [category menu]"
+I want that changed to honor my 7am to 8pm sending times. And I want my categories numbered, so I want them to be able to reply 1 for ALL, 2 for Buggies and bikes, 3 dogs & puppies, etc.
+Should I change the picture management? One competitor has vastly more expensive ads ($65 for a picture ad, $45 for text) and he sends the pictures automatically with each one. My other competitor has users send PIC for a picture. How should I handle mine? I want it to scale well, and part of me says I should go back to the send /PIC for a picture.
+I also want to enhance my welcome message. I want to tell people that the ads also get posted to the website, where they can see more pictures if they want to. And maybe that decides the picture question. People could see unlimited pictures on the website if my system has people reply /PIC for pictures. All they need to do is go to ThePlainExchange.com for more pictures and to sign up for optional email subscription as well. I want to completely remove the Holmes County from the branding, as that would limit my reach (per an amish guy I spoke with today about it).
+Actually I've decided on my pricing. I want a text ad to be $20, 1 pic $30, 2 pics $40 and 3 pics $50. The first 200 subscribers get $40 free ad credit.

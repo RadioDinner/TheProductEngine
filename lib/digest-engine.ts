@@ -105,7 +105,7 @@ export function composeDigestMessages(
     `Plain Exchange${digestNo ? ` No. ${digestNo}` : ""} ${dateLabel} ${label}:`,
   );
   const adLines = items.map((ad) =>
-    gsmSanitize(`#${ad.id} ${ad.body}`),
+    gsmSanitize(`#${ad.id} ${ad.body}${ad.photo ? ` Pic? Reply PIC ${ad.id}` : ""}`),
   );
   // Business sponsor lines (item 17) ride FIRST, right under the header —
   // clearly labeled ("Sponsor: …"), OUTSIDE the cap-10 member ads (they are
@@ -165,6 +165,8 @@ export function buildCategorizedSmsRows(params: {
   edition?: DigestEdition;
   digestNo: number | null;
   sponsorLines: string[];
+  /** Attach each picture ad's photo as MMS instead of prompting for PIC. */
+  photosInBroadcast?: boolean;
   recipients: { phone: string; categories: string[] | null }[];
 }): { rows: OutboxInsert[]; recipients: number; deliveredAdIds: Set<number> } {
   const groups = new Map<string, { categories: string[] | null; phones: string[] }>();
@@ -201,11 +203,14 @@ export function buildCategorizedSmsRows(params: {
       params.sponsorLines,
     );
     const partSegments = messages.map((m) => segmentation(m).segments);
-    // Picture ads ride out WITH their photo (user decision, session 016) —
-    // the collage for a multi-picture ad, exactly the image PIC would send.
-    // Attached to part 1 only: one MMS per edition, however it packs. An
-    // edition is a single ad since instant send, so this is at most one file.
-    const media = filtered.map((ad) => ad.photo?.src).filter((url): url is string => Boolean(url));
+    // Whether the picture rides along (MMS to every subscriber) or the ad
+    // says "Reply PIC 12" is a SETTING, off by default — an MMS costs ~$0.035
+    // per subscriber, so at a $30 picture ad auto-sending stops breaking even
+    // near 850 subscribers, while an on-demand pull costs that only for the
+    // few who ask. The website carries every picture either way.
+    const media = params.photosInBroadcast
+      ? filtered.map((ad) => ad.photo?.src).filter((url): url is string => Boolean(url))
+      : [];
     for (const phone of group.phones) {
       recipients++;
       for (let i = 0; i < messages.length; i++) {
@@ -229,7 +234,7 @@ export function buildCategorizedSmsRows(params: {
 export function composeCatchupMessages(items: StoredAd[]): string[] {
   const header = gsmSanitize(`${site.name} — most recent ads:`);
   const adLines = items.map((ad) =>
-    gsmSanitize(`#${ad.id} ${ad.body}`),
+    gsmSanitize(`#${ad.id} ${ad.body}${ad.photo ? ` Pic? Reply PIC ${ad.id}` : ""}`),
   );
   return packMessages({ header, adLines, maxGsm: DIGEST_MSG_MAX_GSM });
 }
@@ -413,6 +418,7 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
     edition,
     digestNo,
     sponsorLines: sponsors.map((s) => sponsorLine(s)),
+    photosInBroadcast: settings.photosInBroadcast,
     recipients: subscribers,
   });
   await enqueueDigestOutbox(rows);
@@ -624,6 +630,7 @@ async function composeSmsEdition(args: {
     phonesTextedToday,
     digestNo,
     sponsorLines: sponsors.map((s) => sponsorLine(s)),
+    photosInBroadcast: args.settings.photosInBroadcast,
     recipients: subscribers,
   });
   const queued = await enqueueDigestOutbox(rows);

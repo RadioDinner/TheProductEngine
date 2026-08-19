@@ -55,7 +55,7 @@ import {
 } from "@/lib/categories";
 import { gsmSanitize } from "@/lib/sms-segments";
 import { normalizePhone } from "@/lib/phone";
-import { formatPrice, site } from "@/lib/config";
+import { adPriceCents, formatPrice, site } from "@/lib/config";
 import { getEngineSettings, getWordRules, matchWordRules, effectiveSmsCaps } from "@/lib/settings";
 import type { EngineSettings } from "@/lib/settings";
 import { stripEmoji, hasLink, mayPostLinks } from "@/lib/content-filter";
@@ -179,6 +179,15 @@ async function coverShortfallWithCard(
 }
 
 /** The add-money instructions every cannot-pay reply carries. */
+/** The price sheet in one line, straight from Settings — never hardcoded, so
+ * a repricing is a settings edit and not a code change. */
+function priceSheetLine(settings: EngineSettings): string {
+  const pics = settings.photoPricesCents
+    .map((cents, i) => `${i + 1} pic${i ? "s" : ""} ${formatPrice(cents)}`)
+    .join(", ");
+  return `Text ad ${formatPrice(settings.costTextCents)}; ${pics}.`;
+}
+
 function payInstructions(): string {
   return `Add money at ThePlainExchange.com, or call ${site.supportPhone} to pay by card or check`;
 }
@@ -269,13 +278,16 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   // still posts (as text, at text price) but the seller must be TOLD — a
   // silent drop reads as "my picture ad is live" when it isn't.
   const photoDropped = sentPictures > 0 && !hasPhoto;
-  const cost = hasPhoto ? settings.costPhotoCents : settings.costTextCents;
+  // Price by picture COUNT (session 016 sheet: $20 text, $30/$40/$50 for
+  // 1/2/3 pictures) — savedPictures is what the ad will actually carry, so a
+  // seller is never charged for a picture that failed to save.
+  const cost = adPriceCents(savedPictures, settings);
   // Apply the one-time starter credit now — on the seller's FIRST real AD NEW
   // (past the empty/too-long/auto-reject gates), not on account creation. A
   // number that only ever subscribes or checks its balance never mints money.
   // Idempotent: once granted it never re-fires, even after the money is spent.
   const starterLabel = formatPrice(settings.starterCreditCents);
-  const starter = await grantStarterCreditIfFirst(from, settings.starterCreditCents, starterLabel);
+  const starter = await grantStarterCreditIfFirst(from, settings.starterCreditCents, starterLabel, settings.starterCreditLimit);
   let balance = await getCreditBalance(from);
   // Automatic top-up: a saved card (with the toggle on) covers the shortfall,
   // and the confirmation below states the charge. Runs BEFORE the ad record
@@ -497,7 +509,9 @@ async function handlePhotoFollowup(
   let upgradeAttempt = 0;
   if (!ad.photo) {
     const upgradeToken = `Ad #${ad.id} (picture upgrade)`;
-    const delta = Math.max(0, settings.costPhotoCents - settings.costTextCents);
+    // The ad had no picture, so it was charged the text price; upgrading
+    // charges the difference up to the rung its picture count lands on.
+    const delta = Math.max(0, adPriceCents(newCount, settings) - settings.costTextCents);
     if (delta > 0) {
       const ledger = await getLedger(from);
       const charges = ledger.filter(
@@ -527,7 +541,7 @@ async function handlePhotoFollowup(
             ? ` We tried your saved card but it didn't go through (${declineReason}).`
             : "";
           return {
-            body: `Adding a picture to ad #${ad.id} costs ${formatPrice(delta)} more (picture ads are ${formatPrice(settings.costPhotoCents)}) and you have ${formatPrice(balance)}.${cardNote} ${payInstructions()}, then send the picture again.`,
+            body: `Adding a picture to ad #${ad.id} costs ${formatPrice(delta)} more and you have ${formatPrice(balance)}.${cardNote} ${payInstructions()}, then send the picture again.`,
           };
         }
         upgradeAttempt = refunds;
@@ -928,7 +942,7 @@ async function route(
       await ensureAccount(from);
       const balance = await getCreditBalance(from);
       return {
-        body: `You have ${formatPrice(balance)} of ad credit. A plain ad is ${formatPrice(settings.costTextCents)}, a picture ad ${formatPrice(settings.costPhotoCents)}. ${payInstructions()}.`,
+        body: `You have ${formatPrice(balance)} of ad credit. ${priceSheetLine(settings)} ${payInstructions()}.`,
       };
     }
     case "sold":

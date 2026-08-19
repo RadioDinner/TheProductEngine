@@ -38,6 +38,22 @@ export function customAmountCents(raw: string): number | null {
   return cents;
 }
 
+/**
+ * What an ad costs, by how many pictures it carries (user price sheet,
+ * session 016): 0 pictures = the text price, 1/2/3 = the picture ladder.
+ * More pictures than the sheet covers charge the top rung — the combiner
+ * caps at the same number, so that is a belt-and-braces clamp rather than a
+ * real case. Pure, so the price ladder is unit-testable.
+ */
+export function adPriceCents(
+  photoCount: number,
+  prices: { costTextCents: number; photoPricesCents: number[] },
+): number {
+  if (photoCount <= 0 || !prices.photoPricesCents.length) return prices.costTextCents;
+  const rung = Math.min(photoCount, prices.photoPricesCents.length) - 1;
+  return prices.photoPricesCents[rung];
+}
+
 export function formatPrice(cents: number): string {
   return cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`;
 }
@@ -53,8 +69,25 @@ export const engineDefaults = {
    * stale credit-era config row (credit_cost_text = 2) can never be
    * misread as $0.02: unmigrated prod falls back to these defaults.
    */
-  costTextCents: 4500,
-  costPhotoCents: 6000,
+  costTextCents: 2000,
+  /**
+   * Picture-ad prices in CENTS, BY PICTURE COUNT (user decision, session 016
+   * after comparing an SMS competitor at $15/$20/$30): index 0 = one picture,
+   * index 1 = two, index 2 = three. Three is the maximum an ad can carry —
+   * the price sheet stops there, so the combiner does too.
+   */
+  photoPricesCents: [3000, 4000, 5000],
+  /** Kept as the ONE-picture price so a single number still means something
+   * to older callers and to the refund matcher. Derived, never edited alone. */
+  costPhotoCents: 3000,
+  /**
+   * Do broadcasts carry the picture (MMS to every subscriber), or does the ad
+   * say "Reply PIC 12"? OFF is the launch answer and the one that scales: an
+   * MMS costs ~$0.035 per subscriber, so at $30 a picture ad auto-sending
+   * stops breaking even around 850 subscribers, while an on-demand pull costs
+   * that only for the handful who ask. The website carries every picture.
+   */
+  photosInBroadcast: false,
   /**
    * Website-listing add-on in cents. 0 (launch value) = every ad lists on
    * the website automatically, free. Set to 1500 to start charging +$15:
@@ -67,7 +100,14 @@ export const engineDefaults = {
    * (never at account creation; the session-005 anti-abuse rule). $150
    * covers 3 text ads or 2 picture ads; set 18000 for "3 ads of any kind".
    */
-  starterCreditCents: 15000,
+  starterCreditCents: 4000,
+  /**
+   * How many members may ever receive the starter credit — "the first 200
+   * subscribers get $40 free ad credit" (user decision, session 016). It is a
+   * launch offer, not a standing one: past this count, first posts are simply
+   * charged. 0 = no cap.
+   */
+  starterCreditLimit: 200,
   digestCap: 10,
   /**
    * EMAIL edition times, hours in America/New_York (session 016: SMS stopped

@@ -2,7 +2,7 @@
 // real dollars leaving a member's card, so the parser must reject anything
 // ambiguous and clamp the fat-finger range ($1–$5,000, the same ceiling as
 // the admin balance adjustment).
-import { customAmountCents, isTopUpPreset, TOP_UP_PRESETS_CENTS } from "../lib/config.ts";
+import { adPriceCents, customAmountCents, engineDefaults, isTopUpPreset, TOP_UP_PRESETS_CENTS } from "../lib/config.ts";
 
 export const name = "config";
 
@@ -31,4 +31,21 @@ export function run(t) {
     t.eq(`preset ${preset} accepted`, isTopUpPreset(preset), true);
   }
   t.eq("non-preset rejected by the preset gate", isTopUpPreset(4600), false);
+
+  /* ---- the price ladder (session 016 sheet v2) ---- */
+  const sheet = { costTextCents: 2000, photoPricesCents: [3000, 4000, 5000] };
+  t.eq("no pictures = the text price", adPriceCents(0, sheet), 2000);
+  t.eq("1 picture", adPriceCents(1, sheet), 3000);
+  t.eq("2 pictures", adPriceCents(2, sheet), 4000);
+  t.eq("3 pictures", adPriceCents(3, sheet), 5000);
+  // The combiner caps at three, so this is a belt-and-braces clamp — but a
+  // seller must never be charged LESS for more pictures.
+  t.eq("beyond the sheet charges the top rung", adPriceCents(9, sheet), 5000);
+  t.eq("a negative count reads as text", adPriceCents(-1, sheet), 2000);
+  t.eq("no ladder configured falls back to text", adPriceCents(2, { costTextCents: 2000, photoPricesCents: [] }), 2000);
+  // Every rung must cost more than the one below it, or a seller could pay
+  // less by sending an extra picture.
+  const ladder = [engineDefaults.costTextCents, ...engineDefaults.photoPricesCents];
+  t.eq("the shipped ladder only climbs", ladder.every((p, i) => i === 0 || p > ladder[i - 1]), true);
+  t.eq("costPhotoCents mirrors the one-picture rung", engineDefaults.costPhotoCents, engineDefaults.photoPricesCents[0]);
 }

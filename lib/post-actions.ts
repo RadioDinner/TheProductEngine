@@ -27,7 +27,7 @@ import {
   spendCredits,
 } from "@/lib/store";
 import { autoTopUpShortfall, resolveStripeCustomer } from "@/lib/payments";
-import { formatPrice } from "@/lib/config";
+import { adPriceCents, formatPrice } from "@/lib/config";
 import {
   addPhotoSubmission,
   countAdPhotos,
@@ -143,7 +143,10 @@ async function postAdInner(formData: FormData): Promise<void> {
   const wantsWebListing = settings.webAddonCents === 0 || formData.get("weblisting") === "on";
   const addonCost = settings.webAddonCents > 0 && wantsWebListing ? settings.webAddonCents : 0;
 
-  const cost = (hasPhoto ? settings.costPhotoCents : settings.costTextCents) + addonCost;
+  // Web posts carry ONE listing picture (the extras are website-gallery only,
+  // never texted), so they sit on the one-picture rung of the price ladder.
+  // The multi-picture rungs are an SMS thing — a seller texting 2 or 3.
+  const cost = adPriceCents(hasPhoto ? 1 : 0, settings) + addonCost;
   // One-time starter credit fires here — on the FIRST real post, past the
   // empty/too-long/auto-reject gates — exactly like the SMS lane.
   const starterLabel = formatPrice(settings.starterCreditCents);
@@ -151,6 +154,7 @@ async function postAdInner(formData: FormData): Promise<void> {
     phone,
     settings.starterCreditCents,
     starterLabel,
+    settings.starterCreditLimit,
   );
   let balance = await getCreditBalance(phone);
   // Automatic top-up: the saved card (toggle on) covers the shortfall before

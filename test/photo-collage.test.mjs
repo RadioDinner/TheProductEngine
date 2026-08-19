@@ -75,9 +75,11 @@ function visiblePoint(placements, i) {
 }
 
 export async function run(t) {
-  t.eq("cap is 4", MAX_COMBINED_PHOTOS, 4);
+  // Three since session 016: the price sheet ($30/$40/$50) stops at three, so
+  // an ad must never carry a picture nobody was charged for.
+  t.eq("cap is 3", MAX_COMBINED_PHOTOS, 3);
   t.eq("page is portrait 4:5", { width: COLLAGE_WIDTH, height: COLLAGE_HEIGHT }, { width: 1200, height: 1500 });
-  for (const count of [2, 3, 4, 9]) {
+  for (const count of [2, 3, 9]) {
     t.eq(`dims are the fixed page (${count})`, collageDimensions(count), {
       width: COLLAGE_WIDTH,
       height: COLLAGE_HEIGHT,
@@ -105,9 +107,11 @@ export async function run(t) {
       );
     }
   }
-  // 4 pictures (user decision): the fixed 2×2 grid — equal cells, thin
-  // gutters, exactly tiling the page.
-  t.eq("4-up is the fixed grid", collagePlacements(SIZES), gridCells());
+  // Every collage is a scrapbook now that three is the maximum; extras beyond
+  // the cap are dropped, never silently laid out.
+  t.eq("a 4th picture is ignored", collagePlacements(SIZES).length, 3);
+  t.eq("3-up and a truncated 4-up agree", collagePlacements(SIZES), collagePlacements(SIZES.slice(0, 3)));
+  // The retired 2x2 grid still tiles the page — kept for a future 4th rung.
   const cells = gridCells();
   t.eq("grid tiles the page width", cells[0].width + cells[1].width < COLLAGE_WIDTH, true);
   t.eq(
@@ -120,7 +124,7 @@ export async function run(t) {
     cells[3].top + cells[3].height,
     COLLAGE_HEIGHT,
   );
-  t.eq("placements clamp above cap", collagePlacements(SIZES.concat([SIZES[0]])).length, 4);
+  t.eq("placements clamp above cap", collagePlacements(SIZES.concat([SIZES[0]])).length, MAX_COMBINED_PHOTOS);
   // An extreme panorama still fits uncropped.
   const pano = collagePlacements([{ width: 4000, height: 800 }, SIZES[1]])[0];
   t.eq(
@@ -140,7 +144,7 @@ export async function run(t) {
   }
   t.eq("single image throws", threw, true);
 
-  for (const count of [2, 3, 4]) {
+  for (const count of [2, 3]) {
     const collage = await combineImageBuffers(sources.slice(0, count));
     t.eq(`${count}-up bytes are JPEG`, sniffImage(collage), "jpg");
     const meta = await sharp(collage).metadata();
@@ -160,7 +164,7 @@ export async function run(t) {
         t.eq(`${count}-up picture ${i + 1} color shows`, near(got, COLORS[i]), true);
       }
     }
-    if (count < 4) {
+    {
       // Somewhere on the page the white ground still shows (scrapbook look):
       // a corner no placement covers.
       const corners = [
@@ -175,12 +179,6 @@ export async function run(t) {
         const got = await probe(collage, free[0], free[1]);
         t.eq(`${count}-up white shows through`, near(got, { r: 255, g: 255, b: 255 }), true);
       }
-    } else {
-      // The grid's gutters stay white between the filled cells.
-      const gutterX = await probe(collage, 600, 300);
-      const gutterY = await probe(collage, 300, 750);
-      t.eq("grid vertical gutter is white", near(gutterX, { r: 255, g: 255, b: 255 }), true);
-      t.eq("grid horizontal gutter is white", near(gutterY, { r: 255, g: 255, b: 255 }), true);
     }
   }
 

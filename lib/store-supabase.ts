@@ -1002,10 +1002,23 @@ export async function grantStarterCreditIfFirst(
   phone: string,
   amountCents: number,
   amountLabel: string,
+  limit = 0,
 ): Promise<{ account: Account; granted: boolean }> {
   const user = await userByPhone(phone);
   if (!user) throw new Error(`grantStarterCreditIfFirst: no account for ${phone}`);
   if (user.starter_granted_at) return { account: toAccount(user), granted: false };
+  // "The first 200 subscribers get $40 free ad credit" (session 016): a launch
+  // offer, not a standing one. Past the limit the first post is simply
+  // charged. The count is of members ALREADY granted, so the 200th still
+  // gets it and the 201st does not. 0 = no cap.
+  if (limit > 0) {
+    const { count, error: countError } = await db()
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .not("starter_granted_at", "is", null);
+    if (countError) throw countError;
+    if ((count ?? 0) >= limit) return { account: toAccount(user), granted: false };
+  }
   const at = new Date().toISOString();
   // Conditional update guarded on starter_granted_at IS NULL: only the caller
   // that flips it from NULL wins the grant, so a concurrent double post can't
