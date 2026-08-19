@@ -118,3 +118,6 @@ ADded those other ring to and redployed
 
 --- prompt (2026-08-19, continued session) ---
 I called the twillio number 3305213445 and it range for a little, then said, please enter your password, then press pound
+
+--- prompt (2026-08-19, continued session) ---
+Ok, I called from another number and it answered and I pressed 1 to enter my card. I followed all the prompts but it said, "something went wrong and your card was not added, please try again later, goodbye"
