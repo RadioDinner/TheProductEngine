@@ -226,7 +226,7 @@ export default async function AdminSettings({
         ))}
         <div className="field">
           <label htmlFor="slots">
-            Digest slots (hours ET, comma-separated) <Tip k="settings.slots" />
+            Email edition times (hours ET, comma-separated) <Tip k="settings.slots" />
           </label>
           <input id="slots" name="slots" type="text" defaultValue={settings.slots.join(", ")} />
           <p className="fine">The email edition goes out at these same times.</p>

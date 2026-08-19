@@ -203,3 +203,6 @@ Should I include messages for when people do "AD NEW" at like 5am? Should I send
 
 --- prompt (2026-08-19, continued session, sent mid-turn) ---
 also, the business advertising uses the digest language. Change it to once a day and actually, Let's include it in the email digests as a banner every time. There are 4 email digests daily, so we could sell one sponsor per email
+
+--- prompt (2026-08-19, continued session) ---
+pasted the migrations. Sponsors get a ride once a day, throughout the day. Lets do three email digests daily. One at 7am, one at noon, one at 5pm. Create a system that allows for basically unlimited sponsors. If I have 5 sponsors, put them in a queue and put one sponsor on an email at a time. If I have 10 sponsors, put them in a list and they all get in at least 10 email digests. We'll need to re-work the sponsor length. Maybe we'll have them pay week by week. 1 week is 1 price, 2 weeks is another slightly discounted vs paying for 1 week twice, etc. To keep it fair, limit it to 5 sponsors a week. If 4 sponsors pay for a week, and the 5th sponsor pays for 2, he automatically gets the first slot on the second week, then if in the second week 5 sponsors sign up, only the first 4 get to be on that week, otherwise they wait

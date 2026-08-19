@@ -70,10 +70,11 @@ export const engineDefaults = {
   starterCreditCents: 15000,
   digestCap: 10,
   /**
-   * SMS digest slots, hours in America/New_York — 2/day (morning + evening).
-   * Admin-editable at /admin/settings.
+   * EMAIL edition times, hours in America/New_York (session 016: SMS stopped
+   * being a digest, so these drive the email editions only) — 7am, noon and
+   * 5pm, the user's schedule. Admin-editable at /admin/settings.
    */
-  slots: [7, 18],
+  slots: [7, 12, 17],
   /**
    * SMS send window (session 016, user decision): an approved ad is texted
    * IMMEDIATELY, one text per ad — but only between these hours, America/
