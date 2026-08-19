@@ -3,7 +3,38 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-18 (session 016).
+**Last updated:** 2026-08-19 (session 016 addendum).
+
+## Session 016 addendum (2026-08-19) — PROD OUTAGE: sharp 0.35 broke every route on Vercel (fixed; merge to deploy)
+
+The user merged PR #3 (the overhaul) into `main`, pasted migration 9973, then
+hit a site-wide 500. Their Vercel log export showed every route — pages,
+`/_not-found`, even `/api/cron/digests` (the daily digest!) — dying at cold
+start with `Failed to load external module sharp…ERR_DLOPEN_FAILED:
+libvips-cpp.so.8.18.3: cannot open shared object file`. **Not the migration
+and not the overhaul code:** the old `main` (3b430f3) had the identical
+`sharp ^0.35.3` + lockfile and its deployment served fine the same morning —
+the merge merely forced the first FRESH Vercel build, and Vercel's current
+builder fails to bundle sharp 0.35's libvips layout (known upstream:
+lovell/sharp#4567 — Next 16 + Turbopack + Vercel, runtime-only, "downgrade
+to 0.34.x fixes it"). Two-part fix on the designated branch:
+
+- **sharp `^0.34.5`** (package.json + lock) — dedupes with Next 16's own
+  sharp dependency, i.e. the exact layout Vercel's tracing is tested with
+  (`npm ls sharp` → one copy). No API changes needed; the 68 photo-collage
+  compositing checks run the real binding and pass.
+- **sharp is now lazy-loaded** (`lib/photo-collage.ts` inside
+  `combineImageBuffers`; `app/admin/sms-diag/page.tsx` at its two use
+  sites). The pure helpers in photo-collage.ts are imported by the store
+  layer and hence by nearly every route — the old top-level `import sharp`
+  put the native dlopen in the ROOT SERVER CHUNK of the whole site. Now a
+  broken binding costs one collage (callers already fall back to the first
+  picture) instead of the site. Proven by simulation: with `@img/` renamed
+  away (`require("sharp")` throwing the exact prod error), `next start`
+  serves / and /faq 200.
+- Verified: tsc clean, build clean, unit 522/522. **Prod stays down until
+  the user merges this branch into `main`.** After deploy, `/api/health`
+  should go green and /admin/sms-diag's upload self-test exercises sharp.
 
 ## Session 016 (2026-08-18) — THE DOLLAR PRICING OVERHAUL (credits are gone)
 
