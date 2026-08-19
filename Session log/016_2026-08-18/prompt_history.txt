@@ -206,3 +206,29 @@ also, the business advertising uses the digest language. Change it to once a day
 
 --- prompt (2026-08-19, continued session) ---
 pasted the migrations. Sponsors get a ride once a day, throughout the day. Lets do three email digests daily. One at 7am, one at noon, one at 5pm. Create a system that allows for basically unlimited sponsors. If I have 5 sponsors, put them in a queue and put one sponsor on an email at a time. If I have 10 sponsors, put them in a list and they all get in at least 10 email digests. We'll need to re-work the sponsor length. Maybe we'll have them pay week by week. 1 week is 1 price, 2 weeks is another slightly discounted vs paying for 1 week twice, etc. To keep it fair, limit it to 5 sponsors a week. If 4 sponsors pay for a week, and the 5th sponsor pays for 2, he automatically gets the first slot on the second week, then if in the second week 5 sponsors sign up, only the first 4 get to be on that week, otherwise they wait
+
+--- prompt (2026-08-19, continued session) ---
+I pasted the migrations. I want to work on my welcome message. One of my competitors, when I send "START" replies with "NETWORK MSG: You have replied "start" and will begin receiving messages again from this number.
+Welcome!
+
+Reply YES to subscribe and get $20 in FREE ad credit.
+
+Ad pricing: text-only $15, 1 photo $20, 2-3 photos $30.
+
+Reply STOP to unsubscribe."
+
+I said "YES"
+
+And it replied
+
+"Thanks for signing up!
+
+You've got $20 in FREE ad credit.
+
+Pricing: text-only $15, 1 photo $20, 2-3 photos $30.
+
+Reply AD to place your first ad."
+
+I spoke with a guy that used it, and he said that if he runs over his balance, the company will CALL him to get payment. I don't want to do that. I want to send them a message saying to call the number to add a card to settle the balance. And I want you to make the system support that.
+
+The other thing I want you to do is analyze how competitive I am on price. Also, what is my welcome message? I want to re-work it
