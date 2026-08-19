@@ -56,3 +56,9 @@ I refunded the 45 charge but my balance didn't go down. Is that because the refu
 
 --- prompt (2026-08-19, continued session) ---
 that makes sense and it worked. I want the ability to charge a custom amount to their card. Also, what did we decide on the upcharge for a web ad? 15 or 25?
+
+--- prompt (2026-08-19, continued session) ---
+I'm waiting on Twilio compliance profile review, I think. I can't buy a number until that is done
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+I want to make a change when a subscriber is logged in. Right now, you have to click your own number to view your settings, profile, etc. I wnat that to be different, something more intuitive

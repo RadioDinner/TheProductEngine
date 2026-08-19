@@ -3,7 +3,6 @@ import { Newsreader, Public_Sans } from "next/font/google";
 import Link from "next/link";
 import { isAdminPhone } from "@/lib/admin";
 import { signOut } from "@/lib/auth-actions";
-import { formatPhone } from "@/lib/phone";
 import { readSession } from "@/lib/session";
 import { countUnreadChats } from "@/lib/store";
 import { site } from "@/lib/config";
@@ -67,7 +66,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     {" · "}
                     <Link href="/account/ads">My ads</Link>
                     {" · "}
-                    <Link href="/account">{formatPhone(session.phone)}</Link>
+                    {/* A labeled destination, not the member's own phone number —
+                        "click your number for settings" was the one nav link that
+                        needed explaining (user request, session 016). The number
+                        still shows on /account under Profile. */}
+                    <Link href="/account">My account</Link>
                     {" · "}
                     <form action={signOut} className="inline-form">
                       <button className="link-button" type="submit">
