@@ -19,7 +19,16 @@
  * honors EXIF orientation — without it phone photos land sideways. An
  * animated GIF contributes its first frame.
  */
-import sharp from "sharp";
+/** sharp is loaded lazily, inside combineImageBuffers, never at module scope.
+ * This module's pure helpers (websiteAdPhotos, isCollageSrc, dimensions) are
+ * imported by the store layer and therefore by nearly every route; a
+ * top-level `import sharp` puts the native binding in the root server chunk
+ * of the whole site, and when a deploy's .so goes missing (the 2026-08-19
+ * Vercel outage: sharp 0.35 + Next 16 tracing dropped libvips) every page
+ * 500s instead of one collage falling back to its first picture. */
+async function loadSharp() {
+  return (await import("sharp")).default;
+}
 
 /** The most pictures one ad combines — extras beyond this are ignored. */
 export const MAX_COMBINED_PHOTOS = 4;
@@ -158,6 +167,7 @@ export function collagePlacements(
  */
 export async function combineImageBuffers(images: Buffer[]): Promise<Buffer> {
   if (images.length < 2) throw new Error("combineImageBuffers needs at least 2 images");
+  const sharp = await loadSharp();
   const use = images.slice(0, MAX_COMBINED_PHOTOS);
   // Normalize first: EXIF-rotate and learn each picture's true pixel size.
   // limitInputPixels: sender bytes could be a decompression bomb — a small

@@ -8,7 +8,6 @@
  * codes. Admin-only (layout enforces requireAdmin).
  */
 import Link from "next/link";
-import sharp from "sharp";
 import { requireAdmin } from "@/lib/admin";
 import { supabaseConfigured } from "@/lib/db";
 import { CONTENT_TYPE_BY_EXT, sniffImage } from "@/lib/image-sniff";
@@ -129,6 +128,10 @@ async function checkStoredPhoto(raw: string): Promise<StorageCheck> {
     const tail = bytes.subarray(-4).toString("hex");
     let decode: string;
     try {
+      // sharp is imported lazily (never at module scope) so a broken native
+      // binding on a deploy reads as DECODE FAILED here — a diagnosis this
+      // page can report — instead of 500ing the page that diagnoses it.
+      const sharp = (await import("sharp")).default;
       // failOn "error": tolerate warnings (trailing bytes after EOI, minor
       // metadata oddities are normal in real phone JPEGs) but fail on true
       // decode errors — roughly a browser's tolerance, unlike sharp's
@@ -206,6 +209,7 @@ export default async function SmsDiagPage({
   // RIGHT NOW on this deployment" without hunting for a media URL.
   let selfTest: { stored: RehostResult; check?: StorageCheck } | null = null;
   if (params.selftest === "1" && supabaseConfigured) {
+    const sharp = (await import("sharp")).default;
     const testJpeg = await sharp({
       create: { width: 240, height: 180, channels: 3, background: { r: 30, g: 90, b: 200 } },
     })

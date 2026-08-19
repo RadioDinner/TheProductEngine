@@ -136,3 +136,27 @@ combined to-do list. Built the code half on the spot (the session-012 seam):
   Stripe account/secret key.
 
 Verified: tsc clean, build clean, unit 522/522, abuse 19/19.
+
+## Follow-up (2026-08-19): the prod 500 — sharp 0.35 vs Vercel's builder
+
+The user merged PR #3, pasted 9973, and reported a site-wide 500. Their
+Vercel log export (CSV) held the answer on line one: every route on the new
+production deployment — including `/api/cron/digests` — died at cold start
+with `ERR_DLOPEN_FAILED: libvips-cpp.so.8.18.3: cannot open shared object
+file` while loading sharp. Exonerating evidence in the same export: the
+PREVIOUS production deployment served 200s the same morning from the same
+`sharp ^0.35.3` + identical lockfile (last touched at c5a69c0, already in
+old main) — so neither the migration nor the overhaul broke it; the merge
+just forced the first fresh build on Vercel's CURRENT builder, which fails
+to bundle sharp 0.35's libvips. Known upstream: lovell/sharp#4567 (Next 16
++ Turbopack + Vercel, runtime-only, fixed by downgrading to 0.34.x).
+
+Fix (this branch): sharp → `^0.34.5` (dedupes with Next 16's own copy — the
+layout Vercel provably traces) and sharp made LAZY at both import sites
+(photo-collage.ts / admin sms-diag) so a native-load failure can never
+again take the root server chunk — and the whole site — down; worst case
+one collage falls back to its first picture, and sms-diag REPORTS the
+decode failure instead of 500ing. Proof: unit 522/522 (68 real compositing
+checks on 0.34.5), tsc + build clean, and an outage simulation (`@img/`
+renamed so `require("sharp")` throws the exact prod error) under
+`next start` serving / and /faq with 200.
