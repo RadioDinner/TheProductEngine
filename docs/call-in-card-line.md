@@ -108,6 +108,40 @@ application; clear that first if the portal objects.)
    `ADMIN_PHONES` gets a text with the recording link (the audio lives in the
    Twilio console; the app never stores it).
 
+## Moving the site onto the connector's Stripe account
+
+Twilio's Pay Connector OAuth would not attach to the existing Stripe account
+(session 016: every attempt created a NEW account instead — six of them). The
+card MUST live in the same account the app charges from, so the resolution
+was to move the app to the account the connector created. Recorded here in
+case it ever has to happen again.
+
+Nothing in the database is tied to a Stripe account except
+`users.stripe_customer_id`; checkouts build their line items inline, so there
+are no products or prices to recreate. Member balances live in the credit
+ledger, not in Stripe, and are untouched by any of this.
+
+**Order matters — do not swap the keys until the new account is activated for
+live payments, or checkout starts erroring.**
+
+1. In the new account: complete activation (legal entity, tax id, address,
+   bank account), set **payment methods to cards only** (async methods take
+   money without granting credit), and set the statement descriptor so
+   members recognize the charge on a bank statement.
+2. Developers → API keys → copy the new `sk_live_…`.
+3. Developers → Webhooks → add `https://<site>/api/stripe/webhook` with the
+   `checkout.session.completed` event → copy the new `whsec_…`.
+4. Vercel → replace `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` → redeploy.
+5. Supabase SQL editor: `update users set stripe_customer_id = null;` — those
+   ids point into the OLD account and would fail with "No such customer".
+   Nulling is safe and self-healing: `resolveStripeCustomer` re-adopts a
+   caller's card by phone metadata the next time a charge is attempted.
+6. Re-test both rails: a real "Add money" checkout on the website (proves key
+   + webhook), and a call-in capture (proves the connector shares the
+   account). /admin/calls should log **Card saved**.
+
+Payments made before the move stay in the old account — refund them there.
+
 ## Costs
 
 Twilio Pay is about **$0.15 per successful capture**, inbound voice ~$0.0085/min

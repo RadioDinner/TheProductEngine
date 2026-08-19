@@ -157,3 +157,6 @@ option to create or create new account. Those two options alone
 
 --- prompt (2026-08-19, continued session) ---
 it just keeps making new stripe account ids. If I create a new STRIPE_SECRET_KEY, my website will stop working, won't it?
+
+--- prompt (2026-08-19, continued session) ---
+No, I want to keep the call in 1 card capture. the text them the link won't work for the majority of my users. They're on flip phones. Walk me through updatign my stripe keys to my new stripe account with twilio
