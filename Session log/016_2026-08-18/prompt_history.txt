@@ -301,3 +301,45 @@ No no no, I meant to post this as the final [WELCOME PACKAGE, five messages —
 identical to the previous one except MESSAGE 4, which uses the earlier wording:
 "Every ad is also on ThePlainExchange.com. / Along with all the remaining
 pictures and other special features too. / ..."]
+
+--- prompt (2026-08-19, continued session) ---
+all migrations are run
+
+--- prompt (2026-08-19, continued session) ---
+I have a few things we need to fix. In system controls, I have a setting called
+"Picture ad price" and it's set to 30. I need a setting for 1 pic, 2 pic, adn 3
+pictures. Also, the max ads per digest is depreciated. The ad run time in days,
+is only applicable to the website. I want to know when people hit their limit of
+picture pulls per day as well as how many people use number lookups per day. On
+the command replies service-wide per hour, how is that affected now that digests
+are depreciated? Also, is the email edition times field, currently set to 7, 12
+,16, 20, honored? also, do we have a way to verify that the number is real when
+people are creating an account? So that people can't just use a fake account to
+sign up to the web page?
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+on the word filter, make that open a separate field with words listed, instead
+of one word per line. I want an auto-reject list, with words separated by commas,
+and an auto-flag list, also a window of words separated by commas. But I want the
+word filter feature to be on a separate tab on the admin panel
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+I want Claude design to generate an image that I can send out to people that they
+will forward to their friends, about our service, imagine it being a brochure type,
+one image thing that people can easily forward to their friends. It'll be mostly
+viewed on smaller screens, but I want to talk about the features of my platform,
+similar to the welcome messages. And I want to tell people that ads start sending
+on Aug 31. Generate a prompt that I can use on ChatGPT and generate a prompt I can
+use on Claude Design
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+I tried to add an item to the "featured" section of the admin dashboard and got an
+error "This page couldn't load / Reload to try again, or go back."
+Log in vercel says "FUNCTION_PAYLOAD_TOO_LARGE"
+
+--- prompt (2026-08-19, continued session) ---
+I posted all the migrations
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+did you build controls into who can sign up? And how to make sure the use a real
+number?
