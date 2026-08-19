@@ -74,6 +74,17 @@ export const engineDefaults = {
    * Admin-editable at /admin/settings.
    */
   slots: [7, 18],
+  /**
+   * SMS send window (session 016, user decision): an approved ad is texted
+   * IMMEDIATELY, one text per ad — but only between these hours, America/
+   * New_York, start inclusive and end EXCLUSIVE (7..21 = the last text can
+   * leave at 8:59pm). Ads approved outside the window wait for the next open
+   * morning; nothing is ever sent in the middle of the night.
+   */
+  smsWindowStartHour: 7,
+  smsWindowEndHour: 21,
+  /** Days that never send, 0 = Sunday. Monday–Saturday is the user's rule. */
+  smsQuietDays: [0],
   maxChars: 250,
   expiryDays: 30,
   /** Abuse guards: command replies per number per hour before going silent. */

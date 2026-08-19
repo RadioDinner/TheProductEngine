@@ -523,7 +523,7 @@ export default async function AccountPage({
           </>
         )}
         <p className="fine">
-          Up to 4 digests a day. Msg &amp; data rates may apply. Reply STOP to any digest to
+          Message frequency varies — each ad is texted as it&rsquo;s approved, 7am&ndash;9pm Mon&ndash;Sat. Msg &amp; data rates may apply. Reply STOP to any text to
           stop, HELP for help.
         </p>
       </section>

@@ -60,7 +60,7 @@ export default async function EmailSignup({
 
       <p className="auth-alt">
         Rather have it by text? Text <strong>SUBSCRIBE</strong> to{" "}
-        <strong>{site.smsNumber}</strong> — free, up to four digests a day.
+        <strong>{site.smsNumber}</strong> — free; ads arrive as they&rsquo;re posted, 7am&ndash;9pm Mon&ndash;Sat.
       </p>
     </div>
   );

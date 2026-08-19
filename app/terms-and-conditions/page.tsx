@@ -36,7 +36,7 @@ export default function TermsAndConditions() {
           <strong>STOP</strong>. Reply <strong>HELP</strong> for help.
         </li>
         <li>
-          Message frequency varies: up to four ad digests a day, plus replies to the
+          Message frequency varies: each ad is texted as it is approved, between 7am and 9pm Monday through Saturday, plus replies to the
           commands you send.
         </li>
         <li>Message and data rates may apply, charged by your phone company.</li>

@@ -11,6 +11,8 @@ import { dirname, join } from "node:path";
 import { supabaseConfigured } from "@/lib/db";
 import * as remote from "@/lib/engine-store-supabase";
 import { isPicReplaceSubmission } from "@/lib/myads";
+import { COLLAGE_QUIET_MS } from "@/lib/collage-confirm";
+import { MAX_COMBINED_PHOTOS } from "@/lib/photo-collage";
 import { FIXTURE_ADS, fixtureDate } from "@/lib/fixtures";
 import { AD_TTL_DAYS, type Ad, type AdPage, type AdQuery, type AdStatus } from "@/lib/ads";
 import { websiteAdPhotos } from "@/lib/photo-collage";
@@ -31,6 +33,11 @@ export interface StoredAd {
   soldAt?: string;
   /** Set when the ad rode its one included broadcast (new-ad slot). */
   broadcastAt?: string;
+  /** When an email edition carried this ad (session 016 instant send). */
+  emailedAt?: string;
+  /** While in the future, the ad is still collecting pictures and stays out
+   * of the review queue (session 016). */
+  photosSettleAt?: string;
   /** Admin "skip the next digest": excluded from digest selection until this
    * time passes (migration 9988). */
   holdUntil?: string | null;
@@ -135,6 +142,9 @@ export interface OutboxRow {
   subject?: string; // email only
   body: string; // SMS text / email plain text
   html?: string; // email only
+  /** MMS attachments for this part (SMS only). Since session 016 a picture
+   * ad broadcasts WITH its photo instead of prompting "Reply PIC 12". */
+  media?: string[];
   /** Billed SMS segments for this part (0 for email) — budget accounting. */
   segments: number;
   status: "queued" | "sending" | "sent" | "failed";
@@ -389,6 +399,15 @@ const file = {
       }),
       ...(input.photo && { photo: input.photo }),
       ...(input.morePhotos?.length && { morePhotos: input.morePhotos }),
+      // A picture ad starts its settling window on arrival: it waits out of
+      // the review queue until the pictures stop coming (session 016).
+      ...(input.photo && {
+        photosSettleAt: new Date(
+          1 + (input.morePhotos?.length ?? 0) >= MAX_COMBINED_PHOTOS
+            ? Date.now()
+            : Date.now() + COLLAGE_QUIET_MS,
+        ).toISOString(),
+      }),
       ...(input.webListing === false && { webListing: false }),
     });
     save(store);
@@ -418,6 +437,12 @@ const file = {
     const oldPrimarySrc = ad.photo?.src ?? null;
     if (primary) ad.photo = primary;
     if (addParts.length) (ad.morePhotos ??= []).push(...addParts);
+    // Another picture landed: push the settling window out (or close it if
+    // this was the 4th and last one the ad can combine).
+    const photoCount = (ad.photo ? 1 : 0) + (ad.morePhotos?.length ?? 0);
+    ad.photosSettleAt = new Date(
+      photoCount >= MAX_COMBINED_PHOTOS ? Date.now() : Date.now() + COLLAGE_QUIET_MS,
+    ).toISOString();
     save(store);
     return { oldPrimarySrc };
   },
@@ -445,8 +470,14 @@ const file = {
   },
 
   getPendingAds(): StoredAd[] {
+    const now = Date.now();
     return load()
-      .ads.filter((a) => a.status === "pending")
+      .ads.filter(
+        (a) =>
+          a.status === "pending" &&
+          // Still collecting pictures = not ready to review (session 016).
+          (!a.photosSettleAt || Date.parse(a.photosSettleAt) <= now),
+      )
       .sort((a, b) => Number(b.flagged) - Number(a.flagged) || a.id - b.id);
   },
 
@@ -594,6 +625,37 @@ const file = {
         (a, b) => Date.parse(a.approvedAt ?? a.createdAt) - Date.parse(b.approvedAt ?? b.createdAt),
       )
       .slice(0, cap);
+  },
+
+  countAdsAwaitingPictures(): number {
+    const now = Date.now();
+    return load().ads.filter(
+      (a) => a.status === "pending" && a.photosSettleAt && Date.parse(a.photosSettleAt) > now,
+    ).length;
+  },
+
+  touchPhotoSettle(adId: number, photoCount: number): void {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === adId && a.status === "pending");
+    if (!ad) return;
+    ad.photosSettleAt = new Date(
+      photoCount >= MAX_COMBINED_PHOTOS ? Date.now() : Date.now() + COLLAGE_QUIET_MS,
+    ).toISOString();
+    save(store);
+  },
+
+  getUnemailedBroadcastAds(cap: number): StoredAd[] {
+    return load()
+      .ads.filter((a) => a.status === "approved" && a.broadcastAt && !a.emailedAt)
+      .sort((a, b) => String(a.broadcastAt).localeCompare(String(b.broadcastAt)))
+      .slice(0, cap);
+  },
+
+  markAdsEmailed(ids: number[]): void {
+    const store = load();
+    const stamp = new Date().toISOString();
+    for (const ad of store.ads) if (ids.includes(ad.id)) ad.emailedAt = stamp;
+    save(store);
   },
 
   listHeldNewAds(): StoredAd[] {
@@ -1106,6 +1168,13 @@ export async function getPendingAds(): Promise<StoredAd[]> {
   return supabaseConfigured ? remote.getPendingAds() : file.getPendingAds();
 }
 
+/** How many pending ads are still collecting pictures (session 016). */
+export async function countAdsAwaitingPictures(): Promise<number> {
+  return supabaseConfigured
+    ? remote.countAdsAwaitingPictures()
+    : file.countAdsAwaitingPictures();
+}
+
 export async function getAllAds(
   q?: string,
   status?: StoredAdStatus,
@@ -1208,6 +1277,25 @@ export async function getQueuedBumps(): Promise<BumpRecord[]> {
 
 export async function getNewDigestAds(cap: number): Promise<StoredAd[]> {
   return supabaseConfigured ? remote.getNewDigestAds(cap) : file.getNewDigestAds(cap);
+}
+
+/** Start/extend a picture ad's settling window (see the supabase twin). */
+export async function touchPhotoSettle(adId: number, photoCount: number): Promise<void> {
+  return supabaseConfigured
+    ? remote.touchPhotoSettle(adId, photoCount)
+    : file.touchPhotoSettle(adId, photoCount);
+}
+
+/** Ads already texted but not yet emailed — the email edition's queue. */
+export async function getUnemailedBroadcastAds(cap: number): Promise<StoredAd[]> {
+  return supabaseConfigured
+    ? remote.getUnemailedBroadcastAds(cap)
+    : file.getUnemailedBroadcastAds(cap);
+}
+
+/** Stamp the ads an email edition carried. */
+export async function markAdsEmailed(ids: number[]): Promise<void> {
+  return supabaseConfigured ? remote.markAdsEmailed(ids) : file.markAdsEmailed(ids);
 }
 
 /** Approved, never-broadcast ads currently held past a digest ("skip next"). */

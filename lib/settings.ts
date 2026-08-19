@@ -19,8 +19,14 @@ export interface EngineSettings {
   /** Starter credit in CENTS, granted once on a member's first real post. */
   starterCreditCents: number;
   digestCap: number;
-  /** Digest slots, hours in America/New_York (the email edition mirrors these). */
+  /** Digest slots, hours in America/New_York. EMAIL ONLY since session 016 —
+   * SMS sends each ad the moment it is approved (see the window below). */
   slots: number[];
+  /** SMS send window, hours America/New_York: start inclusive, end EXCLUSIVE. */
+  smsWindowStartHour: number;
+  smsWindowEndHour: number;
+  /** Weekdays that never send SMS (0 = Sunday). */
+  smsQuietDays: number[];
   maxChars: number;
   expiryDays: number;
   /** Abuse guards — see engineDefaults for what each cap means. */
@@ -72,6 +78,9 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   starterCreditCents: "starter_credit_cents",
   digestCap: "digest_ad_cap",
   slots: "digest_slots_sms",
+  smsWindowStartHour: "sms_window_start_hour",
+  smsWindowEndHour: "sms_window_end_hour",
+  smsQuietDays: "sms_quiet_days",
   maxChars: "ad_max_chars",
   expiryDays: "ad_expiry_days",
   smsRepliesPerHour: "sms_replies_per_hour",
@@ -128,6 +137,9 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     starterCreditCents: engineDefaults.starterCreditCents,
     digestCap: engineDefaults.digestCap,
     slots: [...engineDefaults.slots],
+    smsWindowStartHour: engineDefaults.smsWindowStartHour,
+    smsWindowEndHour: engineDefaults.smsWindowEndHour,
+    smsQuietDays: [...engineDefaults.smsQuietDays],
     maxChars: engineDefaults.maxChars,
     expiryDays: engineDefaults.expiryDays,
     smsRepliesPerHour: engineDefaults.smsRepliesPerHour,

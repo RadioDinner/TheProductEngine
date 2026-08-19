@@ -70,7 +70,7 @@ export default async function HowItWorks() {
       </figure>
       <p>
         Every ad is read and approved by a person before it runs. Once approved, your ad goes
-        out in the next digest and is listed on this website for {s.expiryDays} days. You’ll
+        out to subscribers right away — with its picture, if it has one — and is listed on this website for {s.expiryDays} days. You’ll
         get a text with your ad’s number when it’s in.{" "}
         <strong>
           Your first post comes with {formatPrice(s.starterCreditCents)} of ad credit on the

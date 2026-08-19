@@ -17,6 +17,7 @@ import { site } from "@/lib/config";
 import { etParts } from "@/lib/et";
 import { formatEventDay } from "@/lib/town-hall";
 import { listPendingEvents } from "@/lib/town-hall-store";
+import { countAdsAwaitingPictures } from "@/lib/engine-store";
 import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
@@ -35,6 +36,9 @@ function submitted(iso: string): string {
 
 export default async function AdminReview() {
   const pending = await getPendingAds();
+  // Picture ads still collecting photos are deliberately NOT in the queue yet
+  // (session 016) — surfaced as a count so a "missing" ad is never a mystery.
+  const settling = await countAdsAwaitingPictures();
   // Member-reported chat messages (item 13) — empty until migration 9980.
   const reports = await listChatReports();
   // Town hall submissions (item 18) — empty until migration 9977.
@@ -60,7 +64,16 @@ export default async function AdminReview() {
         dropdown <Tip k="review.category" />, and settle the money with the right reject
         button <Tip k="review.reject" />.
       </p>
-      {pending.length === 0 && <p>Nothing waiting for review.</p>}
+      {pending.length === 0 && settling === 0 && <p>Nothing waiting for review.</p>}
+      {settling > 0 && (
+        <p className="fine">
+          {settling === 1
+            ? "1 picture ad is still collecting pictures"
+            : `${settling} picture ads are still collecting pictures`}{" "}
+          — they appear here once the seller stops sending (about 10 minutes) or hits the
+          4-picture maximum, so you never approve an ad that is only half its photos.
+        </p>
+      )}
       <ul className="sim-pending">
         {pending.map((ad) => {
           const links = findLinks(ad.body);

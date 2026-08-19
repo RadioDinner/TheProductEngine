@@ -8,7 +8,7 @@
  * a rolling-24h billed-segment budget. Idempotency comes from the
  * one-digest-per-slot rule plus the outbox unique key.
  */
-import { getEngineSettings, effectiveSmsCaps } from "@/lib/settings";
+import { getEngineSettings, effectiveSmsCaps, type EngineSettings } from "@/lib/settings";
 import {
   allocateDigestNumber,
   claimDigestOutbox,
@@ -105,7 +105,7 @@ export function composeDigestMessages(
     `Plain Exchange${digestNo ? ` No. ${digestNo}` : ""} ${dateLabel} ${label}:`,
   );
   const adLines = items.map((ad) =>
-    gsmSanitize(`#${ad.id} ${ad.body}${ad.photo ? ` Pic? Reply PIC ${ad.id}` : ""}`),
+    gsmSanitize(`#${ad.id} ${ad.body}`),
   );
   // Business sponsor lines (item 17) ride FIRST, right under the header —
   // clearly labeled ("Sponsor: …"), OUTSIDE the cap-10 member ads (they are
@@ -201,6 +201,11 @@ export function buildCategorizedSmsRows(params: {
       params.sponsorLines,
     );
     const partSegments = messages.map((m) => segmentation(m).segments);
+    // Picture ads ride out WITH their photo (user decision, session 016) —
+    // the collage for a multi-picture ad, exactly the image PIC would send.
+    // Attached to part 1 only: one MMS per edition, however it packs. An
+    // edition is a single ad since instant send, so this is at most one file.
+    const media = filtered.map((ad) => ad.photo?.src).filter((url): url is string => Boolean(url));
     for (const phone of group.phones) {
       recipients++;
       for (let i = 0; i < messages.length; i++) {
@@ -212,6 +217,7 @@ export function buildCategorizedSmsRows(params: {
           parts: messages.length,
           body: messages[i],
           segments: partSegments[i],
+          ...(i === 0 && media.length && { media }),
         });
       }
     }
@@ -223,7 +229,7 @@ export function buildCategorizedSmsRows(params: {
 export function composeCatchupMessages(items: StoredAd[]): string[] {
   const header = gsmSanitize(`${site.name} — most recent ads:`);
   const adLines = items.map((ad) =>
-    gsmSanitize(`#${ad.id} ${ad.body}${ad.photo ? ` Pic? Reply PIC ${ad.id}` : ""}`),
+    gsmSanitize(`#${ad.id} ${ad.body}`),
   );
   return packMessages({ header, adLines, maxGsm: DIGEST_MSG_MAX_GSM });
 }
@@ -497,109 +503,197 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   };
 }
 
-export async function runDueDigests(now = new Date()): Promise<SlotResult[]> {
+/**
+ * The SMS send window (session 016, user decision): "any ads will send any
+ * time after they're approved, and they'll send anytime after 7am until 9pm,
+ * Monday through Saturday." Start hour inclusive, end hour EXCLUSIVE, and
+ * quiet days (Sunday by default) never send. All hours America/New_York.
+ * Pure so the boundaries are unit-testable without a clock.
+ */
+export function smsWindowOpen(
+  now: Date,
+  settings: Pick<EngineSettings, "smsWindowStartHour" | "smsWindowEndHour" | "smsQuietDays">,
+): boolean {
   const { day, hour } = etParts(now);
-  const settings = await getEngineSettings();
-  const results: SlotResult[] = [];
+  if (settings.smsQuietDays.includes(etWeekday(day))) return false;
+  return hour >= settings.smsWindowStartHour && hour < settings.smsWindowEndHour;
+}
 
-  for (const slot of settings.slots) {
-    if (hour < slot) continue;
-    const slotKey = `${day}#${slot}`;
-    const { id: digestId, finalized } = await createDigestIfAbsent(slotKey, slot);
-    // finalized = slot fully composed+enqueued already. A digest row that
-    // exists but never finalized means a previous run died mid-enqueue —
-    // fall through and redo it (the outbox unique key dedups the rows).
-    if (finalized) continue;
+/**
+ * When the next text can go out, in words a seller can act on: "in a few
+ * minutes" while the window is open, otherwise the next opening ("at 7am",
+ * "tomorrow at 7am", "Monday at 7am"). Answers the question every seller who
+ * texts an ad at 5am will have. Pure — the caller supplies the clock.
+ */
+export function nextSendLabel(
+  now: Date,
+  settings: Pick<EngineSettings, "smsWindowStartHour" | "smsWindowEndHour" | "smsQuietDays">,
+): string {
+  if (smsWindowOpen(now, settings)) return "in a few minutes";
+  const { day, hour } = etParts(now);
+  const openLabel = hourLabel(settings.smsWindowStartHour);
+  const today = etWeekday(day);
+  // Before opening on a day that sends: later this morning.
+  if (hour < settings.smsWindowStartHour && !settings.smsQuietDays.includes(today)) {
+    return `at ${openLabel}`;
+  }
+  // Otherwise walk forward to the next day that sends.
+  for (let ahead = 1; ahead <= 7; ahead++) {
+    const weekday = (today + ahead) % 7;
+    if (settings.smsQuietDays.includes(weekday)) continue;
+    return ahead === 1
+      ? `tomorrow at ${openLabel}`
+      : `${DAY_NAMES[weekday]} at ${openLabel}`;
+  }
+  return `at ${openLabel}`; // every day is quiet — nonsense config, say something sane
+}
 
-    const { newAds, bumpAds, bumpRecords } = await selectDigestItems(settings.digestCap);
-    const items = [...newAds, ...bumpAds];
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-    if (!items.length) {
-      // Spec: empty slots send nothing — but the slot is recorded so it never re-runs.
-      await finalizeDigest(digestId, [], [], 0);
-      results.push({ slotKey, items: 0, recipients: 0, skipped: true });
-      continue;
-    }
+/** 7 -> "7am", 13 -> "1pm", 0 -> "12am". */
+export function hourLabel(hour: number): string {
+  const h = ((hour % 24) + 24) % 24;
+  const suffix = h < 12 ? "am" : "pm";
+  const twelve = h % 12 === 0 ? 12 : h % 12;
+  return `${twelve}${suffix}`;
+}
 
-    const firstOfDay = (await digestsSentOnDay(day)) === 0;
-    // Per-group STOP-footer signal (item 22): which phones already had an SMS
-    // digest enqueued today. A selective group whose first digest of the day
-    // composes at a LATER slot still gets the opt-out footer, while the ALL
-    // group (texted at the first slot) doesn't get it twice.
-    const phonesTextedToday = firstOfDay
-      ? undefined
-      : new Set(await smsDigestOutboxPhonesOnDay(day));
-    const digestNo = await allocateDigestNumber(digestId);
-    // Business sponsor lines (item 17): every active package rides the first
-    // digest that composes each ET day (listDueSponsors excludes ones that
-    // already rode today), as labeled extra lines outside the cap-10 — and
-    // they ride EVERY subscriber's edition regardless of category prefs.
-    const sponsors = await listDueSponsors(day);
-    // Blocked numbers get no broadcast (the drain sends via the raw transport,
-    // so filtering here is the blocklist's enforcement point for digests).
-    const blocked = new Set((await listBlocked()).map((b) => b.phone));
-    const subscribers = (await listSubscribersWithCategories()).filter(
-      (s) => !blocked.has(s.phone),
-    );
-    // Per-category-set composition (item 22): one combined digest per
-    // subscriber, packed once per distinct category set. Pre-9976 this map is
-    // empty (all ads uncategorized) and prefs read ALL — unfiltered as today.
-    const categoriesByAd = await getAdCategories(items.map((a) => a.id));
-    const { rows, recipients, deliveredAdIds } = buildCategorizedSmsRows({
-      digestId,
-      now,
-      slotHour: slot,
-      items,
-      categoriesByAd,
-      firstOfDay,
-      phonesTextedToday,
-      digestNo,
-      sponsorLines: sponsors.map((s) => sponsorLine(s)),
-      recipients: subscribers,
-    });
-    const queued = await enqueueDigestOutbox(rows);
-    // Consume ONLY delivered ads: an ad every SMS group filtered out keeps
-    // broadcast_at null / its bump queued and rides the next slot instead of
-    // being silently marked sent. Ads that reach no SMS group but DO match an
-    // email recipient still count as delivered — the email edition mirrors
-    // this digest's recorded item list (runDueEmailDigests), so restricting
-    // to SMS groups alone would starve an email-only audience forever.
-    const emailRecipients = await listEmailRecipientsWithCategories();
-    const consumed = new Set(deliveredAdIds);
-    for (const ad of items) {
-      if (consumed.has(ad.id)) continue;
-      const adCategory = categoriesByAd.get(ad.id) ?? null;
-      if (emailRecipients.some((r) => adMatchesCategories(adCategory, r.categories))) {
-        consumed.add(ad.id);
-      }
-    }
-    await finalizeDigest(
-      digestId,
-      newAds.filter((a) => consumed.has(a.id)).map((a) => a.id),
-      bumpRecords.filter((b) => consumed.has(b.adId)).map((b) => b.id),
-      consumed.size,
-      items.filter((a) => consumed.has(a.id)).map((a) => a.id),
-    );
-    // Consume each sponsor's paid day only after the digest is enqueued and
-    // finalized: a crash mid-compose leaves the day uncounted, the redo picks
-    // the sponsors up again, and the outbox unique key dedups the rows. The
-    // slot key is remembered so the email edition mirrors the same sponsors.
-    // Skipped entirely when nothing was delivered anywhere (rows empty and no
-    // ad consumed) — a paid sponsor day must not burn on an undelivered slot.
-    if (rows.length || consumed.size) {
-      for (const s of sponsors) {
-        await markSponsorRan(s.id, day, slotKey);
-      }
-    }
-    results.push({
-      slotKey,
-      items: consumed.size,
-      recipients,
-      queued,
-      skipped: false,
-    });
+/** Day-of-week (0 = Sunday) for an ET calendar day "YYYY-MM-DD". Noon UTC
+ * keeps the date from sliding either way across a timezone. */
+export function etWeekday(day: string): number {
+  return new Date(`${day}T12:00:00Z`).getUTCDay();
+}
+
+/**
+ * Compose ONE SMS edition — a set of ads packed per category group, enqueued
+ * to the outbox for delivery. Since session 016 an edition is a SINGLE ad
+ * sent the moment it is approved; the machinery (category packing, the
+ * per-group STOP footer, sponsor lines, the blocklist, outbox dedup) is the
+ * digest's, unchanged, because all of it is per-edition rather than
+ * per-schedule. `slotKey` is what makes an edition idempotent: composing the
+ * same key twice is a no-op.
+ */
+async function composeSmsEdition(args: {
+  items: StoredAd[];
+  slotKey: string;
+  slotHour: number;
+  now: Date;
+  settings: EngineSettings;
+}): Promise<SlotResult> {
+  const { items, slotKey, slotHour, now } = args;
+  const { day } = etParts(now);
+  const { id: digestId, finalized } = await createDigestIfAbsent(slotKey, slotHour);
+  // finalized = this edition was fully composed+enqueued already. A row that
+  // exists but never finalized means a previous run died mid-enqueue — fall
+  // through and redo it (the outbox unique key dedups the rows).
+  if (finalized) return { slotKey, items: 0, recipients: 0, skipped: true };
+  if (!items.length) {
+    await finalizeDigest(digestId, [], [], 0);
+    return { slotKey, items: 0, recipients: 0, skipped: true };
   }
 
+  const firstOfDay = (await digestsSentOnDay(day)) === 0;
+  // Per-group STOP-footer signal (item 22): which phones already had an SMS
+  // edition enqueued today, so a group whose first text of the day comes
+  // later still gets the opt-out footer and nobody gets it twice.
+  const phonesTextedToday = firstOfDay
+    ? undefined
+    : new Set(await smsDigestOutboxPhonesOnDay(day));
+  const digestNo = await allocateDigestNumber(digestId);
+  // Business sponsor lines (item 17): every active package rides the FIRST
+  // edition of each ET day (listDueSponsors excludes ones that already rode
+  // today), as labeled extra lines — on every subscriber's copy regardless
+  // of category prefs.
+  const sponsors = await listDueSponsors(day);
+  // Blocked numbers get no broadcast (the drain sends via the raw transport,
+  // so filtering here is the blocklist's enforcement point).
+  const blocked = new Set((await listBlocked()).map((b) => b.phone));
+  const subscribers = (await listSubscribersWithCategories()).filter(
+    (s) => !blocked.has(s.phone),
+  );
+  const categoriesByAd = await getAdCategories(items.map((a) => a.id));
+  const { rows, recipients, deliveredAdIds } = buildCategorizedSmsRows({
+    digestId,
+    now,
+    slotHour,
+    items,
+    categoriesByAd,
+    firstOfDay,
+    phonesTextedToday,
+    digestNo,
+    sponsorLines: sponsors.map((s) => sponsorLine(s)),
+    recipients: subscribers,
+  });
+  const queued = await enqueueDigestOutbox(rows);
+  // Consume ONLY delivered ads: an ad every SMS group filtered out keeps
+  // broadcast_at null and is retried, rather than being silently marked sent.
+  // An ad that reaches no SMS group but DOES match an email recipient still
+  // counts — the email edition carries texted-but-unemailed ads, so leaving
+  // it unconsumed would retry it forever.
+  const emailRecipients = await listEmailRecipientsWithCategories();
+  const consumed = new Set(deliveredAdIds);
+  for (const ad of items) {
+    if (consumed.has(ad.id)) continue;
+    const adCategory = categoriesByAd.get(ad.id) ?? null;
+    if (emailRecipients.some((r) => adMatchesCategories(adCategory, r.categories))) {
+      consumed.add(ad.id);
+    }
+  }
+  await finalizeDigest(
+    digestId,
+    items.filter((a) => consumed.has(a.id)).map((a) => a.id),
+    [],
+    consumed.size,
+    items.filter((a) => consumed.has(a.id)).map((a) => a.id),
+  );
+  // Consume each sponsor's paid day only after the edition is enqueued and
+  // finalized: a crash mid-compose leaves the day uncounted and the redo
+  // picks the sponsors up again (the outbox unique key dedups). Skipped when
+  // nothing was delivered — a paid sponsor day must not burn on an
+  // undelivered edition.
+  if (rows.length || consumed.size) {
+    for (const s of sponsors) {
+      await markSponsorRan(s.id, day, slotKey);
+    }
+  }
+  return { slotKey, items: consumed.size, recipients, queued, skipped: false };
+}
+
+/** The edition key for a single ad — one ad, one text, forever idempotent. */
+function adSlotKey(adId: number): string {
+  return `ad#${adId}`;
+}
+
+/**
+ * Send every approved ad that hasn't gone out yet, one text per ad (user
+ * decision, session 016). Called on approval — so an ad goes the moment you
+ * say yes — and on every cron tick, which is what drains the overnight and
+ * Sunday queue the next time the window opens.
+ *
+ * `force` skips the window check: the operator's "send now" on /admin/digests.
+ */
+export async function runQueuedBroadcasts(
+  now = new Date(),
+  opts: { force?: boolean } = {},
+): Promise<SlotResult[]> {
+  const settings = await getEngineSettings();
+  if (!opts.force && !smsWindowOpen(now, settings)) return [];
+  const { hour } = etParts(now);
+  // digestCap bounds one pass, not the day: whatever is left rides the next
+  // tick, so a flood can never blow the function's time budget.
+  const queued = await getNewDigestAds(settings.digestCap);
+  const results: SlotResult[] = [];
+  for (const ad of queued) {
+    results.push(
+      await composeSmsEdition({
+        items: [ad],
+        slotKey: adSlotKey(ad.id),
+        slotHour: hour,
+        now,
+        settings,
+      }),
+    );
+  }
   return results;
 }
 
@@ -775,5 +869,6 @@ async function sendOutboxRow(row: OutboxRow): Promise<void> {
     });
     return;
   }
-  await sms.send(row.address, row.body);
+  // media = a picture ad riding out with its photo (MMS).
+  await sms.send(row.address, row.body, row.media?.length ? row.media : undefined);
 }

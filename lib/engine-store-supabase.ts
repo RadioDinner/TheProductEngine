@@ -4,6 +4,8 @@
  * project exists.
  */
 import { db } from "@/lib/db";
+import { COLLAGE_QUIET_MS } from "@/lib/collage-confirm";
+import { MAX_COMBINED_PHOTOS } from "@/lib/photo-collage";
 import { AD_TTL_DAYS } from "@/lib/ads";
 import { isPicReplaceSubmission } from "@/lib/myads";
 import { removeHostedPhotos } from "@/lib/photos";
@@ -147,6 +149,11 @@ export async function createAd(input: NewAdInput, options: CreateAdOptions = {})
     });
     if (photoError) throw photoError;
   }
+  if (input.photo) {
+    // Start the picture-settling window: a picture ad waits for its photos to
+    // stop arriving before it reaches the review queue (session 016).
+    await touchPhotoSettle(id, 1 + (input.morePhotos?.length ?? 0));
+  }
   if (input.morePhotos?.length) {
     // Combined-photo originals (item 32): website gallery at positions 1+.
     const { error: partsError } = await db()
@@ -256,6 +263,13 @@ export async function attachAdPhotos(
       if (insertError) throw insertError;
     }
   }
+  // Another picture landed: push the settling window out again (or close it
+  // if this was the 4th and last one the ad can combine).
+  const { count: photoCount } = await db()
+    .from("ad_photos")
+    .select("id", { count: "exact", head: true })
+    .eq("ad_id", id);
+  await touchPhotoSettle(id, photoCount ?? 1);
   return { oldPrimarySrc };
 }
 
@@ -263,6 +277,42 @@ export async function getAdRecord(id: number): Promise<StoredAd | null> {
   const { data, error } = await db().from("ads").select(AD_SELECT).eq("id", id).maybeSingle();
   if (error) throw error;
   return data ? toStored(data as unknown as AdRow) : null;
+}
+
+/**
+ * Start (or extend) a picture ad's settling window: it stays OUT of the
+ * review queue until its pictures stop arriving, so the operator never
+ * approves — and, since session 016's instant send, never BROADCASTS — an ad
+ * that is still collecting photos. The 4th picture is the maximum an ad can
+ * combine, so that one settles it immediately. Best-effort: a missing column
+ * (migration 9971 unpasted) just means no gate, exactly as before.
+ */
+export async function touchPhotoSettle(adId: number, photoCount: number): Promise<void> {
+  const settleAt =
+    photoCount >= MAX_COMBINED_PHOTOS
+      ? new Date()
+      : new Date(Date.now() + COLLAGE_QUIET_MS);
+  const { error } = await db()
+    .from("ads")
+    .update({ photos_settle_at: settleAt.toISOString() })
+    .eq("id", adId)
+    .eq("status", "pending");
+  if (error && error.code !== "42703" && error.code !== "PGRST204") throw error;
+}
+
+/** Pending picture ads whose settling window hasn't closed — shown as a
+ * count on the review page so a "missing" ad is never a mystery. */
+export async function countAdsAwaitingPictures(): Promise<number> {
+  const { count, error } = await db()
+    .from("ads")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending")
+    .gt("photos_settle_at", new Date().toISOString());
+  if (error) {
+    if (error.code === "42703" || error.code === "PGRST204") return 0;
+    throw error;
+  }
+  return count ?? 0;
 }
 
 export async function getPendingAds(): Promise<StoredAd[]> {
@@ -274,6 +324,8 @@ export async function getPendingAds(): Promise<StoredAd[]> {
       .from("ads")
       .select(AD_SELECT)
       .eq("status", "pending")
+      // Still collecting pictures = not ready to review (session 016).
+      .or(`photos_settle_at.is.null,photos_settle_at.lte.${new Date().toISOString()}`)
       .order("flagged", { ascending: false })
       .order("id", { ascending: true })
       .range(offset, offset + PAGE - 1);
@@ -460,6 +512,44 @@ export async function getNewDigestAds(cap: number): Promise<StoredAd[]> {
     .limit(cap);
   if (error) throw error;
   return ((data ?? []) as unknown as AdRow[]).map(toStored);
+}
+
+/**
+ * Ads already TEXTED but not yet carried by an email edition — the email
+ * digest's queue since session 016, when SMS stopped being a digest and the
+ * email edition lost the SMS slot it used to mirror.
+ *
+ * Graceful: if `emailed_at` is missing (migration 9971 unpasted) this reads
+ * as "nothing to email" rather than throwing, which keeps the cron healthy —
+ * texting, the primary channel, is unaffected either way.
+ */
+export async function getUnemailedBroadcastAds(cap: number): Promise<StoredAd[]> {
+  const { data, error } = await db()
+    .from("ads")
+    .select(AD_SELECT)
+    .eq("status", "approved")
+    .not("broadcast_at", "is", null)
+    .is("emailed_at", null)
+    .order("broadcast_at", { ascending: true })
+    .limit(cap);
+  if (error) {
+    if (error.code === "42703" || error.code === "PGRST204") {
+      console.error("[email] ads.emailed_at is missing — paste migration 9971 to start email editions");
+      return [];
+    }
+    throw error;
+  }
+  return ((data ?? []) as unknown as AdRow[]).map(toStored);
+}
+
+/** Stamp the ads an email edition just carried, so the next one moves on. */
+export async function markAdsEmailed(ids: number[]): Promise<void> {
+  if (!ids.length) return;
+  const { error } = await db()
+    .from("ads")
+    .update({ emailed_at: new Date().toISOString() })
+    .in("id", ids);
+  if (error && error.code !== "42703" && error.code !== "PGRST204") throw error;
 }
 
 export async function listHeldNewAds(): Promise<StoredAd[]> {
@@ -1256,6 +1346,7 @@ interface OutboxRowDb {
   subject: string | null;
   body: string;
   html: string | null;
+  media?: string[] | null;
   segments: number;
   status: string;
   attempts: number;
@@ -1276,6 +1367,7 @@ function toOutboxRow(row: OutboxRowDb): OutboxRow {
     subject: row.subject ?? undefined,
     body: row.body,
     html: row.html ?? undefined,
+    media: row.media ?? undefined,
     segments: row.segments,
     status: row.status as OutboxRow["status"],
     attempts: row.attempts,
@@ -1286,7 +1378,28 @@ function toOutboxRow(row: OutboxRowDb): OutboxRow {
   };
 }
 
+/** Set once a `media` column error is seen: migration 9971 has not been
+ * pasted, so broadcasts fall back to text-only (the ad still goes out; the
+ * picture just doesn't ride along) instead of failing to enqueue at all. */
+let outboxMediaUnsupported = false;
+
 export async function enqueueDigestOutbox(rows: OutboxInsert[]): Promise<number> {
+  try {
+    return await enqueueDigestOutboxInner(rows);
+  } catch (e) {
+    const code = (e as { code?: string } | null)?.code;
+    if (!outboxMediaUnsupported && (code === "PGRST204" || code === "42703")) {
+      outboxMediaUnsupported = true;
+      console.error(
+        "[digest] digest_outbox.media is missing (paste migration 9971) — picture ads will broadcast without their photo",
+      );
+      return enqueueDigestOutboxInner(rows);
+    }
+    throw e;
+  }
+}
+
+async function enqueueDigestOutboxInner(rows: OutboxInsert[]): Promise<number> {
   let added = 0;
   // Chunked so a big list (1500 subscribers × parts) stays well under
   // request-size limits; ignoreDuplicates makes a resumed enqueue a no-op
@@ -1302,6 +1415,7 @@ export async function enqueueDigestOutbox(rows: OutboxInsert[]): Promise<number>
       body: r.body,
       html: r.html ?? null,
       segments: r.segments,
+      ...(!outboxMediaUnsupported && { media: r.media ?? null }),
     }));
     const { data, error } = await db()
       .from("digest_outbox")

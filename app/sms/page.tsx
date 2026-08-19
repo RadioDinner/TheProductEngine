@@ -23,7 +23,7 @@ export default function SmsProgram() {
 
       <p>
         {site.name} sends local classified ads for {site.region} as short text-message
-        digests. This page explains, in one place, how to start the texts, how to stop them,
+        ads. This page explains, in one place, how to start the texts, how to stop them,
         and everything the program discloses. Summary of the terms below.
       </p>
 
@@ -31,7 +31,7 @@ export default function SmsProgram() {
       <p>
         Text the keyword <strong>SUBSCRIBE</strong> (or <strong>START</strong>) to{" "}
         <strong className="tel">{site.smsNumber}</strong>. That is the only way the ad
-        digests begin — you receive them only after you send that text. Posting or managing an
+        texts begin — you receive them only after you send that text. Posting or managing an
         ad by text also uses the same number.
       </p>
       <p>
@@ -41,7 +41,7 @@ export default function SmsProgram() {
         <figcaption>Confirmation you receive after texting SUBSCRIBE:</figcaption>
         <p>
           {site.name}: you&rsquo;re opted in to receive marketing texts - our local
-          classified-ad digests. Msg freq varies, up to 4/day. Msg &amp; data rates may apply.
+          classified ads. Msg freq varies. Msg &amp; data rates may apply.
           Reply STOP to cancel, HELP for help. We won&rsquo;t sell or share your mobile info with
           third parties for marketing.
         </p>
@@ -49,9 +49,16 @@ export default function SmsProgram() {
 
       <h2>Message frequency</h2>
       <p>
-        Message frequency varies. You will receive up to <strong>4 ad-digest messages a
-        day</strong>, plus a reply to any command you text us (for example, a balance check or
-        an ad confirmation).
+        Message frequency varies. Each classified ad is texted to you{" "}
+        <strong>as it is posted and approved</strong> — one message per ad, and a picture ad
+        arrives with its picture — plus a reply to any command you text us (for example, a
+        balance check or an ad confirmation). How many that comes to on a given day depends on
+        how many neighbors post; a slow day may be none at all.
+      </p>
+      <p>
+        Ads are only ever sent between <strong>7am and 9pm, Monday through Saturday</strong>.
+        Nothing is sent overnight or on Sunday — an ad approved outside those hours waits for
+        the next morning.
       </p>
 
       <h2>Message and data rates</h2>
@@ -72,7 +79,7 @@ export default function SmsProgram() {
       <h2>Stop the texts</h2>
       <p>
         Reply <strong>STOP</strong> to <strong className="tel">{site.smsNumber}</strong> at any
-        time — or STOP to any digest — and the messages end. You&rsquo;ll get one confirmation
+        time — or STOP to any of the texts — and the messages end. You&rsquo;ll get one confirmation
         that you&rsquo;ve been unsubscribed, and nothing after that. Reply{" "}
         <strong>START</strong> any time to come back.
       </p>
@@ -91,7 +98,7 @@ export default function SmsProgram() {
 
       <h2>The rest of the terms</h2>
       <p>
-        Consent to receive the digests is not a condition of buying anything. Carriers are not
+        Consent to receive the ads is not a condition of buying anything. Carriers are not
         liable for delayed or undelivered messages. Full details are in the{" "}
         <Link href="/terms-and-conditions">terms and conditions</Link> and the{" "}
         <Link href="/privacy">privacy policy</Link>.

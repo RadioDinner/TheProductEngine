@@ -6,6 +6,7 @@
 const SUITES = [
   "config",
   "voice",
+  "send-window",
   "segments",
   "commands",
   "dst",

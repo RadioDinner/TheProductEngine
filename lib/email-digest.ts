@@ -12,13 +12,13 @@ import { etParts } from "@/lib/et";
 import { deriveTitle, deriveRest } from "@/lib/ads";
 import { composeEmailSubject } from "@/lib/ad-display";
 import {
+  allocateDigestNumber,
   createDigestIfAbsent,
   enqueueDigestOutbox,
   finalizeDigest,
   getAdCategories,
-  getAdRecord,
-  getSmsDigestAdIds,
-  getSmsDigestNumber,
+  getUnemailedBroadcastAds,
+  markAdsEmailed,
   type OutboxInsert,
   type StoredAd,
 } from "@/lib/engine-store";
@@ -26,7 +26,7 @@ import { listEmailRecipientsWithCategories } from "@/lib/store";
 import { adMatchesCategories } from "@/lib/categories";
 import { getEngineSettings } from "@/lib/settings";
 import { site } from "@/lib/config";
-import { listSponsorsRanWithKey } from "@/lib/business";
+import { listDueSponsors, markSponsorRan } from "@/lib/business";
 import { formatPhone } from "@/lib/phone";
 
 /** A business sponsor riding this edition (FEATURES item 17) — the fields the
@@ -149,20 +149,14 @@ export async function runDueEmailDigests(now = new Date()): Promise<SlotResult[]
     // Not finalized = a previous run died mid-enqueue; redo it (outbox dedups).
     if (finalized) continue;
 
-    // Exactly this slot's SMS digest. null = it hasn't composed yet (the SMS
-    // pass runs first in the same cron tick, but it can fail mid-run) — leave
-    // this email slot un-finalized so the next tick retries, rather than
-    // sending an empty or incomplete edition.
-    const carriedIds = await getSmsDigestAdIds(`${day}#${slot}`);
-    if (carriedIds === null) {
-      results.push({ slotKey, items: 0, recipients: 0, skipped: true });
-      continue;
-    }
-    const ads: StoredAd[] = [];
-    for (const id of carriedIds) {
-      const ad = await getAdRecord(id);
-      if (ad && ad.status === "approved") ads.push(ad); // still-available only
-    }
+    // Everything TEXTED since the last email edition. Before session 016 this
+    // mirrored the same slot's SMS digest; SMS is no longer a digest at all
+    // (each ad goes out the moment it is approved), so the email edition is
+    // now the catch-up: the ads already broadcast that no email has carried.
+    // "If I send an email every time an ad is listed, it'll get spammy."
+    const ads = (await getUnemailedBroadcastAds(settings.digestCap)).filter(
+      (ad) => ad.status === "approved", // still-available only
+    );
     ads.sort((a, b) => a.id - b.id);
 
     if (!ads.length) {
@@ -175,8 +169,8 @@ export async function runDueEmailDigests(now = new Date()): Promise<SlotResult[]
     // and its sponsor lines (item 17): whatever sponsors rode THIS slot's SMS
     // digest (recorded by slot key at markSponsorRan) appear here too, with
     // the link clickable. [] pre-migration or on sponsor-free days.
-    const sponsors = await listSponsorsRanWithKey(`${day}#${slot}`);
-    const digestNo = await getSmsDigestNumber(`${day}#${slot}`);
+    const sponsors = await listDueSponsors(day);
+    const digestNo = await allocateDigestNumber(digestId);
     const dateLabel =
       now.toLocaleDateString("en-US", {
         weekday: "long",
@@ -214,6 +208,13 @@ export async function runDueEmailDigests(now = new Date()): Promise<SlotResult[]
     }
     const queued = await enqueueDigestOutbox(rows);
     await finalizeDigest(digestId, [], [], ads.length);
+    // Stamped only after the rows are enqueued: a crash mid-compose leaves
+    // the ads unstamped and the next edition picks them up again (the outbox
+    // unique key dedups any row that did make it in).
+    await markAdsEmailed(ads.map((a) => a.id));
+    if (rows.length) {
+      for (const sp of sponsors) await markSponsorRan(sp.id, day, slotKey);
+    }
     results.push({
       slotKey,
       items: ads.length,

@@ -190,3 +190,16 @@ I'm wondering if it isn't because I used my own email as the receipt and stripe 
 
 --- prompt (2026-08-19, continued session) ---
 BOOM. I called and it worked!
+
+--- prompt (2026-08-19, continued session) ---
+Ok, a few more changes. I want to overhaul the system. I want to send out an ad as soon as its approved, and I want to use the digests for emails only, at least I think so. I think if I send an email every time an ad is listed, it'll get spammy. Anyhow, any ads will send any time after they're approved, and they'll send anytime after 7am until 9pm, Monday through Saturday.
+
+[AskUserQuestion answers: pacing = "One text per ad, immediately"; daily cap =
+"No cap, publish 'varies'"; email = "Keep the current schedule"]
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+Oh, also, I will send out the pics automatically as well. I want to take away the /PIC command from the advertising, etc. I want to keep the functionality, because people will occasionally want to see the picture again, but I want every picture ad to send out with its ad. Also, if someone submits a picture ad, I don't want it sent out until the "add more pictures" window times out at 10 minutes. Unless the max amount of pictures are sent in (4) then automatically put the ad in the review digest and if approved, it'll be sent.
+Should I include messages for when people do "AD NEW" at like 5am? Should I send them a message that says "your message is queued for review, and if approved it'll be sent at the earliest time (7 am)" or whatever time I have set in the portal
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+also, the business advertising uses the digest language. Change it to once a day and actually, Let's include it in the email digests as a banner every time. There are 4 email digests daily, so we could sell one sponsor per email

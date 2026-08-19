@@ -69,7 +69,7 @@ export default async function Faq() {
       <h2>Who sees my ad, and when?</h2>
       <p>
         Every ad is read and approved by a person first — usually the same day. Once
-        approved, it goes out in the next digest, and it stays listed on this website for
+        approved, it goes straight out to subscribers, and it stays listed on this website for
         30 days. You&rsquo;ll get a text with your ad&rsquo;s number when it&rsquo;s in.
       </p>
 

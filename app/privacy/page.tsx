@@ -96,7 +96,7 @@ export default function PrivacyPolicy() {
       <p>
         You only get texts from us if you asked for them — by texting SUBSCRIBE (or START)
         to <strong>{site.smsNumber}</strong>, or by using the service to post and manage
-        ads. Message frequency varies: up to four ad digests a day, plus replies to the
+        ads. Message frequency varies: each ad is texted as it is approved, between 7am and 9pm Monday through Saturday, plus replies to the
         commands you send. Message and data rates may apply, charged by your phone company.
       </p>
       <p>

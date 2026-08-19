@@ -109,7 +109,7 @@ export default async function Home({
         <div className="subscribe-strip">
           <p className="container">
             Get the ads by text — text <strong>SUBSCRIBE</strong> to{" "}
-            <strong className="tel">{site.smsNumber}</strong>. Free, up to 4 digests a day; msg
+            <strong className="tel">{site.smsNumber}</strong>. Free; ads arrive as they&rsquo;re posted, 7am&ndash;9pm Mon&ndash;Sat; msg
             &amp; data rates may apply. <strong>The first 200 subscribers get 3 free
             ads.</strong> Reply <strong>HELP</strong> for help, <strong>STOP</strong> to
             cancel. <Link href="/sms">Text terms</Link> ·{" "}

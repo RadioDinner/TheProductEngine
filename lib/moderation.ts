@@ -18,6 +18,13 @@ import {
   recordOffense,
 } from "@/lib/store";
 import { getEngineSettings } from "@/lib/settings";
+import {
+  drainDigestOutbox,
+  hourLabel,
+  nextSendLabel,
+  runQueuedBroadcasts,
+  smsWindowOpen,
+} from "@/lib/digest-engine";
 import { dispatchSms } from "@/lib/outbound";
 import { adRefundableTotal, findAdCharge, legacyPassRefundCents } from "@/lib/myads";
 import { formatPrice } from "@/lib/config";
@@ -49,10 +56,29 @@ export async function approveAd(
       console.error(`[moderation] category not saved for ad #${id}:`, e);
     }
   }
+  // Instant send (session 016, user decision): the ad goes out the moment it
+  // is approved, inside the send window — no waiting for a digest slot. The
+  // pass picks up anything else that was queued too, which is what empties
+  // the overnight and Sunday queue on the first approval of the morning.
+  const now = new Date();
+  const open = smsWindowOpen(now, settings);
   await notify(
     ad.ownerPhone,
-    `Your ad #${id} is approved and will run in the next digest. Text STATUS ${id} any time to check it.`,
+    open
+      ? `Your ad #${id} is approved and is going out to subscribers now. Text STATUS ${id} any time to check it.`
+      : `Your ad #${id} is approved. It goes out ${nextSendLabel(now, settings)} — texts only go out between ${hourLabel(settings.smsWindowStartHour)} and ${hourLabel(settings.smsWindowEndHour)}, Monday through Saturday. Text STATUS ${id} any time to check it.`,
   );
+  if (!open) return;
+  try {
+    await runQueuedBroadcasts(now);
+    // Enqueueing is not sending: spend a bounded slice here so "approved"
+    // really does mean "on its way", then let the cron drain the rest.
+    await drainDigestOutbox({ timeBudgetMs: 10_000, newlyEnqueued: true });
+  } catch (e) {
+    // A broadcast problem must never leave the ad stuck unapproved — it is
+    // already approved and queued, and the next cron tick will send it.
+    console.error(`[moderation] instant broadcast for ad #${id} failed:`, e);
+  }
 }
 
 export async function rejectAd(

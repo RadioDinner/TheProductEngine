@@ -22,7 +22,7 @@ import {
   type StoredAd,
 } from "@/lib/engine-store";
 import { listAdsByOwner } from "@/lib/ads";
-import { sendRecentDigestTo } from "@/lib/digest-engine";
+import { hourLabel, nextSendLabel, sendRecentDigestTo, smsWindowOpen } from "@/lib/digest-engine";
 import {
   addLedgerEntry,
   addRating,
@@ -375,10 +375,17 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
         ? ` (${MAX_COMBINED_PHOTOS} pictures is the most one ad can show.)`
         : ` (We could only save ${savedPictures} of your ${sentPictures} pictures.)`;
   }
+  // Instant send (session 016): approved ads go out immediately, so the
+  // honest promise is "when it's approved" — with the window spelled out only
+  // when it actually delays them (a 5am sender needs to know; a 2pm sender
+  // does not, and every extra sentence is a billed segment).
+  const windowNote = smsWindowOpen(new Date(), settings)
+    ? ""
+    : ` Ads go out ${hourLabel(settings.smsWindowStartHour)}-${hourLabel(settings.smsWindowEndHour)}, Mon-Sat, so yours will send ${nextSendLabel(new Date(), settings)} at the earliest.`;
   return {
     body: hasPhoto
-      ? `Got your ad! It's #${id} and is waiting for review - you'll get a text when it's approved for the next digest. (${chargeNote})${photoNote}`
-      : `Got it! Your ad is #${id} and is waiting for review. You'll get a text when it's approved for the next digest. (${chargeNote})${photoNote}`,
+      ? `Got your ad! It's #${id} and is waiting for review - you'll get a text when it's approved and it goes out. (${chargeNote})${photoNote}${windowNote}`
+      : `Got it! Your ad is #${id} and is waiting for review. You'll get a text when it's approved and it goes out. (${chargeNote})${photoNote}${windowNote}`,
   };
 }
 
