@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { site } from "@/lib/config";
+import { formatPrice, site } from "@/lib/config";
+import { getEngineSettings } from "@/lib/settings";
 
 export const metadata: Metadata = {
   title: `How it works — ${site.name}`,
@@ -15,13 +16,12 @@ const COMMANDS: { cmd: string; what: string }[] = [
   { cmd: "PIC 1234", what: "Get the picture for ad number 1234." },
   { cmd: "STATUS 1234", what: "Check if an ad is still available or sold." },
   { cmd: "SOLD 1234", what: "Mark your ad sold (your ads only)." },
-  { cmd: "BUMP 1234", what: "Run your ad again in the next digest." },
   { cmd: "MYADS", what: "List your ads and their status." },
-  { cmd: "CREDITS", what: "Check how many ad credits you have." },
-  { cmd: "BUYCREDIT 10", what: "Buy a credit pack with your saved card." },
+  { cmd: "CREDITS", what: "Check your ad-credit balance." },
 ];
 
-export default function HowItWorks() {
+export default async function HowItWorks() {
+  const s = await getEngineSettings();
   return (
     <div className="container prose">
       <h1>How it works</h1>
@@ -58,8 +58,9 @@ export default function HowItWorks() {
       <p>
         Text your ad to <strong>{site.smsNumber}</strong> starting with the words{" "}
         <span className="cmd">AD NEW</span>. Say what you’re selling, the price, and how to
-        reach you. Attach a picture if you’d like — picture ads cost more credits than plain
-        ones. Keep it under 250 characters.
+        reach you. A plain ad is {formatPrice(s.costTextCents)}; attach pictures (up to
+        four) and it’s a picture ad at {formatPrice(s.costPhotoCents)}. Keep it under{" "}
+        {s.maxChars} characters.
       </p>
       <figure className="sms-example">
         <figcaption>
@@ -69,26 +70,29 @@ export default function HowItWorks() {
       </figure>
       <p>
         Every ad is read and approved by a person before it runs. Once approved, your ad goes
-        out in the next digest and is listed on this website for 30 days. You’ll get a text
-        with your ad’s number when it’s in.{" "}
-        <strong>The first 200 subscribers get their first 3 ads free</strong> — picture or
-        plain.
+        out in the next digest and is listed on this website for {s.expiryDays} days. You’ll
+        get a text with your ad’s number when it’s in.{" "}
+        <strong>
+          Your first post comes with {formatPrice(s.starterCreditCents)} of ad credit on the
+          house
+        </strong>{" "}
+        — enough for your first few ads.
       </p>
 
       <h2>Manage your ad</h2>
       <p>
         Sold it? Text <span className="cmd">SOLD 1234</span> and the listing is marked sold.
-        Want more eyes on it? Text <span className="cmd">BUMP 1234</span> and it runs again in
-        the next digest. Forgot your ad numbers? Text <span className="cmd">MYADS</span>.
+        Forgot your ad numbers? Text <span className="cmd">MYADS</span>.
       </p>
 
-      <h2>Credits</h2>
+      <h2>Paying for ads</h2>
       <p>
-        Ads use credits; checking, browsing, and getting digests are free. Text{" "}
-        <span className="cmd">CREDITS</span> any time to see your balance. Buy credit packs on
-        this website, or text <span className="cmd">BUYCREDIT 10</span> to buy with a card you’ve
-        saved — you’ll be asked to reply YES to confirm before anything is charged. You can also
-        call <strong>{site.supportPhone}</strong> to set up payment by phone or mail.
+        Ads come off your ad-credit balance; checking, browsing, and getting digests are
+        free. Text <span className="cmd">CREDITS</span> any time to see your balance. Add
+        money on this website under <Link href="/account">your account</Link> — once a card
+        is saved there, ads can top up automatically when your balance runs short (the
+        confirmation text always says so). You can also call{" "}
+        <strong>{site.supportPhone}</strong> to set up payment by phone or check.
       </p>
 
       <h2>All the commands</h2>

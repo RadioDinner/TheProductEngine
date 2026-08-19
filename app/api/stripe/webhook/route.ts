@@ -13,7 +13,7 @@ import {
   hasLedgerRef,
   setStripeCustomerId,
 } from "@/lib/store";
-import { formatPrice, getPack } from "@/lib/config";
+import { formatPrice } from "@/lib/config";
 import { normalizePhone } from "@/lib/phone";
 import { createBusinessPackage } from "@/lib/business";
 import { getBusinessTier } from "@/lib/business-packages";
@@ -51,8 +51,9 @@ interface CheckoutSessionPayload {
   amount_total?: number | null;
   metadata?: {
     phone?: string;
-    pack?: string;
-    /** "business_package" marks a business-advertising purchase (item 17). */
+    /** Cents this checkout adds to the ad-credit balance (kind "topup"). */
+    topup_cents?: string;
+    /** "topup" (add money) or "business_package" (item 17). */
     kind?: string;
     tier?: string;
     business_name?: string;
@@ -152,23 +153,25 @@ export async function POST(req: NextRequest) {
         );
       }
     } else if (session.payment_status === "paid") {
+      // Ad-credit top-up (dollar pricing, session 016): the paid dollars land
+      // on the member's balance, cent for cent.
       const phone = normalizePhone(session.metadata?.phone ?? "");
-      const pack = getPack(session.metadata?.pack ?? "");
+      const amountCents = Math.floor(Number(session.metadata?.topup_cents ?? ""));
       const ref = session.payment_intent ?? session.id ?? "";
-      if (!phone || !pack || !ref) {
+      if (!phone || !Number.isFinite(amountCents) || amountCents <= 0 || !ref) {
         console.error("[payments] completed session missing metadata:", session.id);
-      } else if (session.amount_total != null && session.amount_total < pack.priceCents) {
-        // Defense in depth: never grant a pack for less than its price.
+      } else if (session.amount_total != null && session.amount_total < amountCents) {
+        // Defense in depth: never grant more than what was actually paid.
         console.error(
-          `[payments] amount ${session.amount_total} < pack ${pack.id} price ${pack.priceCents}; not granting`,
+          `[payments] amount ${session.amount_total} < top-up ${amountCents}; not granting`,
         );
       } else {
         await ensureAccount(phone);
         if (!(await hasLedgerRef(ref))) {
           await addLedgerEntry(phone, {
-            delta: pack.credits,
+            delta: amountCents,
             kind: "purchase",
-            note: `Purchased ${pack.credits} credits (${formatPrice(pack.priceCents)})`,
+            note: `Added ${formatPrice(amountCents)} of ad credit`,
             ref,
           });
         }

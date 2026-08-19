@@ -3,7 +3,68 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-18 (session 015).
+**Last updated:** 2026-08-18 (session 016).
+
+## Session 016 (2026-08-18) — THE DOLLAR PRICING OVERHAUL (credits are gone)
+
+Branch `claude/pricing-structure-overhaul-5ckcku` (designated; awaiting the
+user's merge). The user found their competitor's pricing ($65/ad with up to
+4 pictures, $45/text ad under 160 chars — print; name stays out of the repo
+per the session-010 order) and overhauled pricing end to end. **FEATURES
+item 35 built; the live sheet + rationale is `docs/pricing.md`.**
+
+**The sheet (all user decisions this session):** text ad **$45**, picture ad
+(up to 4 pictures) **$60**, website-listing add-on **+$15 but FREE at launch**
+(`web_addon_cents` = 0; machinery built), **$150 starter credit** granted on a
+member's FIRST post (replaces the 3 free-ad passes; same session-005
+first-post-only anti-abuse rule), **BUMP removed completely** ("completely
+gone, from everywhere, including the FAQ" — the ADMIN re-run tool on
+/admin/ads was deliberately kept and flagged), business packages repriced
+**$199/$349/$599**. Money is CENTS in the ledger; new config keys
+(`ad_price_*_cents`, `starter_credit_cents`, `web_addon_cents`) replace the
+credit-era keys so stale rows can't be misread; admin settings edits dollars.
+Paying: add-money presets ($45/$60/$150/$300) via Stripe checkout, **auto
+top-up** (saved card covers the posting shortfall; users.auto_topup,
+FAIL-CLOSED pre-migration; toggles on /account + /admin/users) replaces
+BUYCREDIT/YES and the saved-card discount; checks/cash via "Adjust balance"
+on /admin/users. Refund matrix unchanged in shape, now dollars; ledger note
+tokens (`Ad #<id> (<kind>)`) unchanged — they're an API.
+
+- ⚠️ **NEW MIGRATION `9973_dollar_pricing.sql` — USER MUST PASTE** (re-runnable;
+  ledger ×100 conversion guarded by a `money_unit` marker, remaining free
+  passes → $60/pass grants, config key swap, `users.auto_topup` +
+  `ads.web_listing`, drops the dead packs table). Until pasted: prices are
+  correct from code defaults and everything degrades safely (auto top-up OFF
+  fail-closed), but legacy balances DISPLAY 100× low. `/api/health` →
+  `migration9973`.
+- Verified: tsc + build clean, unit suite 532 → **522** (bump/BUYCREDIT tests
+  removed with their features; dollar tests added), abuse suite **19/19**
+  (BUMP vectors now prove removal: 0 queued, $0, 0 revivals), **37/37**
+  Playwright walk checks. Walk gotchas recorded in the session log
+  (SESSION_SECRET required under `next start`; dev codes rate-limited).
+- Deferred seams (documented in docs/pricing.md): SMS self-serve purchase of
+  the website add-on + an admin per-ad web toggle (build before flipping
+  `web_addon_cents` above 0); event-listing + featured prices still unset;
+  starter credit is a setting — $180 would cover "3 free ads of any kind"
+  literally (at $150 it's 3 text or 2 picture ads).
+- **Environment note:** the Workflow tool is STILL broken in this container
+  class (session-015 permission-handler bug, reproduced 7/7 agents +
+  critic). Everything was mined/built inline again.
+- **Pay-by-phone bridge BUILT (same session, follow-up):** the session-012
+  seam is closed — `resolveStripeCustomer` (lib/payments.ts) adopts an
+  IVR-saved card by searching Stripe `metadata['phone']:'+1<ten>'` and
+  stamping the member's `stripeCustomerId`; wired into engine auto top-up,
+  web-post top-up, admin Bill-their-saved-card, and the admin user view
+  (card shows as "on file" as soon as the call-in card lands). Requires the
+  IVR service and the app to share ONE Stripe account. `/api/health` env now
+  reports STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET presence. The IVR deploy
+  itself (own Twilio number/subaccount + PCI Mode + Stripe Pay Connector,
+  per pay-by-phone/README.md) is still on the user; its confirmation-SMS
+  copy ("Text us what you need and we'll order it") predates this product —
+  reword at deploy time.
+- Ops queue: **Stripe prod config remains the launch blocker** (checklist
+  re-delivered in chat this session); migration 9974 paste + 9980 re-paste
+  still on the user (see Session 014), now joined by **9973**.
 
 ## Session 015 (2026-08-17/18) — the admin handbook: "?" tips on every admin feature
 

@@ -11,60 +11,62 @@ export default function RefundPolicy() {
   return (
     <div className="container prose">
       <h1>Refund policy</h1>
-      <p className="fine">Effective July 17, 2026</p>
+      <p className="fine">Effective July 17, 2026 · updated August 18, 2026 (dollar pricing)</p>
       <p>
         {site.name} keeps money simple: subscribing and browsing are free, and posting
-        ads uses prepaid credits. This page says exactly when a credit comes back to you
-        and when it is spent for good. It goes hand in hand with the{" "}
-        <Link href="/terms-and-conditions">terms and conditions</Link>.
+        ads comes off your prepaid ad-credit balance, in dollars. This page says exactly
+        when your money comes back to you and when it is spent for good. It goes hand in
+        hand with the <Link href="/terms-and-conditions">terms and conditions</Link>.
       </p>
 
       <h2>The short version</h2>
       <ul>
-        <li>Your ad never ran? You get the credit back.</li>
-        <li>Your ad went out in a digest? The credit is spent — that was the product.</li>
+        <li>Your ad never ran? You get your money back.</li>
+        <li>Your ad went out in a digest? The money is spent — that was the product.</li>
         <li>Ads declined for breaking the rules are not refunded.</li>
       </ul>
 
-      <h2>When a credit is returned</h2>
+      <h2>When your money is returned</h2>
       <ul>
         <li>
           <strong>Declined for an ordinary reason.</strong> Every ad is read by a person
           before it runs. If we decline yours for an ordinary reason — too long, unclear,
-          not a good fit — the credit (or free ad) is returned automatically, in full.
+          not a good fit — the full charge is returned to your balance automatically.
         </li>
         <li>
           <strong>Removed before approval.</strong> If your ad is deleted while it is
-          still waiting for review, the credit is returned.
+          still waiting for review, the charge is returned.
         </li>
         <li>
           <strong>Approved but never broadcast.</strong> If your ad was approved but is
-          deleted before it has ever gone out in a digest, the credit is returned.
+          deleted before it has ever gone out in a digest, the charge is returned.
         </li>
       </ul>
 
-      <h2>When a credit is spent for good</h2>
+      <h2>When the money is spent for good</h2>
       <ul>
         <li>
           <strong>The ad ran.</strong> Once your ad has been sent out in any digest, the
-          credit is used — the broadcast to the list is what the credit buys. Deleting
-          the ad afterward does not return it.
+          money is used — the broadcast to the list is what it buys. Deleting the ad
+          afterward does not return it.
         </li>
         <li>
           <strong>The ad broke the rules.</strong> If an ad is declined or removed for
           violating the{" "}
-          <Link href="/terms-and-conditions">posting rules</Link>, the credit is kept and
+          <Link href="/terms-and-conditions">posting rules</Link>, the charge is kept and
           the ad counts as a strike.
         </li>
       </ul>
 
-      <h2>Credit packs and card payments</h2>
+      <h2>Adding money and card payments</h2>
       <p>
-        Credit packs are sold on this website and, with a saved card, by texting{" "}
-        <strong>BUYCREDIT</strong>. Payments are processed by Stripe; when a refund is
-        granted on a purchase, it goes back to the card it was paid with. Credits have no
-        cash value, don&rsquo;t expire, and can&rsquo;t be transferred; refunds of credit
-        purchases themselves are at our discretion, except where the law says otherwise.
+        You add money to your account on this website; with a saved card, your balance
+        can also top up automatically at posting time (the confirmation text always
+        states the charge, and the toggle is under your account). Payments are processed
+        by Stripe; when a refund is granted on a payment, it goes back to the card it was
+        paid with. Ad credit has no cash value, doesn&rsquo;t expire, and can&rsquo;t be
+        transferred; refunds of money you added are at our discretion, except where the
+        law says otherwise.
       </p>
 
       <h2>What has no charge to refund</h2>

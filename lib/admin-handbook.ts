@@ -48,7 +48,7 @@ const ENTRIES = {
     title: "Why every ad waits for you",
     what: "Every ad — texted, web-posted, business, or event — sits here until a human approves it. Nothing broadcasts or appears on the website without your yes.",
     why: "A founding decision from the very first grilling session: \"manual review with credit refund on rejection works … I want to review ads manually initially\" (session 001). The human gate is also the safety valve that lets other rules stay loose — links, categories, and business ads are all judged here rather than by rigid automation.",
-    gotchas: "The seller was already charged when the ad arrived (credits or a free pass). Rejecting is what settles the money — see the two reject buttons.",
+    gotchas: "The seller was already charged when the ad arrived (dollars off their ad-credit balance). Rejecting is what settles the money — see the two reject buttons.",
   },
   "review.flagged": {
     title: "The Flagged badge",
@@ -78,8 +78,8 @@ const ENTRIES = {
   },
   "review.reject": {
     title: "The two reject buttons",
-    what: "Reject–refund returns what was paid (credits back, or the free pass restored) and texts the seller your reason. Reject–violation keeps the charge and records a strike; three strikes bans the number from posting (reversible on their user page).",
-    why: "Verbatim founding rules (session 001): \"If their ad gets rejected for something inappropriate, use their credits. If its a false positive, don't use credits\" and \"If they offend 3 times, they're banned.\" Refunds are idempotent (guarded by a ledger reference) so a double-click or a race with the seller deleting can never refund twice (sessions 002, 009).",
+    what: "Reject–refund returns the full dollar charge and texts the seller your reason. Reject–violation keeps the charge and records a strike; three strikes bans the number from posting (reversible on their user page).",
+    why: "Verbatim founding rules (session 001): \"If their ad gets rejected for something inappropriate, use their credits. If its a false positive, don't use credits\" (money since session 016's dollar pricing) and \"If they offend 3 times, they're banned.\" Refunds are idempotent (guarded by a ledger reference) so a double-click or a race with the seller deleting can never refund twice (sessions 002, 009).",
     gotchas: "Leave the reason blank and a sensible default is texted. For an ad that must simply disappear, this is still the right flow — Delete on the Ads tab never refunds and never notifies.",
   },
   "review.chatReports": {
@@ -186,8 +186,8 @@ const ENTRIES = {
   },
   "insights.mostBumped": {
     title: "Most-bumped ads",
-    what: "Which ads keep riding digests via bumps. Admin bumps are free; seller-texted BUMPs charge whatever bump cost Settings sets.",
-    why: "Worth watching because of a proven leak: with bump cost at 0, the session-005 abuse suite kept a 1-credit ad alive five months for $0. Raising bump cost was recommended then and the decision is still open — this table shows whether it matters yet.",
+    what: "Which ads keep riding digests via re-runs. Only YOU can queue these now — the member-facing BUMP command was removed entirely in session 016 (user decision: \"completely gone, from everywhere\").",
+    why: "Worth watching because of a proven leak: with free member bumps, the session-005 abuse suite kept a cheap ad alive five months for $0. Session 016 closed it by removing the feature; this table now just shows your own curation.",
   },
 
   /* ---------------- All ads (/admin/ads) ---------------- */
@@ -198,9 +198,9 @@ const ENTRIES = {
     why: "Ad-number search was fixed in the session-005 correctness audit; the deleted filter came with soft deletion (session 008). History is never rewritten here — past digests and the message log keep their ad numbers forever.",
   },
   "ads.bump": {
-    title: "Admin Bump",
-    what: "Queues the ad to ride the next digest (after new ads). An expired ad relists first, exactly like a seller's BUMP would. Free when you do it.",
-    why: "Session 007, deliberate: bump cost applies to seller-texted BUMPs; the operator bumping an ad is curation, not revenue. One queued bump per ad is a founding rule (session 001 — \"let the user know they already have a bump scheduled\").",
+    title: "Admin Bump (re-run)",
+    what: "Queues the ad to ride the next digest (after new ads). An expired ad relists first. Free, and operator-only: the member-facing BUMP command was removed in session 016.",
+    why: "Session 007, deliberate: the operator re-running an ad is curation, not revenue. One queued re-run per ad is a founding rule (session 001). Session 016 removed the seller's own BUMP everywhere (user decision: \"completely gone, from everywhere, including the FAQ\") — this button is the only way an ad rides twice.",
   },
   "ads.edit": {
     title: "Inline edit",
@@ -210,7 +210,7 @@ const ENTRIES = {
   "ads.delete": {
     title: "Delete vs Reject",
     what: "Delete removes an ad in ANY status: off the website and out of the digest queue immediately, queued bump dropped, photo removed from storage. It is a soft delete — past digests and the message log keep the number. No refund, no text to the seller.",
-    why: "Requested at the end of session 007, built in session 008. Soft-by-design because broadcast history must never be rewritten (the digest_items record is append-only, same ethos as the money ledger). Delete stays refund-free deliberately: the confirm box shows what the seller paid so a deserved refund goes through Grant credits on their page — YOUR judgement, not automation.",
+    why: "Requested at the end of session 007, built in session 008. Soft-by-design because broadcast history must never be rewritten (the digest_items record is append-only, same ethos as the money ledger). Delete stays refund-free deliberately: the confirm box shows what the seller paid so a deserved refund goes through Adjust balance on their page — YOUR judgement, not automation.",
     gotchas: "For an ad still in review, prefer Reject — that's the flow that refunds (benign) or strikes (violation) and tells the seller. Members deleting their OWN ads follow a stricter matrix (session 009, user's words): pending → refund; approved but never digested → refund; ever ridden a digest → \"game over,\" no refund.",
   },
   "ads.photoSubmissions": {
@@ -224,7 +224,7 @@ const ENTRIES = {
 
   "business.model": {
     title: "How business packages work",
-    what: "Businesses pay up front on the public /advertising page (the prices and tiers were set by you in session 009), then land here for review — paying never skips the human gate. Approving starts the run that day.",
+    what: "Businesses pay up front on the public /advertising page (tiers set in session 009; repriced to $199/$349/$599 in session 016 so every tier costs more than a single classified), then land here for review — paying never skips the human gate. Approving starts the run that day.",
     why: "FEATURES item 17, the user's ask verbatim: \"a package of running in a digest once a day for 1 week, 2 weeks or a month.\" Stripe self-serve, the labeled sponsor line, and links-allowed-after-review were all explicit user picks that session. Same-approval-as-ads was its own instruction: \"for business listings, I want an approval process same as the regular ads.\"",
   },
   "business.sponsorLine": {
@@ -266,7 +266,7 @@ const ENTRIES = {
 
   "users.invite": {
     title: "Add a member",
-    what: "Creates the account immediately, optionally grants starting credits (a ledger entry, noted as an invite grant), and texts ONE compliant invite: who we are, \"to sign up, reply START,\" rates/frequency disclosure, HELP/STOP. One invite per number per day; already-subscribed numbers are refused.",
+    what: "Creates the account immediately, optionally grants starting ad credit in dollars (a ledger entry, noted as an invite grant), and texts ONE compliant invite: who we are, \"to sign up, reply START,\" rates/frequency disclosure, HELP/STOP. One invite per number per day; already-subscribed numbers are refused.",
     why: "FEATURES item 8 (session 008). The strictness is the point: this is outreach to someone who never texted us first — one polite knock, not a campaign. Everything about the wording matches the registered 10DLC program, and nothing else is ever sent unless they reply START.",
   },
   "users.memberId": {
@@ -284,25 +284,25 @@ const ENTRIES = {
     what: "Star averages here and on ad pages come only from CONFIRMED sales: a seller texts SOLD, names the buyer's phone number, and then each side may RATE 1–5 the other — once per ad, matching parties only.",
     why: "FEATURES item 2 (session 008). Store-enforced matching is what makes the stars mean something: nobody can rate a stranger, so \"rated ★ 4.8 by 5 confirmed buyers\" is real.",
   },
-  "users.freeAds": {
-    title: "Free ads (the starter grant)",
-    what: "New sellers get a flat grant of free ad passes — but only when they post their first ad, not when the account is created. A pass covers either kind of ad, text or picture.",
-    why: "\"Starter grant is 3 ads flat. Pics or text\" (session 001). Deferring the grant to first AD NEW was a session-005 user decision: a number that only subscribes or lurks mints zero liability.",
+  "users.starterCredit": {
+    title: "The starter credit",
+    what: "New members get a one-time dollar grant (amount set on Settings) — but only when they post their first ad, not when the account is created. \"Granted\" here means it already fired and never fires again.",
+    why: "\"Every new account ships with $150 ad credit\" (session 016, replacing the session-001 three-free-passes grant when pricing moved to dollars). Deferring the grant to the first post was a session-005 user decision: a number that only subscribes or lurks mints zero liability.",
   },
   "users.credits": {
-    title: "Adjust credits (and why the note is required)",
-    what: "Credits are an append-only ledger: every grant, purchase, spend, and refund is a line, and the balance is the sum. Adjusting requires a non-zero amount AND a note (\"phone order,\" \"check #204\") — the note is the audit trail.",
-    why: "Money histories should be append-only (a bug can't silently overwrite a balance, and you can always see exactly what happened) — same session-001 log-everything ethos as the message log. Cash or check payments go through here, deliberately outside Stripe.",
+    title: "Adjust balance (and why the note is required)",
+    what: "The balance is an append-only ledger in dollars: every grant, purchase, spend, and refund is a line, and the balance is the sum. Adjusting requires a non-zero dollar amount AND a note (\"phone order,\" \"check #204\") — the note is the audit trail.",
+    why: "Money histories should be append-only (a bug can't silently overwrite a balance, and you can always see exactly what happened) — same session-001 log-everything ethos as the message log. Cash or check payments go through here, deliberately outside Stripe — the session-016 decision: \"they can send a check after a phone conversation.\"",
   },
   "users.phoneOrder": {
     title: "Phone order",
-    what: "A caller pays by card: bill the saved card on their verbal OK (same discount as texting BUYCREDIT, double-click-safe), or collect a card — open Stripe's checkout here and key it in as they read it, or text them the link. Credits land automatically; the card is saved for future BUYCREDIT texts.",
-    why: "FEATURES item 29 (session 011): a review of the credit system found everything existed EXCEPT call-in card capture — and callers who can't text a smartphone are exactly this audience. The card number goes straight into Stripe and is never seen or stored by this site.",
-    gotchas: "The pay-by-phone keypad service (FEATURES item 31, under pay-by-phone/ in the repo) is the PCI-safe upgrade — the caller keys the card themselves and the operator never hears it. It is deployed separately and NOT yet wired to member accounts; wiring it needs a decision recorded in FEATURES item 31.",
+    what: "A caller pays by card: bill the saved card for a preset amount on their verbal OK (double-click-safe), or collect a card — open Stripe's checkout here and key it in as they read it, or text them the link. The money lands automatically; the card is saved so their future ads can top up automatically.",
+    why: "FEATURES item 29 (session 011): a review of the payment system found everything existed EXCEPT call-in card capture — and callers who can't text a smartphone are exactly this audience. The card number goes straight into Stripe and is never seen or stored by this site.",
+    gotchas: "The pay-by-phone keypad service (FEATURES item 31, under pay-by-phone/ in the repo) is the PCI-safe upgrade — the caller keys the card themselves and nobody ever hears it. Since session 016 the app ADOPTS an IVR-saved card automatically (it searches Stripe by the caller's phone and stamps the member's customer id) — so once that service is deployed ON THE SAME STRIPE ACCOUNT, a call-in card just shows up here as \"Card on file\" and auto top-up works. The service itself still needs its own Twilio number + PCI Mode setup per pay-by-phone/README.md.",
   },
   "users.merge": {
     title: "Merge / link identities",
-    what: "A PHONE does a full merge: ads, credits, passes, strikes, saved card, and subscription state move to this account; the other account is deleted; its message history stays under the old number in the log (never rewritten). An EMAIL links the address here — the member then gets both editions.",
+    what: "A PHONE does a full merge: ads, money, strikes, saved card, and subscription state move to this account; the other account is deleted; its message history stays under the old number in the log (never rewritten). An EMAIL links the address here — the member then gets both editions.",
     why: "Built in session 007 when real signups made duplicates real (the same person texting in and signing up by email). The user's call: SMS + email identities are one person; a phone means full merge.",
   },
   "users.moderation": {
@@ -342,13 +342,19 @@ const ENTRIES = {
   },
   "settings.costs": {
     title: "Ad pricing",
-    what: "What a text ad and a picture ad cost in credits. Changes apply immediately, to SMS and web posting alike (one price, both lanes — a session-008 decision).",
-    why: "\"I forget the costs off hand but I think pictures are 5x as expensive\" (session 001) set the original 1/5; the user raised the live values to 2/10 in session 011. The profitability model (docs/profitability.md, session 005) ties break-even to subscriber count — pricing is a live lever, not a constant.",
+    what: "What a text ad and a picture ad cost, in dollars. Changes apply immediately, to SMS and web posting alike (one price, both lanes — a session-008 decision).",
+    why: "Dollar pricing arrived in session 016 after a competitor-pricing review (their sheet: $65 with pictures, $45 text-only in print) — the user's decision: \"$45 text / $60 picture,\" replacing the credit system outright. The profitability model (docs/profitability.md, session 005; sheet in docs/pricing.md) shows a $45 ad clears its delivery cost at any plausible list size — the pricing bet is conversion, not cost.",
   },
-  "settings.bumpCost": {
-    title: "Bump cost — the open decision",
-    what: "What a seller-texted BUMP charges. At 0, bumps are free (admin bumps are always free regardless).",
-    why: "\"I want bumps free for now\" (session 001) — but the session-005 abuse suite proved the leak: at bump cost 0, a 1-credit ad was kept riding digests for five months for $0. Raising it was recommended then; the decision has been open since. This one number closes the free-rebroadcast loophole whenever you're ready.",
+  "settings.webAddon": {
+    title: "The website-listing add-on",
+    what: "The extra dollars a WEBSITE listing costs on top of the ad price. At 0 (the launch value) every ad lists on the website automatically, free. Above 0: web posts buy it with a checkbox; SMS ads default to NOT listed.",
+    why: "Session 016, the user's design: \"The +$15 is an additional charge … a photo ad on the website would be $60+15 … I'll initially offer those for free.\" The machinery shipped ready so flipping this one number turns the charge on.",
+    gotchas: "Flip it only AFTER migration 9973 is pasted (it adds ads.web_listing). The SMS lane has no self-serve way to buy the add-on yet — that flow is a documented seam in docs/pricing.md; until it's built, an SMS seller who wants the website listing needs you to arrange it.",
+  },
+  "settings.starterCredit": {
+    title: "The starter credit",
+    what: "The one-time dollar grant every new member gets on their FIRST post (never at account creation). Set 0 to turn new-member free money off.",
+    why: "Session 016: \"Every new account ships with $150 ad credit.\" At $150 that covers 3 text ads or 2 picture ads; the user's earlier \"3 free ads of any kind\" promise would need $180 (3 × the picture price). First-post-only is the session-005 anti-abuse rule — minted numbers that never post cost nothing.",
   },
   "settings.digestCap": {
     title: "Max ads per digest",
@@ -362,7 +368,7 @@ const ENTRIES = {
   },
   "settings.expiryDays": {
     title: "Ad run time",
-    what: "How long an approved ad stays live on the website before expiring (an expired ad can relist via bump).",
+    what: "How long an approved ad stays live on the website before expiring (you can relist an expired ad from the Ads tab).",
     why: "From the founding spec. Worth knowing: Supabase originally never expired ads at all — live-on-site-forever — until the session-005 audit caught it and wired expiry into the digest cron.",
   },
   "settings.replyCaps": {
@@ -403,11 +409,6 @@ const ENTRIES = {
     what: "The threshold for the red \"Excessive\" flag on Insights' picture table. A flag, not a block — the quota above does the enforcing.",
     why: "Session 003: the human-attention threshold, so a scraper-ish pattern gets your eyes before it needs your hand.",
   },
-  "settings.savedCardDiscount": {
-    title: "Saved-card discount",
-    what: "Percent off a credit pack bought by texting BUYCREDIT with a card on file (the phone-order panel quotes the same discounted price).",
-    why: "Session 003, with BUYCREDIT itself — the founding spec's own idea: \"refill credits if they have a card saved on file by texting BUYCREDIT … reply YES to confirm\" (session 001). The discount rewards the lowest-friction, lowest-support-cost way to pay.",
-  },
   "settings.throttlePerMin": {
     title: "Under-attack throttle",
     what: "A global sends-per-minute ceiling enforced ONLY while UNDER ATTACK mode is on; excess sends defer to the next minute rather than dropping.",
@@ -421,7 +422,7 @@ const ENTRIES = {
   "settings.banner": {
     title: "The homepage banner",
     what: "Operator-set text at the top of the homepage, with a link that must point at a page on this site. Clear the text and save to hide it.",
-    why: "FEATURES item 30 (session 011), built for running credit sales. On-site links only, because the walled-garden rule applies to your own banner too.",
+    why: "FEATURES item 30 (session 011), built for running sales and announcements. On-site links only, because the walled-garden rule applies to your own banner too.",
   },
   "settings.wordFilter": {
     title: "The word filter",
@@ -478,7 +479,7 @@ const ENTRIES = {
   },
   "concepts.ledger": {
     title: "Why money is append-only",
-    what: "Credit balances are never edited — every grant, spend, purchase, and refund is a ledger line, and the balance is the sum. Refunds and purchases carry a reference key, so a retried webhook or a double-click can't grant or refund twice.",
+    what: "Balances are never edited — every grant, spend, purchase, and refund is a ledger line (stored in cents since the session-016 dollar pricing), and the balance is the sum. Refunds and purchases carry a reference key, so a retried webhook or a double-click can't grant or refund twice.",
     why: "Append-only money is the same ethos as the message log: you can always see exactly what happened, and a bug can't silently overwrite a balance. The idempotent references have caught real races — Stripe replays, reject-vs-delete races, upgrade-charge retries (sessions 002, 009, 013).",
   },
   "concepts.et": {

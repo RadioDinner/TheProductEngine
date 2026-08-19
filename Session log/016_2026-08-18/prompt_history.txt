@@ -1,0 +1,35 @@
+--- 2026-08-18 (session start) ---
+We have an emergency. All out emergency. I have discovered my competitors pricing and I would have gotten KILLED with my current pricing structure. Currently, we have a credit system. Images are x amounts of credits, text another etc. I think as it stands, picture ads would be about $20, and text ads about $10. They charge $65 a text ad with up to four pictures, and $45 an ad for text ads under 160 characters.
+
+Here is where I want to make a comprehensive overhaul to our pricing structure. Grill me on the chagnes and the outcomes I want to have happen. I obviously need to charge as much or more per picture ad and should I make the internet/website listing cost more? Like +$15 to any ad that you want to be hosted on the website? I know I'll have to run this system at a loss for some time and give people free ads for a time. Help me overhaul this
+
+--- 2026-08-18 (follow-up) ---
+1) I wont say the name because we're logging prompts.
+
+2) I want the option to be profitable or consistenly breaking even. This won't be a money printing machine, but I want it to be sustainable. 
+
+3) I need to hit that price point, because otherwise I'll be bleeding money.
+
+4) The +$15 is an additional charge. You can't post to the website for just 15. A photo ad on the website would be $60+15. So 75. Unless I can charge more for the website listing. I'll initially offer those for free
+
+5) I want to start selling in dollars. And I want you to re-write the entire code base where necessary to support it
+
+6) I will give 3 free ads of any kind still.
+
+7) The Business package needs to be re-thought. I forget even my intention behind it. But yeah, it needs to be more than the ad package. 
+
+8) Give me a to-do list to test the stripe thing. Was that the "call in to add a card" feature"
+Try again
+Continue from where you left off.
+
+--- 2026-08-18 (AskUserQuestion answers) ---
+Q "Lock the core price sheet ..." -> "$45 text / $60 picture (Recommended)"
+Q "BUMP re-broadcasts an ad ... What does a re-run cost?" -> "I want to take away the bump feature for now. Completely gone, from everywhere, including the FAQ"
+Q "The business package ... New tiers?" -> "$199 / $349 / $599"
+Q "At $45-60 an ad, how does a seller actually hand you money?" -> "Every new account ships with $150 ad credit. People can add cards to automatically top up, or they can send a check after a phone conversation"
+
+--- 2026-08-18 (follow-up) ---
+Can I use an AI answering service to take down credit card numbers?
+
+--- 2026-08-18 (follow-up) ---
+ok lets go back to testing the stripe thing or whatever you said wasn't working. Also at one point I had a system planned or created for people to call in and add a card. Is this all one thing? Make another to do list to work on these items

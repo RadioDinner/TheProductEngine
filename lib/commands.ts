@@ -14,9 +14,6 @@ export type Command =
   | { kind: "sold"; id: number | null }
   | { kind: "status"; id: number | null }
   | { kind: "myads" }
-  | { kind: "bump"; id: number | null }
-  | { kind: "buycredit"; amount: number | null }
-  | { kind: "confirm" }
   | { kind: "rate"; stars: number | null }
   | { kind: "skip" }
   /** A category word (item 22): "all" or a lib/categories key — toggles it. */
@@ -98,12 +95,13 @@ export function parseCommand(raw: string): Command {
     case "ad": {
       // "AD NEW <body>" is canonical; bare "AD <body>" works too.
       const body = rest.replace(/^new\b[\s:,-]*/i, "").trim();
-      // "AD SOLD 1325" / "AD BUMP 3" / "AD STATUS 1042" / "AD PIC 900": the sender
-      // clearly meant the owner command, not an ad whose entire text is a keyword
-      // plus a number. Re-route ONLY that exact shape, so a real ad ("AD sold out,
-      // taking spring orders...") is never intercepted. Prevents a mistyped SOLD
-      // from silently posting a junk ad and burning a credit/free pass.
-      if (/^(sold|bump|status|pic)\s+\d{3,}\s*$/i.test(body)) {
+      // "AD SOLD 1325" / "AD STATUS 1042" / "AD PIC 900": the sender clearly
+      // meant the owner command, not an ad whose entire text is a keyword plus
+      // a number. Re-route ONLY that exact shape, so a real ad ("AD sold out,
+      // taking spring orders...") is never intercepted. Prevents a mistyped
+      // SOLD from silently posting a junk ad and burning the seller's money.
+      // (BUMP left this set when the bump feature was removed, session 016.)
+      if (/^(sold|status|pic)\s+\d{3,}\s*$/i.test(body)) {
         return parseCommand(body);
       }
       return { kind: "ad", body };
@@ -121,17 +119,6 @@ export function parseCommand(raw: string): Command {
       return { kind: "status", id: adNumber(rest) };
     case "myads":
       return { kind: "myads" };
-    case "bump":
-      return { kind: "bump", id: adNumber(rest) };
-    case "buycredit":
-    case "buycredits": {
-      const match = rest.match(/\d{1,3}/);
-      return { kind: "buycredit", amount: match ? Number(match[0]) : null };
-    }
-    case "yes":
-    case "y":
-    case "confirm":
-      return { kind: "confirm" };
     case "rate": {
       // "RATE 5", "RATE 5 stars" — anything outside 1–5 is a null (hint reply).
       const match = rest.match(/^([1-5])\b/);

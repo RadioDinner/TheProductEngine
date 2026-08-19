@@ -4,11 +4,11 @@ import { rmSync } from "node:fs";
 import { handleInbound } from "@/lib/engine.ts";
 import {
   ensureAccount, addLedgerEntry, getCreditBalance, getAccount, setSubscribed,
-  listSubscriberPhones, consumeFreeAd,
+  listSubscriberPhones,
 } from "@/lib/store.ts";
 import { approveAd } from "@/lib/moderation.ts";
 import {
-  getPendingAds, getAdRecord, getQueuedBumps, listMessages, reviveAd,
+  getPendingAds, getAdRecord, getQueuedBumps, listMessages,
 } from "@/lib/engine-store.ts";
 import { saveEngineSettings } from "@/lib/settings.ts";
 import { segmentation } from "@/lib/sms-segments.ts";
@@ -46,8 +46,10 @@ async function stats(phone) {
 }
 const send = (from, text, media) => handleInbound({ from, text, ...(media && { media }) });
 
+// Money is CENTS since the session-016 dollar pricing ($45 text / $60 picture,
+// $150 starter credit granted on the first post).
 async function seedApprovedAd(owner, body = "Oak table, $200 OBO. Berlin. 330-555-0142", photo = false) {
-  await addLedgerEntry(owner, { delta: 10, kind: "grant", note: "seed" });
+  await addLedgerEntry(owner, { delta: 20000, kind: "grant", note: "seed $200" });
   await send(owner, `AD NEW ${body}`, photo ? ["https://media.telnyx.com/x.jpg"] : undefined);
   const pend = await getPendingAds();
   const ad = pend[pend.length - 1];
@@ -80,56 +82,38 @@ async function scBumpFlood() {
   reset();
   const A = "3305550002";
   const id = await seedApprovedAd(A);
-  await saveEngineSettings({ bumpCost: 0 });
-  let queuedTotal = 0;
-  // Every 5 minutes for 2 hours = 24 bumps.
+  // The member BUMP feature is REMOVED (session 016). A BUMP flood must queue
+  // nothing, charge nothing, and cost at most one unknown-word redirect/day.
+  const balBefore = await getCreditBalance(A);
   for (let i = 0; i < 24; i++) { await send(A, `BUMP ${id}`); advance(5 * MIN); }
   const q = (await getQueuedBumps()).length;
   const s = await stats(A);
-  verdict("2. BUMP every 5 min for 2h ×24 (bumpCost=0)", true,
-    `  outbound replies=${s.outSms}  cost=$${s.cost}  queued bumps for ad=${q}\n` +
-    `  -> replies bounded by the 20/hr cap; only ONE bump can be queued per ad at a time, so the free\n` +
-    `     re-broadcast rate is capped at ~1 per digest cycle (2/day), NOT per bump. The leak is the free\n` +
-    `     re-broadcast itself (bumpCost=0), rate-limited by digest cadence.`);
-}
-
-async function scBumpFloodPaid() {
-  reset();
-  const A = "3305550003";
-  const id = await seedApprovedAd(A);
-  await saveEngineSettings({ bumpCost: 1 });
-  const startBal = await getCreditBalance(A);
-  let charged = 0;
-  for (let i = 0; i < 24; i++) {
-    const balBefore = await getCreditBalance(A);
-    await send(A, `BUMP ${id}`); advance(5 * MIN);
-    if ((await getCreditBalance(A)) < balBefore) charged++;
-  }
-  const endBal = await getCreditBalance(A);
-  verdict("3. BUMP flood with bumpCost=1 (the fix)", (startBal - endBal) === charged,
-    `  start balance=${startBal}  end=${endBal}  bumps charged=${charged}\n` +
-    `  -> every queued bump costs 1 credit; once credits run out, BUMP is refused. Free re-broadcast leak CLOSED.`);
+  const balAfter = await getCreditBalance(A);
+  verdict("2. BUMP every 5 min for 2h ×24 (feature removed)", q === 0 && balAfter === balBefore && s.outSms <= 6,
+    `  outbound replies=${s.outSms} (incl. seed msgs)  queued bumps=${q} (expect 0)  balance unchanged=${balBefore === balAfter}\n` +
+    `  -> BUMP is an unknown word now: no queue entry, no charge, and the automated-system redirect is\n` +
+    `     deduped to 1/number/day. The free re-broadcast leak is gone WITH the feature.`);
 }
 
 async function scReviveLoop() {
   reset();
   const A = "3305550004";
-  await saveEngineSettings({ bumpCost: 0, expiryDays: 30 });
+  await saveEngineSettings({ expiryDays: 30 });
   const id = await seedApprovedAd(A);
-  // Let the ad expire NATURALLY (advance 31 days), then BUMP to revive. Repeat.
+  // Let the ad expire NATURALLY (advance 31 days), then try BUMP to revive ×5.
   let revives = 0;
   for (let i = 0; i < 5; i++) {
     advance(31 * 24 * HOUR);
-    const ad0 = await getAdRecord(id); // sweep() flips approved->expired on read
-    await send(A, `BUMP ${id}`);        // BUMP on expired -> reviveAd (free at bumpCost=0)
+    await getAdRecord(id); // sweep() flips approved->expired on read
+    await send(A, `BUMP ${id}`);
     const ad1 = await getAdRecord(id);
-    if (ad1 && ad1.status === "approved" && Date.parse(ad1.expiresAt) > Date.parse(ad0.expiresAt ?? 0)) revives++;
+    if (ad1 && ad1.status === "approved") revives++;
   }
   const s = await stats(A);
-  verdict("4. Expired-ad free revival loop ×5 (bumpCost=0)", revives === 5,
-    `  successful FREE revivals=${revives}/5  cost=$${s.cost}  (a 1-credit ad kept alive 5+ months for $0)\n` +
-    `  -> CONFIRMS the R3 leak: at bumpCost=0 an expired ad relists free with a fresh 30-day TTL, forever.\n` +
-    `     Direct SMS cost is only the reply (capped). Setting bumpCost>0 makes reviveAd charge (scenario 3).`);
+  verdict("4. Expired-ad revival loop ×5 (BUMP removed)", revives === 0,
+    `  successful revivals=${revives}/5 (expect 0)  cost=$${s.cost}\n` +
+    `  -> the session-005 R3 leak (free infinite revival via BUMP) is CLOSED by removing the feature:\n` +
+    `     an expired ad stays expired unless the OPERATOR relists it from /admin/ads.`);
 }
 
 async function scPicFlood() {
@@ -149,7 +133,7 @@ async function scPicFlood() {
 async function scAdNewFlood() {
   reset();
   const A = "3305550006";
-  await addLedgerEntry(A, { delta: 5, kind: "grant", note: "seed" }); // 5 credits + 3 starter
+  await addLedgerEntry(A, { delta: 5000, kind: "grant", note: "seed $50" }); // + $150 starter on first post
   const start = await getCreditBalance(A);
   let posted = 0;
   for (let i = 0; i < 50; i++) {
@@ -159,28 +143,27 @@ async function scAdNewFlood() {
     if (after.length > before.length) posted++;
   }
   const end = await getCreditBalance(A);
-  const acct = await getAccount(A);
-  verdict("6. AD NEW flood ×50 (drain credits/free-ads)", end >= 0,
-    `  start credits=${start}  end=${end}  free_ads_left=${acct?.freeAds ?? "?"}  ads posted=${posted}\n` +
-    `  -> posting stops when free ads + credits are exhausted; balance never goes negative (single-threaded).`);
+  verdict("6. AD NEW flood ×50 (drain the balance)", end >= 0 && posted === 4,
+    `  start balance=${start}c (+15000c starter on first post)  end=${end}c  ads posted=${posted} (expect 4 = $200/$45)\n` +
+    `  -> posting stops when the money is exhausted; balance never goes negative (single-threaded).`);
 }
 
 async function scConcurrentSpend() {
   reset();
   const A = "3305550007";
-  await addLedgerEntry(A, { delta: 1, kind: "grant", note: "one credit" }); // exactly 1 credit, 0 free (consume the 3 starter first)
-  // burn the 3 starter passes so only the 1 credit remains
+  // $30 grant + $150 starter = $180; three $45 warmups leave exactly $45 — one more ad's worth.
+  await addLedgerEntry(A, { delta: 3000, kind: "grant", note: "top-up to one ad's worth" });
   await send(A, "AD NEW warmup1"); await send(A, "AD NEW warmup2"); await send(A, "AD NEW warmup3");
   const bal = await getCreditBalance(A);
   const before = (await getPendingAds()).length;
-  // fire 10 AD NEW concurrently against a 1-credit balance
+  // fire 10 AD NEW concurrently against a one-ad balance
   await Promise.all(Array.from({ length: 10 }, (_, i) => send(A, `AD NEW race ${i}`)));
   const posted = (await getPendingAds()).length - before;
   const end = await getCreditBalance(A);
-  verdict("7. Concurrent AD NEW ×10 on 1 credit (RACE)", true,
-    `  balance before race=${bal}  ads posted by the race=${posted}  end balance=${end}\n` +
-    `  -> FILE STORE has no atomic guard (informational). PROD uses the Supabase spend_credits/consumeFreeAd\n` +
-    `     RPCs with advisory locks (migration 0005), verified race-safe in Round 1. This number reflects the\n` +
+  verdict("7. Concurrent AD NEW ×10 on one ad's worth (RACE)", true,
+    `  balance before race=${bal}c  ads posted by the race=${posted}  end balance=${end}c\n` +
+    `  -> FILE STORE has no atomic guard (informational). PROD uses the Supabase spend_credits RPC\n` +
+    `     with advisory locks (migration 9995), verified race-safe in Round 1. This number reflects the\n` +
     `     dev store only; the prod path is the one that matters.`);
 }
 
@@ -213,14 +196,13 @@ async function scSubscribeFlood() {
   for (let i = 0; i < 300; i++) {
     const n = "331" + String(1000000 + i);
     await send(n, "SUBSCRIBE");
-    const a = await getAccount(n);
-    liability += a?.freeAds ?? 0;
+    liability += await getCreditBalance(n);
   }
   const subs = (await listSubscriberPhones()).length;
   const all = await stats(undefined);
   verdict("9. Subscribe flood ×300 spoofed numbers", liability === 0,
-    `  accounts subscribed=${subs}  total free-ad passes minted=${liability}  total catch-up SMS cost=$${all.cost}\n` +
-    `  -> starter grant now deferred to first AD NEW, so a subscribe flood mints ZERO free-ad liability.\n` +
+    `  accounts subscribed=${subs}  total starter-credit cents minted=${liability}  total catch-up SMS cost=$${all.cost}\n` +
+    `  -> the $150 starter credit is deferred to the first AD NEW, so a subscribe flood mints ZERO liability.\n` +
     `     Catch-up is per-number-per-day + global-cap gated. (underAttack would suppress catch-up entirely.)`);
 }
 
@@ -243,7 +225,7 @@ async function scGibberishFlood() {
 async function scAdversarialBodies() {
   reset();
   const A = "3305550012";
-  await addLedgerEntry(A, { delta: 20, kind: "grant", note: "seed" });
+  await addLedgerEntry(A, { delta: 40000, kind: "grant", note: "seed $400" });
   const cases = [
     ["10k chars", "AD NEW " + "x".repeat(10000)],
     ["emoji spam (UCS-2 flip)", "AD NEW Cows 🐄🐄🐄🐄🐄 for sale 😀😀😀 $500 💰💰"],
@@ -268,7 +250,6 @@ async function scAdversarialBodies() {
 
 async function scGlobalBreaker() {
   reset();
-  await saveEngineSettings({ bumpCost: 0 });
   // 600 distinct numbers each send 1 command in the same hour -> global 500/hr cap
   for (let i = 0; i < 600; i++) await send("332" + String(2000000 + i), "HELP");
   const all = await stats(undefined);
@@ -294,28 +275,26 @@ async function scCrossUser() {
   reset();
   const V = "3305559001", A = "3305559002"; // victim owns the ad, attacker attacks it
   const id = await seedApprovedAd(V, "Quilt for sale, $300. 330-555-9001");
-  await addLedgerEntry(A, { delta: 10, kind: "grant", note: "seed" });
+  await addLedgerEntry(A, { delta: 10000, kind: "grant", note: "seed $100" });
   await send(A, `SOLD ${id}`);   // grief: mark victim's ad sold
-  await send(A, `BUMP ${id}`);   // grief: bump victim's ad
   const ad = await getAdRecord(id);
   const attackerBalBefore = await getCreditBalance(A);
   const ok = ad && ad.status === "approved"; // untouched by the attacker
-  verdict("13. Cross-user griefing: attacker SOLD/BUMP victim's ad", ok,
-    `  victim ad status after attack = ${ad?.status}  (expect 'approved' = untouched)  attacker credits=${attackerBalBefore}\n` +
-    `  -> ownership check (engine.ts:203) refuses SOLD/BUMP on an ad you don't own; no state change, no charge.`);
+  verdict("13. Cross-user griefing: attacker SOLD victim's ad", ok,
+    `  victim ad status after attack = ${ad?.status}  (expect 'approved' = untouched)  attacker balance=${attackerBalBefore}c\n` +
+    `  -> ownership check refuses SOLD on an ad you don't own; no state change, no charge.`);
 }
 
 async function scWebhookReplay() {
   reset();
   const A = "3305559003";
-  await addLedgerEntry(A, { delta: 10, kind: "grant", note: "seed" });
   const pid = "telnyx-msg-abc-123";
   // Same provider id delivered 5× (a captured webhook replayed / carrier retries)
   for (let i = 0; i < 5; i++) await handleInbound({ from: A, text: "AD NEW Horse cart $1000" }, pid);
   const posted = (await getPendingAds()).filter((a) => a.ownerPhone === A).length;
-  const acct = await getAccount(A);
-  verdict("14. Webhook replay: same provider-id ×5", posted === 1,
-    `  ads posted=${posted} (expect 1)  free_ads_left=${acct?.freeAds} (expect 2 — one starter pass used ONCE)\n` +
+  const bal = await getCreditBalance(A);
+  verdict("14. Webhook replay: same provider-id ×5", posted === 1 && bal === 10500,
+    `  ads posted=${posted} (expect 1)  balance=${bal}c (expect 10500 = $150 starter − one $45 charge)\n` +
     `  -> recordInboundOnce dedups on provider-id: the first insert wins, retries return null. No double post/charge.`);
 }
 
@@ -417,7 +396,7 @@ async function scPicBanking() {
 
 // ---- run all ----
 const scenarios = [
-  scStatusFlood, scStatusSustained, scBumpFlood, scBumpFloodPaid, scReviveLoop, scPicFlood,
+  scStatusFlood, scStatusSustained, scBumpFlood, scReviveLoop, scPicFlood,
   scAdNewFlood, scConcurrentSpend, scStopStartLoop, scSubscribeFlood,
   scGibberishFlood, scAdversarialBodies, scGlobalBreaker,
   scCrossUser, scWebhookReplay, scBlocklistDrop,

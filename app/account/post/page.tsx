@@ -3,10 +3,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { postAd } from "@/lib/post-actions";
 import { readSession } from "@/lib/session";
-import { categoriesSupported, getAccount, getCreditBalance, STARTER_FREE_ADS } from "@/lib/store";
+import { categoriesSupported, getAccount, getAutoTopUp, getCreditBalance } from "@/lib/store";
 import { getEngineSettings } from "@/lib/settings";
 import { CATEGORIES } from "@/lib/categories";
-import { site } from "@/lib/config";
+import { formatPrice, site } from "@/lib/config";
 import { chargeNoteLine, postingPreview } from "@/lib/post-ad";
 import { AdBodyField } from "@/components/AdBodyField";
 
@@ -14,8 +14,6 @@ export const metadata: Metadata = {
   title: `Post an ad — ${site.name}`,
   robots: { index: false },
 };
-
-const credits = (n: number) => `${n} credit${n === 1 ? "" : "s"}`;
 
 export default async function PostAdPage({
   searchParams,
@@ -25,6 +23,8 @@ export default async function PostAdPage({
     charge?: string;
     cost?: string;
     left?: string;
+    topup?: string;
+    welcome?: string;
     nopic?: string;
     extras?: string;
     extraskip?: string;
@@ -45,15 +45,16 @@ export default async function PostAdPage({
   // Optional seller category picker (item 22) — hidden until migration 9976.
   const withCategories = await categoriesSupported();
   const banned = Boolean(account?.postingBannedAt);
+  const autoTopUp = Boolean(account?.stripeCustomerId) && (await getAutoTopUp(session.phone));
   const preview = postingPreview(
     {
-      freeAds: account?.freeAds ?? 0,
       starterGranted: Boolean(account?.starterGrantedAt),
-      balance,
+      balanceCents: balance,
+      autoTopUp,
     },
-    settings.costText,
-    settings.costPhoto,
-    STARTER_FREE_ADS,
+    settings.costTextCents,
+    settings.costPhotoCents,
+    settings.starterCreditCents,
   );
 
   // Confirmation state (redirect-with-query-params, repo convention). The ad
@@ -62,13 +63,14 @@ export default async function PostAdPage({
   const posted = Number.isInteger(postedId) && postedId > 0;
   const chargeNote = !posted
     ? null
-    : params.charge === "free"
-      ? chargeNoteLine({ kind: "free", left: Number(params.left) || 0 })
-      : chargeNoteLine({
-          kind: "credits",
-          cost: Number(params.cost) || 0,
-          left: Number(params.left) || 0,
-        });
+    : chargeNoteLine({
+        costCents: Number(params.cost) || 0,
+        leftCents: Number(params.left) || 0,
+        toppedUpCents: Number(params.topup) || 0,
+        ...(Number(params.welcome) > 0 && {
+          welcomeLabel: formatPrice(Number(params.welcome)),
+        }),
+      });
   const extrasSaved = Number(params.extras) || 0;
   const extrasSkipped = Number(params.extraskip) || 0;
 
@@ -77,8 +79,8 @@ export default async function PostAdPage({
       <h1>Post an ad</h1>
       <p>
         Posting here costs <strong>exactly the same</strong> as texting AD NEW to{" "}
-        {site.smsNumber}: a free ad pass covers it if you have one, otherwise credits — and
-        every ad goes to the same review before it runs. Firearms are not allowed; see the{" "}
+        {site.smsNumber} — it comes off your ad-credit balance — and every ad goes to the
+        same review before it runs. Firearms are not allowed; see the{" "}
         <Link href="/terms-and-conditions">posting rules</Link>.
       </p>
 
@@ -148,9 +150,9 @@ export default async function PostAdPage({
       )}
       {params.error === "funds" && (
         <p className="form-error" role="alert">
-          That ad needs {credits(Number(params.cost) || settings.costText)} and you have{" "}
-          {Number(params.balance) || 0}. Nothing was posted or charged —{" "}
-          <Link href="/account#credits">buy credits</Link> and try again, or call{" "}
+          That ad costs {formatPrice(Number(params.cost) || settings.costTextCents)} and you
+          have {formatPrice(Number(params.balance) || 0)} of ad credit. Nothing was posted
+          or charged — <Link href="/account#credits">add money</Link> and try again, or call{" "}
           {site.supportPhone}.
         </p>
       )}
@@ -169,53 +171,60 @@ export default async function PostAdPage({
             <dl className="account-facts">
               <div>
                 <dt>Text ad</dt>
-                <dd>{credits(settings.costText)}</dd>
+                <dd>{formatPrice(settings.costTextCents)}</dd>
               </div>
               <div>
-                <dt>Picture ad</dt>
-                <dd>{credits(settings.costPhoto)}</dd>
+                <dt>Picture ad (up to 4 pictures)</dt>
+                <dd>{formatPrice(settings.costPhotoCents)}</dd>
               </div>
               <div>
-                <dt>Your free ad passes</dt>
-                <dd>{account?.freeAds ?? 0}</dd>
+                <dt>Website listing</dt>
+                <dd>
+                  {settings.webAddonCents > 0
+                    ? `+${formatPrice(settings.webAddonCents)}`
+                    : "included"}
+                </dd>
               </div>
               <div>
-                <dt>Your credit balance</dt>
-                <dd>{balance}</dd>
+                <dt>Your ad-credit balance</dt>
+                <dd>{formatPrice(balance)}</dd>
               </div>
             </dl>
             {preview.starterGrantApplies ? (
               <p>
-                <strong>This is your first ad, so it&rsquo;s on the house:</strong> your
-                first post comes with {STARTER_FREE_ADS} free ad passes (picture or plain).
-                This ad will use one — nothing is charged — and{" "}
-                {preview.freeAdsAtPost - 1} will be left for next time.
-              </p>
-            ) : preview.usesFreePass ? (
-              <p>
-                <strong>This ad will use 1 free ad pass</strong> (picture or plain) — no
-                credits are charged. You&rsquo;ll have {preview.freeAdsAtPost - 1} pass
-                {preview.freeAdsAtPost - 1 === 1 ? "" : "es"} left.
+                <strong>This is your first ad, so it&rsquo;s covered:</strong> your first
+                post comes with {formatPrice(settings.starterCreditCents)} of welcome
+                credit. This ad&rsquo;s price comes out of that, and the rest stays on your
+                account for next time.
               </p>
             ) : preview.canAffordPicture ? (
               <p>
-                <strong>This ad will be charged in credits:</strong>{" "}
-                {credits(settings.costText)} as a text ad, or {credits(settings.costPhoto)}{" "}
-                with a listing picture. You have {balance}.
+                <strong>This ad comes off your balance:</strong>{" "}
+                {formatPrice(settings.costTextCents)} as a text ad, or{" "}
+                {formatPrice(settings.costPhotoCents)} with a listing picture. You have{" "}
+                {formatPrice(balance)}.
               </p>
             ) : preview.canAffordText ? (
               <p>
-                <strong>This ad will be charged in credits:</strong> your balance of{" "}
-                {balance} covers a text ad ({credits(settings.costText)}) but not a picture
-                ad ({credits(settings.costPhoto)}) —{" "}
-                <Link href="/account#credits">buy credits</Link> if you want the picture.
+                <strong>This ad comes off your balance:</strong> your{" "}
+                {formatPrice(balance)} covers a text ad (
+                {formatPrice(settings.costTextCents)}) but not a picture ad (
+                {formatPrice(settings.costPhotoCents)}) —{" "}
+                <Link href="/account#credits">add money</Link> if you want the picture.
               </p>
             ) : (
               <p className="form-error">
-                You&rsquo;re out of free ad passes and your balance of {balance} doesn&rsquo;t
-                cover a text ad ({credits(settings.costText)}).{" "}
-                <Link href="/account#credits">Buy credits</Link> first — nothing is charged
+                Your balance of {formatPrice(balance)} doesn&rsquo;t cover a text ad (
+                {formatPrice(settings.costTextCents)}).{" "}
+                <Link href="/account#credits">Add money</Link> first — nothing is charged
                 until an ad actually posts.
+              </p>
+            )}
+            {autoTopUp && !preview.starterGrantApplies && !preview.canAffordPicture && (
+              <p className="fine">
+                Automatic top-up is on: if your balance comes up short, the difference is
+                charged to your saved card and the confirmation says so. Turn it off under{" "}
+                <Link href="/account#credits">your account</Link>.
               </p>
             )}
           </section>
@@ -256,10 +265,25 @@ export default async function PostAdPage({
               </div>
               <p className="fine">
                 This ONE picture is the paid picture: it makes this a picture ad (
-                {credits(settings.costPhoto)} instead of {credits(settings.costText)}) and
-                rides the digest and PIC replies with your ad. Jpg, png, gif, or webp up to
-                8 MB.
+                {formatPrice(settings.costPhotoCents)} instead of{" "}
+                {formatPrice(settings.costTextCents)}) and rides the digest and PIC replies
+                with your ad. Jpg, png, gif, or webp up to 8 MB.
               </p>
+              {settings.webAddonCents > 0 && (
+                <>
+                  <div className="field">
+                    <label className="sim-photo-toggle">
+                      <input type="checkbox" name="weblisting" defaultChecked /> List my ad
+                      on the website too — +{formatPrice(settings.webAddonCents)}
+                    </label>
+                  </div>
+                  <p className="fine">
+                    Every ad rides the text digest. The website listing keeps it browsable
+                    on ThePlainExchange.com for {settings.expiryDays} days, pictures and
+                    all. Uncheck to skip it.
+                  </p>
+                </>
+              )}
               <div className="field">
                 <label htmlFor="extra-photos">Extra pictures (optional — website only, free)</label>
                 <input id="extra-photos" name="extras" type="file" accept="image/*" multiple />

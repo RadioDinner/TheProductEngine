@@ -19,11 +19,11 @@ export const name = "business";
 export function run(t) {
   // ---- tiers: the user-recorded pricing, exactly ----
   t.eq("three tiers", BUSINESS_TIERS.length, 3);
-  t.eq("1 week price", getBusinessTier("week")?.priceCents, 3999);
+  t.eq("1 week price", getBusinessTier("week")?.priceCents, 19900);
   t.eq("1 week days", getBusinessTier("week")?.days, 7);
-  t.eq("2 weeks price", getBusinessTier("twoweeks")?.priceCents, 5999);
+  t.eq("2 weeks price", getBusinessTier("twoweeks")?.priceCents, 34900);
   t.eq("2 weeks days", getBusinessTier("twoweeks")?.days, 14);
-  t.eq("1 month price", getBusinessTier("month")?.priceCents, 8999);
+  t.eq("1 month price", getBusinessTier("month")?.priceCents, 59900);
   t.eq("1 month days", getBusinessTier("month")?.days, 30);
   t.eq("unknown tier is null", getBusinessTier("year"), null);
 

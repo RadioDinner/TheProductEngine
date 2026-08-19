@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signOut } from "@/lib/auth-actions";
 import {
+  saveAutoTopUp,
   saveCategories,
   saveEmail,
   saveProfile,
@@ -14,6 +15,7 @@ import { readSession } from "@/lib/session";
 import {
   ensureUserId,
   getAccount,
+  getAutoTopUp,
   getCreditBalance,
   getLedger,
   getProfile,
@@ -24,7 +26,7 @@ import {
 import { CATEGORIES } from "@/lib/categories";
 import { adExpiresAt, deriveTitle, listAdsByOwner, type Ad } from "@/lib/ads";
 import { getPendingAds } from "@/lib/engine-store";
-import { formatPrice, packs, site } from "@/lib/config";
+import { TOP_UP_PRESETS_CENTS, formatPrice, site } from "@/lib/config";
 import { checkoutUrl } from "@/lib/payments";
 
 export const metadata: Metadata = {
@@ -75,6 +77,7 @@ export default async function AccountPage({
 
   const params = await searchParams;
   const account = await getAccount(session.phone);
+  const autoTopUp = account?.stripeCustomerId ? await getAutoTopUp(session.phone) : false;
   const memberId = await ensureUserId(session.phone);
   const profile = await getProfile(session.phone);
   const unreadChats = (await listChatsFor(session.phone)).filter((c) => c.unread).length;
@@ -130,17 +133,17 @@ export default async function AccountPage({
 
       <section id="credits" aria-labelledby="credits-h">
         <h2 id="credits-h" className="section-h">
-          Credits
+          Ad credit
         </h2>
         {params.purchased && (
           <p className="notice" role="status">
-            {params.purchased} credits added to your account. Thank you!
+            {formatPrice(Number(params.purchased) || 0)} added to your account. Thank you!
           </p>
         )}
         {params.checkout === "success" && (
           <p className="notice" role="status">
-            Payment received — thank you! Your credits will show up here in a moment;
-            refresh the page if you don&rsquo;t see them yet.
+            Payment received — thank you! The money will show up here in a moment;
+            refresh the page if you don&rsquo;t see it yet.
           </p>
         )}
         {params.checkout === "cancelled" && (
@@ -154,32 +157,70 @@ export default async function AccountPage({
             call {site.supportPhone} for help.
           </p>
         )}
+        {params.saved === "topup" && (
+          <p className="notice" role="status">
+            Automatic top-up setting saved.
+          </p>
+        )}
+        {params.error === "topup" && (
+          <p className="form-error" role="alert">
+            That setting couldn&rsquo;t be saved just now — try again later.
+          </p>
+        )}
         <dl className="account-facts">
           <div>
-            <dt>Free ads remaining</dt>
-            <dd>{account?.freeAds ?? 0}</dd>
-          </div>
-          <div>
-            <dt>Credit balance</dt>
-            <dd>{balance}</dd>
+            <dt>Balance</dt>
+            <dd>{formatPrice(balance)}</dd>
           </div>
         </dl>
-        <h3 className="subsection-h">Buy credits</h3>
+        <h3 className="subsection-h">Add money</h3>
         <ul className="pack-list">
-          {packs.map((pack) => (
-            <li key={pack.id} className="pack-row">
-              <span className="pack-name">{pack.credits} credits</span>
-              <span className="pack-price">{formatPrice(pack.priceCents)}</span>
-              <Link className="btn btn-sm" href={checkoutUrl(pack.id)}>
-                Buy
+          {TOP_UP_PRESETS_CENTS.map((amount) => (
+            <li key={amount} className="pack-row">
+              <span className="pack-name">Add {formatPrice(amount)}</span>
+              <span className="pack-price">{formatPrice(amount)}</span>
+              <Link className="btn btn-sm" href={checkoutUrl(amount)}>
+                Add
               </Link>
             </li>
           ))}
         </ul>
         <p className="fine">
-          Prefer paper? Call {site.supportPhone} to arrange payment by phone or check. Buying by
-          text (BUYCREDIT) opens once you’ve saved a card here.
+          Prefer paper? Call {site.supportPhone} to arrange payment by phone or check —
+          we&rsquo;ll add it to your account for you.
         </p>
+        {account?.stripeCustomerId && (
+          <>
+            <h3 className="subsection-h">Automatic top-up</h3>
+            {autoTopUp ? (
+              <>
+                <p>
+                  <strong>On.</strong> If an ad costs more than your balance, the difference
+                  is charged to your saved card and the confirmation text says so.
+                </p>
+                <form action={saveAutoTopUp}>
+                  <input type="hidden" name="on" value="no" />
+                  <button className="btn btn-sm btn-secondary" type="submit">
+                    Turn automatic top-up off
+                  </button>
+                </form>
+              </>
+            ) : (
+              <>
+                <p>
+                  <strong>Off.</strong> Ads only post when your balance covers them — add
+                  money above first.
+                </p>
+                <form action={saveAutoTopUp}>
+                  <input type="hidden" name="on" value="yes" />
+                  <button className="btn btn-sm" type="submit">
+                    Turn automatic top-up on
+                  </button>
+                </form>
+              </>
+            )}
+          </>
+        )}
         <h3 className="subsection-h">History</h3>
         {ledger.length ? (
           <table className="cmd-table ledger-table">
@@ -188,7 +229,7 @@ export default async function AccountPage({
                 <th scope="col">Date</th>
                 <th scope="col">What</th>
                 <th scope="col" className="num">
-                  Credits
+                  Amount
                 </th>
               </tr>
             </thead>
@@ -198,14 +239,18 @@ export default async function AccountPage({
                   <td className="nowrap">{shortDate(entry.at)}</td>
                   <td>{entry.note}</td>
                   <td className="num">
-                    {entry.delta === 0 ? "—" : entry.delta > 0 ? `+${entry.delta}` : entry.delta}
+                    {entry.delta === 0
+                      ? "—"
+                      : entry.delta > 0
+                        ? `+${formatPrice(entry.delta)}`
+                        : `−${formatPrice(-entry.delta)}`}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : (
-          <p className="fine">No credit activity yet.</p>
+          <p className="fine">No account activity yet.</p>
         )}
       </section>
 
@@ -221,7 +266,7 @@ export default async function AccountPage({
         </p>
         <p>
           <Link href="/account/ads">
-            Manage your ads — mark sold, bump, change pictures, or delete →
+            Manage your ads — mark sold, change pictures, or delete →
           </Link>
         </p>
         {myAds.length || pendingAds.length ? (

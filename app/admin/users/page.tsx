@@ -22,8 +22,8 @@ import {
 } from "@/lib/store";
 import { listAdsByOwner } from "@/lib/ads";
 import { formatPhone, normalizePhone } from "@/lib/phone";
-import { discountedCents, formatPrice, packs, site } from "@/lib/config";
-import { paymentsDevMode, savedCardOnFile } from "@/lib/payments";
+import { TOP_UP_PRESETS_CENTS, formatPrice, site } from "@/lib/config";
+import { paymentsDevMode, resolveStripeCustomer, savedCardOnFile } from "@/lib/payments";
 import { getEngineSettings } from "@/lib/settings";
 import { Tip } from "@/components/Tip";
 
@@ -55,11 +55,18 @@ export default async function AdminUsers({
   const params = await searchParams;
   const phone = params.phone ? normalizePhone(params.phone) : null;
   const account = phone ? await getAccount(phone) : null;
-  // Phone-order panel: is a card on file? (best-effort; display only)
+  // Phone-order panel: is a card on file? (best-effort; display only). A card
+  // saved through the pay-by-phone line lives on a Stripe customer this
+  // account hasn't stored yet — resolveStripeCustomer adopts it right here,
+  // so the operator sees "Card on file" as soon as the call-in card lands.
+  const customerId =
+    account && phone && !paymentsDevMode
+      ? await resolveStripeCustomer(phone, account.stripeCustomerId)
+      : (account?.stripeCustomerId ?? null);
   const savedCard =
-    account?.stripeCustomerId && !paymentsDevMode
-      ? await savedCardOnFile(account.stripeCustomerId)
-      : account?.stripeCustomerId
+    customerId && !paymentsDevMode
+      ? await savedCardOnFile(customerId)
+      : customerId
         ? {}
         : null;
   const engineSettings = await getEngineSettings();
@@ -81,8 +88,8 @@ export default async function AdminUsers({
         <summary className="fine">Add a member (send a signup invite by text)</summary>
         <p className="fine">
           Creates their account right away and texts them a one-time invite — &ldquo;To sign
-          up, reply START&rdquo; with opt-out instructions. Starting credits (optional) are
-          granted immediately, so they&apos;re ready the moment they reply. One invite per
+          up, reply START&rdquo; with opt-out instructions. Starting ad credit in dollars
+          (optional) is granted immediately, so they&apos;re ready the moment they reply. One invite per
           number per day; numbers that are already subscribed are refused.{" "}
           <Tip k="users.invite" />
         </p>
@@ -100,8 +107,9 @@ export default async function AdminUsers({
               type="number"
               min={0}
               max={1000}
-              placeholder="Starting credits (optional)"
-              aria-label="Starting credits"
+              step="0.01"
+              placeholder="Starting $ (optional)"
+              aria-label="Starting ad credit in dollars"
               className="admin-num"
             />
             <button className="btn btn-sm" type="submit">
@@ -147,7 +155,7 @@ export default async function AdminUsers({
           <h2 className="section-h">{formatPhone(phone)}</h2>
           {params.saved === "grant" && (
             <p className="notice" role="status">
-              Credits adjusted.
+              Balance adjusted.
             </p>
           )}
           {params.error === "grant" && (
@@ -175,15 +183,15 @@ export default async function AdminUsers({
           )}
           {params.saved === "phoneorder" && (
             <p className="notice" role="status">
-              Payment complete. The credits are granted (and the card saved) the moment
+              Payment complete. The money is granted (and the card saved) the moment
               Stripe&rsquo;s confirmation arrives — usually within seconds; refresh to see the
               new balance in the ledger below.
             </p>
           )}
           {params.saved === "phoneorder_link" && (
             <p className="notice" role="status">
-              Checkout link texted. When they finish paying, the credits land on this account
-              automatically and the card is saved for BUYCREDIT texts.
+              Checkout link texted. When they finish paying, the money lands on this account
+              automatically and the card is saved for automatic top-up.
             </p>
           )}
           {params.error === "phoneorder_cancel" && (
@@ -193,7 +201,7 @@ export default async function AdminUsers({
           )}
           {params.error === "phoneorder_pack" && (
             <p className="form-error" role="alert">
-              Pick a credit pack for the phone order first.
+              Pick an amount for the phone order first.
             </p>
           )}
           {params.error === "phoneorder_dev" && (
@@ -289,14 +297,14 @@ export default async function AdminUsers({
               </div>
             )}
             <div>
-              <dt>
-                Free ads <Tip k="users.freeAds" />
-              </dt>
-              <dd>{account.freeAds}</dd>
+              <dt>Ad-credit balance</dt>
+              <dd>{formatPrice(await getCreditBalance(phone))}</dd>
             </div>
             <div>
-              <dt>Credit balance</dt>
-              <dd>{await getCreditBalance(phone)}</dd>
+              <dt>
+                Starter credit <Tip k="users.starterCredit" />
+              </dt>
+              <dd>{account.starterGrantedAt ? "Granted" : "Waiting for their first post"}</dd>
             </div>
             <div>
               <dt>Strikes</dt>
@@ -309,18 +317,26 @@ export default async function AdminUsers({
           </dl>
 
           <h3 className="subsection-h">
-            Adjust credits <Tip k="users.credits" />
+            Adjust balance ($) <Tip k="users.credits" />
           </h3>
           <form action={adminGrantCredits} className="review-form">
             <input type="hidden" name="phone" value={phone} />
             <div className="inline-fields">
-              <input name="delta" type="number" placeholder="+5 or -2" required className="admin-num" />
+              <input
+                name="delta"
+                type="number"
+                step="0.01"
+                placeholder="+45 or -15"
+                required
+                className="admin-num"
+              />
               <input name="note" type="text" placeholder="Required note — e.g. phone order, check #204" required />
               <button className="btn btn-sm" type="submit">
                 Apply
               </button>
             </div>
           </form>
+          <p className="fine">Dollars, decimals allowed — this is how a mailed check or cash payment lands on the account.</p>
 
           <h3 className="subsection-h">
             Phone order — card payment by phone <Tip k="users.phoneOrder" />
@@ -329,9 +345,7 @@ export default async function AdminUsers({
             {savedCard ? (
               <>
                 <strong>Card on file{savedCard.last4 ? ` (ending ${savedCard.last4})` : ""}.</strong>{" "}
-                &ldquo;Bill their saved card&rdquo; charges it right now with their verbal
-                OK — same {engineSettings.savedCardDiscountPercent}% saved-card discount as
-                texting BUYCREDIT.
+                &ldquo;Bill their saved card&rdquo; charges it right now with their verbal OK.
               </>
             ) : (
               <>
@@ -343,25 +357,21 @@ export default async function AdminUsers({
                 opens web pages; link lasts 24 hours).
               </>
             )}{" "}
-            Either way the credits land on this account automatically and the card is saved,
-            so from then on they can buy by texting <span className="cmd">BUYCREDIT</span> —
-            or you can bill them here. Paying by cash or check? Use Adjust credits above
-            instead.
+            Either way the money lands on this account automatically and the card is saved,
+            so from then on their ads can top up automatically — or you can bill them here.
+            Paying by cash or check? Use Adjust balance above instead.
           </p>
           <form className="review-form">
             <input type="hidden" name="phone" value={phone} />
             <input type="hidden" name="nonce" value={crypto.randomUUID()} />
             <div className="inline-fields">
-              <select name="pack" defaultValue="" className="admin-select" aria-label="Credit pack">
+              <select name="amount" defaultValue="" className="admin-select" aria-label="Amount">
                 <option value="" disabled>
-                  Credit pack…
+                  Amount…
                 </option>
-                {packs.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.credits} credits — {formatPrice(p.priceCents)}
-                    {savedCard
-                      ? ` (${formatPrice(discountedCents(p.priceCents, engineSettings.savedCardDiscountPercent))} billed to the saved card)`
-                      : ""}
+                {TOP_UP_PRESETS_CENTS.map((amount) => (
+                  <option key={amount} value={amount}>
+                    {formatPrice(amount)} of ad credit
                   </option>
                 ))}
               </select>
@@ -388,7 +398,7 @@ export default async function AdminUsers({
           </h3>
           <p className="fine">
             Enter a <strong>phone number</strong> for a FULL merge (that account&apos;s ads,
-            credits, free passes, strikes, and saved card move here; the account is then deleted —
+            money, strikes, and saved card move here; the account is then deleted —
             its message history stays under the old number in the Messages log). Enter an{" "}
             <strong>email address</strong> to link it to this member — they then get both the text
             and email digests (&quot;doubly subscribed&quot;).
@@ -467,7 +477,7 @@ export default async function AdminUsers({
           </ul>
 
           <h3 className="subsection-h">
-            Credit history <Tip k="concepts.ledger" />
+            Money history <Tip k="concepts.ledger" />
           </h3>
           <table className="cmd-table ledger-table">
             <thead>
@@ -475,7 +485,7 @@ export default async function AdminUsers({
                 <th scope="col">Date</th>
                 <th scope="col">What</th>
                 <th scope="col" className="num">
-                  Credits
+                  Amount
                 </th>
               </tr>
             </thead>
@@ -485,7 +495,11 @@ export default async function AdminUsers({
                   <td className="nowrap">{shortDate(entry.at)}</td>
                   <td>{entry.note}</td>
                   <td className="num">
-                    {entry.delta === 0 ? "—" : entry.delta > 0 ? `+${entry.delta}` : entry.delta}
+                    {entry.delta === 0
+                      ? "—"
+                      : entry.delta > 0
+                        ? `+${formatPrice(entry.delta)}`
+                        : `−${formatPrice(-entry.delta)}`}
                   </td>
                 </tr>
               ))}

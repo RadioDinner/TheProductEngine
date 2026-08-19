@@ -15,12 +15,12 @@ import {
   OFFENSE_BAN_THRESHOLD,
   addLedgerEntry,
   getLedger,
-  grantFreeAd,
   recordOffense,
 } from "@/lib/store";
 import { getEngineSettings } from "@/lib/settings";
 import { dispatchSms } from "@/lib/outbound";
-import { adRefundableTotal } from "@/lib/myads";
+import { adRefundableTotal, findAdCharge, legacyPassRefundCents } from "@/lib/myads";
+import { formatPrice } from "@/lib/config";
 
 async function notify(phone: string, body: string): Promise<void> {
   // "reply" class: a FULL pause suppresses these seller notices, a PARTIAL
@@ -69,11 +69,20 @@ export async function rejectAd(
 
   if (kind === "benign") {
     // Full refund of whatever the submission charged (spec Q4/Q8) — the base
-    // charge PLUS any picture-upgrade charge (item 32), netted against an
-    // upgrade already returned by a failed attach. adRefundableTotal matches
-    // ad ids as delimited tokens, so #12 never resolves to #125's charge.
+    // charge PLUS any picture-upgrade or website-add-on charge, netted against
+    // an upgrade already returned by a failed attach. adRefundableTotal
+    // matches ad ids as delimited tokens, so #12 never resolves to #125's.
     const ledger = await getLedger(ad.ownerPhone);
-    const owed = adRefundableTotal(ledger, id);
+    let owed = adRefundableTotal(ledger, id);
+    if (owed === 0) {
+      // A delta-0 spend = a legacy free-ad-pass ad (pre-session-016). Passes
+      // are gone — refund the current dollar price of that ad kind instead.
+      const charge = findAdCharge(ledger, id);
+      if (charge) {
+        const settings = await getEngineSettings();
+        owed = legacyPassRefundCents(charge.note, settings.costTextCents, settings.costPhotoCents);
+      }
+    }
     let refundNote = "charge";
     if (owed > 0) {
       await addLedgerEntry(ad.ownerPhone, {
@@ -81,15 +90,7 @@ export async function rejectAd(
         kind: "refund",
         note: `Refund — ad #${id} not accepted`,
       });
-      refundNote = `${owed} credit${owed === 1 ? "" : "s"}`;
-    } else {
-      await grantFreeAd(ad.ownerPhone);
-      await addLedgerEntry(ad.ownerPhone, {
-        delta: 0,
-        kind: "refund",
-        note: `Free ad returned — ad #${id} not accepted`,
-      });
-      refundNote = "free ad";
+      refundNote = formatPrice(owed);
     }
     await notify(
       ad.ownerPhone,

@@ -21,10 +21,25 @@ export const metadata: Metadata = {
   title: `Settings — ${site.name} admin`,
 };
 
+/** Money fields are entered in DOLLARS (decimals allowed) and stored in
+ * cents — adminSaveSettings converts. */
+const DOLLAR_FIELDS = new Set(["costTextCents", "costPhotoCents", "webAddonCents", "starterCreditCents"]);
+
 const FIELDS: { key: string; label: string; hint?: string; tip: HandbookKey }[] = [
-  { key: "costText", label: "Text ad cost (credits)", tip: "settings.costs" },
-  { key: "costPhoto", label: "Picture ad cost (credits)", tip: "settings.costs" },
-  { key: "bumpCost", label: "Bump cost (credits)", hint: "0 = free for now", tip: "settings.bumpCost" },
+  { key: "costTextCents", label: "Text ad price ($)", tip: "settings.costs" },
+  { key: "costPhotoCents", label: "Picture ad price ($)", tip: "settings.costs" },
+  {
+    key: "webAddonCents",
+    label: "Website listing add-on ($)",
+    hint: "0 = every ad lists on the website free (the launch state); set 15 to start charging",
+    tip: "settings.webAddon",
+  },
+  {
+    key: "starterCreditCents",
+    label: "Starter credit ($)",
+    hint: "granted once, on a member's first post — never at account creation",
+    tip: "settings.starterCredit",
+  },
   { key: "digestCap", label: "Max ads per digest", tip: "settings.digestCap" },
   { key: "maxChars", label: "Max ad length (characters)", tip: "settings.maxChars" },
   { key: "expiryDays", label: "Ad run time (days)", tip: "settings.expiryDays" },
@@ -93,12 +108,6 @@ const FIELDS: { key: string; label: string; hint?: string; tip: HandbookKey }[] 
     label: "Flag excessive picture requests (per day)",
     hint: "on Insights, flag any number asking for more than this many pictures in 24h (0 turns the flag off)",
     tip: "settings.picAbuseFlag",
-  },
-  {
-    key: "savedCardDiscountPercent",
-    label: "Saved-card discount (%)",
-    hint: "percent off a credit pack bought by text (BUYCREDIT) with a saved card; 0 = no discount",
-    tip: "settings.savedCardDiscount",
   },
   {
     key: "outboundThrottlePerMin",
@@ -209,7 +218,8 @@ export default async function AdminSettings({
               name={f.key}
               type="number"
               min={0}
-              defaultValue={values[f.key]}
+              step={DOLLAR_FIELDS.has(f.key) ? "0.01" : "1"}
+              defaultValue={DOLLAR_FIELDS.has(f.key) ? values[f.key] / 100 : values[f.key]}
               className="admin-num"
             />
           </div>
@@ -223,7 +233,7 @@ export default async function AdminSettings({
         </div>
         <div className="field">
           <label htmlFor="bannerText">
-            Homepage banner (credit sales) <Tip k="settings.banner" />
+            Homepage banner (sales/announcements) <Tip k="settings.banner" />
           </label>
           <input
             id="bannerText"
@@ -231,7 +241,7 @@ export default async function AdminSettings({
             type="text"
             maxLength={200}
             defaultValue={settings.promoBannerText}
-            placeholder={'e.g. "CREDIT SALE — 25 credits for $15 through Saturday"'}
+            placeholder={'e.g. "SPRING SALE — picture ads $45 through Saturday"'}
           />
           <p className="fine">
             Shows as a banner at the top of the homepage. <strong>Clear the text and save to

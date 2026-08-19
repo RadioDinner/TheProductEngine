@@ -17,8 +17,13 @@ import {
 } from "@/lib/store";
 import { headers } from "next/headers";
 import { dispatchSms } from "@/lib/outbound";
-import { discountedCents, formatPrice, getPack, site } from "@/lib/config";
-import { chargeSavedCard, createCheckoutSession, paymentsDevMode } from "@/lib/payments";
+import { formatPrice, isTopUpPreset, site } from "@/lib/config";
+import {
+  chargeSavedCard,
+  createCheckoutSession,
+  paymentsDevMode,
+  resolveStripeCustomer,
+} from "@/lib/payments";
 import { devToolsEnabled } from "@/lib/env";
 import {
   addWordRule,
@@ -118,8 +123,10 @@ export async function adminEditAd(formData: FormData): Promise<void> {
   redirect(backTarget(formData));
 }
 
-/** Queue a free admin bump: the ad rides the next digest again. An expired ad
- * is relisted first — the same semantics as the seller's own BUMP. */
+/** Queue a free admin re-run: the ad rides the next digest again. An expired
+ * ad is relisted first. Operator-only — the member-facing BUMP feature was
+ * removed entirely in session 016 (user decision); this internal tool is how
+ * the operator re-runs or relists an ad when it's warranted. */
 export async function adminQueueBump(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = Number(formData.get("id"));
@@ -252,23 +259,23 @@ export async function adminSendDigest(formData: FormData): Promise<void> {
 
 /**
  * Phone orders (call-in card payments). Both actions create a REAL Stripe
- * Checkout session for a credit pack ON BEHALF of the member being viewed —
- * same metadata/webhook path as self-serve, so completing it grants the
- * credits AND saves the card to that member's Stripe customer (enabling
- * BUYCREDIT texts). Card numbers never touch this app: they are keyed
+ * Checkout session for an ad-credit top-up ON BEHALF of the member being
+ * viewed — same metadata/webhook path as self-serve, so completing it grants
+ * the money AND saves the card to that member's Stripe customer (enabling
+ * automatic top-up). Card numbers never touch this app: they are keyed
  * directly into Stripe's hosted page — either by the OPERATOR while the
  * caller reads the card out (open-here), or by the member themselves via a
- * texted link. Cash/check stays on Adjust credits above.
+ * texted link. Cash/check stays on Adjust balance above.
  */
 async function phoneOrderSession(
   formData: FormData,
   urls: (origin: string, phone: string) => { successUrl?: string; cancelUrl?: string },
-): Promise<{ phone: string; url: string; packCredits: number } | { phone: string; error: string }> {
+): Promise<{ phone: string; url: string; amountCents: number } | { phone: string; error: string }> {
   await requireAdmin();
   const phone = normalizePhone(String(formData.get("phone") ?? ""));
   if (!phone) redirect("/admin/users");
-  const pack = getPack(String(formData.get("pack") ?? ""));
-  if (!pack) return { phone, error: "phoneorder_pack" };
+  const amountCents = Number(formData.get("amount"));
+  if (!isTopUpPreset(amountCents)) return { phone, error: "phoneorder_pack" };
   if (paymentsDevMode) return { phone, error: "phoneorder_dev" };
   // A brand-new caller gets an account minted right here, so the very first
   // contact with the exchange can be "call in, pay, start posting".
@@ -278,14 +285,12 @@ async function phoneOrderSession(
     process.env.SITE_URL || `https://${requestHeaders.get("host") ?? "localhost:3000"}`;
   try {
     const url = await createCheckoutSession({
-      packId: pack.id,
-      credits: pack.credits,
-      priceCents: pack.priceCents,
+      amountCents,
       phone,
       origin,
       ...urls(origin, phone),
     });
-    return { phone, url, packCredits: pack.credits };
+    return { phone, url, amountCents };
   } catch (e) {
     console.error("[admin] phone-order session failed:", e);
     return { phone, error: "phoneorder" };
@@ -293,14 +298,14 @@ async function phoneOrderSession(
 }
 
 /**
- * Bill the member's SAVED card for a pack while they're on the phone ("charge
- * my card on file"). Same product as the BUYCREDIT text flow — same saved-card
- * discount, same off-session charge, same idempotent ref-then-grant — but the
- * confirmation is verbal, so the form carries a render-time nonce as the ref:
- * a double-click (or a Stripe retry) can neither double-charge nor
- * double-grant. Declines (incl. banks demanding 3-D Secure, which can't
- * happen over the phone) come back as a readable reason; the fallback is the
- * checkout lane below, where the bank challenge can actually be met.
+ * Bill the member's SAVED card for an ad-credit top-up while they're on the
+ * phone ("charge my card on file"). Same off-session charge and idempotent
+ * ref-then-grant as automatic top-up — but the confirmation is verbal, so
+ * the form carries a render-time nonce as the ref: a double-click (or a
+ * Stripe retry) can neither double-charge nor double-grant. Declines (incl.
+ * banks demanding 3-D Secure, which can't happen over the phone) come back
+ * as a readable reason; the fallback is the checkout lane below, where the
+ * bank challenge can actually be met.
  */
 export async function adminBillSavedCard(formData: FormData): Promise<void> {
   await requireAdmin();
@@ -310,29 +315,30 @@ export async function adminBillSavedCard(formData: FormData): Promise<void> {
   // lets TS narrow after each `back(...)` guard below.
   const back: (q: string) => never = (q) => redirect(`/admin/users?phone=${phone}&${q}`);
 
-  const pack = getPack(String(formData.get("pack") ?? ""));
-  if (!pack) back("error=phoneorder_pack");
+  const amountCents = Number(formData.get("amount"));
+  if (!isTopUpPreset(amountCents)) back("error=phoneorder_pack");
   const nonce = String(formData.get("nonce") ?? "").replace(/[^a-zA-Z0-9-]/g, "");
   if (!nonce) back("error=bill");
   const account = await getAccount(phone);
-  if (!account?.stripeCustomerId) back("error=bill_nocard");
+  // A card saved through the pay-by-phone line is adopted here on first use.
+  const customerId = account
+    ? await resolveStripeCustomer(phone, account.stripeCustomerId)
+    : null;
+  if (!customerId) back("error=bill_nocard");
 
-  const settings = await getEngineSettings();
-  const price = discountedCents(pack.priceCents, settings.savedCardDiscountPercent);
   const ref = `adminbill:${phone}:${nonce}`;
   if (await hasLedgerRef(ref)) {
-    back(`saved=bill&detail=${encodeURIComponent(`Those credits were already added — balance ${await getCreditBalance(phone)}.`)}`);
+    back(`saved=bill&detail=${encodeURIComponent(`That money was already added — balance ${formatPrice(await getCreditBalance(phone))}.`)}`);
   }
 
   let result: { ok: boolean; last4?: string; reason?: string };
   if (!paymentsDevMode) {
     result = await chargeSavedCard({
-      customerId: account.stripeCustomerId,
-      amountCents: price,
+      customerId: customerId!,
+      amountCents,
       ref,
       phone,
-      packId: pack.id,
-      credits: pack.credits,
+      description: `${formatPrice(amountCents)} ad credit — ${site.name} (phone order)`,
     });
   } else if (devToolsEnabled) {
     result = { ok: true, last4: "0000" }; // dev simulation (never in a real prod deploy)
@@ -344,15 +350,15 @@ export async function adminBillSavedCard(formData: FormData): Promise<void> {
     back(`error=bill&reason=${encodeURIComponent(result.reason ?? "charge failed")}`);
   }
   await addLedgerEntry(phone, {
-    delta: pack.credits,
+    delta: amountCents,
     kind: "purchase",
-    note: `Purchased ${pack.credits} credits (${formatPrice(price)}) — saved card, phone order`,
+    note: `Added ${formatPrice(amountCents)} of ad credit — saved card, phone order`,
     ref,
   });
   const last4 = result.last4 ? ` ending ${result.last4}` : "";
   back(
     `saved=bill&detail=${encodeURIComponent(
-      `Charged ${formatPrice(price)} to the card${last4}. ${pack.credits} credits added — balance ${await getCreditBalance(phone)}.`,
+      `Charged ${formatPrice(amountCents)} to the card${last4}. Balance is now ${formatPrice(await getCreditBalance(phone))}.`,
     )}`,
   );
 }
@@ -374,7 +380,7 @@ export async function adminTextCheckoutLink(formData: FormData): Promise<void> {
   const out = await phoneOrderSession(formData, () => ({}));
   if ("error" in out) redirect(`/admin/users?phone=${out.phone}&error=${out.error}`);
   const body =
-    `${site.name}: secure checkout for ${out.packCredits} ad credits — pay by card here ` +
+    `${site.name}: secure checkout for ${formatPrice(out.amountCents)} of ad credit — pay by card here ` +
     `(link good for 24 hours): ${out.url}`;
   const { sent, reason } = await dispatchSms(out.phone, body, { cls: "reply" });
   if (!sent) {
@@ -388,13 +394,21 @@ export async function adminTextCheckoutLink(formData: FormData): Promise<void> {
 export async function adminGrantCredits(formData: FormData): Promise<void> {
   await requireAdmin();
   const phone = normalizePhone(String(formData.get("phone") ?? ""));
-  const delta = Number(formData.get("delta"));
+  // The form takes DOLLARS (checks, cash, make-goods); the ledger stores
+  // cents. Clamp to ±$5,000 so a fat-fingered grant can't mint a fortune.
+  const dollars = Number(String(formData.get("delta") ?? "").trim());
+  const deltaCents = Math.round(dollars * 100);
   const note = String(formData.get("note") ?? "").trim();
   if (!phone) redirect("/admin/users");
-  if (!Number.isInteger(delta) || delta === 0 || !note) {
+  if (
+    !Number.isFinite(deltaCents) ||
+    deltaCents === 0 ||
+    Math.abs(deltaCents) > 500_000 ||
+    !note
+  ) {
     redirect(`/admin/users?phone=${phone}&error=grant`);
   }
-  await addLedgerEntry(phone, { delta, kind: "adjustment", note });
+  await addLedgerEntry(phone, { delta: deltaCents, kind: "adjustment", note });
   redirect(`/admin/users?phone=${phone}&saved=grant`);
 }
 
@@ -449,13 +463,16 @@ export async function adminInviteUser(formData: FormData): Promise<void> {
   if (invited > 0) back("error", "That number was already invited in the last day.");
 
   await ensureAccount(phone);
-  const rawCredits = Number(String(formData.get("credits") ?? "").trim() || 0);
-  const credits = Number.isInteger(rawCredits) ? Math.min(Math.max(rawCredits, 0), 1000) : 0;
-  if (credits > 0) {
+  // Dollars in the form, cents in the ledger — capped at $1,000.
+  const rawDollars = Number(String(formData.get("credits") ?? "").trim() || 0);
+  const startingCents = Number.isFinite(rawDollars)
+    ? Math.min(Math.max(Math.round(rawDollars * 100), 0), 100_000)
+    : 0;
+  if (startingCents > 0) {
     await addLedgerEntry(phone, {
-      delta: credits,
+      delta: startingCents,
       kind: "grant",
-      note: "Starting credits — added with the admin invite",
+      note: "Starting ad credit — added with the admin invite",
     });
   }
 
@@ -464,9 +481,9 @@ export async function adminInviteUser(formData: FormData): Promise<void> {
     `${INVITE_MARKER} (up to 4 msgs/day; msg&data rates may apply). ` +
     `Reply HELP for help, STOP to opt out. Info: ThePlainExchange.com/sms or call ${site.supportPhone}.`;
   const { sent, reason } = await dispatchSms(phone, invite, { cls: "reply" });
-  if (!sent) back("error", `Account created${credits ? ` with ${credits} credits` : ""}, but the text was not sent (${reason ?? "suppressed"}).`);
+  if (!sent) back("error", `Account created${startingCents ? ` with ${formatPrice(startingCents)} of ad credit` : ""}, but the text was not sent (${reason ?? "suppressed"}).`);
   await logMessage({ direction: "outbound", channel: "sms", address: phone, body: invite });
-  back("saved", `Invite sent${credits ? ` and ${credits} credit${credits === 1 ? "" : "s"} granted` : ""}.`);
+  back("saved", `Invite sent${startingCents ? ` and ${formatPrice(startingCents)} of ad credit granted` : ""}.`);
 }
 
 /** Grant or revoke the green check (FEATURES item 7) — a manual, human
@@ -519,10 +536,13 @@ export async function adminToggleWord(formData: FormData): Promise<void> {
 
 // Sane ceilings so one fat-fingered save can't create a runaway-cost digest
 // (thousands of ads / giant bodies) or neutralize the abuse circuit breaker.
+// Money fields are entered in DOLLARS on the form and stored in cents — their
+// ceilings here are in dollars.
 const SETTING_MAX: Record<string, number> = {
-  costText: 100,
-  costPhoto: 100,
-  bumpCost: 100,
+  costTextCents: 1000,
+  costPhotoCents: 1000,
+  webAddonCents: 500,
+  starterCreditCents: 1000,
   digestCap: 15,
   maxChars: 300,
   expiryDays: 365,
@@ -537,9 +557,16 @@ const SETTING_MAX: Record<string, number> = {
   revealBankCap: 10000,
   revealAbusePerDay: 1000,
   categoryConfirmsPerHour: 100,
-  savedCardDiscountPercent: 100,
   outboundThrottlePerMin: 10000,
 };
+
+/** Settings the admin types in DOLLARS (converted to cents on save). */
+const DOLLAR_SETTINGS = new Set([
+  "costTextCents",
+  "costPhotoCents",
+  "webAddonCents",
+  "starterCreditCents",
+]);
 
 export async function adminSaveSettings(formData: FormData): Promise<void> {
   await requireAdmin();
@@ -555,7 +582,9 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
     const value = Number(str);
     if (!Number.isFinite(value) || value < 0) return null;
     const max = SETTING_MAX[name] ?? Number.MAX_SAFE_INTEGER;
-    return Math.min(Math.floor(value), max);
+    const clamped = Math.min(value, max);
+    // Dollar fields allow cents ("59.99") and store whole cents.
+    return DOLLAR_SETTINGS.has(name) ? Math.round(clamped * 100) : Math.floor(clamped);
   };
   const parseSlots = (name: string) =>
     String(formData.get(name) ?? "")
@@ -569,9 +598,10 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
 
   const update: Record<string, number | number[]> = {};
   for (const key of [
-    "costText",
-    "costPhoto",
-    "bumpCost",
+    "costTextCents",
+    "costPhotoCents",
+    "webAddonCents",
+    "starterCreditCents",
     "digestCap",
     "maxChars",
     "expiryDays",
@@ -586,7 +616,6 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
     "revealBankCap",
     "revealAbusePerDay",
     "categoryConfirmsPerHour",
-    "savedCardDiscountPercent",
     "outboundThrottlePerMin",
   ]) {
     const value = num(key);

@@ -5,12 +5,14 @@
  * unit suite can pin it; lib/business.ts owns storage and lib/business-actions
  * the I/O.
  *
- * THE PRODUCT (user decisions, session 009):
- *   1 week $39.99 · 2 weeks $59.99 · 1 month $89.99 — the business's ad rides
+ * THE PRODUCT (user decisions, session 009; REPRICED session 016):
+ *   1 week $199 · 2 weeks $349 · 1 month $599 — the business's ad rides
  *   the daily digest once a day as a clearly-labeled "Sponsor:" line that
  *   NEVER consumes one of the 10 member ad slots. Payment is Stripe
  *   self-serve, but the ad still goes through the SAME human review as every
  *   member ad, and the run clock starts at APPROVAL, not payment.
+ *   Pricing rule (session 016, docs/pricing.md): every tier must cost MORE
+ *   than a single classified ($45/$60) — it buys 7/14/30 daily insertions.
  *
  * THE MISSED-DAY RULE (build decision, documented on /advertising and
  * /admin/help): a package expires when it has RIDDEN days-purchased distinct
@@ -28,11 +30,11 @@ export interface BusinessTier {
   priceCents: number;
 }
 
-/** The three packages (user-recorded pricing, session 009). */
+/** The three packages (user-recorded pricing, session 016). */
 export const BUSINESS_TIERS: BusinessTier[] = [
-  { id: "week", label: "1 week", days: 7, priceCents: 3999 },
-  { id: "twoweeks", label: "2 weeks", days: 14, priceCents: 5999 },
-  { id: "month", label: "1 month", days: 30, priceCents: 8999 },
+  { id: "week", label: "1 week", days: 7, priceCents: 19900 },
+  { id: "twoweeks", label: "2 weeks", days: 14, priceCents: 34900 },
+  { id: "month", label: "1 month", days: 30, priceCents: 59900 },
 ];
 
 export function getBusinessTier(id: string): BusinessTier | null {

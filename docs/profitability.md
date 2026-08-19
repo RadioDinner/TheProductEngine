@@ -1,5 +1,12 @@
 # Profitability audit — The Plain Exchange
 
+> **Superseded on pricing (2026-08-18, session 016):** the credit system this
+> audit priced against was replaced by dollar pricing — $45 text / $60 picture,
+> $150 starter credit, BUMP removed. See `docs/pricing.md` for the live sheet.
+> The COST MODEL below (segments, break-even-per-subscriber math, leak
+> analysis) remains the reference; at the new prices a single ad clears its
+> delivery cost at any plausible list size.
+
 Round 3 of the three-round audit (security → function → profitability), session
 005, 2026-07-09. Every figure below is computed from the **real** segmentation
 and packing code (`lib/sms-segments.ts`, `lib/digest-engine.ts`), not estimated.

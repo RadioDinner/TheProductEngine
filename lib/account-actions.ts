@@ -7,6 +7,7 @@ import {
   addLedgerEntry,
   ensureAccount,
   ensureChat,
+  setAutoTopUp,
   setEmail,
   setEmailEdition,
   setProfile,
@@ -14,7 +15,7 @@ import {
   setSubscriberCategories,
 } from "@/lib/store";
 import { isCategoryKey } from "@/lib/categories";
-import { formatPrice, getPack } from "@/lib/config";
+import { formatPrice, isTopUpPreset } from "@/lib/config";
 import { createCheckoutSession, paymentsDevMode } from "@/lib/payments";
 import { devToolsEnabled } from "@/lib/env";
 import { getAd } from "@/lib/ads";
@@ -120,24 +121,18 @@ export async function toggleEmailEdition(formData: FormData): Promise<void> {
   redirect("/account#settings");
 }
 
-/** Hand off to hosted Stripe Checkout; credits are granted by the webhook. */
+/** Hand off to hosted Stripe Checkout; the money is granted by the webhook. */
 export async function startStripeCheckout(formData: FormData): Promise<void> {
   const phone = await requirePhone();
   if (paymentsDevMode) redirect("/account");
-  const pack = getPack(String(formData.get("pack") ?? ""));
-  if (!pack) redirect("/account");
+  const amountCents = Number(formData.get("amount"));
+  if (!isTopUpPreset(amountCents)) redirect("/account");
   const requestHeaders = await headers();
   const origin =
     process.env.SITE_URL || `https://${requestHeaders.get("host") ?? "localhost:3000"}`;
   let url: string;
   try {
-    url = await createCheckoutSession({
-      packId: pack.id,
-      credits: pack.credits,
-      priceCents: pack.priceCents,
-      phone,
-      origin,
-    });
+    url = await createCheckoutSession({ amountCents, phone, origin });
   } catch (e) {
     console.error("[payments] checkout session failed:", e);
     redirect("/account?checkout=error#credits");
@@ -145,18 +140,26 @@ export async function startStripeCheckout(formData: FormData): Promise<void> {
   redirect(url);
 }
 
+/** Automatic top-up toggle (dollar pricing, session 016). */
+export async function saveAutoTopUp(formData: FormData): Promise<void> {
+  const phone = await requirePhone();
+  await ensureAccount(phone);
+  const outcome = await setAutoTopUp(phone, formData.get("on") === "yes");
+  redirect(outcome === "saved" ? "/account?saved=topup#credits" : "/account?error=topup#credits");
+}
+
 /** Dev-mode stand-in for the Stripe Checkout success webhook. */
 export async function simulatePurchase(formData: FormData): Promise<void> {
   const phone = await requirePhone();
   // Only usable when payments are in dev mode AND dev tools are enabled, so a
-  // production deploy without Stripe keys can't be used to mint free credits.
+  // production deploy without Stripe keys can't be used to mint free money.
   if (!paymentsDevMode || !devToolsEnabled) redirect("/account");
-  const pack = getPack(String(formData.get("pack") ?? ""));
-  if (!pack) redirect("/account");
+  const amountCents = Number(formData.get("amount"));
+  if (!isTopUpPreset(amountCents)) redirect("/account");
   await addLedgerEntry(phone, {
-    delta: pack.credits,
+    delta: amountCents,
     kind: "purchase",
-    note: `Purchased ${pack.credits} credits (${formatPrice(pack.priceCents)}) — simulated`,
+    note: `Added ${formatPrice(amountCents)} of ad credit — simulated`,
   });
-  redirect(`/account?purchased=${pack.credits}#credits`);
+  redirect(`/account?purchased=${amountCents}#credits`);
 }

@@ -10,7 +10,7 @@ import {
   OFFENSE_BAN_THRESHOLD,
   RATE_MAX_CODES,
   RATE_WINDOW_MS,
-  STARTER_FREE_ADS,
+  starterCreditNote,
   type Account,
   type CreateCodeResult,
   type EmailRecipientCategories,
@@ -46,7 +46,6 @@ interface UserRow {
   created_at: string;
   subscribed_at: string | null;
   email_subscribed_at: string | null;
-  free_ads: number;
   starter_granted_at: string | null;
   offense_count: number;
   posting_banned_at: string | null;
@@ -55,8 +54,11 @@ interface UserRow {
   pic_accrual_day: string | null;
 }
 
+// free_ads (retired session 016) and auto_topup (migration 9973) are
+// deliberately NOT selected here: the core account lookup must never depend
+// on a migration. auto_topup is read lazily via getAutoTopUp.
 const USER_SELECT =
-  "id, phone, email, password_hash, created_at, subscribed_at, email_subscribed_at, free_ads, starter_granted_at, offense_count, posting_banned_at, stripe_customer_id, pic_balance, pic_accrual_day";
+  "id, phone, email, password_hash, created_at, subscribed_at, email_subscribed_at, starter_granted_at, offense_count, posting_banned_at, stripe_customer_id, pic_balance, pic_accrual_day";
 
 function toAccount(row: UserRow): Account {
   return {
@@ -66,7 +68,6 @@ function toAccount(row: UserRow): Account {
     email: row.email ?? undefined,
     subscribedAt: row.subscribed_at,
     emailSubscribedAt: row.email_subscribed_at,
-    freeAds: row.free_ads,
     starterGrantedAt: row.starter_granted_at,
     offenseCount: row.offense_count,
     postingBannedAt: row.posting_banned_at,
@@ -108,11 +109,11 @@ export async function upsertAccountPassword(
     if (error) throw error;
     return toAccount({ ...existing, password_hash: passwordHash });
   }
-  // Claiming an account (setting a password) grants NO free ads — the starter
-  // grant is deferred to the first AD NEW like every other creation path.
+  // Claiming an account (setting a password) grants NO starter credit — the
+  // grant is deferred to the first real post like every other creation path.
   const { data, error } = await db()
     .from("users")
-    .insert({ phone, password_hash: passwordHash, free_ads: 0 })
+    .insert({ phone, password_hash: passwordHash })
     .select(USER_SELECT)
     .single();
   if (error) throw error;
@@ -122,12 +123,12 @@ export async function upsertAccountPassword(
 export async function ensureAccount(phone: string): Promise<Account> {
   const existing = await userByPhone(phone);
   if (existing) return toAccount(existing);
-  // First contact mints the account with ZERO free-ad passes and no welcome
-  // ledger entry; the starter grant fires lazily on the first AD NEW
-  // (grantStarterAdsIfFirst), so a number that never posts costs nothing.
+  // First contact mints the account with NO starter credit and no welcome
+  // ledger entry; the grant fires lazily on the first real post
+  // (grantStarterCreditIfFirst), so a number that never posts costs nothing.
   const { data, error } = await db()
     .from("users")
-    .insert({ phone, free_ads: 0 })
+    .insert({ phone })
     .select(USER_SELECT)
     .single();
   if (error) throw error;
@@ -997,71 +998,71 @@ export async function markChatRead(chatId: number, phone: string): Promise<void>
   if (error && !chatSchemaMissing(error)) throw error;
 }
 
-export async function consumeFreeAd(phone: string): Promise<boolean> {
+export async function grantStarterCreditIfFirst(
+  phone: string,
+  amountCents: number,
+  amountLabel: string,
+): Promise<{ account: Account; granted: boolean }> {
   const user = await userByPhone(phone);
-  if (!user || user.free_ads <= 0) return false;
-  // Conditional decrement; the row count tells us whether WE won the race.
-  // A concurrent request that already spent the last pass leaves 0 rows
-  // matched — previously this returned true anyway, double-spending the pass.
-  const { data, error } = await db()
-    .from("users")
-    .update({ free_ads: user.free_ads - 1 })
-    .eq("id", user.id)
-    .eq("free_ads", user.free_ads)
-    .select("id");
-  if (error) throw error;
-  return (data?.length ?? 0) > 0;
-}
-
-export async function grantStarterAdsIfFirst(phone: string): Promise<Account> {
-  const user = await userByPhone(phone);
-  if (!user) throw new Error(`grantStarterAdsIfFirst: no account for ${phone}`);
-  if (user.starter_granted_at) return toAccount(user);
+  if (!user) throw new Error(`grantStarterCreditIfFirst: no account for ${phone}`);
+  if (user.starter_granted_at) return { account: toAccount(user), granted: false };
   const at = new Date().toISOString();
   // Conditional update guarded on starter_granted_at IS NULL: only the caller
-  // that flips it from NULL wins the grant, so a concurrent double AD NEW can't
-  // grant the passes twice (the loser matches 0 rows).
+  // that flips it from NULL wins the grant, so a concurrent double post can't
+  // grant the starter money twice (the loser matches 0 rows).
   const { data, error } = await db()
     .from("users")
-    .update({ free_ads: user.free_ads + STARTER_FREE_ADS, starter_granted_at: at })
+    .update({ starter_granted_at: at })
     .eq("id", user.id)
     .is("starter_granted_at", null)
     .select(USER_SELECT);
   if (error) throw error;
   if ((data?.length ?? 0) > 0) {
-    const { error: ledgerError } = await db().from("credit_ledger").insert({
-      user_id: user.id,
-      delta: 0,
-      kind: "grant",
-      note: `Welcome — ${STARTER_FREE_ADS} free ads, picture or plain`,
-    });
-    if (ledgerError) throw ledgerError;
-    return toAccount(data![0] as UserRow);
+    if (amountCents > 0) {
+      const { error: ledgerError } = await db().from("credit_ledger").insert({
+        user_id: user.id,
+        delta: amountCents,
+        kind: "grant",
+        note: starterCreditNote(amountLabel),
+      });
+      if (ledgerError) throw ledgerError;
+    }
+    return { account: toAccount(data![0] as UserRow), granted: amountCents > 0 };
   }
-  // Lost the race — a concurrent AD NEW granted first; return the fresh state.
+  // Lost the race — a concurrent post granted first; return the fresh state.
   const fresh = await userByPhone(phone);
-  return toAccount((fresh ?? user) as UserRow);
+  return { account: toAccount((fresh ?? user) as UserRow), granted: false };
 }
 
-export async function grantFreeAd(phone: string): Promise<void> {
-  // CAS retry loop, mirroring consumeFreeAd: an unconditional read-modify-write
-  // here raced consumeFreeAd (grant reads 1; consume CAS 1→0; grant writes 2 —
-  // a minted pass). The eq(free_ads) guard makes the loser re-read and retry.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const user = await userByPhone(phone);
-    if (!user) return;
-    const { data, error } = await db()
-      .from("users")
-      .update({ free_ads: user.free_ads + 1 })
-      .eq("id", user.id)
-      .eq("free_ads", user.free_ads)
-      .select("id");
-    if (error) throw error;
-    if ((data?.length ?? 0) > 0) return;
+/** Auto top-up flag (migration 9973). FAIL-CLOSED: a missing column reads as
+ * false — no card is ever auto-charged before the toggle exists. */
+export async function getAutoTopUp(phone: string): Promise<boolean> {
+  const { data, error } = await db()
+    .from("users")
+    .select("auto_topup")
+    .eq("phone", phone)
+    .maybeSingle();
+  if (error) {
+    if (error.code === "42703") return false; // migration 9973 pending
+    throw error;
   }
-  // Three lost races in a row is pathological — surface it rather than mint
-  // or silently drop; the caller's ledger note still records the intent.
-  console.error(`[store] grantFreeAd: free_ads CAS lost 3 attempts for ${phone} — pass NOT granted`);
+  return Boolean(data?.auto_topup);
+}
+
+export async function setAutoTopUp(
+  phone: string,
+  on: boolean,
+): Promise<"saved" | "unsupported"> {
+  const { data, error } = await db()
+    .from("users")
+    .update({ auto_topup: on })
+    .eq("phone", phone)
+    .select("id");
+  if (error) {
+    if (error.code === "42703" || error.code === "PGRST204") return "unsupported";
+    throw error;
+  }
+  return data?.length ? "saved" : "unsupported";
 }
 
 /** Atomically accrue + spend one PIC pull (migration 9989 reserve_pic_quota). */
@@ -1250,7 +1251,7 @@ export async function listEmailRecipients(): Promise<string[]> {
 }
 
 const MERGE_SELECT =
-  "id, phone, email, password_hash, subscribed_at, email_subscribed_at, free_ads, " +
+  "id, phone, email, password_hash, subscribed_at, email_subscribed_at, " +
   "starter_granted_at, offense_count, posting_banned_at, full_blocked_at, " +
   "stripe_customer_id, pic_balance";
 
@@ -1261,7 +1262,6 @@ interface MergeRow {
   password_hash: string | null;
   subscribed_at: string | null;
   email_subscribed_at: string | null;
-  free_ads: number;
   starter_granted_at: string | null;
   offense_count: number;
   posting_banned_at: string | null;
@@ -1338,14 +1338,13 @@ export async function mergeAccounts(survivorPhone: string, source: string): Prom
     await reassignUserRows(loser.id, survivor.id);
     const { error: stripError } = await db()
       .from("users")
-      .update({ free_ads: 0, offense_count: 0, pic_balance: 0, email: null, stripe_customer_id: null })
+      .update({ offense_count: 0, pic_balance: 0, email: null, stripe_customer_id: null })
       .eq("id", loser.id);
     if (stripError) throw stripError;
     const takeEmail = !survivor.email && loser.email;
     const { error: updateError } = await db()
       .from("users")
       .update({
-        free_ads: survivor.free_ads + loser.free_ads,
         offense_count: survivor.offense_count + loser.offense_count,
         pic_balance: (survivor.pic_balance ?? 0) + (loser.pic_balance ?? 0),
         subscribed_at: survivor.subscribed_at ?? loser.subscribed_at,
