@@ -268,3 +268,12 @@ Reworking message number 2 [twice: first with the command list, then replaced by
 
 --- prompt (2026-08-19, continued session, sent mid-turn) ---
 pricing migration is posted
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+Message 3 [rewritten with blank lines; card line given as (330) 960-7170]
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+Message 4 [the numbered menu, with "Last thing," instead of "Last thing -"]
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+Message 3 [revised again: "Along with more special features!" added]

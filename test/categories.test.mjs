@@ -26,8 +26,7 @@ export function run(t) {
   const WELCOME_ARGS = {
     siteName: "The Plain Exchange",
     siteUrl: "ThePlainExchange.com",
-    smsNumber: "(330) 960-7170",
-    supportPhone: "(234) 301-0048",
+    cardPhone: "(330) 960-7170",
     starterCreditLabel: "$40",
     windowLabel: "7am-9pm Mon-Sat",
     priceLine: "Text ad $20; 1 pic $30, 2 pics $40, 3 pics $50.",
@@ -56,15 +55,34 @@ export function run(t) {
   // HELP stays the escape hatch for every other command, and it lives in the
   // final message — so the welcome never leaves someone without a way in.
   t.eq("HELP is offered somewhere", welcome.some((m) => m.includes("HELP")), true);
-  t.eq("3: names the website", welcome[2].includes("ThePlainExchange.com"), true);
-  t.eq("3: promises every picture", /all of its pictures/i.test(welcome[2]), true);
-  t.eq("3: mentions messaging sellers", /message sellers/i.test(welcome[2]), true);
-  t.eq("3: mentions email", /by email/i.test(welcome[2]), true);
-  t.eq("3: gives the card line", welcome[2].includes("(234) 301-0048"), true);
-  t.eq("3: says the card is stored securely", /stored securely/i.test(welcome[2]), true);
+  t.eq(
+    "3: verbatim",
+    welcome[2],
+    "Every ad is also on ThePlainExchange.com\n\nAll of its pictures and you can message sellers right there. Along with more special features!\n\nYou can sign up for the ads by email too, free.\n\nTo pay by card, call (330) 960-7170 and enter it on your phone keypad",
+  );
+  // The card line is the SMS number, forwarded to the pay-by-phone service —
+  // members learn ONE number. If that forwarding is ever removed this
+  // sentence points at a number that does not answer.
+  t.eq("3: card line is the one public number", welcome[2].includes("(330) 960-7170"), true);
   // The ASK goes last, so the question is the final thing on the screen.
   t.eq("4: is the menu", welcome[3].includes("1 - ALL, every ad"), true);
   t.eq("4: asks for a reply", /reply with a number/i.test(welcome[3]), true);
+  t.eq(
+    "4: verbatim",
+    welcome[3],
+    "Last thing, pick what you want ads for. Reply with a number (or the word):\n" +
+      "1 - ALL, every ad\n" +
+      "2 - buggies & bikes (BUGGIES)\n" +
+      "3 - dogs & puppies (DOGS)\n" +
+      "4 - lawn & garden (GARDEN)\n" +
+      "5 - horses & tack (HORSES)\n" +
+      "6 - household, furniture, realty (HOUSEHOLD)\n" +
+      "7 - hunting, fishing, camping (HUNTING)\n" +
+      "8 - goats, ponies, small animals (LIVESTOCK)\n" +
+      "9 - machinery & equipment (MACHINERY)\n" +
+      "10 - wanted & everything else (WANTED)\n" +
+      "Text HELP for help. Text STOP to end.",
+  );
   t.eq("4: carries STOP and HELP", welcome[3].includes("STOP") && welcome[3].includes("HELP"), true);
   // Once the launch offer is spent the welcome must stop advertising it.
   t.eq(

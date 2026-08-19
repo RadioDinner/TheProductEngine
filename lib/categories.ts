@@ -72,8 +72,8 @@ export function categoryLabel(key: string): string {
 export function welcomeMessages(args: {
   siteName: string;
   siteUrl: string;
-  smsNumber: string;
-  supportPhone: string;
+  /** The number members call to key in a card — the SMS number, forwarded. */
+  cardPhone: string;
   starterCreditLabel: string | null;
   windowLabel: string;
   priceLine: string;
@@ -100,14 +100,22 @@ export function welcomeMessages(args: {
     "You can reply PIC and the ad number like (PIC 1022) to receive the pictures for the ad",
   ].join("\n");
 
+  // The card line is the SMS number on purpose (the user's wording): calls to
+  // it forward to the pay-by-phone service, so members only ever learn ONE
+  // number. That forwarding must be live in the Telnyx portal, or this
+  // sentence points at a number that does not answer.
   const website = [
-    `Every ad is also on ${args.siteUrl} - all of its pictures, not just one, and you can message sellers right there.`,
+    `Every ad is also on ${args.siteUrl}`,
+    "",
+    "All of its pictures and you can message sellers right there. Along with more special features!",
+    "",
     "You can sign up for the ads by email too, free.",
-    `To pay by card, call ${args.supportPhone} and enter it on your phone keypad - it's stored securely with our card processor, never by us, and your ads can then pay for themselves.`,
-  ].join(" ");
+    "",
+    `To pay by card, call ${args.cardPhone} and enter it on your phone keypad`,
+  ].join("\n");
 
   const menu = [
-    "Last thing - pick what you want ads for. Reply with a number (or the word):",
+    "Last thing, pick what you want ads for. Reply with a number (or the word):",
     ...menuLines(),
     "Text HELP for help. Text STOP to end.",
   ].join("\n");

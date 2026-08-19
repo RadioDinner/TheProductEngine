@@ -144,8 +144,7 @@ async function welcomeFor(from: string, settings: EngineSettings): Promise<Reply
   const messages = welcomeMessages({
     siteName: site.name,
     siteUrl: site.webHost,
-    smsNumber: site.smsNumber,
-    supportPhone: site.supportPhone,
+    cardPhone: site.smsNumber,
     starterCreditLabel: offerOpen ? formatPrice(settings.starterCreditCents) : null,
     windowLabel: `${hourLabel(settings.smsWindowStartHour)}-${hourLabel(settings.smsWindowEndHour)} Mon-Sat`,
     priceLine: priceSheetLine(settings),
