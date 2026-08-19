@@ -86,3 +86,8 @@ Try again
 
 --- prompt (2026-08-19, continued session) ---
 I'm not seeing a Twilio > Voice > settings
+
+--- prompt (2026-08-19, continued session) ---
+[user pasted a Twilio One Console 404: "The requested URL was not found:
+1console.twilio.com/not-found?badurl=/account/AC.../us1/voice/settings/general"
+— the account is on the new 1Console, whose URLs differ from console.twilio.com]
