@@ -120,9 +120,9 @@ export function welcomeMessages(args: {
   ].join("\n");
 
   const website = [
-    `Every ad is also on ${args.siteUrl}`,
+    `Every ad is also on ${args.siteUrl}.`,
     "",
-    "All of its pictures and you can message sellers right there. Along with more special features!",
+    "Along with all the remaining pictures and other special features too.",
     "",
     "You can sign up for the ads by email too, free.",
     "",

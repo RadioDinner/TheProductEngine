@@ -57,7 +57,7 @@ export function run(t) {
   t.eq(
     "4 verbatim",
     welcome[3],
-    "Every ad is also on ThePlainExchange.com\n\nAll of its pictures and you can message sellers right there. Along with more special features!\n\nYou can sign up for the ads by email too, free.\n\nTo pay by card, call (330) 960-7170 and enter it on your phone keypad",
+    "Every ad is also on ThePlainExchange.com.\n\nAlong with all the remaining pictures and other special features too.\n\nYou can sign up for the ads by email too, free.\n\nTo pay by card, call (330) 960-7170 and enter it on your phone keypad",
   );
   t.eq(
     "5 verbatim",
