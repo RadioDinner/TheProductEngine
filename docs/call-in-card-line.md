@@ -59,9 +59,14 @@ application; clear that first if the portal objects.)
 
 ## Testing it
 
-1. Call the number. Your phone (and anyone else on `VOICE_RING_TO`) should
-   ring, and the whisper announces the caller's number before you're
-   connected — that's how you know it's a business call.
+1. Call the number **from a phone that is NOT on `VOICE_RING_TO`**. Your
+   phone (and anyone else on the list) should ring; whoever picks up hears
+   who is calling and must **press a key to take the call**. That keypress is
+   deliberate: a cell's voicemail answers when the phone is off or busy, and
+   without confirmation the caller would be bridged to a mailbox beep instead
+   of reaching the attendant. (Calling from a ring-list number is the
+   sharpest case — the carrier sends it straight to your own mailbox, which
+   then asks the caller for a voicemail password.)
 2. Don't answer. After ~18 seconds you should hear the attendant menu.
 3. Press **1**, listen for the authorization sentence, then key in a card
    (Stripe's test card `4242 4242 4242 4242`, any future expiry, any CVC, any

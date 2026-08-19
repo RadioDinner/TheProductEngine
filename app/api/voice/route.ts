@@ -16,6 +16,8 @@ import { sms } from "@/lib/sms";
 import { ensureAccount, getAccount } from "@/lib/store";
 import {
   VOICE_PATH,
+  acceptTwiml,
+  callWasAnswered,
   hangUpTwiml,
   menuTwiml,
   payConnector,
@@ -97,13 +99,21 @@ export async function POST(req: NextRequest) {
     }
 
     case "whisper":
-      return xml(whisperTwiml(url.searchParams.get("caller")));
+      return xml(
+        whisperTwiml({
+          callerPhone: url.searchParams.get("caller"),
+          acceptUrl: stepUrl(req, "accept"),
+        }),
+      );
 
-    /* Answered = handled by a human, nothing more to do. Any other outcome
-     * (no answer, busy, the call went to a personal voicemail box) drops
-     * through to the attendant. */
+    case "accept":
+      return xml(acceptTwiml(Boolean((params.Digits ?? "").trim())));
+
+    /* A person confirmed and talked = handled, nothing more to do. Everything
+     * else (no answer, busy, a voicemail box that picked up, a leg the
+     * whisper dropped) falls through to the attendant. */
     case "after-ring":
-      return params.DialCallStatus === "completed"
+      return callWasAnswered(params.DialCallStatus, params.DialCallDuration)
         ? xml(hangUpTwiml())
         : xml(menuTwiml({ actionUrl: stepUrl(req, "menu") }));
 

@@ -2,6 +2,8 @@
 // returns. A forged webhook could attach cards to arbitrary phone numbers,
 // so the signature check gets the same scrutiny as money code.
 import {
+  acceptTwiml,
+  callWasAnswered,
   escapeXml,
   hangUpTwiml,
   menuTwiml,
@@ -119,8 +121,28 @@ export function run(t) {
   t.eq("voicemail: records with a beep", /<Record /.test(vm) && /playBeep="true"/.test(vm), true);
   t.eq("voicemail: bounded length", /maxLength="120"/.test(vm), true);
 
-  t.eq("whisper names the caller", /3 3 0/.test(whisperTwiml("3305551212")), true);
-  t.eq("whisper survives an unknown caller", whisperTwiml(null).includes("<Say>"), true);
+  const whisper = whisperTwiml({ callerPhone: "3305551212", acceptUrl: "https://x.test/api/voice?step=accept" });
+  t.eq("whisper names the caller", /3 3 0/.test(whisper), true);
+  t.eq("whisper survives an unknown caller", whisperTwiml({ callerPhone: null, acceptUrl: "u" }).includes("<Say>"), true);
+  // Answer confirmation: a cell's VOICEMAIL answers the call (phone off, or
+  // the caller is dialing from a number that is itself on the ring list), and
+  // a bridged mailbox would swallow the call — the attendant would never run.
+  // A mailbox cannot press a key, so it gets hung up instead.
+  t.eq("whisper demands a keypress", /<Gather numDigits="1"/.test(whisper), true);
+  t.eq("whisper says how to accept", /press any key/i.test(whisper), true);
+  t.eq("unconfirmed leg is dropped", whisper.trimEnd().endsWith("<Hangup/></Response>"), true);
+  t.eq("keypress bridges the call", acceptTwiml(true), '<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+  t.eq("silence drops the leg", acceptTwiml(false).includes("<Hangup/>"), true);
+
+  /* ---- who actually took the call ---- */
+  t.eq("a real conversation counts as answered", callWasAnswered("completed", "42"), true);
+  // Twilio reports a voicemail pickup (and a whisper-dropped leg) as
+  // "completed" too — only a bridged conversation has duration.
+  t.eq("voicemail pickup does NOT count", callWasAnswered("completed", "0"), false);
+  t.eq("dropped leg does NOT count", callWasAnswered("completed", undefined), false);
+  t.eq("no answer does not count", callWasAnswered("no-answer", undefined), false);
+  t.eq("busy does not count", callWasAnswered("busy", "0"), false);
+  t.eq("failed does not count", callWasAnswered("failed", undefined), false);
 
   t.eq("hang-up is a bare Response", hangUpTwiml().includes("<Hangup/>"), true);
   t.eq("closing line speaks then hangs up", /<Say>.*<\/Say><Hangup\/>/.test(sayAndHangUpTwiml("Bye")), true);
@@ -136,7 +158,7 @@ export function run(t) {
     ["menu", menu],
     ["pay", pay],
     ["voicemail", vm],
-    ["whisper", whisperTwiml("3305551212")],
+    ["whisper", whisper],
     ["hangup", hangUpTwiml()],
   ]) {
     t.eq(`${label}: declares XML`, doc.startsWith('<?xml version="1.0" encoding="UTF-8"?><Response>'), true);

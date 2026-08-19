@@ -145,11 +145,41 @@ export function ringTwiml(args: {
   );
 }
 
-/** Played to whoever picks up, before they're connected — so a business call
- * is never answered like a personal one. */
-export function whisperTwiml(callerPhone: string | null): string {
-  const who = callerPhone ? ` from ${spokenDigits(callerPhone)}` : "";
-  return twiml(say(`${site.name} call${who}.`));
+/**
+ * Played to whoever picks up, before they're connected — and it demands a
+ * keypress ("answer confirmation").
+ *
+ * The keypress is the load-bearing part: a CELL'S VOICEMAIL ANSWERS THE CALL
+ * (phone off, busy, or — the way this was found — the member is calling from
+ * a number that is itself on the ring list, so the carrier sends it straight
+ * to their mailbox). An answered leg would otherwise bridge the caller to a
+ * beep, and the attendant would never run. A mailbox can't press a key, so
+ * it gets hung up and the caller falls through to the menu.
+ */
+export function whisperTwiml(args: { callerPhone: string | null; acceptUrl: string }): string {
+  const who = args.callerPhone ? ` from ${spokenDigits(args.callerPhone)}` : "";
+  return twiml(
+    `<Gather numDigits="1" timeout="6" action="${escapeXml(args.acceptUrl)}" method="POST">` +
+      say(`${site.name} call${who}. Press any key to take it.`) +
+      `</Gather><Hangup/>`,
+  );
+}
+
+/** The answer-confirmation verdict on the ANSWERING leg: a key was pressed,
+ * so bridge the two calls (an empty response ends the whisper and connects);
+ * otherwise drop this leg and let the caller move on to the attendant. */
+export function acceptTwiml(pressedKey: boolean): string {
+  return pressedKey ? twiml("") : twiml(`<Hangup/>`);
+}
+
+/**
+ * Did a person actually take the call? Twilio reports a voicemail pickup —
+ * and a leg the whisper hung up — as `completed` too, so the DURATION of the
+ * bridged conversation is what separates them: nothing was bridged unless
+ * someone confirmed, which makes any positive duration a real conversation.
+ */
+export function callWasAnswered(status: string | undefined, duration: string | undefined): boolean {
+  return status === "completed" && Number(duration) > 0;
 }
 
 /** Stage 2 — the attendant menu (nobody answered). */
