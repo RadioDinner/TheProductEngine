@@ -34,8 +34,12 @@ export function run(t) {
   t.eq("BUMP 1042 -> unknown (feature removed)", parseCommand("BUMP 1042").kind, "unknown");
   t.eq("buycredit 10 -> unknown (feature removed)", parseCommand("buycredit 10").kind, "unknown");
   t.eq("yes -> unknown (BUYCREDIT confirm removed)", parseCommand("yes").kind, "unknown");
-  t.eq("credits (no arg)", parseCommand("credits").kind, "credits");
-  t.eq("credits with junk -> unknown", parseCommand("credits foo").kind, "unknown");
+  // CREDITS retired with the credit system it was named for (session 016);
+  // BAL/BALANCE is the balance command, and it is what the welcome promises.
+  t.eq("CREDITS is gone", parseCommand("credits").kind, "unknown");
+  t.eq("BAL (no arg)", parseCommand("BAL").kind, "credits");
+  t.eq("BALANCE (no arg)", parseCommand("balance").kind, "credits");
+  t.eq("BAL with junk -> unknown", parseCommand("bal foo").kind, "unknown");
   t.eq("gibberish -> unknown", parseCommand("asdf qwer").kind, "unknown");
   t.eq("empty -> unknown", parseCommand("").kind, "unknown");
   t.eq("whitespace only -> unknown", parseCommand("   ").kind, "unknown");
@@ -56,7 +60,7 @@ export function run(t) {
   t.eq("'Revoke my ad' is NOT a stop", parseCommand("Revoke my ad 1042").kind, "unknown");
   t.eq("'opt for the buggy' is NOT a stop", parseCommand("opt for the buggy").kind, "unknown");
   t.eq("SUBSCRIBE, -> subscribe", parseCommand("SUBSCRIBE,").kind, "subscribe");
-  t.eq("credits! (no arg) -> credits", parseCommand("credits!").kind, "credits");
+  t.eq("bal! (no arg) -> balance", parseCommand("bal!").kind, "credits");
   t.eq("SOLD. 1042 keeps id", parseCommand("SOLD. 1042").id, 1042);
   // Slash followed by a space still routes to the keyword.
   t.eq("/ help (slash+space) -> help", parseCommand("/ help").kind, "help");

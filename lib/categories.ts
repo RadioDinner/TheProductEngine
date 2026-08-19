@@ -38,6 +38,12 @@ export const CATEGORIES: CategoryDef[] = [
   { key: "wanted", label: "Wanted", menu: "wanted & everything else" },
 ];
 
+/** Mirrors lib/photo-collage.ts — kept here as plain numbers so this module
+ * stays dependency-free for the unit suite. The suite cross-checks them
+ * against the real constants, so the welcome's promise cannot drift. */
+export const MAX_AD_PHOTOS = 8;
+export const MAX_TEXTED_PHOTOS = 3;
+
 export const CATEGORY_KEYS = CATEGORIES.map((c) => c.key);
 
 export function isCategoryKey(word: string): boolean {
@@ -75,13 +81,14 @@ export function welcomeMessages(args: {
   /** The number members call to key in a card — the SMS number, forwarded. */
   cardPhone: string;
   starterCreditLabel: string | null;
+  /** "7am to 9pm Mon - Sat", built from Settings by the caller. */
   windowLabel: string;
   priceLine: string;
 }): string[] {
-  // Blank lines between the facts (user's own layout): a newline is one
+  // Blank lines between the facts (the user's own layout): a newline is one
   // septet, so the breathing room costs nothing and a flip-phone screen shows
-  // four short lines instead of one paragraph to squint at.
-  const opener = [
+  // short lines instead of a paragraph to squint at.
+  const welcome = [
     `Welcome to ${args.siteName}!`,
     "",
     `Ads post from ${args.windowLabel}.`,
@@ -92,24 +99,30 @@ export function welcomeMessages(args: {
       : []),
   ].join("\n");
 
-  const commands = [
+  const posting = [
     "To post, text AD NEW and your ad, like:",
     "",
     "AD NEW Hay for sale, $5/bale. Call 330-555-0142",
     "",
     "You can reply PIC and the ad number like (PIC 1022) to receive the pictures for the ad",
     "",
-    "When posting an AD you can send up to 8 pictures, but the first 3 will be the only ones available via text. you can see the rest on ThePlainExchange.com!",
+    `When posting an AD you can send up to ${MAX_AD_PHOTOS} pictures, but the first ${MAX_TEXTED_PHOTOS} will be the only ones available via text. You can see the rest on ${args.siteUrl}!`,
   ].join("\n");
 
-  // The card line is the SMS number on purpose (the user's wording): calls to
-  // it forward to the pay-by-phone service, so members only ever learn ONE
-  // number. That forwarding must be live in the Telnyx portal, or this
-  // sentence points at a number that does not answer.
-  const website = [
-    `Every ad is also on ${args.siteUrl}.`,
+  // Every command named here is honoured by the parser — see the unit suite,
+  // which walks this text and asserts each one answers.
+  const commands = [
+    "To check your balance, reply BAL",
     "",
-    "Along with all the remaining pictures and other special features too.",
+    "To mark your ad item as sold, reply SOLD followed by your ad number.",
+    "",
+    "To view your ads, reply MY ADS.",
+  ].join("\n");
+
+  const website = [
+    `Every ad is also on ${args.siteUrl}`,
+    "",
+    "All of its pictures and you can message sellers right there. Along with more special features!",
     "",
     "You can sign up for the ads by email too, free.",
     "",
@@ -122,7 +135,7 @@ export function welcomeMessages(args: {
     "Text HELP for help. Text STOP to end.",
   ].join("\n");
 
-  return [opener, commands, website, menu];
+  return [welcome, posting, commands, website, menu];
 }
 
 /** The numbered menu lines: 1 is ALL, then the categories in order. */

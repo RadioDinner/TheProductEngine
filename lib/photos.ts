@@ -12,8 +12,6 @@ import { CONTENT_TYPE_BY_EXT, sniffImage } from "@/lib/image-sniff";
 import {
   AD_PHOTOS_BUCKET,
   MAX_COMBINED_PHOTOS,
-  collageDimensions,
-  combineImageBuffers,
 } from "@/lib/photo-collage";
 
 // The storage-path provenance markers live in lib/photo-collage.ts (pure, so
@@ -247,25 +245,10 @@ export async function ingestInboundPhotos(srcs: string[]): Promise<IngestResult>
     return { ok: true, photo: partUrls[0], parts: [], saved: 1, dropped, combined: false };
   }
   const saved = stored.length;
-  try {
-    const collage = await combineImageBuffers(stored.map((s) => s.bytes));
-    const storedCollage = await storeImageBytes(collage, "collage");
-    if (storedCollage.ok) {
-      return {
-        ok: true,
-        photo: storedCollage.url,
-        parts: partUrls,
-        saved,
-        dropped,
-        combined: true,
-        ...collageDimensions(saved),
-      };
-    }
-    console.error("[photos] collage store failed:", storedCollage.reason);
-  } catch (e) {
-    console.error("[photos] collage compose failed:", e instanceof Error ? e.message : String(e));
-  }
-  // Compose fallback: first picture is the photo, the rest ride the gallery.
+  // No compositing (user decision, session 016): pictures are stored exactly
+  // as they arrive. The first is the ad's photo; the rest ride the gallery,
+  // which is what "the first 3 go out by text, the rest on the website"
+  // means. This was the compose fallback; now it is the only path.
   return {
     ok: true,
     photo: partUrls[0],

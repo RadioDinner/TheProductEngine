@@ -16,60 +16,52 @@ import {
   welcomeMessages,
   menuChoice,
   menuLines,
+  MAX_AD_PHOTOS,
+  MAX_TEXTED_PHOTOS,
 } from "../lib/categories.ts";
 import { parseCommand } from "../lib/commands.ts";
 
 export const name = "categories";
 
 export function run(t) {
-  // ---- the welcome SEQUENCE (session 016) ----
+  // ---- the WELCOME PACKAGE (session 016) ----
+  // The user wrote these five messages and said "HONOR EVERYTHING I PROMISED
+  // IN IT". So: each is pinned verbatim, AND every command it names is fed
+  // through the real parser below. A promise in this text that the engine
+  // does not answer is a failing test, not a support ticket.
   const WELCOME_ARGS = {
     siteName: "The Plain Exchange",
     siteUrl: "ThePlainExchange.com",
     cardPhone: "(330) 960-7170",
     starterCreditLabel: "$40",
-    windowLabel: "7am-9pm Mon-Sat",
+    windowLabel: "7am to 9pm Mon - Sat",
     priceLine: "Text ad $20; 1 pic $30, 2 pics $40, 3 pics $50.",
   };
   const welcome = welcomeMessages(WELCOME_ARGS);
-  t.eq("four messages", welcome.length, 4);
-  // Each message has exactly one job, and the sequence must cover everything
-  // a new subscriber was promised.
-  t.eq("1: names the service", welcome[0].startsWith("Welcome to The Plain Exchange!"), true);
-  // The user's own layout: one fact per line, blank lines between. A newline
-  // is a single septet, so the breathing room is free.
+  t.eq("five messages", welcome.length, 5);
   t.eq(
-    "1: laid out with blank lines",
+    "1 verbatim",
     welcome[0],
-    "Welcome to The Plain Exchange!\n\nAds post from 7am-9pm Mon-Sat.\n\nText ad $20; 1 pic $30, 2 pics $40, 3 pics $50.\n\nYou have $40 of free ad credit!",
+    "Welcome to The Plain Exchange!\n\nAds post from 7am to 9pm Mon - Sat.\n\nText ad $20; 1 pic $30, 2 pics $40, 3 pics $50.\n\nYou have $40 of free ad credit!",
   );
-  t.eq("1: says when ads arrive", welcome[0].includes("7am-9pm Mon-Sat"), true);
-  t.eq("1: states the prices", welcome[0].includes("1 pic $30"), true);
-  t.eq("1: states the free credit", welcome[0].includes("$40 of free ad credit!"), true);
-  // The user's exact wording, blank lines and all.
   t.eq(
-    "2: verbatim",
+    "2 verbatim",
     welcome[1],
-    "To post, text AD NEW and your ad, like:\n\nAD NEW Hay for sale, $5/bale. Call 330-555-0142\n\nYou can reply PIC and the ad number like (PIC 1022) to receive the pictures for the ad\n\nWhen posting an AD you can send up to 8 pictures, but the first 3 will be the only ones available via text. you can see the rest on ThePlainExchange.com!",
+    "To post, text AD NEW and your ad, like:\n\nAD NEW Hay for sale, $5/bale. Call 330-555-0142\n\nYou can reply PIC and the ad number like (PIC 1022) to receive the pictures for the ad\n\nWhen posting an AD you can send up to 8 pictures, but the first 3 will be the only ones available via text. You can see the rest on ThePlainExchange.com!",
   );
-  // HELP stays the escape hatch for every other command, and it lives in the
-  // final message — so the welcome never leaves someone without a way in.
-  t.eq("HELP is offered somewhere", welcome.some((m) => m.includes("HELP")), true);
   t.eq(
-    "3: verbatim",
+    "3 verbatim",
     welcome[2],
-    "Every ad is also on ThePlainExchange.com.\n\nAlong with all the remaining pictures and other special features too.\n\nYou can sign up for the ads by email too, free.\n\nTo pay by card, call (330) 960-7170 and enter it on your phone keypad",
+    "To check your balance, reply BAL\n\nTo mark your ad item as sold, reply SOLD followed by your ad number.\n\nTo view your ads, reply MY ADS.",
   );
-  // The card line is the SMS number, forwarded to the pay-by-phone service —
-  // members learn ONE number. If that forwarding is ever removed this
-  // sentence points at a number that does not answer.
-  t.eq("3: card line is the one public number", welcome[2].includes("(330) 960-7170"), true);
-  // The ASK goes last, so the question is the final thing on the screen.
-  t.eq("4: is the menu", welcome[3].includes("1 - ALL, every ad"), true);
-  t.eq("4: asks for a reply", /reply with a number/i.test(welcome[3]), true);
   t.eq(
-    "4: verbatim",
+    "4 verbatim",
     welcome[3],
+    "Every ad is also on ThePlainExchange.com\n\nAll of its pictures and you can message sellers right there. Along with more special features!\n\nYou can sign up for the ads by email too, free.\n\nTo pay by card, call (330) 960-7170 and enter it on your phone keypad",
+  );
+  t.eq(
+    "5 verbatim",
+    welcome[4],
     "Last thing, pick what you want ads for. Reply with a number (or the word):\n" +
       "1 - ALL, every ad\n" +
       "2 - buggies & bikes (BUGGIES)\n" +
@@ -83,7 +75,22 @@ export function run(t) {
       "10 - wanted & everything else (WANTED)\n" +
       "Text HELP for help. Text STOP to end.",
   );
-  t.eq("4: carries STOP and HELP", welcome[3].includes("STOP") && welcome[3].includes("HELP"), true);
+
+  // ---- every command the package names must ANSWER ----
+  t.eq("BAL is honoured", parseCommand("BAL").kind, "credits");
+  t.eq("BALANCE too", parseCommand("balance").kind, "credits");
+  // CREDITS retired with the credit system it was named for.
+  t.eq("CREDITS is gone", parseCommand("CREDITS").kind, "unknown");
+  t.eq("MY ADS with junk after -> unknown", parseCommand("MY ADS please").kind, "unknown");
+  t.eq("MYADS one word still works", parseCommand("MYADS").kind, "myads");
+  t.eq("SOLD + number", parseCommand("SOLD 1022"), { kind: "sold", id: 1022 });
+  t.eq("MY ADS", parseCommand("MY ADS").kind, "myads");
+  t.eq("PIC + number", parseCommand("PIC 1022"), { kind: "pic", id: 1022 });
+  t.eq("AD NEW", parseCommand("AD NEW Hay for sale, $5/bale.").kind, "ad");
+  t.eq("HELP", parseCommand("HELP").kind, "help");
+  t.eq("STOP", parseCommand("STOP").kind, "stop");
+  // The picture promise is the code's real capacity, not a number in prose.
+  t.eq("the package's picture numbers are the code's", [MAX_AD_PHOTOS, MAX_TEXTED_PHOTOS], [8, 3]);
   // Once the launch offer is spent the welcome must stop advertising it.
   t.eq(
     "no offer -> no free-credit line",

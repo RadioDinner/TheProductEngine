@@ -9,7 +9,6 @@
  */
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { runDueCollageConfirmations } from "@/lib/collage-notify";
 import { drainDigestOutbox, runQueuedBroadcasts } from "@/lib/digest-engine";
 import { runDueEmailDigests } from "@/lib/email-digest";
 import { expireDueAds } from "@/lib/engine-store";
@@ -35,9 +34,6 @@ export async function GET(req: NextRequest) {
   // Retire ads past their 30-day window before composing, so an expired ad is
   // never included in a digest and drops off the public site (file-store parity).
   const expired = await expireDueAds();
-  // Combined-photo confirmations (item 33): text sellers their finished
-  // collage once the picture set has been quiet for 10 minutes. Never throws.
-  const collageConfirm = await runDueCollageConfirmations();
   // SMS first so the email edition can carry what just went out. Since
   // session 016 this is not a schedule: it texts every approved ad that
   // hasn't gone yet, one per ad, and does nothing outside the send window —
@@ -50,5 +46,5 @@ export async function GET(req: NextRequest) {
     timeBudgetMs: Math.max(5_000, 45_000 - (Date.now() - startedAt)),
     newlyEnqueued,
   });
-  return NextResponse.json({ ok: true, expired, collageConfirm, sms, email, drain });
+  return NextResponse.json({ ok: true, expired, sms, email, drain });
 }

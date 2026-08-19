@@ -90,7 +90,7 @@ export default function TermsAndConditions() {
       <p>
         Posting an ad comes off your prepaid ad-credit balance (a picture ad costs more
         than a plain one — current prices are shown when you post and by texting{" "}
-        <strong>CREDITS</strong>). Every new member&rsquo;s first post comes with a
+        <strong>BAL</strong>). Every new member&rsquo;s first post comes with a
         welcome credit. You add money on this website; with a saved card, your balance
         can also top up automatically when an ad costs more than what&rsquo;s on the
         account — the confirmation text always states the charge, and you can turn

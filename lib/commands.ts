@@ -62,8 +62,14 @@ export function parseCommand(raw: string): Command {
   // keyword). `rest` is sliced from the ORIGINAL token so args survive
   // ("SOLD. 1234" -> id 1234). Trailing digits are kept (no keyword ends in one).
   const [rawWord = ""] = lower.split(/\s+/, 1);
-  const word = rawWord.replace(/[^a-z0-9]+$/g, "");
-  const rest = text.slice(rawWord.length).trim();
+  let word = rawWord.replace(/[^a-z0-9]+$/g, "");
+  let rest = text.slice(rawWord.length).trim();
+  // "MY ADS" is two words, and it is what the welcome tells members to send —
+  // so the two-word form has to route exactly like MYADS.
+  if (word === "my" && /^ads[^a-z0-9]*$/i.test(rest)) {
+    rest = "";
+    word = "myads";
+  }
 
   switch (word) {
     case "subscribe":
@@ -111,8 +117,13 @@ export function parseCommand(raw: string): Command {
     case "photo":
     case "picture":
       return { kind: "pic", id: adNumber(rest) };
-    case "credits":
-    case "credit":
+    // BAL/BALANCE is the balance command, and the only one: CREDITS retired
+    // with the credit system it was named for (user decision, session 016).
+    // The welcome names BAL by name, so it must answer — a command a member
+    // was told to use that replies "I didn't understand" is worse than one
+    // that was never mentioned.
+    case "bal":
+    case "balance":
       return rest ? { kind: "unknown", text } : { kind: "credits" };
     case "sold":
       return { kind: "sold", id: adNumber(rest) };

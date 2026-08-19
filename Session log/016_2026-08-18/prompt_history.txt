@@ -283,3 +283,15 @@ Reworking message number 2 [adds: "When posting an AD you can send up to 8 pictu
 
 --- prompt (2026-08-19, continued session, sent mid-turn) ---
 Message 3 [revised: "Every ad is also on ThePlainExchange.com. / Along with all the remaining pictures and other special features too. / ..."]
+
+--- prompt (2026-08-19, continued session) ---
+ok so I want you to stop combining pictures into 1 image. Just store them as they come in.
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+the forwarding is set up and verified working.
+[FIVE-MESSAGE WELCOME PACKAGE: welcome/prices/credit; posting + PIC + 8 pictures;
+BAL/SOLD/MY ADS; website + email + card line; numbered category menu]
+Here is my WELCOME PACKAGE. HONOR EVERYTHING I PROMISED IN IT
+
+--- prompt (2026-08-19, continued session, sent mid-turn) ---
+Get rid of BUMP and CREDITS

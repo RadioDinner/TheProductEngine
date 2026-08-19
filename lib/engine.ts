@@ -71,7 +71,7 @@ import {
   removeHostedPhotos,
   storeImageBytes,
 } from "@/lib/photos";
-import { MAX_AD_PHOTOS, MAX_COMBINED_PHOTOS, collageDimensions, combineImageBuffers } from "@/lib/photo-collage";
+import { MAX_AD_PHOTOS, MAX_COMBINED_PHOTOS } from "@/lib/photo-collage";
 import { sniffImage } from "@/lib/image-sniff";
 import { siteUrl } from "@/lib/email";
 import { supabaseConfigured } from "@/lib/db";
@@ -146,7 +146,7 @@ async function welcomeFor(from: string, settings: EngineSettings): Promise<Reply
     siteUrl: site.webHost,
     cardPhone: site.smsNumber,
     starterCreditLabel: offerOpen ? formatPrice(settings.starterCreditCents) : null,
-    windowLabel: `${hourLabel(settings.smsWindowStartHour)}-${hourLabel(settings.smsWindowEndHour)} Mon-Sat`,
+    windowLabel: `${hourLabel(settings.smsWindowStartHour)} to ${hourLabel(settings.smsWindowEndHour)} Mon - Sat`,
     priceLine: priceSheetLine(settings),
   }).map((m) => gsmSanitize(m));
   return { body: messages[0], ...(messages.length > 1 && { extra: messages.slice(1) }) };
@@ -324,7 +324,7 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   if (balance < cost) {
     const cardNote = declineReason ? ` We tried your saved card but it didn't go through (${declineReason}).` : "";
     return {
-      body: `That ad costs ${formatPrice(cost)} and you have ${formatPrice(balance)} of ad credit.${cardNote} ${payInstructions()}. Text CREDITS to check your balance.`,
+      body: `That ad costs ${formatPrice(cost)} and you have ${formatPrice(balance)} of ad credit.${cardNote} ${payInstructions()}. Text BAL to check your balance.`,
     };
   }
 
@@ -375,7 +375,7 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   if (!chargeNote) {
     await rejectAdRecord(id, "Not enough money at submission.", "benign");
     return {
-      body: `That ad costs ${formatPrice(cost)} and your balance couldn't cover it just now — nothing was posted, and your money is still on your account. Text CREDITS to check it, then try again. ${payInstructions()}.`,
+      body: `That ad costs ${formatPrice(cost)} and your balance couldn't cover it just now — nothing was posted, and your money is still on your account. Text BAL to check it, then try again. ${payInstructions()}.`,
     };
   }
 
@@ -578,7 +578,6 @@ async function handlePhotoFollowup(
     let primary: StoredAd["photo"] | null = null;
     let newParts: NonNullable<StoredAd["morePhotos"]> = [];
     const removeSrcs: string[] = [];
-    let combinedNow = false;
     let shownCount = existingOriginals.length + newCount;
 
     if (!supabaseConfigured) {
@@ -642,37 +641,16 @@ async function handlePhotoFollowup(
           height: 600,
         })),
       ];
-      try {
-        const collage = await combineImageBuffers([...inputs, ...newStored.map((s) => s.bytes)]);
-        const storedCollage = await storeImageBytes(collage, "collage");
-        if (!storedCollage.ok) throw new Error(storedCollage.reason);
-        primary = { src: storedCollage.url, alt: title, ...collageDimensions(shownCount) };
-        combinedNow = true;
-        // A `parts/` object promoted to position 0 by an earlier compose
-        // fallback has no gallery row of its own — give it one (same storage
-        // object, no re-store) so the collage replacing it doesn't orphan the
-        // picture and the gallery keeps matching what the collage combines.
-        if (primarySrc && primaryIsPart && !gallerySrcs.includes(primarySrc)) {
-          newParts = [
-            { src: primarySrc, alt: `${title} — picture 1`, width: 800, height: 600 },
-            ...newParts,
-          ];
-        }
-        // The replaced position-0 object: a superseded collage, or a legacy
-        // single now living on as its `parts/` copy.
-        if (primarySrc && (primaryIsCollage || (legacyPrimary && legacyCopy))) {
-          removeSrcs.push(primarySrc);
-        }
-      } catch (e) {
-        console.error("[engine] follow-up collage failed:", e instanceof Error ? e.message : String(e));
-        // Fallback: the pictures still land in the gallery; a photo-less ad
-        // promotes the first new picture to position 0.
-        if (!ad.photo) {
-          const first = newParts.find((p) => !legacyCopy || p.src !== legacyCopy.src);
-          if (first) {
-            primary = { src: first.src, alt: title, width: 800, height: 600 };
-            newParts = newParts.filter((p) => p.src !== first.src);
-          }
+      // No compositing (user decision, session 016): pictures are stored
+      // exactly as they arrive. Position 0 is simply the FIRST picture, and
+      // every other one joins the gallery — which is what "the first 3 go out
+      // by text, see the rest on the website" describes. This was already the
+      // fallback path when a collage failed to build; now it is the only path.
+      if (!ad.photo) {
+        const first = newParts.find((p) => !legacyCopy || p.src !== legacyCopy.src);
+        if (first) {
+          primary = { src: first.src, alt: title, width: 800, height: 600 };
+          newParts = newParts.filter((p) => p.src !== first.src);
         }
       }
       const attached = await attachAdPhotos(ad.id, primary, newParts);
@@ -684,19 +662,14 @@ async function handlePhotoFollowup(
 
     let note = "";
     if (overCap > 0 && newCount + existingOriginals.length >= MAX_AD_PHOTOS) {
-      note = ` (${MAX_COMBINED_PHOTOS} pictures is the most one ad can show.)`;
+      note = ` (${MAX_AD_PHOTOS} pictures is the most one ad can hold.)`;
     } else if (droppedBad > 0) {
       note = ` (We could only save ${newCount} of the ${media.length} pictures.)`;
     }
-    // Room + the combined-photo promise (item 33): mirror the AD NEW guidance
-    // so a trickling seller always knows how many pictures are left and that
-    // the finished collage will be texted back once the set goes quiet.
+    // Room note: a trickling seller always knows how many pictures are left.
     const room = Math.max(0, MAX_AD_PHOTOS - shownCount);
     const roomNote = room > 0 ? ` You can send ${room} more, one at a time.` : "";
-    const s = newCount === 1 ? "" : "s";
-    const body = combinedNow
-      ? `Got your picture${s}! Ad #${ad.id} (${title}) now shows ${shownCount} pictures combined into one photo.${roomNote} We'll text you the combined photo once your pictures are in. It's waiting for review.${chargeNote}${note}`
-      : `Got it! ${newCount === 1 ? "Your picture was" : `${newCount} pictures were`} added to ad #${ad.id} (${title}). It's waiting for review.${chargeNote}${note}${roomNote}`;
+    const body = `Got it! ${newCount === 1 ? "Your picture was" : `${newCount} pictures were`} added to ad #${ad.id} (${title}) - it now has ${shownCount}. It's waiting for review.${chargeNote}${note}${roomNote}`;
     return { body };
   } catch (e) {
     // Undo the upgrade charge — the pictures didn't make it onto the ad. The
@@ -899,7 +872,7 @@ async function route(
         body:
           `${site.name} classifieds by text. Up to 4 digests/day. Msg&data rates may apply. ` +
           `Cmds: SUBSCRIBE for ads. AD NEW your ad to post. PIC 1234 for a picture. ` +
-          `SOLD/STATUS/MYADS/CREDITS. Reply STOP to cancel. ` +
+          `SOLD/STATUS/MY ADS/BAL. Reply STOP to cancel. ` +
           `Help: call ${site.supportPhone} or ThePlainExchange.com/sms`,
       };
     case "ad":
@@ -947,13 +920,24 @@ async function route(
         if (told > 0) return null;
         return { body: picLimitMessage(settings.picDailyAllowance, settings.picBankCap) };
       }
-      // Telnyx needs an ABSOLUTE media URL: re-hosted photos already carry one,
-      // but a site-relative src (fixtures, pre-re-hosting ads) must be prefixed
-      // or the MMS send 400s and the requester hears nothing.
-      const mediaUrl = ad.photo.src.startsWith("http")
-        ? ad.photo.src
-        : `${siteUrl}${ad.photo.src}`;
-      return { body: `Photo for ad #${command.id} — ${deriveTitle(ad.body)}:`, media: [mediaUrl] };
+      // Pictures are no longer composited (session 016), so PIC sends the
+      // ad's FIRST MAX_COMBINED_PHOTOS pictures as one MMS — that is exactly
+      // what "the first 3 are available by text" promises. Telnyx needs
+      // ABSOLUTE media URLs: re-hosted photos already carry one, but a
+      // site-relative src (fixtures, pre-re-hosting ads) must be prefixed or
+      // the MMS send 400s and the requester hears nothing.
+      const absolute = (src: string) => (src.startsWith("http") ? src : `${siteUrl}${src}`);
+      const media = [ad.photo, ...(ad.morePhotos ?? [])]
+        .slice(0, MAX_COMBINED_PHOTOS)
+        .map((p) => absolute(p.src));
+      const count = media.length;
+      return {
+        body:
+          count > 1
+            ? `${count} photos for ad #${command.id} — ${deriveTitle(ad.body)}. See them all at ${site.webHost}:`
+            : `Photo for ad #${command.id} — ${deriveTitle(ad.body)}:`,
+        media,
+      };
     }
     case "credits": {
       await ensureAccount(from);
