@@ -36,6 +36,7 @@ export const HANDBOOK_PAGES: { prefix: string; label: string; href: string }[] =
   { prefix: "users", label: "Users", href: "/admin/users" },
   { prefix: "subscribers", label: "Subscribers", href: "/admin/subscribers" },
   { prefix: "messages", label: "Message audit log", href: "/admin/messages" },
+  { prefix: "calls", label: "Calls", href: "/admin/calls" },
   { prefix: "settings", label: "Settings", href: "/admin/settings" },
   { prefix: "smsdiag", label: "SMS diagnostics", href: "/admin/sms-diag" },
   { prefix: "concepts", label: "How it all hangs together", href: "/admin/help" },
@@ -299,6 +300,12 @@ const ENTRIES = {
     what: "A caller pays by card: bill the saved card on their verbal OK (double-click-safe) for a preset or custom amount (custom runs $1–$5,000, the same fat-finger ceiling as Adjust balance; the custom box wins when both are set), or collect a card — open Stripe's checkout here and key it in as they read it, or text them the link. The money lands automatically; the card is saved so their future ads can top up automatically.",
     why: "FEATURES item 29 (session 011): a review of the payment system found everything existed EXCEPT call-in card capture — and callers who can't text a smartphone are exactly this audience. The card number goes straight into Stripe and is never seen or stored by this site.",
     gotchas: "The pay-by-phone keypad service (FEATURES item 31, under pay-by-phone/ in the repo) is the PCI-safe upgrade — the caller keys the card themselves and nobody ever hears it. Since session 016 the app ADOPTS an IVR-saved card automatically (it searches Stripe by the caller's phone and stamps the member's customer id) — so once that service is deployed ON THE SAME STRIPE ACCOUNT, a call-in card just shows up here as \"Card on file\" and auto top-up works. The service itself still needs its own Twilio number + PCI Mode setup per pay-by-phone/README.md.",
+  },
+  "calls.list": {
+    title: "The call log",
+    what: "Every call to the card line: when it came in, who called (linked to their account), how long they stayed on, and what came of it — answered by you, reached the menu, saved a card, card failed, or left a voicemail. Voicemail links open the audio in Twilio.",
+    why: "\"I want to know when someone calls, how long they stay on the call and who called\" (user, session 016) — before this the only record was Twilio's console. Rows are written by /api/voice as the call happens; the authoritative total length arrives from Twilio's status callback after the caller hangs up, so a call still in progress shows the bridged-conversation time or nothing at all.",
+    gotchas: "Needs migration 9972_call_log.sql. Without it the page is simply empty — logging never blocks a call in progress, so an unpasted migration costs history, not phone service. Total-length figures only appear if the number's \"Call status changes\" webhook points at /api/voice?step=status.",
   },
   "users.merge": {
     title: "Merge / link identities",

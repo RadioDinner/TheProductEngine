@@ -46,7 +46,15 @@ by text.
      answers the call and the attendant never gets its turn.
    - `TWILIO_PAY_CONNECTOR` — only if you named the connector something other
      than `Default`.
-5. Check `/api/health` (with the `CRON_SECRET` bearer token): `TWILIO_AUTH_TOKEN`
+5. **Optional but recommended — call logging.** Paste
+   `supabase/migrations/9972_call_log.sql` in the Supabase SQL editor, then
+   set the number's **"Call status changes"** webhook to
+   `https://www.theplainexchange.com/api/voice?step=status` (POST). The log
+   is at **/admin/calls**: who called, when, how long, and what came of it.
+   Without the status webhook you still get every call and its outcome — just
+   not the authoritative total length. Without the migration the page is
+   simply empty; logging never blocks a call.
+6. Check `/api/health` (with the `CRON_SECRET` bearer token): `TWILIO_AUTH_TOKEN`
    should read `true` and `VOICE_RING_TO` should be the count of numbers.
 
 ### Keeping your one public number

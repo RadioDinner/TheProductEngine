@@ -8,6 +8,7 @@
  * never reach this app — Twilio tokenizes them straight into Stripe).
  */
 import { NextResponse, type NextRequest } from "next/server";
+import { startCall, updateCall } from "@/lib/call-log";
 import { site } from "@/lib/config";
 import { isProduction } from "@/lib/env";
 import { savePhoneCapturedCard } from "@/lib/payments";
@@ -81,11 +82,17 @@ export async function POST(req: NextRequest) {
   }
 
   const caller = normalizePhone(params.From ?? params.Caller ?? "");
+  const callSid = params.CallSid ?? "";
 
   switch (step) {
     /* The operator's phones ring first; whoever picks up hears who is
      * calling, and the call is simply a conversation. */
     case "": {
+      await startCall({
+        callSid,
+        fromPhone: caller,
+        toPhone: normalizePhone(params.To ?? ""),
+      });
       const phones = ringToPhones();
       if (!phones.length) return xml(menuTwiml({ actionUrl: stepUrl(req, "menu") }));
       return xml(
@@ -112,10 +119,16 @@ export async function POST(req: NextRequest) {
     /* A person confirmed and talked = handled, nothing more to do. Everything
      * else (no answer, busy, a voicemail box that picked up, a leg the
      * whisper dropped) falls through to the attendant. */
-    case "after-ring":
-      return callWasAnswered(params.DialCallStatus, params.DialCallDuration)
+    case "after-ring": {
+      const answered = callWasAnswered(params.DialCallStatus, params.DialCallDuration);
+      await updateCall(callSid, {
+        outcome: answered ? "answered" : "attendant",
+        ...(answered && { durationSeconds: Number(params.DialCallDuration) }),
+      });
+      return answered
         ? xml(hangUpTwiml())
         : xml(menuTwiml({ actionUrl: stepUrl(req, "menu") }));
+    }
 
     case "menu": {
       const digit = (params.Digits ?? "").trim();
@@ -137,6 +150,10 @@ export async function POST(req: NextRequest) {
           code: params.PayErrorCode,
           caller,
         });
+        await updateCall(callSid, {
+          outcome: "card_failed",
+          detail: `card entry ${params.Result ?? "failed"}${params.PayErrorCode ? ` (${params.PayErrorCode})` : ""}`,
+        });
         return xml(
           sayAndHangUpTwiml(
             "Sorry, we could not save that card. Please check the card and call again. Goodbye.",
@@ -152,6 +169,10 @@ export async function POST(req: NextRequest) {
         storedCustomerId: account.stripeCustomerId,
       });
       if (!saved) {
+        await updateCall(callSid, {
+          outcome: "card_failed",
+          detail: "the card was captured but Stripe rejected it (see the function log)",
+        });
         return xml(
           sayAndHangUpTwiml(
             "Sorry, something went wrong on our end and the card was not saved. Please call again later. Goodbye.",
@@ -159,6 +180,10 @@ export async function POST(req: NextRequest) {
         );
       }
       const last4 = (params.PaymentCardNumber ?? "").replace(/\D/g, "").slice(-4);
+      await updateCall(callSid, {
+        outcome: "card_saved",
+        detail: last4 ? `card ending ${last4} saved` : "card saved",
+      });
       // The confirmation goes out on the REGISTERED Telnyx line (the same
       // number members already text), not the Twilio voice number.
       if (last4) {
@@ -185,6 +210,11 @@ export async function POST(req: NextRequest) {
         .split(",")
         .map((entry) => normalizePhone(entry.trim()))
         .filter((phone): phone is string => Boolean(phone));
+      await updateCall(callSid, {
+        outcome: "voicemail",
+        recordingUrl: recording || null,
+        ...(params.RecordingDuration && { durationSeconds: Number(params.RecordingDuration) }),
+      });
       const from = caller ? await getAccount(caller) : null;
       const who = caller ? `+1${caller}${from ? "" : " (not a member yet)"}` : "an unknown number";
       for (const admin of admins) {
@@ -196,6 +226,19 @@ export async function POST(req: NextRequest) {
           .catch((e) => console.error("[voice] voicemail notice failed:", e));
       }
       return xml(sayAndHangUpTwiml("Thank you. We'll call you back. Goodbye."));
+    }
+
+    /* Twilio's call status callback (optional to configure, and the only
+     * source of the TOTAL length of a call — our other webhooks fire while
+     * the caller is still on the line). */
+    case "status": {
+      if (params.CallStatus === "completed") {
+        await updateCall(callSid, {
+          durationSeconds: Number(params.CallDuration) || 0,
+          endedAt: new Date().toISOString(),
+        });
+      }
+      return new NextResponse(null, { status: 204 });
     }
 
     default:
