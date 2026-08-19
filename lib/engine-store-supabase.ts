@@ -5,7 +5,7 @@
  */
 import { db } from "@/lib/db";
 import { COLLAGE_QUIET_MS } from "@/lib/collage-confirm";
-import { MAX_COMBINED_PHOTOS } from "@/lib/photo-collage";
+import { MAX_AD_PHOTOS } from "@/lib/photo-collage";
 import { AD_TTL_DAYS } from "@/lib/ads";
 import { isPicReplaceSubmission } from "@/lib/myads";
 import { removeHostedPhotos } from "@/lib/photos";
@@ -289,7 +289,7 @@ export async function getAdRecord(id: number): Promise<StoredAd | null> {
  */
 export async function touchPhotoSettle(adId: number, photoCount: number): Promise<void> {
   const settleAt =
-    photoCount >= MAX_COMBINED_PHOTOS
+    photoCount >= MAX_AD_PHOTOS
       ? new Date()
       : new Date(Date.now() + COLLAGE_QUIET_MS);
   const { error } = await db()

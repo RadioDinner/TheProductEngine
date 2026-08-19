@@ -98,6 +98,8 @@ export function welcomeMessages(args: {
     "AD NEW Hay for sale, $5/bale. Call 330-555-0142",
     "",
     "You can reply PIC and the ad number like (PIC 1022) to receive the pictures for the ad",
+    "",
+    "When posting an AD you can send up to 8 pictures, but the first 3 will be the only ones available via text. you can see the rest on ThePlainExchange.com!",
   ].join("\n");
 
   // The card line is the SMS number on purpose (the user's wording): calls to
@@ -105,9 +107,9 @@ export function welcomeMessages(args: {
   // number. That forwarding must be live in the Telnyx portal, or this
   // sentence points at a number that does not answer.
   const website = [
-    `Every ad is also on ${args.siteUrl}`,
+    `Every ad is also on ${args.siteUrl}.`,
     "",
-    "All of its pictures and you can message sellers right there. Along with more special features!",
+    "Along with all the remaining pictures and other special features too.",
     "",
     "You can sign up for the ads by email too, free.",
     "",

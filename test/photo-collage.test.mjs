@@ -6,6 +6,7 @@
 // each color is probed at an overlap-free point of its own placement.
 import sharp from "sharp";
 import {
+  MAX_AD_PHOTOS,
   MAX_COMBINED_PHOTOS,
   COLLAGE_WIDTH,
   COLLAGE_HEIGHT,
@@ -78,6 +79,10 @@ export async function run(t) {
   // Three since session 016: the price sheet ($30/$40/$50) stops at three, so
   // an ad must never carry a picture nobody was charged for.
   t.eq("cap is 3", MAX_COMBINED_PHOTOS, 3);
+  // The welcome promises "up to 8 pictures, the first 3 by text" — these two
+  // constants ARE that promise, so they are pinned together.
+  t.eq("an ad can hold 8", MAX_AD_PHOTOS, 8);
+  t.eq("more can be held than are texted", MAX_AD_PHOTOS > MAX_COMBINED_PHOTOS, true);
   t.eq("page is portrait 4:5", { width: COLLAGE_WIDTH, height: COLLAGE_HEIGHT }, { width: 1200, height: 1500 });
   for (const count of [2, 3, 9]) {
     t.eq(`dims are the fixed page (${count})`, collageDimensions(count), {

@@ -12,7 +12,7 @@ import { supabaseConfigured } from "@/lib/db";
 import * as remote from "@/lib/engine-store-supabase";
 import { isPicReplaceSubmission } from "@/lib/myads";
 import { COLLAGE_QUIET_MS } from "@/lib/collage-confirm";
-import { MAX_COMBINED_PHOTOS } from "@/lib/photo-collage";
+import { MAX_AD_PHOTOS } from "@/lib/photo-collage";
 import { FIXTURE_ADS, fixtureDate } from "@/lib/fixtures";
 import { AD_TTL_DAYS, type Ad, type AdPage, type AdQuery, type AdStatus } from "@/lib/ads";
 import { websiteAdPhotos } from "@/lib/photo-collage";
@@ -403,7 +403,7 @@ const file = {
       // the review queue until the pictures stop coming (session 016).
       ...(input.photo && {
         photosSettleAt: new Date(
-          1 + (input.morePhotos?.length ?? 0) >= MAX_COMBINED_PHOTOS
+          1 + (input.morePhotos?.length ?? 0) >= MAX_AD_PHOTOS
             ? Date.now()
             : Date.now() + COLLAGE_QUIET_MS,
         ).toISOString(),
@@ -441,7 +441,7 @@ const file = {
     // this was the 4th and last one the ad can combine).
     const photoCount = (ad.photo ? 1 : 0) + (ad.morePhotos?.length ?? 0);
     ad.photosSettleAt = new Date(
-      photoCount >= MAX_COMBINED_PHOTOS ? Date.now() : Date.now() + COLLAGE_QUIET_MS,
+      photoCount >= MAX_AD_PHOTOS ? Date.now() : Date.now() + COLLAGE_QUIET_MS,
     ).toISOString();
     save(store);
     return { oldPrimarySrc };
@@ -639,7 +639,7 @@ const file = {
     const ad = store.ads.find((a) => a.id === adId && a.status === "pending");
     if (!ad) return;
     ad.photosSettleAt = new Date(
-      photoCount >= MAX_COMBINED_PHOTOS ? Date.now() : Date.now() + COLLAGE_QUIET_MS,
+      photoCount >= MAX_AD_PHOTOS ? Date.now() : Date.now() + COLLAGE_QUIET_MS,
     ).toISOString();
     save(store);
   },

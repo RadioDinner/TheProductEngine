@@ -36,6 +36,15 @@ async function loadSharp() {
  * an ad must never carry a picture nobody was charged for. */
 export const MAX_COMBINED_PHOTOS = 3;
 
+/**
+ * The most pictures ONE AD can hold. The first MAX_COMBINED_PHOTOS of them
+ * are what goes out by text (the collage, and what the price sheet charges
+ * for); the rest live on the website gallery, which is the point of saying
+ * "you can see the rest on the website" — the SMS channel stays cheap while
+ * the ad still shows everything a buyer wants.
+ */
+export const MAX_AD_PHOTOS = 8;
+
 /** The public storage bucket every ad photo lives in (lib/photos.ts uploads
  * there; these path markers encode provenance so no schema change is needed):
  * - `collage/` — a combined multi-picture image (always at ad_photos position

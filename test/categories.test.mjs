@@ -50,7 +50,7 @@ export function run(t) {
   t.eq(
     "2: verbatim",
     welcome[1],
-    "To post, text AD NEW and your ad, like:\n\nAD NEW Hay for sale, $5/bale. Call 330-555-0142\n\nYou can reply PIC and the ad number like (PIC 1022) to receive the pictures for the ad",
+    "To post, text AD NEW and your ad, like:\n\nAD NEW Hay for sale, $5/bale. Call 330-555-0142\n\nYou can reply PIC and the ad number like (PIC 1022) to receive the pictures for the ad\n\nWhen posting an AD you can send up to 8 pictures, but the first 3 will be the only ones available via text. you can see the rest on ThePlainExchange.com!",
   );
   // HELP stays the escape hatch for every other command, and it lives in the
   // final message — so the welcome never leaves someone without a way in.
@@ -58,7 +58,7 @@ export function run(t) {
   t.eq(
     "3: verbatim",
     welcome[2],
-    "Every ad is also on ThePlainExchange.com\n\nAll of its pictures and you can message sellers right there. Along with more special features!\n\nYou can sign up for the ads by email too, free.\n\nTo pay by card, call (330) 960-7170 and enter it on your phone keypad",
+    "Every ad is also on ThePlainExchange.com.\n\nAlong with all the remaining pictures and other special features too.\n\nYou can sign up for the ads by email too, free.\n\nTo pay by card, call (330) 960-7170 and enter it on your phone keypad",
   );
   // The card line is the SMS number, forwarded to the pay-by-phone service —
   // members learn ONE number. If that forwarding is ever removed this

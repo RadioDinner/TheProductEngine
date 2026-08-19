@@ -71,7 +71,7 @@ import {
   removeHostedPhotos,
   storeImageBytes,
 } from "@/lib/photos";
-import { MAX_COMBINED_PHOTOS, collageDimensions, combineImageBuffers } from "@/lib/photo-collage";
+import { MAX_AD_PHOTOS, MAX_COMBINED_PHOTOS, collageDimensions, combineImageBuffers } from "@/lib/photo-collage";
 import { sniffImage } from "@/lib/image-sniff";
 import { siteUrl } from "@/lib/email";
 import { supabaseConfigured } from "@/lib/db";
@@ -279,7 +279,7 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
       console.error("[engine] photo ingest failed:", ingest.reason);
     }
   } else if (sentPictures) {
-    const allowed = media!.slice(0, MAX_COMBINED_PHOTOS).filter(isAllowedPhotoSrc);
+    const allowed = media!.slice(0, MAX_AD_PHOTOS).filter(isAllowedPhotoSrc);
     photoSrc = allowed[0];
     galleryParts = allowed.slice(1);
     savedPictures = allowed.length;
@@ -391,17 +391,17 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   if (photoDropped) {
     photoNote = ` Note: we couldn't save your picture${sentPictures > 1 ? "s" : ""}, so this will run as a text-only ad. Reply with the photo${sentPictures > 1 ? "s" : ""} again, or call ${site.supportPhone}.`;
   } else if (combined) {
-    const room = MAX_COMBINED_PHOTOS - savedPictures;
+    const room = MAX_AD_PHOTOS - savedPictures;
     photoNote = ` Your ${savedPictures} pictures were combined into one photo.`;
     if (room > 0) photoNote += ` You can send ${room} more, one at a time.`;
     photoNote += ` We'll text you the combined photo once your pictures are in.`;
   } else if (hasPhoto && savedPictures === 1) {
-    photoNote = ` If you have more pictures, please send them one at a time - up to ${MAX_COMBINED_PHOTOS} total. If we don't hear from you within 10 minutes, we'll assume this is the only picture.`;
+    photoNote = ` If you have more pictures, please send them one at a time - up to ${MAX_AD_PHOTOS} total. The first ${MAX_COMBINED_PHOTOS} go out by text; the rest show on the website. If we don't hear from you within 10 minutes, we'll assume this is the only picture.`;
   }
   if (hasPhoto && savedPictures < sentPictures) {
     photoNote +=
-      sentPictures > MAX_COMBINED_PHOTOS && savedPictures === MAX_COMBINED_PHOTOS
-        ? ` (${MAX_COMBINED_PHOTOS} pictures is the most one ad can show.)`
+      sentPictures > MAX_AD_PHOTOS && savedPictures === MAX_AD_PHOTOS
+        ? ` (${MAX_AD_PHOTOS} pictures is the most one ad can hold.)`
         : ` (We could only save ${savedPictures} of your ${sentPictures} pictures.)`;
   }
   // Instant send (session 016): approved ads go out immediately, so the
@@ -474,10 +474,10 @@ async function handlePhotoFollowup(
         ]
       : [...(primarySrc ? [primarySrc] : []), ...gallerySrcs]
   ).filter((src, i, arr) => arr.indexOf(src) === i);
-  const room = MAX_COMBINED_PHOTOS - existingOriginals.length;
+  const room = MAX_AD_PHOTOS - existingOriginals.length;
   if (room <= 0) {
     return {
-      body: `Ad #${ad.id} already shows ${MAX_COMBINED_PHOTOS} pictures — that's the most one ad can combine. It's waiting for review.`,
+      body: `Ad #${ad.id} already has ${MAX_AD_PHOTOS} pictures — that's the most one ad can hold. It's waiting for review.`,
     };
   }
   const overCap = Math.max(0, media.length - room);
@@ -683,7 +683,7 @@ async function handlePhotoFollowup(
     }
 
     let note = "";
-    if (overCap > 0 && newCount + existingOriginals.length >= MAX_COMBINED_PHOTOS) {
+    if (overCap > 0 && newCount + existingOriginals.length >= MAX_AD_PHOTOS) {
       note = ` (${MAX_COMBINED_PHOTOS} pictures is the most one ad can show.)`;
     } else if (droppedBad > 0) {
       note = ` (We could only save ${newCount} of the ${media.length} pictures.)`;
@@ -691,7 +691,7 @@ async function handlePhotoFollowup(
     // Room + the combined-photo promise (item 33): mirror the AD NEW guidance
     // so a trickling seller always knows how many pictures are left and that
     // the finished collage will be texted back once the set goes quiet.
-    const room = Math.max(0, MAX_COMBINED_PHOTOS - shownCount);
+    const room = Math.max(0, MAX_AD_PHOTOS - shownCount);
     const roomNote = room > 0 ? ` You can send ${room} more, one at a time.` : "";
     const s = newCount === 1 ? "" : "s";
     const body = combinedNow
