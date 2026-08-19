@@ -96,3 +96,6 @@ I'm not seeing a Twilio > Voice > settings
 [screenshot: 1Console Settings / Account settings / Account details / Details —
 "My First Twilio Account", Account SID shown, DETAILS and SECURITY tabs]
 is this the TWILIO_AUTH_TOKEN?
+
+--- prompt (2026-08-19, continued session) ---
+I hafe the voice confioguration webhook saved
