@@ -65,3 +65,12 @@ I want to make a change when a subscriber is logged in. Right now, you have to c
 
 --- prompt (2026-08-19, continued session) ---
 you stuck bro? stop using my fable usage
+
+--- prompt (2026-08-19, continued session) ---
+rats
+
+[Twilio Business Profile REJECTED email pasted. Error code 18602 —
+"The Business ID you provided could not be verified." Possible causes:
+inaccurate/invalid/expired business ID. Twilio's advice: edit the profile,
+use the legal company name and EIN from tax records, or contact
+trusthub-verify@twilio.com. Bundle SID + Account SID included in the mail.]
