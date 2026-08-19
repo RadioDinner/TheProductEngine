@@ -137,3 +137,11 @@ I found the stripe connector in Products and Services > Builder Tools > Marketpl
 
 --- prompt (2026-08-19, continued session) ---
 For some reason, my stripe account has like 5 aaccounts in it somehow?
+
+--- prompt (2026-08-19, continued session) ---
+[screenshot: Stripe OAuth "Select the account you'd like to connect to Twilio, Inc"
+listing 5 accounts — Walnut Creek Rental (Nov 4 2022), Derrick Wengerd (Aug 19),
+Walnut Creek Rental (Jul 23 2025), Derrick Wengerd (Aug 4 2025), Derrick Wengerd
+(Aug 5 2025, selected); "See 2 ineligible accounts"; a "Re-use this business to
+create a new account" box with a Create button, and "Create a new account"]
+This is what I see when I click "Connect with stripe"
