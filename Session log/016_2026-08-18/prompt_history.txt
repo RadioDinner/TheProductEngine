@@ -145,3 +145,6 @@ Walnut Creek Rental (Jul 23 2025), Derrick Wengerd (Aug 4 2025), Derrick Wengerd
 (Aug 5 2025, selected); "See 2 ineligible accounts"; a "Re-use this business to
 create a new account" box with a Create button, and "Create a new account"]
 This is what I see when I click "Connect with stripe"
+
+--- prompt (2026-08-19, continued session) ---
+It just creates another stripe account :(
