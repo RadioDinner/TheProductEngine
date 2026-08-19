@@ -160,3 +160,6 @@ it just keeps making new stripe account ids. If I create a new STRIPE_SECRET_KEY
 
 --- prompt (2026-08-19, continued session) ---
 No, I want to keep the call in 1 card capture. the text them the link won't work for the majority of my users. They're on flip phones. Walk me through updatign my stripe keys to my new stripe account with twilio
+
+--- prompt (2026-08-19, continued session) ---
+Ok, the stripe account on Twilio is now acct_1U6DyY3cJ9GPOvgC and I'm working on that one in stripe atm. I dont see a Developers > Webhooks > Add endpoint option
