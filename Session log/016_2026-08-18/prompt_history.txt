@@ -53,3 +53,6 @@ all the webhooks are set up and the part C test money path is good and working. 
 
 --- prompt (2026-08-19, continued session) ---
 I refunded the 45 charge but my balance didn't go down. Is that because the refund takes awhile to process?
+
+--- prompt (2026-08-19, continued session) ---
+that makes sense and it worked. I want the ability to charge a custom amount to their card. Also, what did we decide on the upcharge for a web ad? 15 or 25?

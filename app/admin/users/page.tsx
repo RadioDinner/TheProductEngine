@@ -201,7 +201,8 @@ export default async function AdminUsers({
           )}
           {params.error === "phoneorder_pack" && (
             <p className="form-error" role="alert">
-              Pick an amount for the phone order first.
+              Pick a preset amount or type a custom one first — custom amounts run from
+              $1 to $5,000.
             </p>
           )}
           {params.error === "phoneorder_dev" && (
@@ -375,6 +376,14 @@ export default async function AdminUsers({
                   </option>
                 ))}
               </select>
+              <input
+                name="customAmount"
+                type="text"
+                inputMode="decimal"
+                placeholder="or custom $"
+                aria-label="Custom amount in dollars"
+                className="admin-num"
+              />
               {savedCard && (
                 <button className="btn btn-sm" formAction={adminBillSavedCard} type="submit">
                   Bill their saved card

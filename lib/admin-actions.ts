@@ -17,7 +17,7 @@ import {
 } from "@/lib/store";
 import { headers } from "next/headers";
 import { dispatchSms } from "@/lib/outbound";
-import { formatPrice, isTopUpPreset, site } from "@/lib/config";
+import { customAmountCents, formatPrice, isTopUpPreset, site } from "@/lib/config";
 import {
   chargeSavedCard,
   createCheckoutSession,
@@ -267,6 +267,16 @@ export async function adminSendDigest(formData: FormData): Promise<void> {
  * caller reads the card out (open-here), or by the member themselves via a
  * texted link. Cash/check stays on Adjust balance above.
  */
+/** The phone-order forms' amount: the "custom $" box wins when filled
+ * (dollars, validated/clamped by customAmountCents), otherwise the preset
+ * select. Null means neither was usable. */
+function phoneOrderAmountCents(formData: FormData): number | null {
+  const custom = String(formData.get("customAmount") ?? "").trim();
+  if (custom) return customAmountCents(custom);
+  const preset = Number(formData.get("amount"));
+  return isTopUpPreset(preset) ? preset : null;
+}
+
 async function phoneOrderSession(
   formData: FormData,
   urls: (origin: string, phone: string) => { successUrl?: string; cancelUrl?: string },
@@ -274,8 +284,8 @@ async function phoneOrderSession(
   await requireAdmin();
   const phone = normalizePhone(String(formData.get("phone") ?? ""));
   if (!phone) redirect("/admin/users");
-  const amountCents = Number(formData.get("amount"));
-  if (!isTopUpPreset(amountCents)) return { phone, error: "phoneorder_pack" };
+  const amountCents = phoneOrderAmountCents(formData);
+  if (amountCents === null) return { phone, error: "phoneorder_pack" };
   if (paymentsDevMode) return { phone, error: "phoneorder_dev" };
   // A brand-new caller gets an account minted right here, so the very first
   // contact with the exchange can be "call in, pay, start posting".
@@ -315,8 +325,8 @@ export async function adminBillSavedCard(formData: FormData): Promise<void> {
   // lets TS narrow after each `back(...)` guard below.
   const back: (q: string) => never = (q) => redirect(`/admin/users?phone=${phone}&${q}`);
 
-  const amountCents = Number(formData.get("amount"));
-  if (!isTopUpPreset(amountCents)) back("error=phoneorder_pack");
+  const amountCents = phoneOrderAmountCents(formData);
+  if (amountCents === null) back("error=phoneorder_pack");
   const nonce = String(formData.get("nonce") ?? "").replace(/[^a-zA-Z0-9-]/g, "");
   if (!nonce) back("error=bill");
   const account = await getAccount(phone);

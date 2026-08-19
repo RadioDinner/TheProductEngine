@@ -296,7 +296,7 @@ const ENTRIES = {
   },
   "users.phoneOrder": {
     title: "Phone order",
-    what: "A caller pays by card: bill the saved card for a preset amount on their verbal OK (double-click-safe), or collect a card — open Stripe's checkout here and key it in as they read it, or text them the link. The money lands automatically; the card is saved so their future ads can top up automatically.",
+    what: "A caller pays by card: bill the saved card on their verbal OK (double-click-safe) for a preset or custom amount (custom runs $1–$5,000, the same fat-finger ceiling as Adjust balance; the custom box wins when both are set), or collect a card — open Stripe's checkout here and key it in as they read it, or text them the link. The money lands automatically; the card is saved so their future ads can top up automatically.",
     why: "FEATURES item 29 (session 011): a review of the payment system found everything existed EXCEPT call-in card capture — and callers who can't text a smartphone are exactly this audience. The card number goes straight into Stripe and is never seen or stored by this site.",
     gotchas: "The pay-by-phone keypad service (FEATURES item 31, under pay-by-phone/ in the repo) is the PCI-safe upgrade — the caller keys the card themselves and nobody ever hears it. Since session 016 the app ADOPTS an IVR-saved card automatically (it searches Stripe by the caller's phone and stamps the member's customer id) — so once that service is deployed ON THE SAME STRIPE ACCOUNT, a call-in card just shows up here as \"Card on file\" and auto top-up works. The service itself still needs its own Twilio number + PCI Mode setup per pay-by-phone/README.md.",
   },

@@ -27,6 +27,17 @@ export function isTopUpPreset(amountCents: number): boolean {
   return TOP_UP_PRESETS_CENTS.includes(amountCents);
 }
 
+/** Operator-typed custom amount (dollars; a leading "$" and decimals are
+ * fine) → cents, or null when unusable: not a number, under $1, or over
+ * $5,000 — the same fat-finger ceiling as the admin balance adjustment.
+ * Member-facing lanes stay preset-only; this is for the admin phone-order
+ * forms, where the amount is whatever was agreed on the call. */
+export function customAmountCents(raw: string): number | null {
+  const cents = Math.round(Number(raw.trim().replace(/^\$/, "")) * 100);
+  if (!Number.isFinite(cents) || cents < 100 || cents > 500_000) return null;
+  return cents;
+}
+
 export function formatPrice(cents: number): string {
   return cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`;
 }

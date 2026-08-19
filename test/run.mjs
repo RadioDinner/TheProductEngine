@@ -4,6 +4,7 @@
 // A test file exports `name` and `run(t)`, where t.eq(label, got, want) records
 // a check. Exit code is non-zero if any check fails.
 const SUITES = [
+  "config",
   "segments",
   "commands",
   "dst",
