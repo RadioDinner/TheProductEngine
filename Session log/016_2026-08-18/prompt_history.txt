@@ -80,3 +80,9 @@ somehow I was able to buy a number. How do  i set it up
 
 --- prompt (2026-08-19, continued session, sent mid-turn) ---
 I called the number and it said "Thanks for the call, confirguer your number..." something yadayada. Now I need to probably edit teh  voice configureaion in twilio?
+
+--- prompt (2026-08-19, continued session) ---
+Try again
+
+--- prompt (2026-08-19, continued session) ---
+I'm not seeing a Twilio > Voice > settings
