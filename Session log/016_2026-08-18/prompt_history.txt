@@ -109,3 +109,6 @@ Public key validation, no auth token] these are my options...
 on the API KEYS tab ("You don't have any API keys"); an AUTH TOKENS tab sits
 beside it. Sidebar also shows Settings -> Product settings, the likely home of
 Voice/PCI Mode in this console.]
+
+--- prompt (2026-08-19, continued session) ---
+found it and added it
