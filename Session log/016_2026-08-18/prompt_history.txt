@@ -62,3 +62,6 @@ I'm waiting on Twilio compliance profile review, I think. I can't buy a number u
 
 --- prompt (2026-08-19, continued session, sent mid-turn) ---
 I want to make a change when a subscriber is logged in. Right now, you have to click your own number to view your settings, profile, etc. I wnat that to be different, something more intuitive
+
+--- prompt (2026-08-19, continued session) ---
+you stuck bro? stop using my fable usage
