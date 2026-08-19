@@ -44,3 +44,6 @@ What happened?
 --- prompt (2026-08-19, continued session) ---
 @"/root/.claude/uploads/ad7b3ee7-bc25-586d-ae49-484cea9a8203/4f9c8b34-theproductenginelogexport20260819T131157.csv"
 [user uploaded a Vercel log export CSV: theproductengine log export 2026-08-19T13:11:57]
+
+--- prompt (2026-08-19, continued session) ---
+working now. commit to main from here on. Whats my stripe chekclist again?
