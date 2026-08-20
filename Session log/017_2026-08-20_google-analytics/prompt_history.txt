@@ -1,0 +1,19 @@
+Session 017 — Google Analytics setup.
+
+NOTE ON THIS FOLDER'S NAME: the user is running several sessions in parallel
+this day and asked that branches not collide on merge. A plain "017_2026-08-20"
+would be claimed by whichever session committed first and would conflict as an
+add/add on every other. The folder therefore carries the session's subject as a
+suffix, extending the letter-suffix rule in new_session_instructions.md §1 to
+the parallel-session case. Renumber at merge time if the user prefers.
+
+--- 2026-08-20 11:29 UTC ---
+Ok, this will need a branch instead of being committed to main. However, I first want you to commit a folder to main, that is "analytics", then create the branch. DO NOT DEVIATE FROM THESE INSTRUCTIONS.
+
+Then, I want to make my analytics comprehensively better than what we have now. And I want to use Google analytics. You WILL help me set this up
+
+--- 2026-08-20 11:33 UTC ---
+Also, after you create the folder and the branch, don't wire anything that would affect anything outside of the main folder, this way when we merge the branches they don't conflict. I have numerous sessions running right now and I can't afford mismatched branches.
+
+--- 2026-08-20 11:42 UTC ---
+I want to override my earlier instructions. Commit everything you currently have to main, then pause committing to main automatically for this session. I will instruct you when to commit. This way, I can tell one session to commit its changes, and then the other
