@@ -79,6 +79,7 @@ import { autoTopUpShortfall, resolveStripeCustomer } from "@/lib/payments";
 import { dispatchSms } from "@/lib/outbound";
 import { isBlockedNumber } from "@/lib/blocklist";
 import { notifyAdminNewAd } from "@/lib/notify";
+import { mayUse, policyFrom } from "@/lib/line-policy";
 
 export interface InboundSms {
   from: string; // 10 digits
@@ -219,6 +220,14 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
       body: `Your posting privileges are suspended. Contact us at ${site.supportPhone} or appeal at ThePlainExchange.com.`,
     };
   }
+  // Optional strict stance: posting from an app/throwaway number. Off by
+  // default — the money and the seller directory are what need protecting,
+  // and turning a paying seller away costs more than a burner gains.
+  if (!(await mayUse(from, "posting", policyFrom(await getEngineSettings())))) {
+    return {
+      body: `We can't post ads from this kind of number. Text or call us at ${site.supportPhone} and we'll help you get set up.`,
+    };
+  }
   // Strip emoji before anything else: they never appear in a stored or
   // broadcast ad (an emoji flips a whole SMS digest to costly UCS-2 and reads
   // badly on a flip phone). The raw text the sender typed still lives in the
@@ -307,7 +316,14 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   // number that only ever subscribes or checks its balance never mints money.
   // Idempotent: once granted it never re-fires, even after the money is spent.
   const starterLabel = formatPrice(settings.starterCreditCents);
-  const starter = await grantStarterCreditIfFirst(from, settings.starterCreditCents, starterLabel, settings.starterCreditLimit);
+  // Line-type policy (session 016): a throwaway number is skipped ENTIRELY
+  // rather than granted zero — stamping starter_granted_at with no money
+  // would silently consume one of the 200 launch slots, which is the exact
+  // resource this policy exists to protect.
+  const policy = policyFrom(settings);
+  const starter = (await mayUse(from, "starterCredit", policy))
+    ? await grantStarterCreditIfFirst(from, settings.starterCreditCents, starterLabel, settings.starterCreditLimit)
+    : { account, granted: false };
   let balance = await getCreditBalance(from);
   // Automatic top-up: a saved card (with the toggle on) covers the shortfall,
   // and the confirmation below states the charge. Runs BEFORE the ad record

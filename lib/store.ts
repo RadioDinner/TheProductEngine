@@ -23,6 +23,7 @@ import { unreadChatCount } from "@/lib/unread";
 import { normalizePhone } from "@/lib/phone";
 import { USER_ID_MAX_ATTEMPTS, isRetirementActive, randomUserId } from "@/lib/user-id";
 import { decideCategoryConfirm, type ConfirmAction } from "@/lib/categories";
+import type { LineType } from "@/lib/number-lookup";
 
 // ---------- shared types & rules ----------
 
@@ -53,6 +54,8 @@ export interface Account {
    * file store only; Supabase reads it lazily via getAutoTopUp so core
    * lookups never depend on migration 9973. */
   autoTopUp?: boolean | null;
+  /** Cached Twilio line type (migration 9967); absent = never checked. */
+  lineType?: string | null;
   offenseCount?: number;
   postingBannedAt?: string | null;
   /** PIC daily-quota bank — pulls available right now (lib/pic-quota.ts). */
@@ -818,6 +821,19 @@ const file = {
     return "saved";
   },
 
+  getLineType(phone: string): LineType {
+    return (load().accounts[phone]?.lineType as LineType | undefined) ?? "unchecked";
+  },
+
+  setLineType(phone: string, type: LineType): "saved" | "unsupported" {
+    const store = load();
+    const account = store.accounts[phone];
+    if (!account) return "unsupported";
+    account.lineType = type;
+    save(store);
+    return "saved";
+  },
+
   reservePicQuota(
     phone: string,
     dailyAllowance: number,
@@ -1567,6 +1583,24 @@ export async function grantStarterCreditIfFirst(
  */
 export async function getAutoTopUp(phone: string): Promise<boolean> {
   return supabaseConfigured ? remote.getAutoTopUp(phone) : file.getAutoTopUp(phone);
+}
+
+/**
+ * The cached line type for a number. "unchecked" means never asked, the
+ * lookup failed, or migration 9967 is still pending — all three read as
+ * "assume good faith", which is what keeps a Twilio outage from denying real
+ * members their starter credit.
+ */
+export async function getLineType(phone: string): Promise<LineType> {
+  return supabaseConfigured ? remote.getLineType(phone) : file.getLineType(phone);
+}
+
+/** Remember a line type. Never called with "unchecked" — see isCacheable. */
+export async function setLineType(
+  phone: string,
+  type: LineType,
+): Promise<"saved" | "unsupported"> {
+  return supabaseConfigured ? remote.setLineType(phone, type) : file.setLineType(phone, type);
 }
 
 /** Member/admin toggle for automatic top-up. "unsupported" pre-9973. */

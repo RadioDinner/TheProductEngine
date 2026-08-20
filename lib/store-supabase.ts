@@ -37,6 +37,7 @@ import { normalizePhone } from "@/lib/phone";
 import { unreadChatCount } from "@/lib/unread";
 import { CHAT_PHOTO_CAP } from "@/lib/chat";
 import { USER_ID_MAX_ATTEMPTS, isRetirementActive, randomUserId } from "@/lib/user-id";
+import type { LineType } from "@/lib/number-lookup";
 
 interface UserRow {
   id: string;
@@ -1087,6 +1088,41 @@ export async function setAutoTopUp(
   const { data, error } = await db()
     .from("users")
     .update({ auto_topup: on })
+    .eq("phone", phone)
+    .select("id");
+  if (error) {
+    if (error.code === "42703" || error.code === "PGRST204") return "unsupported";
+    throw error;
+  }
+  return data?.length ? "saved" : "unsupported";
+}
+
+/**
+ * The cached line type for a number (migration 9967). "unchecked" covers both
+ * "never asked" and "the column isn't there yet", so a pending migration
+ * simply means the policy stays open — the same thing a Twilio outage means.
+ */
+export async function getLineType(phone: string): Promise<LineType> {
+  const { data, error } = await db()
+    .from("users")
+    .select("line_type")
+    .eq("phone", phone)
+    .maybeSingle();
+  if (error) {
+    if (error.code === "42703") return "unchecked"; // migration 9967 pending
+    throw error;
+  }
+  return (data?.line_type as LineType | null) ?? "unchecked";
+}
+
+/** Remember a line type. Callers must not pass "unchecked" (isCacheable). */
+export async function setLineType(
+  phone: string,
+  type: LineType,
+): Promise<"saved" | "unsupported"> {
+  const { data, error } = await db()
+    .from("users")
+    .update({ line_type: type, line_type_at: new Date().toISOString() })
     .eq("phone", phone)
     .select("id");
   if (error) {

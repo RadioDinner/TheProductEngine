@@ -69,6 +69,7 @@ export async function GET(req: NextRequest) {
       STRIPE_WEBHOOK_SECRET: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
       // The call-in card line: the token gates /api/voice entirely, and the
       // ring list is what makes the phones ring before the attendant.
+      TWILIO_ACCOUNT_SID: Boolean(process.env.TWILIO_ACCOUNT_SID),
       TWILIO_AUTH_TOKEN: Boolean(process.env.TWILIO_AUTH_TOKEN),
       VOICE_RING_TO: ringToPhones().length,
     },

@@ -15,6 +15,7 @@ import { getEngineSettings } from "@/lib/settings";
 import { isAdminPhone } from "@/lib/admin";
 import { etParts } from "@/lib/et";
 import { requireMemberPhone } from "@/lib/member-gate";
+import { mayUse, policyFrom } from "@/lib/line-policy";
 
 export async function revealNumber(formData: FormData): Promise<void> {
   const adId = Number(formData.get("adId"));
@@ -30,6 +31,13 @@ export async function revealNumber(formData: FormData): Promise<void> {
   // signed-in member normally has one).
   await ensureAccount(session.phone);
   const settings = await getEngineSettings();
+  // Line-type policy (session 016): harvesting sellers' numbers is the main
+  // reason to mint burner accounts, so a positively-identified throwaway line
+  // is refused here — the quota is never touched, and the ad page shows the
+  // same "out of look-ups" state rather than naming the reason.
+  if (!(await mayUse(session.phone, "reveals", policyFrom(settings)))) {
+    redirect(`/ad/${adId}?reveal=out`);
+  }
   const today = etParts(new Date()).day;
   const quota = await reserveRevealQuota(
     session.phone,

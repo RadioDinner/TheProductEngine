@@ -10,7 +10,7 @@ import {
 import { getEngineSettings, getWordRules } from "@/lib/settings";
 import { listBlocked } from "@/lib/blocklist";
 import { formatPhone } from "@/lib/phone";
-import { site } from "@/lib/config";
+import { formatPrice, site } from "@/lib/config";
 import type { HandbookKey } from "@/lib/admin-handbook";
 import { Tip } from "@/components/Tip";
 
@@ -292,6 +292,60 @@ export default async function AdminSettings({
             to the credits section.
           </p>
         </div>
+        <h3 className="section-h">
+          Number checks (VoIP policy) <Tip k="settings.lookup" />
+        </h3>
+        <input type="hidden" name="lookupForm" value="1" />
+        <p className="fine">
+          Signing up only proves a number can receive one text — an app number
+          (Google Voice, TextNow) passes exactly like a real cell phone. Turning this on
+          asks Twilio what kind of line each number is, the first time it matters, and
+          remembers the answer. About half a cent per member, once.
+        </p>
+        <p className="fine">
+          <strong>It never blocks anyone from signing up.</strong> It withholds the two
+          things worth abusing — the free starter credit and number look-ups — so a
+          real person on a VoIP line can still post and pay, while a throwaway number
+          gets nothing worth having. Needs <code>TWILIO_ACCOUNT_SID</code> set.
+        </p>
+        <div className="field">
+          <label className="sim-photo-toggle">
+            <input
+              type="checkbox"
+              name="lookupEnabled"
+              defaultChecked={settings.lookupEnabled}
+            />{" "}
+            Check what kind of line each number is
+          </label>
+        </div>
+        <p className="fine">
+          With the check on, a number identified as an app/throwaway line may still:
+        </p>
+        <div className="field">
+          <label className="sim-photo-toggle">
+            <input
+              type="checkbox"
+              name="voipStarterCredit"
+              defaultChecked={settings.voipStarterCredit}
+            />{" "}
+            receive the free starter credit ({formatPrice(settings.starterCreditCents)})
+          </label>
+          <label className="sim-photo-toggle">
+            <input type="checkbox" name="voipReveals" defaultChecked={settings.voipReveals} />{" "}
+            look up sellers&rsquo; numbers on the website
+          </label>
+          <label className="sim-photo-toggle">
+            <input type="checkbox" name="voipPosting" defaultChecked={settings.voipPosting} />{" "}
+            post ads at all
+          </label>
+        </div>
+        <p className="fine">
+          The recommended setting is the first two OFF and the last one ON: they can
+          trade like anyone else, they just can&rsquo;t farm the launch offer or harvest
+          the seller list. Business VoIP lines are treated as real numbers — only
+          app-style numbers are affected.
+        </p>
+
         <button className="btn" type="submit">
           Save settings
         </button>

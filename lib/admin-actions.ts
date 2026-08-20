@@ -654,6 +654,20 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
   if (slots.length) update.slots = [...new Set(slots)].sort((a, b) => a - b);
   await saveEngineSettings(update);
 
+  // Line-type policy checkboxes. An unchecked box sends NOTHING, so absence
+  // can't be read as false the way a blank number field is read as
+  // "unchanged" — the form ships a hidden marker, and only when that marker
+  // is present is an absent box taken to mean off. Without it, any partial
+  // POST would silently switch the whole policy off.
+  if (formData.get("lookupForm") === "1") {
+    await saveEngineSettings({
+      lookupEnabled: formData.get("lookupEnabled") === "on",
+      voipStarterCredit: formData.get("voipStarterCredit") === "on",
+      voipReveals: formData.get("voipReveals") === "on",
+      voipPosting: formData.get("voipPosting") === "on",
+    });
+  }
+
   // Homepage promo banner: free text, clamped; CLEARING the field is how the
   // admin hides the banner, so blank saves as "" (unlike the numbers above).
   // The link must stay a site-relative path — anything else falls back to the

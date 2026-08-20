@@ -440,6 +440,18 @@ const ENTRIES = {
     why: "Session-001 founding ask, verbatim: \"a small rejection system to analyze for specific words … so I can add/remove words as I choose.\" Auto-reject charges nothing deliberately — a robot's judgement shouldn't cost a seller money; only your reject-violation does that. It moved off Settings into its own tab in session 016 (user decision) because the one-word-at-a-time widget made a real list unmanageable: you could not see it whole, paste one in, or move six words between lists without twelve clicks.",
     gotchas: "The boxes ARE the filter — a word you delete from a box stops being filtered when you save. Emptying both needs the confirm tick, so a mis-click can't quietly disarm every rule. A word typed into both boxes counts as auto-reject.",
   },
+  "settings.lookup": {
+    title: "Number checks (VoIP policy)",
+    what: "Asks Twilio what kind of line a number is — real mobile, landline, business VoIP, or an app number like Google Voice or TextNow — the first time it matters, and remembers the answer. The three switches below decide what an app number may still do. Costs about half a cent per member, once.",
+    why: "Session 016, the user's question: \"how do we make sure they use a real number?\" Signing up proves only that a number can receive one text, so an app number passed exactly like a real cell phone. That put the launch offer at risk — 200 slots at the starter-credit amount — and let a burner account harvest sellers' numbers through website look-ups.",
+    gotchas: "It deliberately does NOT block VoIP signups: blocking costs real customers, and a community running on shared phones and answering services would lose several. It withholds the free credit and the look-ups instead, so the attacker's return goes to zero while a real person on a VoIP line trades normally. BUSINESS VoIP is treated as a real number — only app-style lines are affected. Needs TWILIO_ACCOUNT_SID set; with the switch off nothing is looked up and nothing changes. Every failure — outage, bad credential, pending migration — reads as \"allow\", and a failed check is never remembered, so an outage costs one retry rather than mislabelling a member forever.",
+  },
+  "users.lineType": {
+    title: "A member's line type",
+    what: "What Twilio said this number is, cached from the first check. \"Not checked\" means the number checks are off, the lookup hasn't been needed yet, or it failed — all three mean the member is treated as real.",
+    why: "Session 016. It answers \"is this a person or a burner?\" when you're looking at a suspicious account, and it is what the VoIP policy on Settings reads.",
+    gotchas: "An app-number badge is not proof of bad faith — plenty of people use one as their only number. It is a reason to look, not a verdict. Blocking is still your call.",
+  },
   "settings.blocklist": {
     title: "The blocklist",
     what: "Blocked numbers are dropped at the door: no reply, no account, no charge, no digests — the inbound text is still recorded. Block from Insights (ranked) or by hand here; unblock any time.",

@@ -17,6 +17,7 @@ import {
   getCreditBalance,
   getLedger,
   getRatingSummary,
+  getLineType,
   getVerifiedAt,
   searchAccounts,
 } from "@/lib/store";
@@ -26,6 +27,7 @@ import { TOP_UP_PRESETS_CENTS, formatPrice, site } from "@/lib/config";
 import { paymentsDevMode, resolveStripeCustomer, savedCardOnFile } from "@/lib/payments";
 import { getEngineSettings } from "@/lib/settings";
 import { Tip } from "@/components/Tip";
+import { isBurnerLine, lineTypeLabel } from "@/lib/number-lookup";
 
 export const metadata: Metadata = {
   title: `Users — ${site.name} admin`,
@@ -269,6 +271,20 @@ export default async function AdminUsers({
               <dt>Member since</dt>
               <dd>{shortDate(account.createdAt)}</dd>
             </div>
+            {await getLineType(phone).then((lineType) => (
+              <div>
+                <dt>
+                  Line type <Tip k="users.lineType" />
+                </dt>
+                <dd>
+                  {isBurnerLine(lineType) ? (
+                    <span className="ad-sold">{lineTypeLabel(lineType)}</span>
+                  ) : (
+                    lineTypeLabel(lineType)
+                  )}
+                </dd>
+              </div>
+            ))}
             {await getRatingSummary(phone).then((r) =>
               r.asSeller.count + r.asBuyer.count > 0 ? (
                 <div>

@@ -48,6 +48,7 @@ import { notifyAdminNewAd } from "@/lib/notify";
 import { formatPhone } from "@/lib/phone";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
 import { requireMemberPhone } from "@/lib/member-gate";
+import { mayUse, policyFrom } from "@/lib/line-policy";
 
 
 /**
@@ -148,12 +149,16 @@ async function postAdInner(formData: FormData): Promise<void> {
   // One-time starter credit fires here — on the FIRST real post, past the
   // empty/too-long/auto-reject gates — exactly like the SMS lane.
   const starterLabel = formatPrice(settings.starterCreditCents);
-  const starter = await grantStarterCreditIfFirst(
-    phone,
-    settings.starterCreditCents,
-    starterLabel,
-    settings.starterCreditLimit,
-  );
+  // Same line-type policy as the SMS lane: skipped entirely, never granted
+  // zero, so a throwaway number can't consume one of the 200 launch slots.
+  const starter = (await mayUse(phone, "starterCredit", policyFrom(settings)))
+    ? await grantStarterCreditIfFirst(
+        phone,
+        settings.starterCreditCents,
+        starterLabel,
+        settings.starterCreditLimit,
+      )
+    : { account, granted: false };
   let balance = await getCreditBalance(phone);
   // Automatic top-up: the saved card (toggle on) covers the shortfall before
   // any ad record exists — a declined card is a clean refusal. A card saved

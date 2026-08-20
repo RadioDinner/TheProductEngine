@@ -23,6 +23,7 @@ const SUITES = [
   "chat",
   "word-filter",
   "upload-limits",
+  "number-lookup",
   "myads",
   "reveal-quota",
   "business",

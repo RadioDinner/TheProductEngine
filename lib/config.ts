@@ -228,6 +228,17 @@ export const engineDefaults = {
    * smoothing burst spend. Ignored when underAttack is off.
    */
   outboundThrottlePerMin: 60,
+
+  /* Line-type policy (session 016). All OFF by default: an unconfigured
+   * deploy behaves exactly as it did before the feature existed, and turning
+   * it on is a deliberate act that needs TWILIO_ACCOUNT_SID set. The three
+   * VoIP switches only ever apply to a POSITIVELY identified throwaway line —
+   * see lib/number-lookup.ts for why this withholds privileges rather than
+   * blocking signups. */
+  lookupEnabled: false,
+  voipStarterCredit: false,
+  voipReveals: false,
+  voipPosting: true,
   /** Auto-tightened per-number command-reply cap/hour while underAttack. */
   attackRepliesPerHour: 5,
   /** Auto-tightened per-number PIC cap/hour while underAttack. */

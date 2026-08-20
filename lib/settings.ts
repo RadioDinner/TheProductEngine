@@ -70,6 +70,14 @@ export interface EngineSettings {
   underAttack: boolean;
   /** Global outbound sends/minute ceiling, enforced only while underAttack. */
   outboundThrottlePerMin: number;
+  /** Master switch for Twilio line-type lookups. Off = no lookups, no policy. */
+  lookupEnabled: boolean;
+  /** A throwaway line may receive the free starter credit. */
+  voipStarterCredit: boolean;
+  /** A throwaway line may use website number look-ups. */
+  voipReveals: boolean;
+  /** A throwaway line may post ads at all. */
+  voipPosting: boolean;
 }
 
 export interface WordRule {
@@ -113,6 +121,10 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   outboundPaused: "outbound_paused",
   underAttack: "under_attack",
   outboundThrottlePerMin: "outbound_throttle_per_min",
+  lookupEnabled: "lookup_enabled",
+  voipStarterCredit: "voip_starter_credit",
+  voipReveals: "voip_reveals",
+  voipPosting: "voip_posting",
 };
 
 // ---------- file implementation ----------
@@ -176,6 +188,10 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     outboundPaused: engineDefaults.outboundPaused,
     underAttack: engineDefaults.underAttack,
     outboundThrottlePerMin: engineDefaults.outboundThrottlePerMin,
+    lookupEnabled: engineDefaults.lookupEnabled,
+    voipStarterCredit: engineDefaults.voipStarterCredit,
+    voipReveals: engineDefaults.voipReveals,
+    voipPosting: engineDefaults.voipPosting,
   };
   if (!supabaseConfigured) {
     return { ...defaults, ...load().values };
