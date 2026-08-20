@@ -3,7 +3,7 @@
  * wiring an event into the app is a single obvious line and not a lesson in
  * the Measurement Protocol.
  *
- * SERVER ONLY. STAGED, NOT WIRED.
+ * SERVER ONLY.
  *
  * Every helper here is fire-and-forget. Call them with `void`:
  *

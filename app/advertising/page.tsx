@@ -1,3 +1,4 @@
+import { recordVisit } from "@/lib/analytics";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { startBusinessCheckout } from "@/lib/business-actions";
@@ -21,6 +22,7 @@ export default async function AdvertisingPage({
 }: {
   searchParams: Promise<{ error?: string; checkout?: string }>;
 }) {
+  await recordVisit("/advertising");
   const params = await searchParams;
   const available = await businessPackagesAvailable();
 

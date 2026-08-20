@@ -1,3 +1,4 @@
+import { recordVisit } from "@/lib/analytics";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { formatPrice, site } from "@/lib/config";
@@ -9,6 +10,7 @@ export const metadata: Metadata = {
 };
 
 export default async function Faq() {
+  await recordVisit("/faq");
   // Live prices, so this page can never drift from /admin/settings again.
   const s = await getEngineSettings();
   return (

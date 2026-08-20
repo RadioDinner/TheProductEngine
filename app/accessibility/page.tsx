@@ -1,3 +1,4 @@
+import { recordVisit } from "@/lib/analytics";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { site } from "@/lib/config";
@@ -7,7 +8,8 @@ export const metadata: Metadata = {
   description: `How ${site.name} works for people with disabilities, on the website and by text message, and how to reach us about an accessibility problem.`,
 };
 
-export default function AccessibilityStatement() {
+export default async function AccessibilityStatement() {
+  await recordVisit("/accessibility");
   return (
     <div className="container prose">
       <h1>Accessibility statement</h1>

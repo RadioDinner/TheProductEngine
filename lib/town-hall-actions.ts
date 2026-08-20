@@ -13,6 +13,8 @@
  * Outcomes are signaled repo-style: redirect() with query params.
  */
 
+import { afterResponse } from "@/analytics/src/after";
+import * as analytics from "@/analytics/src/server-events";
 import { redirect } from "next/navigation";
 import { readSession } from "@/lib/session";
 import { ensureAccount } from "@/lib/store";
@@ -81,5 +83,8 @@ export async function submitTownHallEvent(formData: FormData): Promise<void> {
     body,
   });
   if (outcome === "unsupported") redirect("/town-hall?error=notopen#add");
+  afterResponse(() =>
+    analytics.custom({ phone: session.phone }, "town_hall_submit", {}),
+  );
   redirect("/town-hall?submitted=1");
 }

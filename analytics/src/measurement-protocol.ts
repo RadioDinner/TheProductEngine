@@ -2,7 +2,7 @@
  * GA4 Measurement Protocol — the server-side half of the measurement, and on
  * this service the more important half.
  *
- * SERVER ONLY. STAGED, NOT WIRED.
+ * SERVER ONLY.
  *
  * Why this exists at all: the browser tag can only see people who load a web
  * page with JavaScript enabled. On The Plain Exchange, most of the business

@@ -1,3 +1,4 @@
+import { recordVisit } from "@/lib/analytics";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { site } from "@/lib/config";
@@ -7,7 +8,8 @@ export const metadata: Metadata = {
   description: `What ${site.name} collects, how it's used, and the choices you have.`,
 };
 
-export default function PrivacyPolicy() {
+export default async function PrivacyPolicy() {
+  await recordVisit("/privacy");
   return (
     <div className="container prose">
       <h1>Privacy policy</h1>

@@ -1,3 +1,4 @@
+import { recordVisit } from "@/lib/analytics";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { formatPrice, site } from "@/lib/config";
@@ -21,6 +22,7 @@ const COMMANDS: { cmd: string; what: string }[] = [
 ];
 
 export default async function HowItWorks() {
+  await recordVisit("/how-it-works");
   const s = await getEngineSettings();
   return (
     <div className="container prose">

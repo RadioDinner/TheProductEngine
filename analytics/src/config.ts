@@ -1,9 +1,6 @@
 /**
  * Google Analytics 4 — configuration, read once from the environment.
  *
- * STAGED, NOT WIRED. Nothing in analytics/src is imported by the app yet; see
- * analytics/04-wiring.md for the exact steps that turn it on.
- *
  * The posture, and why:
  *
  * - **Off unless configured.** No measurement id, no tag; no API secret, no

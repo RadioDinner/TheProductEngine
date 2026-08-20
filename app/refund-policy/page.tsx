@@ -1,3 +1,4 @@
+import { recordVisit } from "@/lib/analytics";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { site } from "@/lib/config";
@@ -7,7 +8,8 @@ export const metadata: Metadata = {
   description: `When ${site.name} returns an ad credit and when a credit is spent for good — in plain words.`,
 };
 
-export default function RefundPolicy() {
+export default async function RefundPolicy() {
+  await recordVisit("/refund-policy");
   return (
     <div className="container prose">
       <h1>Refund policy</h1>

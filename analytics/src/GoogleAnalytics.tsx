@@ -4,9 +4,7 @@
  * The browser tag. One component, dropped into app/layout.tsx, and nothing
  * else in the app has to know gtag exists.
  *
- * STAGED, NOT WIRED — see analytics/04-wiring.md.
- *
- * Four things here are deliberate and easy to undo by accident:
+ *  * Four things here are deliberate and easy to undo by accident:
  *
  * 1. **Consent and the advertising switches are pushed before `config`.**
  *    gtag applies consent state at the moment `config` runs; a consent call
@@ -84,6 +82,27 @@ function ClickTracking() {
   return null;
 }
 
+/**
+ * Keep the GA user id in step with who is actually signed in.
+ *
+ * The inline init script sets it on the first paint, which is not enough:
+ * signing out goes through a server action and a `redirect()`, and in the App
+ * Router that is a CLIENT-side navigation, not a fresh document load. The
+ * inline script does not run again, so without this effect the previous
+ * member's id would stay attached to the tag for the rest of the browser
+ * session — and every event the next person generated would be filed under
+ * them. Shared machines are common in this community; this is not a theoretical
+ * case.
+ */
+function MemberIdentity({ memberId }: { memberId?: string }) {
+  useEffect(() => {
+    if (typeof window.gtag !== "function") return;
+    // null, not undefined — passing undefined leaves the existing value in place.
+    window.gtag("set", { user_id: memberId || null });
+  }, [memberId]);
+  return null;
+}
+
 export function GoogleAnalytics({ measurementId, memberId, analyticsConsent = true }: Props) {
   // No id, no tag. This is what keeps preview deployments and local dev out of
   // the production property: the variable is set on production only.
@@ -126,6 +145,7 @@ ${memberId ? `gtag('set', { user_id: '${memberId}' });` : ""}
         <PageViews />
       </Suspense>
       <ClickTracking />
+      <MemberIdentity memberId={memberId} />
     </>
   );
 }

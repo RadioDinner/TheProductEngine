@@ -12,6 +12,8 @@
  * Outcomes are signaled repo-style: redirect() with query params.
  */
 
+import { afterResponse } from "@/analytics/src/after";
+import * as analytics from "@/analytics/src/server-events";
 import { redirect } from "next/navigation";
 import { readSession } from "@/lib/session";
 import { hasLink, stripEmoji } from "@/lib/content-filter";
@@ -98,5 +100,6 @@ export async function submitFeedback(formData: FormData): Promise<void> {
     console.error("[contact] feedback email failed:", e);
     back("send");
   }
+  afterResponse(() => analytics.custom({}, "contact_submit", { contact_type: kind }));
   redirect(`/contact?type=${kind}&sent=1`);
 }

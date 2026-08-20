@@ -108,6 +108,12 @@ export default async function Home({
           work out on its own: a browse that returns nothing is a category we
           are failing to supply, and it looks identical to a busy one in a
           plain page-view count. */}
+      {q && (
+        <TrackEvent
+          name="search"
+          params={{ search_term: q, results_count: total }}
+        />
+      )}
       <TrackEvent
         name="view_item_list"
         params={{

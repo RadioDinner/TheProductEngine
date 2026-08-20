@@ -1,3 +1,4 @@
+import { recordVisit } from "@/lib/analytics";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { site } from "@/lib/config";
@@ -15,7 +16,8 @@ export const metadata: Metadata = {
  * policy (with the mobile-opt-in-data no-sharing statement). This is the URL
  * to submit as the campaign's Call-to-Action / opt-in URL.
  */
-export default function SmsProgram() {
+export default async function SmsProgram() {
+  await recordVisit("/sms");
   return (
     <div className="container prose">
       <h1>Text message program</h1>

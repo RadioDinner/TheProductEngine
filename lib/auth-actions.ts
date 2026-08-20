@@ -1,5 +1,9 @@
 "use server";
 
+import * as analytics from "@/analytics/src/server-events";
+import { afterResponse } from "@/analytics/src/after";
+import { gaClientIdFromCookie } from "@/analytics/src/ids";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { normalizePhone } from "@/lib/phone";
 import {
@@ -128,7 +132,14 @@ export async function submitPassword(formData: FormData): Promise<void> {
   if (await isBlockedNumber(phone)) {
     redirect(loginUrl({ phone, next, error: "blocked" }));
   }
+  const gaCookie = (await cookies()).get("_ga")?.value;
+  const signInMethod = "password";
   await createSession(phone);
+  afterResponse(() =>
+    analytics.custom({ phone, clientId: gaClientIdFromCookie(gaCookie) ?? undefined }, "login", {
+      method: signInMethod,
+    }),
+  );
   redirect(landing(next));
 }
 
@@ -165,7 +176,14 @@ export async function submitSetPassword(formData: FormData): Promise<void> {
   }
   await upsertAccountPassword(phone, hashPassword(password));
   await destroyTicket();
+  const gaCookie = (await cookies()).get("_ga")?.value;
+  const signInMethod = "code";
   await createSession(phone);
+  afterResponse(() =>
+    analytics.custom({ phone, clientId: gaClientIdFromCookie(gaCookie) ?? undefined }, "login", {
+      method: signInMethod,
+    }),
+  );
   redirect(landing(next));
 }
 

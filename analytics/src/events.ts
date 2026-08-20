@@ -3,7 +3,6 @@
  * call it. Docs are generated from this list by hand; tests assert every entry
  * is legal GA4. If an event is not in here, it should not be sent.
  *
- * STAGED, NOT WIRED.
  *
  * ─────────────────────────────────────────────────────────────────────────
  * THE NAMING TRAP, read this before adding anything

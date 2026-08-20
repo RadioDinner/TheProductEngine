@@ -1,5 +1,7 @@
 "use server";
 
+import { afterResponse } from "@/analytics/src/after";
+import * as analytics from "@/analytics/src/server-events";
 import { redirect } from "next/navigation";
 import { confirmUrl, emailDevEcho, verifyEmailToken } from "@/lib/email";
 import { dispatchEmail } from "@/lib/outbound";
@@ -48,6 +50,9 @@ export async function emailSignup(formData: FormData): Promise<void> {
   // gated on devToolsEnabled (not just a missing provider key) so a prod
   // deploy without Resend can't let anyone confirm an address they don't own.
   const showLink = emailDevEcho && devToolsEnabled;
+  // The CONFIRMATION is what makes them a subscriber, so this is a lead, not
+  // a sign_up — sign_up fires when they click the link (confirmEmailAction).
+  afterResponse(() => analytics.custom({}, "email_signup", {}));
   redirect(showLink ? `/email?sent=1&dev=${encodeURIComponent(link)}` : "/email?sent=1");
 }
 

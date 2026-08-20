@@ -1,3 +1,4 @@
+import { TrackEvent } from "@/analytics/src/TrackEvent";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -77,6 +78,9 @@ export default async function PostAdPage({
 
   return (
     <div className="container account">
+      {/* How many people open the form and never finish. The gap between
+          this and post_submit is the posting form's own conversion rate. */}
+      <TrackEvent name="post_start" />
       <h1>Post an ad</h1>
       <p>
         Posting here costs <strong>exactly the same</strong> as texting AD NEW to{" "}

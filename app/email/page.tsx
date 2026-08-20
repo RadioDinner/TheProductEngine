@@ -1,3 +1,4 @@
+import { recordVisit } from "@/lib/analytics";
 import type { Metadata } from "next";
 import { emailSignup } from "@/lib/email-actions";
 import { devToolsEnabled } from "@/lib/env";
@@ -13,6 +14,7 @@ export default async function EmailSignup({
 }: {
   searchParams: Promise<{ sent?: string; error?: string; dev?: string }>;
 }) {
+  await recordVisit("/email");
   const params = await searchParams;
 
   return (

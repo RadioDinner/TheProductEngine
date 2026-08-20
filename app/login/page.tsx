@@ -1,3 +1,4 @@
+import { recordVisit } from "@/lib/analytics";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -42,6 +43,7 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ step?: string; phone?: string; next?: string; error?: string }>;
 }) {
+  await recordVisit("/login");
   const params = await searchParams;
   const next = safeNextPath(params.next ?? "/");
 

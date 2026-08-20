@@ -2,7 +2,7 @@
  * Identity for analytics — how we say "this is the same person" without ever
  * telling Google who the person is.
  *
- * SERVER ONLY (imports node:crypto). STAGED, NOT WIRED.
+ * SERVER ONLY — imports node:crypto.
  *
  * The problem this file solves: on this service most members never load a web
  * page. They text. A flip-phone seller who posts eleven ads over a year is a

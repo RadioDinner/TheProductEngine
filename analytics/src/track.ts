@@ -3,7 +3,6 @@
  * gtag, so every event goes through the same clamping and the same catalogue
  * check.
  *
- * STAGED, NOT WIRED.
  *
  * Design rules:
  *

@@ -1,5 +1,6 @@
 "use server";
 
+import { afterResponse } from "@/analytics/src/after";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
 import { after } from "next/server";
 import { cookies, headers } from "next/headers";
@@ -147,6 +148,12 @@ export async function startStripeCheckout(formData: FormData): Promise<void> {
   // Carry the browser's GA client id through Stripe so the webhook can credit
   // this sale to the visit that earned it (analytics/04-wiring.md step 4).
   const gaClientId = gaClientIdFromCookie((await cookies()).get("_ga")?.value) ?? "";
+  afterResponse(() =>
+    analytics.custom({ phone, clientId: gaClientId || undefined }, "begin_checkout", {
+      value: Math.round(amountCents) / 100,
+      currency: "USD",
+    }),
+  );
   let url: string;
   try {
     url = await createCheckoutSession({ amountCents, phone, origin, gaClientId });

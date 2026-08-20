@@ -1,3 +1,4 @@
+import { recordVisit } from "@/lib/analytics";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { site } from "@/lib/config";
@@ -7,7 +8,8 @@ export const metadata: Metadata = {
   description: `The plain rules for using ${site.name} — the text-message program, ads, credits, and accounts.`,
 };
 
-export default function TermsAndConditions() {
+export default async function TermsAndConditions() {
+  await recordVisit("/terms-and-conditions");
   return (
     <div className="container prose">
       <h1>Terms and conditions</h1>
