@@ -1068,6 +1068,55 @@ export async function grantStarterCreditIfFirst(
 
 /** Auto top-up flag (migration 9973). FAIL-CLOSED: a missing column reads as
  * false — no card is ever auto-charged before the toggle exists. */
+/** The member's name (migration 9958). Missing columns read as "we don't
+ * know", exactly like auto top-up before 9973 — never a thrown error on a
+ * path that only wants to be helpful. */
+export async function getMemberName(
+  phone: string,
+): Promise<{ firstName: string | null; lastName: string | null }> {
+  const { data, error } = await db()
+    .from("users")
+    .select("first_name, last_name")
+    .eq("phone", phone)
+    .maybeSingle();
+  if (error) {
+    if (error.code === "42703") return { firstName: null, lastName: null };
+    throw error;
+  }
+  return {
+    firstName: (data?.first_name as string | null) ?? null,
+    lastName: (data?.last_name as string | null) ?? null,
+  };
+}
+
+/**
+ * Store a name ONLY on an account that has none (see lib/store.ts for why
+ * fill-only). The is-null guards do the work in the UPDATE itself, so two
+ * forms submitted at once cannot race into a half-written name, and the
+ * returned row count says whether this call was the one that wrote.
+ */
+export async function setMemberNameIfEmpty(
+  phone: string,
+  firstName: string,
+  lastName: string,
+): Promise<boolean> {
+  const { data, error } = await db()
+    .from("users")
+    .update({ first_name: firstName, last_name: lastName })
+    .eq("phone", phone)
+    .is("first_name", null)
+    .is("last_name", null)
+    .select("id");
+  if (error) {
+    if (error.code === "42703" || error.code === "PGRST204") {
+      console.error("[store] users.first_name is missing — paste migration 9958");
+      return false;
+    }
+    throw error;
+  }
+  return (data?.length ?? 0) > 0;
+}
+
 export async function getAutoTopUp(phone: string): Promise<boolean> {
   const { data, error } = await db()
     .from("users")

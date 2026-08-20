@@ -56,6 +56,12 @@ export interface Account {
    * file store only; Supabase reads it lazily via getAutoTopUp so core
    * lookups never depend on migration 9973. */
   autoTopUp?: boolean | null;
+  /** The member's name, learned from a form they filled in (session 018,
+   * migration 9958) — this service otherwise never asks for one. Read lazily
+   * via getMemberName, like autoTopUp, so no core account lookup depends on
+   * the migration. */
+  firstName?: string | null;
+  lastName?: string | null;
   /** Cached Twilio line type (migration 9967); absent = never checked. */
   lineType?: string | null;
   offenseCount?: number;
@@ -806,6 +812,25 @@ const file = {
     }
     save(store);
     return { account, granted: amountCents > 0 };
+  },
+
+  getMemberName(phone: string): { firstName: string | null; lastName: string | null } {
+    const account = load().accounts[phone];
+    return {
+      firstName: account?.firstName ?? null,
+      lastName: account?.lastName ?? null,
+    };
+  },
+
+  setMemberNameIfEmpty(phone: string, firstName: string, lastName: string): boolean {
+    const store = load();
+    const account = store.accounts[phone];
+    if (!account) return false;
+    if (account.firstName || account.lastName) return false;
+    account.firstName = firstName;
+    account.lastName = lastName;
+    save(store);
+    return true;
   },
 
   getAutoTopUp(phone: string): boolean {
@@ -1585,6 +1610,41 @@ export async function grantStarterCreditIfFirst(
  */
 export async function getAutoTopUp(phone: string): Promise<boolean> {
   return supabaseConfigured ? remote.getAutoTopUp(phone) : file.getAutoTopUp(phone);
+}
+
+/** The member's name, if a form ever taught us one (migration 9958). */
+export async function getMemberName(
+  phone: string,
+): Promise<{ firstName: string | null; lastName: string | null }> {
+  return supabaseConfigured ? remote.getMemberName(phone) : file.getMemberName(phone);
+}
+
+/**
+ * Learn a member's name from a form they filled in (session 018, user
+ * request: "if they ever fill out a 'submit an idea' or 'I need help' form,
+ * save their names to their user account").
+ *
+ * FILL-ONLY, never overwrite. Three reasons, and each of them matters:
+ *  - a name the operator has already corrected must not be undone by the next
+ *    form somebody fills in from that household's phone;
+ *  - the forms are open to anyone, so a typed phone number is a CLAIM about
+ *    identity, not proof of it — first writer wins is the cheapest defence
+ *    against someone relabelling a stranger's account, and the worst case is
+ *    a wrong name on a record rather than access to anything;
+ *  - it makes the write idempotent, so filing three reports is not three
+ *    edits to an account.
+ *
+ * Returns true only when a name was actually stored.
+ */
+export async function setMemberNameIfEmpty(
+  phone: string,
+  firstName: string,
+  lastName: string,
+): Promise<boolean> {
+  if (!phone || !firstName || !lastName) return false;
+  return supabaseConfigured
+    ? remote.setMemberNameIfEmpty(phone, firstName, lastName)
+    : file.setMemberNameIfEmpty(phone, firstName, lastName);
 }
 
 /**

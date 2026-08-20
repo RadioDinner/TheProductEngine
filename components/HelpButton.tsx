@@ -24,7 +24,12 @@
  */
 import { useActionState, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { helpPrefill, submitHelpReport, type HelpSubmitState } from "@/lib/help-actions";
+import {
+  helpPrefill,
+  submitHelpReport,
+  type HelpPrefill,
+  type HelpSubmitState,
+} from "@/lib/help-actions";
 import { NOTE_MAX } from "@/lib/help-reports";
 import { CONTACT_MAX, NAME_MAX } from "@/lib/contact-details";
 
@@ -53,7 +58,9 @@ export function HelpButton() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const lastError = useLastError();
-  const [prefill, setPrefill] = useState<{ phone: string; email: string } | null>(null);
+  const [prefill, setPrefill] = useState<HelpPrefill | null>(null);
+  const firstRef = useRef<HTMLInputElement>(null);
+  const lastRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const [state, action, pending] = useActionState<HelpSubmitState | null, FormData>(
@@ -83,22 +90,27 @@ export function HelpButton() {
         if (live) setPrefill(values);
       })
       .catch(() => {
-        if (live) setPrefill({ phone: "", email: "" });
+        if (live) setPrefill({ phone: "", email: "", firstName: "", lastName: "" });
       });
     return () => {
       live = false;
     };
   }, [open, prefill]);
 
-  // Fill the two contact fields when the answer arrives, and ONLY if they are
+  // Fill the known fields when the answer arrives, and ONLY where they are
   // still empty. Re-rendering the form with new defaults (or remounting it on
   // a key) would throw away whatever the member typed in the few hundred
   // milliseconds the lookup took — which is exactly the moment they are
   // typing, because the panel just opened.
   useEffect(() => {
     if (!prefill) return;
-    if (phoneRef.current && !phoneRef.current.value) phoneRef.current.value = prefill.phone;
-    if (emailRef.current && !emailRef.current.value) emailRef.current.value = prefill.email;
+    const fill = (ref: React.RefObject<HTMLInputElement | null>, value: string) => {
+      if (value && ref.current && !ref.current.value) ref.current.value = value;
+    };
+    fill(firstRef, prefill.firstName);
+    fill(lastRef, prefill.lastName);
+    fill(phoneRef, prefill.phone);
+    fill(emailRef, prefill.email);
   }, [prefill]);
 
   if (!open) {
@@ -152,6 +164,7 @@ export function HelpButton() {
           </p>
           <div className="inline-fields">
             <input
+              ref={firstRef}
               name="firstName"
               type="text"
               required
@@ -162,6 +175,7 @@ export function HelpButton() {
               disabled={pending}
             />
             <input
+              ref={lastRef}
               name="lastName"
               type="text"
               required

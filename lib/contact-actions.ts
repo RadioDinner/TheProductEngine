@@ -23,9 +23,11 @@ import { site } from "@/lib/config";
 import { formatPhone } from "@/lib/phone";
 import {
   contactLine,
+  nameTargetPhone,
   parseContactDetails,
   type ContactProblem,
 } from "@/lib/contact-details";
+import { setMemberNameIfEmpty } from "@/lib/store";
 
 const MESSAGE_MAX = 1500;
 
@@ -66,6 +68,15 @@ export async function submitFeedback(formData: FormData): Promise<void> {
   }
   const who = contact.details;
   const sessionPhone = session?.phone ?? "";
+
+  // Learn their name (user request, session 018) — fill-only, best-effort,
+  // and never a reason the message fails to reach the operator.
+  try {
+    const target = nameTargetPhone(sessionPhone, who.phone);
+    if (target) await setMemberNameIfEmpty(target, who.firstName, who.lastName);
+  } catch (e) {
+    console.error("[contact] could not save the sender's name:", e);
+  }
 
   // Inline redirect (not the back() helper) so TS narrows `to` to a string
   // for the send below. No operator inbox configured — tell them to call.

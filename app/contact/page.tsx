@@ -4,7 +4,7 @@ import { readSession } from "@/lib/session";
 import { recordVisit } from "@/lib/analytics";
 import { site } from "@/lib/config";
 import { formatPhone } from "@/lib/phone";
-import { getAccount } from "@/lib/store";
+import { getAccount, getMemberName } from "@/lib/store";
 import { submitFeedback } from "@/lib/contact-actions";
 import { CONTACT_MAX, NAME_MAX } from "@/lib/contact-details";
 
@@ -22,13 +22,22 @@ export default async function ContactPage({
   const session = await readSession();
   await recordVisit("/contact");
 
-  // Signed in? Fill the contact fields in for them (user request, session
-  // 018). The NAME is never prefilled because an account does not carry one —
-  // and guessing a name from a phone number would be worse than asking.
+  // Signed in? Fill in what we already know (user request, session 018) — the
+  // email and phone always, and the name once an earlier form has taught us
+  // one (migration 9958). Nothing here is ever guessed: an account with no
+  // stored name leaves the field blank rather than inventing one.
   let memberEmail = "";
+  let memberFirst = "";
+  let memberLast = "";
   if (session) {
     try {
-      memberEmail = (await getAccount(session.phone))?.email ?? "";
+      const [account, name] = await Promise.all([
+        getAccount(session.phone),
+        getMemberName(session.phone),
+      ]);
+      memberEmail = account?.email ?? "";
+      memberFirst = name.firstName ?? "";
+      memberLast = name.lastName ?? "";
     } catch {
       memberEmail = "";
     }
@@ -133,6 +142,7 @@ export default async function ContactPage({
                 type="text"
                 required
                 autoComplete="given-name"
+                defaultValue={memberFirst}
                 maxLength={NAME_MAX}
               />
             </div>
@@ -144,6 +154,7 @@ export default async function ContactPage({
                 type="text"
                 required
                 autoComplete="family-name"
+                defaultValue={memberLast}
                 maxLength={NAME_MAX}
               />
             </div>

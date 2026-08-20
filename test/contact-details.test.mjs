@@ -12,6 +12,7 @@ import {
   contactPhoneDigits,
   contactProblemMessage,
   looksLikeEmail,
+  nameTargetPhone,
   parseContactDetails,
 } from "../lib/contact-details.ts";
 
@@ -106,6 +107,19 @@ export function run(t) {
     "no empty separators when one is missing",
     contactLine({ firstName: "Sam", lastName: "Yoder", phone: null, email: "sam@example.com" }),
     "Sam Yoder · sam@example.com",
+  );
+
+  // ---- which account learns the name (session 018) ----
+  // The proved phone always wins over the typed one: a member signed in as
+  // A who types B's number must not rename B's account.
+  t.eq("the session wins", nameTargetPhone("3305550111", "3305550222"), "3305550111");
+  t.eq("signed out, the typed number is used", nameTargetPhone(null, "3305550222"), "3305550222");
+  t.eq("neither: nothing is written", nameTargetPhone(null, null), null);
+  t.eq("an empty session is not a target", nameTargetPhone("", ""), null);
+  t.eq(
+    "a signed-in member who leaves the phone blank still teaches their own account",
+    nameTargetPhone("3305550111", null),
+    "3305550111",
   );
 
   // ---- bounds ----

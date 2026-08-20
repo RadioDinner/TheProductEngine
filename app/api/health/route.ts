@@ -108,6 +108,20 @@ export async function GET(req: NextRequest) {
       // missing one breaks a whole surface (9989: every inbound SMS command;
       // 9988: digest composition + /admin/digests). Surface drift here instead
       // of leaving it to be inferred from 500s.
+      // Migration 9958: the member name a feedback form teaches us. Until it
+      // is pasted the forms work and the name rides the operator's email; it
+      // simply isn't stored on the account.
+      const memberName = await db()
+        .from("users")
+        .select("first_name", { count: "exact", head: true });
+      report.migration9958 = memberName.error
+        ? {
+            applied: false,
+            code: memberName.error.code,
+            error: memberName.error.message,
+            fix: "run supabase/migrations/9958_member_names.sql in the SQL editor",
+          }
+        : { applied: true };
       // Migration 9959: who filed a help report. Until it is pasted, reports
       // still file (and the operator's email still names the person) — they
       // just land without the contact columns, so the admin list can't show

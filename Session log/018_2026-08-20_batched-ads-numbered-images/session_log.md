@@ -4,8 +4,8 @@ Branch `claude/batched-ads-numbered-images-aupcvh`. **The user said explicitly:
 "wait to commit to main until I tell you."** Everything is on the branch,
 pushed, awaiting their word.
 
-**Version 1.1.6 → 1.1.7** (§6: two features shipped — 45 and 46 — so the
-far-right digit moves).
+**Version 1.1.6 → 1.1.7** (§6: three features shipped — 45, 46 and 47 — so the
+far-right digit moves; three or fewer keeps it on the third digit).
 
 ## What the user asked for
 
@@ -123,16 +123,39 @@ adding a member WITH starting credit, which does text.
 Rather than build something that exists, the page and the handbook now SAY it,
 so the question doesn't need asking again.
 
-## ⚠️ Two migrations to paste
+## Feature 47 — a member's name, learned from a form
 
+The user, after 46 shipped: "if they ever fill out a 'submit an idea' or 'I
+need help' form, save their names to their user account." Both forms now do.
+The account gains `first_name`/`last_name` (migration 9958) and the panel and
+the contact page prefill them next time, so nobody is asked twice.
+
+**Fill-only, and the rule is deliberate.** A signed-in session always wins.
+Failing that the typed phone is used — but only ever to fill a BLANK name,
+never to replace one, and a form never creates an account. Both forms are open
+to anyone, so a typed number is a claim about identity rather than proof of
+it: first-writer-wins means the worst case is a wrong name on a record instead
+of somebody relabelling a stranger's account, and it keeps an operator's
+correction from being undone by the next form that household fills in. The
+`is null` guards live in the UPDATE itself, so two submissions at once cannot
+race into a half-written name.
+
+The columns are read LAZILY, never through `USER_SELECT` — the same rule
+`auto_topup` follows. An account lookup is on the critical path of nearly
+every page, and a core select naming a column that a pending migration has not
+created yet is how a whole site 500s.
+
+## ⚠️ Three migrations to paste
+
+0. `supabase/migrations/9958_member_names.sql` — `users.first_name/last_name`.
 1. `supabase/migrations/9960_batched_ads.sql` — `digests.slot_key`, the two
    batch settings, `photos_in_broadcast` → true, and the budget raise (a
    CONDITIONAL update, so re-pasting can never undo the operator's own tuning).
 2. `supabase/migrations/9959_help_report_contact.sql` — the four contact
    columns on `help_reports`.
 
-Both degrade safely until pasted; `/api/health` probes `migration9960` and
-`migration9959`.
+All three degrade safely until pasted; `/api/health` probes `migration9960`,
+`migration9959` and `migration9958`.
 
 ## Directional decisions
 
@@ -165,6 +188,6 @@ Both degrade safely until pasted; `/api/health` probes `migration9960` and
 
 ## Verified
 
-tsc clean · build clean · unit **1033 → 1148** (new suites `batch` 82,
-`contact-details` 33) · abuse suite unchanged (the two 🔴 are the
+tsc clean · build clean · unit **1033 → 1153** (new suites `batch` 82,
+`contact-details` 38) · abuse suite unchanged (the two 🔴 are the
 pre-existing annotated notes, not regressions).

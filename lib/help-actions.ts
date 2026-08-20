@@ -15,7 +15,7 @@
  * no single one of them reads like one.
  */
 import { readSession } from "@/lib/session";
-import { getAccount } from "@/lib/store";
+import { getAccount, getMemberName, setMemberNameIfEmpty } from "@/lib/store";
 import { dispatchEmail } from "@/lib/outbound";
 import { site } from "@/lib/config";
 import { formatPhone } from "@/lib/phone";
@@ -28,6 +28,7 @@ import {
 import {
   contactLine,
   contactProblemMessage,
+  nameTargetPhone,
   parseContactDetails,
   type ContactProblem,
 } from "@/lib/contact-details";
@@ -44,19 +45,42 @@ export interface HelpSubmitState {
   message?: string;
 }
 
-/** What the panel can fill in for a signed-in member (user request, session
+/**
+ * What the panel can fill in for a signed-in member (user request, session
  * 018: "automatically pull in their phone and or email"). Read from the
  * SESSION, never from the form — and only when the panel is opened, so a
  * signed-in member's account isn't fetched on every page render of the site.
- * The name is not stored on an account, so it is always theirs to type. */
-export async function helpPrefill(): Promise<{ phone: string; email: string }> {
+ *
+ * The NAME comes back too once we have learned one from an earlier form
+ * (migration 9958): asking a member their name twice is the kind of small
+ * rudeness that makes software feel like paperwork.
+ */
+export interface HelpPrefill {
+  phone: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
+const NO_PREFILL: HelpPrefill = { phone: "", email: "", firstName: "", lastName: "" };
+
+export async function helpPrefill(): Promise<HelpPrefill> {
   const session = await readSession();
-  if (!session) return { phone: "", email: "" };
+  if (!session) return NO_PREFILL;
+  const phone = formatPhone(session.phone);
   try {
-    const account = await getAccount(session.phone);
-    return { phone: formatPhone(session.phone), email: account?.email ?? "" };
+    const [account, name] = await Promise.all([
+      getAccount(session.phone),
+      getMemberName(session.phone),
+    ]);
+    return {
+      phone,
+      email: account?.email ?? "",
+      firstName: name.firstName ?? "",
+      lastName: name.lastName ?? "",
+    };
   } catch {
-    return { phone: formatPhone(session.phone), email: "" };
+    return { ...NO_PREFILL, phone };
   }
 }
 
@@ -108,6 +132,16 @@ export async function submitHelpReport(
       // valuable part and they are already in hand.
       console.error("[help] account lookup failed:", e);
     }
+  }
+
+  // Learn their name (user request, session 018). Fill-only and best-effort:
+  // a member who tells us who they are should not have to again, but a
+  // failure here must never cost the report.
+  try {
+    const target = nameTargetPhone(phone, who.phone);
+    if (target) await setMemberNameIfEmpty(target, who.firstName, who.lastName);
+  } catch (e) {
+    console.error("[help] could not save the member's name:", e);
   }
 
   // Queue first, so a mail outage still leaves a record. "unsupported" means

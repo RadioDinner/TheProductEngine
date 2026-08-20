@@ -110,6 +110,25 @@ export function contactProblemMessage(problem: ContactProblem): string {
   }
 }
 
+/**
+ * WHICH account, if any, a form submission should teach a name to (user
+ * request, session 018).
+ *
+ * The signed-in session wins outright — that is the only phone here we have
+ * actually proved. Failing that, a typed phone number is a reasonable claim
+ * and the worst case of believing it is a wrong name on a record, so it is
+ * used — but ONLY to fill a name in, never to create an account and never to
+ * replace a name already there (the store enforces both).
+ *
+ * Pure, so the precedence is a test rather than a paragraph.
+ */
+export function nameTargetPhone(
+  sessionPhone: string | null | undefined,
+  typedPhone: string | null | undefined,
+): string | null {
+  return sessionPhone || typedPhone || null;
+}
+
 /** "Sam Yoder · (330) 555-0123 · sam@example.com" — one line for the
  * operator's email and the admin list. */
 export function contactLine(details: ContactDetails): string {

@@ -54,6 +54,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 44 | **Archive + restore a member** — the reversible counterpart to delete: set someone aside (off the website, out of the lists, no ads going out) without destroying anything, and put them back exactly as they were | session 016 | **built** (⚠️ migration 9964) |
 | 45 | **Batched ads with numbered pictures** — ads go out in BATCHES again (a competitor's shape, the user's numbering): ONE text listing several ads, each headed by its AD NUMBER (1022, not 1), then ONE picture message per picture ad with the ad number burned into the picture's bottom-right corner. Only the first picture ever goes out; `PIC 1024` pulls up to two more; the rest live on the website. The batch fires as soon as 3 ads are waiting or the oldest has waited an hour, whichever comes first (both settings) | session 018 | **built** (⚠️ migration 9960) |
 | 46 | **Required contact on the feedback forms** — the problem report ("I need help!") and the feature-suggestion form both require a first and last name plus a phone OR an email (each optional on its own, one of the two required); a signed-in member gets the contact fields filled in automatically. The suggestion form is the renamed "Suggest an idea" (item 27) | session 018 | **built** (⚠️ migration 9959) |
+| 47 | **Learn a member's name from a form** — filling in either feedback form saves the name onto that member's account, so the operator sees a person instead of ten digits and the forms stop asking twice. Fill-only: a name already on an account is never overwritten, and a form never creates one | session 018 | **built** (⚠️ migration 9958) |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -527,3 +528,12 @@ itself; build details live in the session logs and HANDOFF.md.
   report nobody can answer is a mystery instead of a person to call back. The
   same rules now cover the question form on /contact, which previously
   accepted a signed-in session in place of typed contact details.
+- **47 · Fill-only, and why the rule is that strict.** Both forms are open to
+  anyone, so a typed phone number is a CLAIM about identity, not proof of it.
+  A signed-in session always wins; failing that the typed number is used, but
+  only ever to fill a BLANK name, never to replace one and never to create an
+  account. Worst case is a wrong name on a record rather than somebody
+  relabelling a stranger's account — and an operator's correction can't be
+  undone by the next form that household fills in. The columns are read
+  lazily (like `auto_topup` before 9973), so a missing migration can never
+  take an account lookup down.

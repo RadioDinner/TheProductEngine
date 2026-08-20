@@ -7,7 +7,7 @@ this every session. Per-session detail lives in `Session log/`.
 
 ## Session 018 (2026-08-20) — BATCHED ADS with the number burned into the picture
 
-**Version 1.1.6 → 1.1.7** (§6: two features, so the far-right digit moves).
+**Version 1.1.6 → 1.1.7** (§6: three features, so the far-right digit moves).
 
 ⚠️ **ON THE BRANCH `claude/batched-ads-numbered-images-aupcvh`, NOT main** —
 the user said "wait to commit to main until I tell you". Pushed and waiting.
@@ -21,9 +21,10 @@ website. Triggers: 3 ads waiting OR the oldest having waited 60 minutes,
 whichever first, both settings, both only inside the send window. One batch
 per pass, so a backlog trickles out as successive batches.
 
-**⚠️ TWO MIGRATIONS TO PASTE: `9960_batched_ads.sql` and
-`9959_help_report_contact.sql`.** Both degrade safely; `/api/health` →
-`migration9960`, `migration9959`.
+**⚠️ THREE MIGRATIONS TO PASTE: `9960_batched_ads.sql`,
+`9959_help_report_contact.sql` and `9958_member_names.sql`.** All three
+degrade safely; `/api/health` → `migration9960`, `migration9959`,
+`migration9958`.
 
 ### ⚠️ A LATENT PRODUCTION BUG, found and fixed here
 
@@ -63,12 +64,19 @@ non-calendar key. Pinned by a regression test.
   "Suggest an idea" is renamed **Suggest a feature**; the question tab shares
   the rules. The problem report's NOTE stays optional — that was always the
   point of item 39.
+- **Either form now teaches the member's name to their account** (migration
+  9958) — this service otherwise never asks for one, so an operator working a
+  report sees a person rather than ten digits, and a member is not asked
+  twice. FILL-ONLY: a signed-in session wins, a typed phone is used only to
+  fill a BLANK name, a form never creates an account, and an operator's
+  correction can never be undone by the next submission. Read lazily, so the
+  missing column can't break an account lookup.
 - **Adjusting a balance was ALREADY silent** (the user asked). Nothing on
   /admin/users texts the member except "Text them the link" and the Add-a-
   member invite. The page and the handbook now say so.
 
-Verified: tsc + build clean, unit 1033 → **1148** (new suites `batch` 82,
-`contact-details` 33), abuse unchanged (the two 🔴 are the annotated notes).
+Verified: tsc + build clean, unit 1033 → **1153** (new suites `batch` 82,
+`contact-details` 38), abuse unchanged (the two 🔴 are the annotated notes).
 
 Full detail: `Session log/018_2026-08-20_batched-ads-numbered-images/session_log.md`.
 

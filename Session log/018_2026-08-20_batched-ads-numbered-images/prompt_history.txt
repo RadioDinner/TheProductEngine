@@ -55,3 +55,6 @@ did you update the welcome messages
 I am curious, on our policy, does it state anything about a custome forfeiting refunds after a certain period? Lets say they put 50 on their account to post an ad, but never posted it. What is the right thing to do? Send the money back at any time regardless? Or after x amount of days, that money is considered forfeit? 
 
 I need some good way of measuring my ACTUAL income because, this is a crazy inflated example, but lets say 50 people would pay 50 bucks to post ads, but none of them ever do, that's 2500 of revenue but no profit, technically.
+
+--- 2026-08-20 (mid-session) ---
+Also! if they ever fill out a "submit an idea" or " I need help" form, save their names to their user account

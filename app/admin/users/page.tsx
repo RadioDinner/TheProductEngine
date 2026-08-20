@@ -15,6 +15,7 @@ import {
 import {
   ensureUserId,
   getAccount,
+  getMemberName,
   getCreditBalance,
   getLedger,
   getRatingSummary,
@@ -59,6 +60,9 @@ export default async function AdminUsers({
   const params = await searchParams;
   const phone = params.phone ? normalizePhone(params.phone) : null;
   const account = phone ? await getAccount(phone) : null;
+  // The name only exists if a feedback form taught it to us (session 018,
+  // migration 9958) — nothing collects it at signup.
+  const memberName = phone ? await getMemberName(phone) : { firstName: null, lastName: null };
   // Null when they're active, when migration 9964 is pending, or when no
   // member is selected — all three mean "show the archive button, not the
   // restore one", which is the safe direction.
@@ -163,7 +167,15 @@ export default async function AdminUsers({
 
       {phone && account && (
         <>
-          <h2 className="section-h">{formatPhone(phone)}</h2>
+          <h2 className="section-h">
+            {formatPhone(phone)}
+            {(memberName.firstName || memberName.lastName) && (
+              <span className="status-muted">
+                {" "}
+                · {[memberName.firstName, memberName.lastName].filter(Boolean).join(" ")}
+              </span>
+            )}
+          </h2>
           {params.saved === "grant" && (
             <p className="notice" role="status">
               Balance adjusted.
