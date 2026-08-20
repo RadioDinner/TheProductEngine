@@ -241,6 +241,17 @@ export interface IncomeSummary {
   unclassifiedCents: number;
 }
 
+/** How the income report answers "is this every row, or only most of them?" */
+export interface IncomeCoverage {
+  /** Ledger rows read. */
+  rows: number;
+  /** Members with any ledger history at all. */
+  members: number;
+  /** True when the read hit its ceiling and the figures are therefore a
+   * FLOOR rather than a total. The page must say so. */
+  truncated: boolean;
+}
+
 /**
  * Roll a set of per-member positions into the service-wide picture.
  *

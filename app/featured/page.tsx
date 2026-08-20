@@ -15,6 +15,7 @@ import {
 import { listBookedStartDays, listPendingRequests } from "@/lib/featured-requests";
 import { submitFeaturedRequest } from "@/lib/featured-actions";
 import { WaysToPay } from "@/components/WaysToPay";
+import { ImageUpload } from "@/components/ImageUpload";
 
 export const metadata: Metadata = {
   title: `Featured listings — ${site.name}`,
@@ -79,10 +80,27 @@ export default async function FeaturedRequestPage({
           of your own ads.
         </p>
       )}
+      {params.error === "image_big" && (
+        <p className="form-error" role="alert">
+          That picture is too big to send. Try a photo from your phone rather than a
+          print-quality file — or leave it blank and email it to {site.supportEmail}.
+        </p>
+      )}
+      {params.error === "image_kind" && (
+        <p className="form-error" role="alert">
+          That file isn&rsquo;t a picture we can read. JPEG, PNG, GIF and WebP all work.
+        </p>
+      )}
+      {params.error === "image_store" && (
+        <p className="form-error" role="alert">
+          Something went wrong saving that picture — <strong>nothing was sent</strong>.
+          Try again, or leave it blank and email it to {site.supportEmail}.
+        </p>
+      )}
       {params.error === "unsupported" && (
         <p className="form-error" role="alert">
           Featured requests aren&rsquo;t switched on yet. Please call{" "}
-          {site.salesPhone} and we&rsquo;ll sort it out by hand.
+          {site.supportPhone} and we&rsquo;ll sort it out by hand.
         </p>
       )}
 
@@ -219,10 +237,16 @@ export default async function FeaturedRequestPage({
             <label htmlFor="note">Anything else? (optional)</label>
             <textarea id="note" name="note" rows={3} maxLength={500} />
           </div>
-          <p className="fine">
-            Send us the picture afterwards — call, or email it to {site.salesEmail}. We
-            size it to fit.
-          </p>
+          <div className="field">
+            <label htmlFor="image">Your picture (optional)</label>
+            <ImageUpload id="image" name="image" />
+            <p className="fine">
+              A photo, a logo, a scan of your card — anything that reads at a glance. Your
+              phone shrinks it before it sends, so a normal photo is fine. Haven&rsquo;t
+              got one ready? Leave it blank and send it later; your place in the queue is
+              held either way.
+            </p>
+          </div>
           <button className="btn btn-block" type="submit">
             Ask for a featured spot
           </button>

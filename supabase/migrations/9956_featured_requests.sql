@@ -32,6 +32,11 @@
 --    a promise about the operator's attention.
 --
 -- RE-RUNNABLE: every statement is if-not-exists or a drop-then-create.
+--
+-- AMENDED the same session to add featured_requests.image_src (self-service
+-- artwork upload). If you already pasted an earlier copy of this file, paste
+-- it again — the alter at the bottom adds the column and everything else
+-- no-ops.
 
 -- ---------- 1. run dates + four slots ----------
 
@@ -66,6 +71,10 @@ create table if not exists featured_requests (
   link_url text,
   ad_id bigint references ads (id),
   note text,
+  -- The artwork, uploaded on the request page itself (session 019 follow-up:
+  -- "Make a self service for the images"). Re-hosted in our own bucket like
+  -- every other picture, never a hotlink to somewhere that can change under us.
+  image_src text,
   status text not null default 'pending'
     check (status in ('pending', 'approved', 'declined', 'cancelled')),
   -- The queue order. Whoever asked first is scheduled first, full stop.
@@ -86,3 +95,8 @@ comment on table featured_requests is
   'Requests for a featured ad or premium business listing. Ordered by submitted_at: the queue is the data, not the operator''s memory. See lib/featured-schedule.ts for the rolling-30-day slot arithmetic.';
 
 alter table featured_requests enable row level security;
+
+-- Added after the first version of this file (self-service image upload), so
+-- it is a separate alter rather than only a column in the create above: an
+-- already-pasted table needs it too.
+alter table featured_requests add column if not exists image_src text;

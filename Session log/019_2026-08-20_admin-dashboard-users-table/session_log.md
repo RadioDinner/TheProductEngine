@@ -169,9 +169,100 @@ eight rows of prose saying "this is fine" is how a panel stops being read.
   and the arrow-key equivalent both reorder; 24 columns scroll the grid but
   never the page, and say so.
 
+## 3 · The money work (second half of the session)
+
+The user's opening question was whether unused balances could be forfeited,
+and how to measure actual income. The answer turned into four shipped pieces.
+
+### The refund fee, and correcting the premise
+
+They asked "can I make a policy that only 95% of their credit gets refunded?"
+because they believed a refund costs them a Stripe fee. It does — but not the
+way they thought. **Stripe does not RETURN the 2.9% + $0.30 when you refund**;
+it was taken at capture and stays taken. So refunding $2,500 costs the $87.50
+already spent (3.5%), not a new 5%.
+
+5% is still the right number, for a reason worth keeping: the flat $0.30 makes
+the fee WORST on the smallest top-up — 4.4% on the $20 preset, 3.2% on the
+$100 one. 5% is the smallest round number that covers every preset, which
+makes it cost recovery rather than a penalty. Also noted: the published terms
+already said refunds are "at our discretion", so a stated percentage is MORE
+generous than what was live, not a retraction. Live on /refund-policy and the
+T&Cs, with no fee when the fault is ours.
+
+### The hole the user spotted: "getting refunded for the free ad credit"
+
+Real, and it had no guard at all. A member adds $20, collects the $40 starter
+credit, and their balance reads $60 — a single number that does not know two
+thirds of it was a gift. Refunds are operator-manual, so only memory stood
+between the service and refunding $60 for a $20 payment.
+
+`lib/money.ts` splits a ledger into CASH (refundable) and GRANTED (never),
+with **grants consumed first** — the member-friendly ordering, and the one the
+policy now publishes. `/admin/users` shows Refundable beside the balance, and
+a payout that would exceed it is **refused**, not warned about. Migration
+**9957** splits the old catch-all `adjustment` into `payment`/`courtesy`/
+`payout`; legacy rows stay legal and are read conservatively in both
+directions, so an unclassified row can never fund a refund.
+
+### The income report (/admin/money)
+
+The direct answer to "fifty people prepaying $50 and never posting is $2,500
+collected but nothing earned". Three groups: what you have EARNED (split into
+the part paid with real money — the income figure — and the part paid with
+credit you gave), what you are HOLDING (cash collected, still owed to members
+as a percentage of it, paid back out), and what you have GIVEN away.
+`lib/income.ts` reads per-member because grants-first is a per-member rule;
+summing raw kinds service-wide would mis-split earned revenue.
+
+### Prices, and the featured product
+
+The user set: **$19.99** an event listing, **$199** a featured spot for 30
+days, **four spots, two stacked on each side**. Then asked for a request page
+that HONORS a queue, then for self-service artwork, then for a slot timeline.
+
+`lib/featured-schedule.ts` is the arithmetic, pinned against the user's own
+worked example — four approved on 8-17/8-20/8-24/8-30 means the fifth starts
+9-16, the sixth 9-19, and the ninth waits on the FIFTH's run rather than any
+original. `/featured` explains that and quotes it from the same function the
+approval runs, so the date promised is the date given. Queue order is stored
+submission time; the admin approve button re-derives position from that order
+rather than trusting the page it was pressed on.
+
+`/admin/featured` grew a **slot timeline**: four rows, a bar per booked run
+across the days it holds, today's line in red. Which slot a run sits in is
+DERIVED (`assignSlots` replays the same earliest-free-slot rule), so the
+picture can never drift from the schedule it draws.
+
+Two small things worth remembering:
+
+- **The homepage's left featured column renders even when empty**, unlike
+  every other sidebar. Before the first spot is sold that column IS the
+  advertisement for the product; hiding it would leave /featured unreachable
+  from the front page.
+- **Checkout gained one shared rule** (`isPurchasableAmount`) covering the
+  presets plus the two listing prices, used by the checkout page AND both
+  purchase actions — previously the page and the actions each had their own
+  copy of the preset check, so a price that rendered could have failed to pay.
+
+### The support number
+
+The user gave (330) 275-1603 for sales; config already had (234) 301-0048 for
+support. Built as a separate sales line, then the user confirmed they are the
+same phone — so both were collapsed onto one `site.supportPhone` /
+`site.supportEmail`. There is deliberately no second number now.
+
 ## For the next session
 
-- **Nothing new to paste.** No migration this session. `admin_saved_views.config`
+- ⚠️ **TWO MIGRATIONS TO PASTE: `9957_money_kinds.sql` and
+  `9956_featured_requests.sql`.** Both degrade safely — until 9957 the
+  Adjust-balance form falls back to `adjustment` and the conservative reading
+  keeps refunds safe; until 9956 the request page shows the board and takes
+  calls but cannot queue anyone, and says so. 9956 was AMENDED after first
+  being written (it gained `image_src`); it is re-runnable, so paste it again
+  if an earlier copy already went in.
+- The original members-table/dashboard half of this session needed no
+  migration. `admin_saved_views.config`
   gained an optional `widths` key, but it is a jsonb blob and `normalizeView`
   tolerates its absence, so old saved views open at the default widths.
 - **The user's next topic, already asked for:** *"after you build/fix this,

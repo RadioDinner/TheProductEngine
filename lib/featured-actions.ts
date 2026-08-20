@@ -9,6 +9,15 @@ import { normalizePhone } from "@/lib/phone";
 import { stripEmoji } from "@/lib/content-filter";
 import { notifyOperator } from "@/lib/notify";
 import { site } from "@/lib/config";
+import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
+import { storeImageBytes } from "@/lib/photos";
+import { sniffImage, CONTENT_TYPE_BY_EXT } from "@/lib/image-sniff";
+import { supabaseConfigured } from "@/lib/db";
+
+/** Same ceiling every other upload uses — deliberately BELOW the platform's
+ * request-body cap, so an oversized file fails with our message rather than a
+ * blank error page (the lesson of the session-016 upload outage). */
+const MAX_FEATURED_IMAGE_BYTES = MAX_UPLOAD_BYTES;
 
 /** Trim, strip emoji, and cap — the same treatment every other public free-text
  * field gets before it reaches the database or an operator's screen. */
@@ -57,6 +66,33 @@ export async function submitFeaturedRequest(formData: FormData): Promise<void> {
   // beats silently dropping it and running a spot that goes nowhere.
   if (rawLink && !linkUrl) back("error=link");
 
+  // The artwork, uploaded here rather than emailed in (session 019 follow-up:
+  // "Make a self service for the images"). Optional on purpose — a business
+  // that has not had a picture made yet should still be able to hold its place
+  // in the queue, and losing that request is worse than a missing image.
+  //
+  // The browser has already shrunk it (components/ImageUpload), so this is
+  // normally a few hundred KB. The size ceiling still stands as the backstop
+  // for anything that skipped the browser, and it is BELOW the platform's own
+  // request-body cap so the failure is ours to explain rather than a blank
+  // error page (the session-016 addendum-4 outage).
+  let imageSrc: string | null = null;
+  const image = formData.get("image");
+  if (image instanceof File && image.size > 0) {
+    if (image.size > MAX_FEATURED_IMAGE_BYTES) back("error=image_big");
+    const bytes = Buffer.from(await image.arrayBuffer());
+    // Sniff the real bytes: a filename can say .jpg about anything.
+    const ext = sniffImage(bytes);
+    if (!ext) back("error=image_kind");
+    if (supabaseConfigured) {
+      const stored = await storeImageBytes(bytes);
+      if (!stored.ok) back("error=image_store");
+      imageSrc = (stored as { ok: true; url: string }).url;
+    } else {
+      imageSrc = `data:${CONTENT_TYPE_BY_EXT[ext!]};base64,${bytes.toString("base64")}`;
+    }
+  }
+
   const outcome = await addFeaturedRequest({
     kind,
     businessName,
@@ -66,6 +102,7 @@ export async function submitFeaturedRequest(formData: FormData): Promise<void> {
     linkUrl,
     adId,
     note,
+    imageSrc,
   });
   if (outcome === "unsupported") back("error=unsupported");
 
@@ -77,6 +114,7 @@ export async function submitFeaturedRequest(formData: FormData): Promise<void> {
     `${businessName} asked for a ${kind === "featured_ad" ? "featured ad" : "premium business listing"}.\n` +
       `Contact: ${phone ?? "—"} ${email ?? ""}\n` +
       `Link: ${linkUrl ?? (adId ? `ad #${adId}` : "—")}\n` +
+      `Artwork: ${imageSrc ? "uploaded" : "NOT sent — ask them for it"}\n` +
       `Note: ${note ?? "—"}\n\n` +
       `${waiting} request${waiting === 1 ? "" : "s"} now waiting: ${site.webHost}/admin/featured`,
   );

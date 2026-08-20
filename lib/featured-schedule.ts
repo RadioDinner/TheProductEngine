@@ -145,6 +145,71 @@ export function featuredSchedule(input: ScheduleInput): ScheduleResult {
   };
 }
 
+export interface SlotBooking {
+  /** 1-based slot number. 1-2 are the homepage's left column, 3-4 the right. */
+  slot: number;
+  startDay: string;
+  endDay: string;
+  /** Index into the array that was passed in, so the caller can find whose
+   * run this is without a second lookup. */
+  index: number;
+}
+
+/**
+ * Which SLOT each booked run actually sits in.
+ *
+ * The scheduler hands every run "the earliest-free slot", which is enough to
+ * answer "when can the next one start?" but not "what does slot 3 look like in
+ * October?". This replays the same assignment deterministically so the admin
+ * timeline can draw four rows — no stored slot column needed, and no chance of
+ * a stored one drifting out of step with the arithmetic that booked it.
+ *
+ * Runs are assigned in START ORDER, which is the order they were booked in:
+ * ties break by the order given, so the caller's queue order decides.
+ */
+export function assignSlots(
+  starts: readonly string[],
+  capacity: number = FEATURED_CAPACITY,
+  runDays: number = FEATURED_RUN_DAYS,
+): SlotBooking[] {
+  const slots = Math.max(1, capacity);
+  // Each slot's next free day. "" sorts before every real date, so an untouched
+  // slot is always available.
+  const freeAt: string[] = Array.from({ length: slots }, () => "");
+  const ordered = starts
+    .map((startDay, index) => ({ startDay, index }))
+    .sort((a, b) => (a.startDay < b.startDay ? -1 : a.startDay > b.startDay ? 1 : a.index - b.index));
+
+  const out: SlotBooking[] = [];
+  for (const run of ordered) {
+    // The first slot that is free by the time this run starts; failing that,
+    // the one that frees soonest (an over-booked board still has to draw).
+    let chosen = 0;
+    let bestFree = freeAt[0];
+    for (let i = 0; i < slots; i++) {
+      if (freeAt[i] <= run.startDay) {
+        chosen = i;
+        break;
+      }
+      if (freeAt[i] < bestFree) {
+        chosen = i;
+        bestFree = freeAt[i];
+      }
+    }
+    const endDay = runEndDay(run.startDay, runDays);
+    freeAt[chosen] = endDay;
+    out.push({ slot: chosen + 1, startDay: run.startDay, endDay, index: run.index });
+  }
+  return out.sort((a, b) => a.slot - b.slot || (a.startDay < b.startDay ? -1 : 1));
+}
+
+/** Every ET calendar day from `from` up to but not including `to`. */
+export function daysBetween(from: string, to: string): string[] {
+  const out: string[] = [];
+  for (let day = from; day < to; day = addDays(day, 1)) out.push(day);
+  return out;
+}
+
 /** "2026-09-16" → "September 16, 2026". Pure; noon UTC so the date can't
  * slide. Used by the public request page and the approval confirmation, so
  * both say the same day in the same words. */

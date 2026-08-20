@@ -1142,7 +1142,10 @@ const MAX_FEATURED_IMAGE_BYTES = MAX_UPLOAD_BYTES;
  */
 export async function adminAddFeaturedSpot(formData: FormData): Promise<void> {
   await requireAdmin();
-  const slot = Number(formData.get("slot")) === 2 ? 2 : 1;
+  // Four slots since session 019 — 1-2 render in the homepage's left column,
+  // 3-4 in the right. Anything else falls back to 1 rather than being stored.
+  const rawSlot = Number(formData.get("slot"));
+  const slot = rawSlot >= 1 && rawSlot <= 4 ? Math.trunc(rawSlot) : 1;
   const rawPosition = Number(formData.get("position"));
   const position = rawPosition === 2 || rawPosition === 3 ? rawPosition : 1;
   const caption = stripEmoji(String(formData.get("caption") ?? "")).slice(0, FEATURED_CAPTION_MAX);

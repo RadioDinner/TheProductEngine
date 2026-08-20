@@ -14,19 +14,16 @@ export const site = {
   /** The provisioned Telnyx number people TEXT ads to. */
   smsNumber: "(330) 960-7170",
   smsNumberPlain: "3309607170",
-  /** The number people CALL for support or to arrange payment (phone/check/saved card). */
-  supportPhone: "(234) 301-0048",
-  supportPhonePlain: "2343010048",
   /**
-   * The number and address for BUYING — an event listing, a featured spot, a
-   * premium business listing (user, session 019). Deliberately separate from
-   * supportPhone above, which is the general help line: the user gave this
-   * number specifically for people wanting to buy, and merging the two would
-   * quietly reroute every existing "call us for help" mention.
+   * The ONE number people call — help, arranging payment, buying a listing.
+   * The user confirmed in session 019 that support and sales are the same
+   * line, so there is deliberately no second number: two numbers for one phone
+   * is a way to print the wrong one somewhere and never notice.
    */
-  salesPhone: "(330) 275-1603",
-  salesPhonePlain: "3302751603",
-  salesEmail: "support@theplainexchange.com",
+  supportPhone: "(330) 275-1603",
+  supportPhonePlain: "3302751603",
+  /** The ONE address, for the same reason. */
+  supportEmail: "support@theplainexchange.com",
   /** The address people are told to visit — no scheme, it is spoken copy. */
   webHost: "ThePlainExchange.com",
   /**

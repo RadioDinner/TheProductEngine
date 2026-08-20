@@ -36,12 +36,12 @@ export function WaysToPay({
       </p>
       <ul className="ways-list">
         <li>
-          <strong>Call {site.salesPhone}</strong> — talk to a person, pay by card over the
+          <strong>Call {site.supportPhone}</strong> — talk to a person, pay by card over the
           phone, or arrange a check.
         </li>
         <li>
           <strong>
-            Email <a href={`mailto:${site.salesEmail}?subject=${subject}`}>{site.salesEmail}</a>
+            Email <a href={`mailto:${site.supportEmail}?subject=${subject}`}>{site.supportEmail}</a>
           </strong>{" "}
           — tell us what you want and we&rsquo;ll set it up.
         </li>

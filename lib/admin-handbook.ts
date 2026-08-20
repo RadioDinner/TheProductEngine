@@ -27,6 +27,7 @@ export interface HandbookEntry {
 /** Page groupings for the read-through view on /admin/help. */
 export const HANDBOOK_PAGES: { prefix: string; label: string; href: string }[] = [
   { prefix: "dashboard", label: "Dashboard", href: "/admin" },
+  { prefix: "money", label: "Money", href: "/admin/money" },
   { prefix: "review", label: "Review queue", href: "/admin/review" },
   { prefix: "digests", label: "Digests", href: "/admin/digests" },
   { prefix: "reports", label: "Reports", href: "/admin/reports" },
@@ -83,6 +84,39 @@ const ENTRIES = {
     what: "Ads sitting in the review queue for your yes or no, with a count of any picture ads still collecting pictures underneath.",
     why: "The review queue moved off /admin in session 019 to make room for the dashboard. Its count stayed here so moving the page could never mean an ad quietly waits for days — the tile is the reminder the old landing page used to be.",
     gotchas: "Picture ads still collecting are deliberately NOT in the queue yet: they appear once the seller stops sending (about ten minutes) or hits the four-picture maximum, so you never approve an ad that is only half its photos.",
+  },
+
+  /* ---------------- Money (/admin/money) ---------------- */
+
+  "money.overview": {
+    title: "Cash collected is not income",
+    what: "Four figures that keep apart what you have EARNED, what you are HOLDING for other people, and what you have GIVEN away. Read fresh from the credit ledger on every load — the same rows a member's own money history shows.",
+    why: "The user's session-018 question: \"how do I measure ACTUAL income, since fifty people prepaying $50 and never posting is $2,500 collected but nothing earned.\" Before this page the service could only tell you how much money had arrived, which is the number most likely to be mistaken for profit.",
+    gotchas: "Money on a member's account is a LIABILITY until an ad runs — it is refundable, and it is not yours. If you ever want one number for \"how is the business doing\", it is \"of that, paid for with real money\": ads that ran and that somebody actually paid cash for. Adjustments written before migration 9957 are unclassified and counted as given away, which understates cash collected on purpose — an honest floor beats a confident guess.",
+  },
+  "money.earned": {
+    title: "Revenue earned",
+    what: "What members have actually spent on ads, less anything refunded back to a balance because an ad did not run. This is the moment money stops being theirs and starts being yours.",
+    why: "An ad running is the thing you sold. Until then their money is a deposit, however long it has been sitting there.",
+    gotchas: "It is split below into the part paid with real money and the part paid with credit you gave away. Only the first is income; the second is the cost of the welcome offer showing up as if it were a sale.",
+  },
+  "money.collected": {
+    title: "Cash collected",
+    what: "Every dollar that actually arrived — card payments through Stripe, plus cheques, cash and phone orders you entered as a payment on a member's page.",
+    why: "Insights' \"Money added\" counts only Stripe, so before migration 9957 every cheque you took by hand was invisible in it. This figure is the one that matches your bank.",
+    gotchas: "It counts money IN, not money kept: subtract what is still owed to members to see what is genuinely yours. And it is all-time, not a period — it does not shrink when a refund goes out, which is what the \"paid back out\" row is for.",
+  },
+  "money.owed": {
+    title: "Still owed to members",
+    what: "Unspent balance that members actually paid for. Refundable, and not income. The percentage says how much of everything you have collected is still somebody else's.",
+    why: "This is the number behind the user's worry about prepaid balances. A big figure here is not a windfall, it is a debt — and if it grows faster than revenue earned, the service is collecting money it hasn't earned the right to keep.",
+    gotchas: "Credit you gave away is NOT in here; that sits under \"given away\" because it can never be refunded as cash. A member's own page shows their share of this as Refundable.",
+  },
+  "money.given": {
+    title: "Credit issued",
+    what: "Welcome credit, credit added with an invitation, and courtesy make-goods. A marketing cost, all time.",
+    why: "It looks like money on a member's balance and spends like money on an ad, but it never came from anyone's wallet — so it can never be revenue and can never be refunded. Keeping it in its own box is what stops the welcome offer flattering the income figure.",
+    gotchas: "The welcome offer is capped: starter credit times the member limit is the most that can ever be issued this way (currently $8,000). If this figure is climbing toward that, the launch offer is doing its job — check whether paid ads are following.",
   },
 
   /* ---------------- Review queue (/admin/review) ---------------- */
@@ -294,6 +328,12 @@ const ENTRIES = {
     what: "Four homepage slots — two stacked on each side of the ads — each rotating every 8 seconds through up to 3 image ads. Slots 1-2 are the left column, 3-4 the right. A spot runs 30 days from the day it is approved.",
     why: "The user's spec, nearly verbatim (session 009): \"two side bar ad spots that will rotate every 8 seconds … up to 3 ads on each … I will manually post these Featured advertisers … image ads, capable of linking to external websites.\" Session 019 priced them ($199 for a 30-day run), widened the board to four — \"two stacked on each side\" — and added the public request page and its queue, so a business can ask rather than having to know to phone you.",
     gotchas: "The left column shows its heading and the \"Reserve your spot here\" link even when nothing is running, unlike the other sidebars, which hide when empty. That is deliberate: before the first spot is sold that column IS the advertisement for the product, and hiding it would leave the request page unreachable from the front page.",
+  },
+  "featured.timeline": {
+    title: "The four slots across dates",
+    what: "One row per slot, one bar per booked run, drawn across the days it holds. The red line is today. Hover a bar for who it is and its exact dates. Finished runs stay drawn, greyed, so you can see what came before as well as what is booked.",
+    why: "The user's session-019 ask: \"I want all 4 of the slots showing as rows with durations across dates.\" The queue page can only say a date; this shows why that date — which slot frees when, where the gaps are, and how far out the board is sold.",
+    gotchas: "Which slot a run sits in is DERIVED, not stored: the same earliest-free-slot rule that booked it is replayed to draw it, so this picture can never drift from the schedule. That also means the slot numbers here are about the calendar, not about which side of the homepage a spot appears on — slots 1-2 render on the left and 3-4 on the right, but a run moving between them would change nothing a visitor sees.",
   },
   "featured.queue": {
     title: "The featured request queue",

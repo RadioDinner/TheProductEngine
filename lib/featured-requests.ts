@@ -29,6 +29,8 @@ export interface FeaturedRequest {
   /** …or one of their own ads, which opens that ad's page. */
   adId: number | null;
   note: string | null;
+  /** The artwork they uploaded, already re-hosted in our bucket. */
+  imageSrc: string | null;
   status: FeaturedRequestStatus;
   submittedAt: string;
   scheduledStartDay: string | null;
@@ -43,6 +45,7 @@ export interface FeaturedRequestInput {
   linkUrl: string | null;
   adId: number | null;
   note: string | null;
+  imageSrc: string | null;
 }
 
 /** 42P01 = table missing, PGRST205 = PostgREST hasn't seen it, 42703 = a
@@ -85,13 +88,14 @@ interface RequestRow {
   link_url: string | null;
   ad_id: number | null;
   note: string | null;
+  image_src: string | null;
   status: string;
   submitted_at: string;
   scheduled_start_day: string | null;
 }
 
 const SELECT =
-  "id, kind, business_name, contact_name, phone, email, link_url, ad_id, note, status, submitted_at, scheduled_start_day";
+  "id, kind, business_name, contact_name, phone, email, link_url, ad_id, note, image_src, status, submitted_at, scheduled_start_day";
 
 function toRequest(row: RequestRow): FeaturedRequest {
   return {
@@ -104,6 +108,7 @@ function toRequest(row: RequestRow): FeaturedRequest {
     linkUrl: row.link_url,
     adId: row.ad_id,
     note: row.note,
+    imageSrc: row.image_src,
     status: (["pending", "approved", "declined", "cancelled"] as const).includes(
       row.status as FeaturedRequestStatus,
     )
@@ -228,6 +233,7 @@ export async function addFeaturedRequest(
     link_url: input.linkUrl,
     ad_id: input.adId,
     note: input.note,
+    image_src: input.imageSrc,
   });
   if (error) {
     if (schemaMissing(error)) return "unsupported";

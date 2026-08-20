@@ -37,3 +37,9 @@ On the town-hall page, it says listing an event is free. I want that updated to 
 Also, you'll need to build a "Request a featured ad/listing" page. I want to have up to 4 sponsored listings or premium business listings per month. Two stacked on each side. Also, I want the featured listing or business premium listing to link to the resource or open the featured listing page when clicked. It'll either go to the link they choose, or open the ad they want to feature.
 
 I want the featured listing request page to honor queued listings. For instance, if I have 3 confirmed businesses for the month, and 2 more people apply, if both are valid/approvable, the first one submitted will get the 4th spot. These will run independant schedules of 30 days. So if a premium business listing or featured ad is approved on 8-17-26, it'll expire in 30 days. If the second ad is posted and approved on 8-20-26, it'll run for 30 days. The same for featureds 3 and 4. Lets say the fourth one arrives and is approved on 8-30-26. The fifth person that wants to posts an approved "premium" listing will have the first available slot at 9-16-26. I want the "submit a featured ad/listing" page to both explain this logic, AND honor it. Tell the user that there are x amount of ads that are queued, and the earliest your featured listing will begin displaying is {first available date}. Make sense? Build it, along with the same checkout options, call and email options that the event feature does
+
+--- 2026-08-20 ---
+The support and sales line is the same. Both are (330) 275-1603‬. Make a self service for the images. Then build the income report
+
+--- 2026-08-20 ---
+I want to build a new "slots" feature of the admin/featured page. I want all 4 of the slots showing as rows with durations across dates. Does this make sense?

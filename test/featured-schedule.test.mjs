@@ -8,6 +8,8 @@ import {
   FEATURED_CAPACITY,
   FEATURED_RUN_DAYS,
   addDays,
+  assignSlots,
+  daysBetween,
   featuredSchedule,
   formatRunDay,
   queueSentence,
@@ -110,6 +112,32 @@ export function run(t) {
     "2026-08-31");
   t.eq("capacity is always at least one",
     featuredSchedule({ approvedStarts: [], today: "2026-08-31", capacity: 0 }).slotFreeDays.length, 1);
+
+  // ---- which SLOT each run sits in (the admin timeline) ----
+  const assigned = assignSlots(four);
+  t.eq("four runs fill four slots", assigned.length, 4);
+  t.eq("each slot is used once", new Set(assigned.map((a) => a.slot)).size, 4);
+  t.eq("the earliest run takes slot 1", assigned.find((a) => a.slot === 1).startDay, "2026-08-17");
+  t.eq("slot 1 ends when it should", assigned.find((a) => a.slot === 1).endDay, "2026-09-16");
+  t.eq("the index points back at the input", assigned.find((a) => a.startDay === "2026-08-30").index, 3);
+  // The fifth run REUSES slot 1, because that is the slot that frees first.
+  const withFifth = assignSlots([...four, "2026-09-16"]);
+  const slot1Runs = withFifth.filter((a) => a.slot === 1);
+  t.eq("the fifth run reuses the slot that freed", slot1Runs.length, 2);
+  t.eq("…and starts the day the first ended", slot1Runs[1].startDay, "2026-09-16");
+  t.eq("no slot ever double-books",
+    withFifth.every((a) =>
+      withFifth.filter((b) => b.slot === a.slot && b !== a).every((b) => b.endDay <= a.startDay || b.startDay >= a.endDay),
+    ), true);
+  t.eq("an empty board assigns nothing", assignSlots([]).length, 0);
+  t.eq("one run takes slot 1", assignSlots(["2026-08-17"])[0].slot, 1);
+  // Two runs starting the same day must land in DIFFERENT slots.
+  const sameDay = assignSlots(["2026-08-17", "2026-08-17"]);
+  t.eq("same-day runs get different slots", sameDay[0].slot !== sameDay[1].slot, true);
+
+  t.eq("a day range is exclusive at the end", daysBetween("2026-08-17", "2026-08-20").length, 3);
+  t.eq("a day range starts where told", daysBetween("2026-08-17", "2026-08-20")[0], "2026-08-17");
+  t.eq("an empty range is empty", daysBetween("2026-08-17", "2026-08-17").length, 0);
 
   // ---- the words the page shows must match the arithmetic ----
   t.eq("the date reads plainly", formatRunDay("2026-09-16"), "September 16, 2026");

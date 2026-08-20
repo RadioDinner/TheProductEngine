@@ -2308,3 +2308,138 @@ a.btn-sm:hover {
   margin: var(--space-xs) 0 var(--space-md);
   font-size: var(--text-sm);
 }
+
+/* ============================================================
+   The featured slot timeline (/admin/featured) — session 019
+   Four rows, one grid column per day, a bar per booked run.
+   ============================================================ */
+
+.slot-timeline {
+  margin: var(--space-sm) 0 var(--space-lg);
+  border: 1px solid var(--rule);
+  padding: var(--space-sm);
+  background: var(--surface);
+  overflow-x: auto;
+}
+
+.slot-axis {
+  display: grid;
+  margin-left: 7rem;
+  height: 1.2rem;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.slot-tick {
+  white-space: nowrap;
+  border-left: 1px solid var(--rule);
+  padding-left: 0.2rem;
+}
+
+.slot-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin-bottom: 0.2rem;
+}
+
+.slot-name {
+  flex: none;
+  width: 7rem;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  align-self: center;
+}
+
+.slot-track {
+  position: relative;
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  height: 1.7rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+}
+
+.slot-bar {
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  background: var(--blue);
+  color: var(--paper);
+  font-size: var(--text-xs);
+  padding: 0 0.3rem;
+  border-radius: 2px;
+}
+
+/* A run that has already finished still gets drawn — the point of a timeline
+   is seeing what came before as well as what is booked. */
+.slot-bar--past {
+  background: var(--muted);
+  opacity: 0.55;
+}
+
+.slot-bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-today {
+  grid-row: 1;
+  border-left: 2px solid var(--red);
+  z-index: 1;
+}
+
+.slot-empty {
+  grid-row: 1;
+  grid-column: 1 / -1;
+  align-self: center;
+  padding-left: 0.4rem;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* The money report (/admin/money) — session 019. Rows of label / figure,
+   with the ones that answer the question set in the heavier weight. */
+.money-table {
+  margin: var(--space-sm) 0 var(--space-lg);
+  border-top: 1px solid var(--rule-strong);
+}
+
+.money-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: var(--space-md);
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.money-label {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: var(--text-sm);
+}
+
+.money-value {
+  font: 600 var(--text-lg) / 1.2 var(--font-serif);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.money-row--strong .money-value {
+  font-size: var(--text-xl);
+}
+
+.money-row--strong .money-label {
+  font-weight: 600;
+}
+
+.money-detail {
+  grid-column: 1 / -1;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}

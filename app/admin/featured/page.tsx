@@ -20,6 +20,8 @@ import {
   formatRunDay,
 } from "@/lib/featured-schedule";
 import { listAllRequests, listBookedStartDays } from "@/lib/featured-requests";
+import { SlotTimeline, type TimelineRun } from "@/components/SlotTimeline";
+import { addDays } from "@/lib/featured-schedule";
 import { Tip } from "@/components/Tip";
 import { ImageUpload } from "@/components/ImageUpload";
 
@@ -41,6 +43,20 @@ export default async function AdminFeatured({
   const today = etParts(new Date()).day;
   const schedule = featuredSchedule({ approvedStarts: booked, today });
 
+  // The timeline: every approved run, named. Booked start days and the approved
+  // request list are the same rows, so the labels line up by start day.
+  const approved = (all ?? []).filter((r) => r.status === "approved" && r.scheduledStartDay);
+  const timelineRuns: TimelineRun[] = booked.map((startDay) => ({
+    startDay,
+    label:
+      approved.find((r) => r.scheduledStartDay === startDay)?.businessName ?? "Booked",
+  }));
+  // A window wide enough to see the whole board sold out and a little history:
+  // two weeks back, and far enough forward to cover the longest booked run.
+  const windowStart = addDays(today, -14);
+  const furthest = booked.reduce((max, d) => (d > max ? d : max), today);
+  const windowEnd = addDays(furthest, FEATURED_RUN_DAYS + 7);
+
   return (
     <>
       <h1>
@@ -57,6 +73,22 @@ export default async function AdminFeatured({
         <Tip k="featured.links" />. The left column always shows the &ldquo;Reserve your
         spot here&rdquo; link so the request page is reachable even with nothing running.
       </p>
+
+      {/* ---------- the four slots, across dates ---------- */}
+      <h2 className="section-h">
+        The four slots <Tip k="featured.timeline" />
+      </h2>
+      <p className="fine">
+        Each row is one slot; each bar is a booked run across the days it holds. The red
+        line is today. A slot opens the day its bar ends — that is the date the request
+        page quotes, and it is the same arithmetic drawing this.
+      </p>
+      <SlotTimeline
+        runs={timelineRuns}
+        today={today}
+        windowStart={windowStart}
+        windowEnd={windowEnd}
+      />
 
       {/* ---------- the request queue ---------- */}
       <h2 className="section-h">
@@ -129,6 +161,20 @@ export default async function AdminFeatured({
                     "not chosen yet — ask them"
                   )}
                 </p>
+                {req.imageSrc ? (
+                  <a href={req.imageSrc} target="_blank" rel="noreferrer" title="Open full size">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={req.imageSrc}
+                      alt={`Artwork sent by ${req.businessName}`}
+                      style={{ maxWidth: 200, maxHeight: 150, border: "1px solid #ccc" }}
+                    />
+                  </a>
+                ) : (
+                  <p className="myad-dates">
+                    <strong>No artwork yet</strong> — ask them for it before it runs.
+                  </p>
+                )}
                 {req.note && <p className="sim-body">{req.note}</p>}
                 <p className="fine">
                   Approving now books{" "}
@@ -198,7 +244,7 @@ export default async function AdminFeatured({
         </p>
       ) : (
         <>
-          {[1, 2].map((slot) => {
+          {[1, 2, 3, 4].map((slot) => {
             const slotSpots = spots.filter((s) => s.slot === slot);
             const rotating = new Set(
               slotRotation(
@@ -210,7 +256,8 @@ export default async function AdminFeatured({
             return (
               <section key={slot} aria-labelledby={`slot-${slot}-h`}>
                 <h2 id={`slot-${slot}-h`} className="section-h">
-                  Slot {slot} {slot === 1 ? "(top)" : "(bottom)"}
+                  Slot {slot} ({slot <= 2 ? "left" : "right"} column,{" "}
+                  {slot % 2 === 1 ? "top" : "bottom"})
                 </h2>
                 {activeCount > SPOTS_PER_SLOT && (
                   <p className="form-error">
@@ -312,8 +359,10 @@ export default async function AdminFeatured({
               <div className="inline-fields">
                 <label htmlFor="spot-slot">Slot</label>
                 <select id="spot-slot" name="slot" className="admin-select" defaultValue="1">
-                  <option value="1">1 (top)</option>
-                  <option value="2">2 (bottom)</option>
+                  <option value="1">1 — left, top</option>
+                  <option value="2">2 — left, bottom</option>
+                  <option value="3">3 — right, top</option>
+                  <option value="4">4 — right, bottom</option>
                 </select>
                 <label htmlFor="spot-position">Order</label>
                 <select id="spot-position" name="position" className="admin-select" defaultValue="1">

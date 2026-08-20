@@ -91,6 +91,60 @@ preserves the total, sort/filter/drag/keyboard-reorder all exercised. (The
 grid can't render in dev — it is one database VIEW — so the walk ran against a
 temporary `GRID_DEMO=1` fixture branch that was removed before committing.)
 
+### The money half of the same session
+
+⚠️ **TWO MIGRATIONS TO PASTE: `9957_money_kinds.sql` and
+`9956_featured_requests.sql`.** Both degrade safely. 9956 was AMENDED after
+first being written (it gained `image_src`) and is re-runnable — paste it
+again if an earlier copy went in.
+
+**Free ad credit can never be refunded as cash, and now nothing relies on the
+operator remembering that.** `lib/money.ts` splits a balance into CASH
+(Stripe, cheques, phone orders) and GRANTED (starter credit, invites,
+courtesy). **Spending consumes grants FIRST** — the member-friendly ordering
+and the one the policy publishes. /admin/users shows Refundable beside the
+balance and REFUSES a payout that exceeds it. Migration 9957 splits the old
+catch-all `adjustment` into `payment` / `courtesy` / `payout`; rows written
+before it are read conservatively in both directions, so an unclassified row
+can never fund a refund.
+
+**The refund fee, and the fact behind it:** Stripe does NOT return the
+2.9% + $0.30 when you refund — it was taken at capture and stays taken. The
+flat $0.30 makes the fee worst on the SMALLEST top-up (4.4% on the $20
+preset, 3.2% on $100), so **5% is the smallest round number that covers every
+preset** — cost recovery, not a penalty. Live on /refund-policy and the T&Cs,
+with no fee when the fault is ours.
+
+**/admin/money answers "what is my actual income"** — earned (split into the
+part paid with real money and the part paid with credit given away) vs held
+(cash collected, still owed to members, paid back out) vs given away. Read
+per-member, because grants-first is a per-member rule.
+
+**Featured listings are a product now.** $19.99 an event listing, $199 a
+featured spot for 30 days, **four spots, two stacked on each side**.
+`lib/featured-schedule.ts` is the rolling-30-day queue, pinned against the
+user's worked example (four approved 8-17/8-20/8-24/8-30 → the fifth starts
+9-16, the ninth waits on the FIFTH's run). `/featured` explains it, quotes it
+from the same function the approval runs, takes a request with self-service
+artwork, and offers call / email / checkout. `/admin/featured` draws the four
+slots as rows with bars across dates; slot identity is DERIVED by replaying
+the booking rule, so the picture can never drift from the schedule.
+
+Things not to get wrong here:
+
+1. **The homepage's left featured column renders even when empty**, unlike
+   every other sidebar — before the first spot is sold it IS the advert for
+   the product, and hiding it would leave /featured unreachable.
+2. **`isPurchasableAmount` is the ONE rule** for what checkout accepts (the
+   presets plus the two listing prices), shared by the checkout page and both
+   purchase actions. They previously each had their own copy of the preset
+   check.
+3. **There is one phone number and one email now** (`site.supportPhone` /
+   `site.supportEmail`, (330) 275-1603). The user confirmed support and sales
+   are the same line; the separate sales fields were removed.
+
+Unit suite ended at **1369**.
+
 Full detail: `Session log/019_2026-08-20_admin-dashboard-users-table/session_log.md`.
 
 ## Session 018 (2026-08-20) — BATCHED ADS with the number burned into the picture
