@@ -8,6 +8,7 @@ code that produces the numbers, and how to read them without fooling yourself.
 
 | Read this | If you want to |
 | --- | --- |
+| [`00-todo.md`](00-todo.md) | **The shared worklist.** What is done, what is next, and who owns it. |
 | [`01-what-we-measure-today.md`](01-what-we-measure-today.md) | Know what the service already counts, and the eleven questions it cannot answer. |
 | [`02-measurement-plan.md`](02-measurement-plan.md) | See the nine questions, the events that answer them, and the dimensions to register. |
 | [`03-ga4-console-setup.md`](03-ga4-console-setup.md) | Set up the GA4 property, step by step. Do this first. |
