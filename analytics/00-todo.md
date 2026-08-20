@@ -150,8 +150,8 @@ Ranked by cost, not effort. The first two are real defects, not polish.
       still looks plausible. ⚠️ `lib/moderation.ts` and `lib/digest-engine.ts`
       must NOT import `next/server`: the test harness loads them under plain
       node. Register in the calling server actions instead.
-- [ ] **Untick Enhanced Measurement → Page views → advanced → "Page changes
-      based on browser history events".** CONFIRMED double-counting in
+- [x] **Untick Enhanced Measurement → Page views → advanced → "Page changes
+      based on browser history events".** ✅ DONE 2026-08-20. CONFIRMED double-counting in
       production: GA fires its own page_view on every App Router navigation on
       top of ours, so every page-view figure so far is ~2×. Console fix, not
       code — the app side is already correct. Not retroactive; note the date.

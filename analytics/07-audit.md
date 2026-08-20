@@ -64,7 +64,7 @@ actions that call them are the right place.
 
 ---
 
-## 🔴 1b. Page views were double-counted — CONFIRMED IN PRODUCTION
+## ✅ 1b. Page views were double-counted — FOUND AND FIXED 2026-08-20
 
 Found by walking four pages in an incognito window and seeing twelve views.
 
@@ -79,7 +79,7 @@ This is the classic Next.js App Router + GA4 double-count, and it only appears
 once SPA page views are implemented properly. Doing nothing manual would have
 hidden it; doing it right exposed it.
 
-**Fix (console, not code):** untick that sub-option. Leave *Page views* itself
+**Fixed 2026-08-20** by unticking that sub-option (console, not code). Leave *Page views* itself
 on — the config call already suppresses the automatic initial view, and the
 manual event covers it.
 
