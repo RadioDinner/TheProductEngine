@@ -278,6 +278,34 @@ later without breaking historical data**.
 | Search results | `results_count` | Standard |
 | Listings in edition | `listing_count` | Standard |
 
+### ⚠️ Scope matters more than it looks, and Item is a trap
+
+The same form creates all three scopes and **does not reset the Scope dropdown
+between saves**, so it is easy to create a run of dimensions under the wrong
+one. A wrong-scoped dimension does not error — it just silently never
+populates, and you find out weeks later staring at an empty report.
+
+The buckets are separate and very unevenly sized:
+
+| Scope | GA4 limit | This property needs |
+| --- | --- | --- |
+| Event | 50 | 15 |
+| User | 25 | 3 |
+| **Item** | **10** | **0** |
+| Custom metrics | 50 | 10 |
+
+**Zero item-scoped.** Every field this codebase puts inside `items[]` —
+`item_id`, `item_category`, `item_list_name`, `item_brand`, `price`,
+`quantity`, `index` — is a BUILT-IN item dimension. Item scope is only for
+custom fields of your own inside the items array, and there are none.
+
+Item is also the tightest bucket in GA4 by a wide margin, which is why it is the
+one you hit first if the dropdown is wrong. To recover: Custom definitions →
+Custom dimensions → the Scope column → ⋮ → **Archive** each item-scoped entry.
+Archiving frees the slot at once, and the usual "archived data stops being
+reportable" warning does not bite for a dimension nothing was ever collected
+against.
+
 ### Do NOT create these
 
 `search_term`, `method`, `value`, `currency`, `transaction_id`, `item_id`,
