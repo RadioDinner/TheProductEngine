@@ -73,6 +73,7 @@ import { stripEmoji } from "@/lib/content-filter";
 import { normalizePhone } from "@/lib/phone";
 import { type LineType } from "@/lib/number-lookup";
 import { lookupLineTypeDetailed } from "@/lib/number-lookup-server";
+import { resolveHelpReport } from "@/lib/help-report-store";
 
 /** Whitelisted return targets for shared ad actions — never trust a form string. */
 function backTarget(formData: FormData): string {
@@ -773,6 +774,16 @@ export async function adminPurgeMember(
   if (result === "unsupported") return { phone, unsupported: true };
   if (!result.found) return { phone, notFound: true };
   return { phone, counts: result, deleted: Boolean(result.deleted) };
+}
+
+/** Mark a help report dealt with, or reopen it. */
+export async function adminResolveHelpReport(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  const resolved = String(formData.get("resolved")) === "yes";
+  const note = String(formData.get("note") ?? "").trim().slice(0, 300);
+  if (Number.isInteger(id)) await resolveHelpReport(id, note, resolved);
+  redirect(`/admin/help-reports${formData.get("all") === "1" ? "?all=1" : ""}`);
 }
 
 // ---------- operator kill switches (PAUSE + UNDER ATTACK) ----------

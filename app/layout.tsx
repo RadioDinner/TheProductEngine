@@ -8,6 +8,7 @@ import { countUnreadChats } from "@/lib/store";
 import { site } from "@/lib/config";
 import { MessagesBadge } from "@/components/MessagesBadge";
 import "./globals.css";
+import { HelpButton } from "@/components/HelpButton";
 
 const newsreader = Newsreader({
   subsets: ["latin"],
@@ -130,6 +131,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </p>
           </div>
         </footer>
+        <HelpButton />
       </body>
     </html>
   );

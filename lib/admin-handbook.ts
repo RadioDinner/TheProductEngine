@@ -37,6 +37,7 @@ export const HANDBOOK_PAGES: { prefix: string; label: string; href: string }[] =
   { prefix: "subscribers", label: "Subscribers", href: "/admin/subscribers" },
   { prefix: "messages", label: "Message audit log", href: "/admin/messages" },
   { prefix: "calls", label: "Calls", href: "/admin/calls" },
+  { prefix: "help", label: "Help reports", href: "/admin/help-reports" },
   { prefix: "purge", label: "Purge a member", href: "/admin/purge" },
   { prefix: "settings", label: "Settings", href: "/admin/settings" },
   { prefix: "smsdiag", label: "SMS diagnostics", href: "/admin/sms-diag" },
@@ -440,6 +441,12 @@ const ENTRIES = {
     what: "Two lists on their own tab, edited as plain comma-separated text. Flag-only words sort their ads to the top of review; auto-reject words bounce instantly — nothing charged, no strike, logged for the audit trail. Matching is whole-word and ignores capitals, so \"gun\" catches Gun but not shotgun; short phrases work too.",
     why: "Session-001 founding ask, verbatim: \"a small rejection system to analyze for specific words … so I can add/remove words as I choose.\" Auto-reject charges nothing deliberately — a robot's judgement shouldn't cost a seller money; only your reject-violation does that. It moved off Settings into its own tab in session 016 (user decision) because the one-word-at-a-time widget made a real list unmanageable: you could not see it whole, paste one in, or move six words between lists without twelve clicks.",
     gotchas: "The boxes ARE the filter — a word you delete from a box stops being filtered when you save. Emptying both needs the confirm tick, so a mis-click can't quietly disarm every rule. A word typed into both boxes counts as auto-reject.",
+  },
+  "help.reports": {
+    title: "Help reports",
+    what: "Filed by the \"I need help!\" button in the corner of every page. Each report carries the page, whether they were signed in and as whom, whether we hold an email for them, their browser, screen size and timezone, where they came from, and the last error the page threw — plus anything they chose to type.",
+    why: "Session 016, the user's ask: capture \"all the data I can possibly get, this way I can pro-actively get fixes in place.\" The reason the typed note is OPTIONAL is the whole point of the feature — a stuck member usually cannot describe what went wrong, so the diagnostics describe it for them. Requiring a sentence first would lose exactly the reports worth having.",
+    gotchas: "Every report ALSO emails you the moment it is filed (user decision), so this page is for working through them, not for finding out. Watch for patterns rather than individual reports: three from one page in an hour is a bug even when no single one reads like one. Identity is read server-side from the session cookie and never from the form, so a report cannot claim to be from someone else. If migration 9965 isn't pasted the button still works and still emails — reports just aren't collected here.",
   },
   "purge.purpose": {
     title: "Purging a member",

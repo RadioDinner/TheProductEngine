@@ -24,6 +24,7 @@ const SUITES = [
   "word-filter",
   "upload-limits",
   "number-lookup",
+  "help-reports",
   "myads",
   "reveal-quota",
   "business",
