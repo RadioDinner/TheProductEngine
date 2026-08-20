@@ -168,22 +168,74 @@ export function toE164(phone: string): string | null {
 }
 
 /**
- * Ask Twilio what kind of line this is. Costs about half a cent per call, so
- * callers must cache the answer (see isCacheable) rather than asking twice.
+ * A lookup's outcome, WITH the reason when it didn't produce a type.
  *
- * Returns "unchecked" for every failure mode — unconfigured, bad number,
- * non-200, timeout, malformed body — so no caller ever has to handle an
- * exception to stay open. A 404 from Twilio means "no such number", which is
- * genuinely unknown rather than a failure, but it is treated the same way:
- * we do not want a lookup quirk denying a real member their credit.
+ * The policy deliberately fails open, which creates one nasty blind spot: a
+ * wrong Account SID looks exactly like "nobody has used a burner yet". Both
+ * are silence. So the raw reason is carried out of here for the admin test
+ * tool to display — an operator has to be able to tell a working check from
+ * one that has been quietly 401ing since the day they set it up.
  */
-export async function lookupLineType(
+export interface LookupOutcome {
+  type: LineType;
+  /** Present only when type is "unchecked". */
+  reason?:
+    | "not-configured"
+    | "bad-number"
+    | "unauthorized"
+    | "forbidden"
+    | "not-found"
+    | "rate-limited"
+    | "twilio-error"
+    | "field-error"
+    | "network";
+  /** HTTP status, when there was one. */
+  status?: number;
+  /** Carrier name, when Twilio gave one — handy in the test tool. */
+  carrier?: string;
+}
+
+/** What each failure means and what to do about it, in the operator's words. */
+export function lookupReasonNote(outcome: LookupOutcome): string {
+  switch (outcome.reason) {
+    case "not-configured":
+      return "TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN isn't set on the server. Add both and redeploy.";
+    case "bad-number":
+      return "That isn't a 10-digit US number.";
+    case "unauthorized":
+      return "Twilio rejected the credentials (401). Check TWILIO_ACCOUNT_SID is the Account SID starting \"AC\", and that the auth token belongs to that same account.";
+    case "forbidden":
+      return "Twilio refused the request (403). Line Type Intelligence may not be enabled on that account, or the account can't use Lookup.";
+    case "not-found":
+      return "Twilio has no record of that number. Real numbers normally resolve — try another one.";
+    case "rate-limited":
+      return "Twilio rate-limited the lookup (429). Wait a moment and try again.";
+    case "twilio-error":
+      return `Twilio returned an error${outcome.status ? ` (${outcome.status})` : ""}. Nothing is wrong on this end — try again shortly.`;
+    case "field-error":
+      return "Twilio answered but couldn't determine the line type for that number.";
+    case "network":
+      return "Couldn't reach Twilio at all (network or timeout).";
+    default:
+      return "";
+  }
+}
+
+/**
+ * Ask Twilio what kind of line this is, with the failure reason attached.
+ * Costs about half a cent per call, so callers cache the answer (isCacheable)
+ * rather than asking twice.
+ *
+ * Every failure mode yields type "unchecked", which every policy check reads
+ * as "allow" — no caller has to catch anything to stay open.
+ */
+export async function lookupLineTypeDetailed(
   phone: string,
   timeoutMs = 4000,
-): Promise<LineType> {
-  if (!lookupConfigured) return "unchecked";
+): Promise<LookupOutcome> {
+  if (!lookupConfigured) return { type: "unchecked", reason: "not-configured" };
   const e164 = toE164(phone);
-  if (!e164) return "unchecked";
+  if (!e164) return { type: "unchecked", reason: "bad-number" };
   const sid = process.env.TWILIO_ACCOUNT_SID!;
   const token = process.env.TWILIO_AUTH_TOKEN!;
   const auth = Buffer.from(`${sid}:${token}`).toString("base64");
@@ -197,23 +249,54 @@ export async function lookupLineType(
       cache: "no-store",
     });
     if (!res.ok) {
-      // 404 = number not found; anything else is our problem, not the
-      // member's. Either way: open, and retried next time.
-      if (res.status !== 404) {
+      const reason =
+        res.status === 401
+          ? "unauthorized"
+          : res.status === 403
+            ? "forbidden"
+            : res.status === 404
+              ? "not-found"
+              : res.status === 429
+                ? "rate-limited"
+                : "twilio-error";
+      // A credential problem is worth shouting about in the logs: it makes
+      // the whole policy silently inert.
+      if (reason === "unauthorized" || reason === "forbidden") {
+        console.error(
+          `[lookup] Twilio ${res.status} — line-type checks are configured but NOT WORKING; the VoIP policy is inert until this is fixed.`,
+        );
+      } else if (res.status !== 404) {
         console.error(`[lookup] Twilio returned ${res.status} for a line-type check`);
       }
-      return "unchecked";
+      return { type: "unchecked", reason, status: res.status };
     }
     const body = (await res.json()) as {
-      line_type_intelligence?: { type?: unknown; error_code?: unknown };
+      line_type_intelligence?: {
+        type?: unknown;
+        error_code?: unknown;
+        carrier_name?: unknown;
+      };
     };
     const intel = body.line_type_intelligence;
     // Twilio reports per-field errors INSIDE a 200 response; a field that
     // errored has no usable type.
-    if (!intel || intel.error_code) return "unchecked";
-    return parseLineType(intel.type);
+    if (!intel || intel.error_code) {
+      return { type: "unchecked", reason: "field-error", status: 200 };
+    }
+    return {
+      type: parseLineType(intel.type),
+      status: 200,
+      ...(typeof intel.carrier_name === "string" && intel.carrier_name
+        ? { carrier: intel.carrier_name }
+        : {}),
+    };
   } catch (e) {
     console.error("[lookup] line-type check failed:", e instanceof Error ? e.message : e);
-    return "unchecked";
+    return { type: "unchecked", reason: "network" };
   }
+}
+
+/** The plain answer, for the hot path that only cares about the type. */
+export async function lookupLineType(phone: string, timeoutMs = 4000): Promise<LineType> {
+  return (await lookupLineTypeDetailed(phone, timeoutMs)).type;
 }

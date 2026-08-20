@@ -4,6 +4,7 @@
 // harder than the blocking behaviour.
 import {
   isBurnerLine,
+  lookupReasonNote,
   isCacheable,
   lineMay,
   lineTypeLabel,
@@ -99,6 +100,46 @@ export function run(t) {
   t.eq("too short is refused", toE164("5550142"), null);
   t.eq("too long is refused", toE164("133055501429"), null);
   t.eq("empty is refused", toE164(""), null);
+
+  // ---- failure reasons are explained, not just coded ----
+  // The policy fails open, so a wrong credential looks exactly like "no
+  // burners yet". These notes are the ONLY thing that tells the operator
+  // apart a working check from one that has been 401ing for months, so every
+  // reason must produce real guidance rather than an empty string.
+  const REASONS = [
+    "not-configured",
+    "bad-number",
+    "unauthorized",
+    "forbidden",
+    "not-found",
+    "rate-limited",
+    "twilio-error",
+    "field-error",
+    "network",
+  ];
+  for (const reason of REASONS) {
+    const note = lookupReasonNote({ type: "unchecked", reason });
+    t.eq(`'${reason}' has a note`, note.length > 10, true);
+  }
+  // The two that mean "you configured it wrong" must name what to check.
+  t.eq(
+    "the 401 note names the Account SID",
+    lookupReasonNote({ type: "unchecked", reason: "unauthorized" }).includes("TWILIO_ACCOUNT_SID"),
+    true,
+  );
+  t.eq(
+    "the not-configured note says to redeploy",
+    lookupReasonNote({ type: "unchecked", reason: "not-configured" }).toLowerCase().includes("redeploy"),
+    true,
+  );
+  t.eq(
+    "the 403 note mentions Line Type Intelligence",
+    lookupReasonNote({ type: "unchecked", reason: "forbidden" }).includes("Line Type Intelligence"),
+    true,
+  );
+  // A successful outcome carries no reason and therefore no note.
+  t.eq("a success has no note", lookupReasonNote({ type: "mobile" }), "");
+  t.eq("an unrecognised reason has no note", lookupReasonNote({ type: "unchecked", reason: "wat" }), "");
 
   // ---- labels are human ----
   t.eq("app numbers read plainly", lineTypeLabel("nonFixedVoip"), "VoIP (app number)");

@@ -69,6 +69,7 @@ import { sniffImage, CONTENT_TYPE_BY_EXT } from "@/lib/image-sniff";
 import { supabaseConfigured } from "@/lib/db";
 import { stripEmoji } from "@/lib/content-filter";
 import { normalizePhone } from "@/lib/phone";
+import { lookupLineTypeDetailed } from "@/lib/number-lookup";
 
 /** Whitelisted return targets for shared ad actions — never trust a form string. */
 function backTarget(formData: FormData): string {
@@ -683,6 +684,34 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
     await saveEngineSettings({ promoBannerText: text, promoBannerLink: link });
   }
   redirect("/admin/settings?saved=1");
+}
+
+/**
+ * Test a line-type lookup against one number, from /admin/settings.
+ *
+ * This exists because the VoIP policy fails open: if the credentials are
+ * wrong, every lookup silently returns "allow" and the operator sees exactly
+ * what they'd see if no burner had ever signed up. Without a way to prove the
+ * check works, a misconfigured deploy would look identical to a working one —
+ * possibly for months. This is the proof.
+ *
+ * Deliberately does NOT cache what it finds: it is a diagnostic, and a
+ * number the operator typed to test the wiring shouldn't quietly become that
+ * member's stored line type.
+ */
+export async function adminTestLookup(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const phone = normalizePhone(String(formData.get("testPhone") ?? ""));
+  if (!phone) redirect("/admin/settings?lookup=bad-number");
+  const outcome = await lookupLineTypeDetailed(phone);
+  const params = new URLSearchParams({
+    lookup: outcome.reason ?? "ok",
+    lookupType: outcome.type,
+    lookupPhone: phone,
+    ...(outcome.carrier ? { lookupCarrier: outcome.carrier } : {}),
+    ...(outcome.status ? { lookupStatus: String(outcome.status) } : {}),
+  });
+  redirect(`/admin/settings?${params.toString()}`);
 }
 
 // ---------- operator kill switches (PAUSE + UNDER ATTACK) ----------
