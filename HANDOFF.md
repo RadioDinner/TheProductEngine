@@ -3,7 +3,86 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-20 (session 016 addendum 5).
+**Last updated:** 2026-08-20 (session 017).
+
+## Session 017 (2026-08-20) — the `analytics/` folder: Google Analytics, staged but not wired
+
+**Nothing in this session changed the site's behaviour.** `analytics/` is a
+complete GA4 implementation that the app does not import — `tsc` and
+`next build` are clean with it present precisely because nothing references it.
+`analytics/04-wiring.md` is the thirteen steps that turn it on.
+
+Merged to `main` (`d1f0ba8`, then the setup-guide corrections). Developed on
+`claude/google-analytics-setup-tjm2p5`. The session ran alongside several
+others, so it was deliberately confined to one new folder until the user
+confirmed the others had closed — which is why every merge was conflict-free.
+
+### ✅ The GA4 property EXISTS (user created it this session)
+
+- **Measurement ID `G-0P031ZCC9Z`**, Analytics account `derrickwengerd`.
+- ⚠️ That account also holds `permitpro-9db15`, a **Firebase-auto-created
+  property for a different project** which loads by default. Every GA setting
+  is per-property — check the switcher says The Plain Exchange first. This cost
+  time once already.
+
+### ⚠️ OPERATOR ACTION QUEUE
+
+1. **Data retention → 14 months.** Defaults to **2**. The only item where
+   waiting actively destroys data.
+2. **Google Signals OFF** (keeps the "we do not track you around the internet"
+   line on /privacy true), **reporting identity → Blended** (stitches a
+   member's texts to their web visits).
+3. **Unwanted referrals:** `stripe.com`, `checkout.stripe.com` — without them
+   every paying member appears to have been *acquired from Stripe*.
+4. **Create the Measurement Protocol API secret** → `GA_API_SECRET` in Vercel.
+5. **`ANALYTICS_SALT`** (`openssl rand -hex 32`) in Vercel. Treat as a
+   password: with it, every member hash is reversible by brute force.
+6. **Set all three variables on the Production environment ONLY** — an unset
+   measurement id is what keeps preview deploys out of the property.
+7. **Decide the privacy option** (see below) before the browser tag ships.
+
+### Directional decisions
+
+1. **A classified ad is a "listing" in every GA event name.** GA4 reserves
+   `ad_click`, `ad_impression`, `ad_exposure` and `ad_query` and discards
+   events using them behind a `204` that looks like success. This product's
+   most important events would have vanished silently. Enforced by a test.
+2. **Server-side first, browser tag second.** Most members never load a web
+   page, so the Measurement Protocol path covers everyone and needs no consent
+   decision; the browser tag is the addition, not the foundation. This inverts
+   the usual order and is right for this audience.
+3. **Members are a salted SHA-256 of their phone, never the phone.** Off-web
+   events get a `client_id` *derived from that hash* — a random one per text
+   would turn one seller into hundreds of one-event users.
+4. **GA is the behavioural layer; Supabase stays the record.** Money, delivery,
+   quotas and anything past GA's 14-month retention stay first-party. When the
+   two disagree, Supabase is right.
+5. ⚠️ **`/privacy` currently promises the opposite of what GA does** — "No
+   advertising cookies, **no analytics trackers**, no third-party cookies".
+   The browser tag makes that false on deploy. Three options, a recommendation
+   and drafted replacement copy: `analytics/05-privacy-and-consent.md`. Note
+   "no third-party cookies" and "we do not track you around the internet" both
+   stay TRUE under the recommended setup, as long as Google Signals stays off.
+
+### Notes for whoever picks this up
+
+- **Nothing is wired.** Wave 1 of `04-wiring.md` (SMS + Stripe server events)
+  is the place to start: it covers every member and needs no consent decision.
+- **`analytics/sql/first-party-upgrade.sql` is unnumbered on purpose.** Rename
+  to `<lowest existing − 1>_analytics_upgrade.sql` at the moment you move it.
+  Parallel sessions took 9965 and 9966 this same day — pinning a number in
+  advance would have collided.
+- **Do not add `analytics/` to `.vercelignore`.** Once `app/layout.tsx` imports
+  from it, it is part of the build.
+- **The version was NOT bumped** (still `1.0.6`). Per §6 the count is FEATURES,
+  and this session shipped none to members — the site is byte-for-byte
+  unchanged. Bump it when the wiring actually ships.
+- Environment note: the container's clone was **shallow**, which made `main`
+  and the working branch look like unrelated histories (`git merge-base`
+  failing, wildly wrong ahead/behind counts). `git fetch --unshallow` is the
+  one-command diagnosis; expect the same symptom in future web sessions.
+
+Full detail: `Session log/017_2026-08-20_google-analytics/session_log.md`.
 
 ## Session 016 addendum 5 (2026-08-20) — the feature-list batch, and a launch-day fix
 
