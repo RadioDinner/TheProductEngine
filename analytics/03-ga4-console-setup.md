@@ -11,17 +11,47 @@ stable; if a path is wrong, search the Admin page for the name in bold.
 
 ## Before you start
 
-**Use a business Google account, not a personal one.** The property will hold
-years of history. If it sits under an account tied to one person's private
-email, losing that account loses the history. Create it under the account that
-owns the domain, and add a second Administrator immediately (step 12).
+**There is no "business" version of Google Analytics to sign up for.** GA4 has
+no personal-versus-business account type: you sign in with any Google account —
+a plain `@gmail.com` is fine — and the first thing you create is an *Analytics
+Account*, which is a container with a name on it. Typing `The Plain Exchange`
+as that name is the whole of "making it a business account."
+
+Two traps on the way in:
+
+- **Searching "Google Analytics for business" lands on Analytics 360**, the paid
+  enterprise tier (roughly $150k/year, every button says "Contact sales"). If
+  you are looking at a sales form rather than a signup, that is the wrong
+  product. Go to `analytics.google.com` directly.
+- **Google Business Profile and Google Workspace are different products** — the
+  Maps listing and paid email respectively. Neither is required and neither
+  gets you Analytics.
+
+What *does* matter is **ownership**: use an account the business controls and
+will not lose, because the property will hold years of history. A personal
+Gmail is fine if it is one that will still exist in five years. Add a second
+Administrator as soon as you are in (step 12) — one account with sole access is
+one forgotten password away from losing all of it.
 
 ---
 
-## 1. Create the property
+## 1. Create the account and property
 
-`analytics.google.com` → **Admin** (gear, bottom left) → **Create** →
+**First time:** `analytics.google.com` → **Start measuring**. The flow walks
+account → property → business details → objectives → terms → data stream, and
+hands you the Measurement ID at the end.
+
+**Adding to an existing account:** **Admin** (gear, bottom left) → **Create** →
 **Property**.
+
+On the **account data-sharing checkboxes**, untick **"Google products and
+services"** — that is the setting that lets Google use this data for its own
+products, which sits badly beside what `/privacy` promises members. "Technical
+support" and "Account specialists" are harmless.
+
+The business-details screen (industry, size) only tailors which reports are
+shown by default. `Shopping` and `Small — 1 to 10 employees` are fine and
+change nothing that cannot be changed later.
 
 | Field | Value | Why it matters |
 | --- | --- | --- |
@@ -29,9 +59,12 @@ owns the domain, and add a second Administrator immediately (step 12).
 | Reporting time zone | **(GMT-05:00) Eastern Time — New York** | Every other daily figure in this app is bucketed in Eastern time (`lib/et.ts`, the send window, the picture allowance). A property on Pacific or UTC time would report a different "today" than `/admin`, and reconciling them later is miserable. |
 | Currency | **US Dollar (USD)** | Revenue is sent in dollars. |
 
-The business-details and objectives screens that follow change nothing you
-cannot change later. Pick "Generate leads" and "Examine user behavior" and move
-on.
+On the **business objectives** screen pick "Generate leads" and "Examine user
+behavior", or "Get baseline reports" for all of them. It only decides which
+reports are surfaced first and can be changed any time.
+
+Accept the Terms of Service with country **United States** (the Analytics terms
+plus the data-processing terms).
 
 > **The time zone cannot be changed retroactively.** Changing it later leaves a
 > permanent seam in the history where the day boundary moved.
