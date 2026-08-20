@@ -1,132 +1,126 @@
-# Session 017 — 2026-08-20 — Google Analytics, and the `analytics/` folder
-
-## Git posture this session (it changed twice — read this first)
-
-The user is running **several sessions in parallel** in this repo today and is
-sequencing merges by hand. The instructions, in order received:
-
-1. Commit a folder named `analytics` **to `main`**, then create the branch.
-2. After that, **change nothing outside the `analytics` folder** — so parallel
-   branches cannot conflict on merge.
-3. Mid-session override: commit what exists **to `main` now**, then **stop
-   committing to `main` automatically**; the user will say when.
-
-All three were followed. Nothing outside `analytics/` was modified — with one
-deliberate exception, the session-log folder itself, which is named
-`017_2026-08-20_google-analytics` rather than `017_2026-08-20` precisely so a
-parallel session claiming 017 does not collide with it on merge.
-
-**Standing at session end: do not push to `main` without being asked.** The
-designated branch `claude/google-analytics-setup-tjm2p5` holds everything.
-
-### Commits
-
-| Where | Hash | What |
-| --- | --- | --- |
-| `main` | `d2b9167` | Add the `analytics/` folder — one home for how we measure the site. |
-| `main` | `2c32247` | Stage the GA4 library: config, event catalogue, ids, server sender. |
-| branch | `8b31f01` | The browser tag, the server helpers, the SQL, and 75 checks. |
-| branch | (this) | The six documents and the folder index. |
-
-A note on the repo state: the container's clone was **shallow**, which made
-`main` and the working branch look like unrelated histories (`git merge-base`
-failed, `git log` showed 80 commits on one side and 50 on the other). They are
-not unrelated — `git fetch --unshallow` resolved it, and the branch turned out
-to be `origin/main` minus one commit. Worth knowing: the same symptom will
-appear in any future session in this environment, and the diagnosis is one
-command.
+# Session 017 — 2026-08-20 — Google Analytics, end to end
 
 ## What shipped
 
-`analytics/` — a complete, staged, **inert** Google Analytics 4 implementation
-plus the reasoning around it. Nothing in the app imports any of it, so the site's
-behaviour is byte-for-byte unchanged.
+A complete measurement system for a business where **most of the activity never
+touches a web browser**. That constraint shaped every decision in it.
 
-- Six documents: the audit of what we measure today, the measurement plan, the
-  GA4 console setup, the wiring steps, the privacy conflict, and the operating
-  routine.
-- Seven code modules under `src/`: config, the event catalogue, salted identity,
-  the browser emitter, the Measurement Protocol sender, one named helper per
-  business moment, and the tag component for `app/layout.tsx`.
-- `sql/first-party-upgrade.sql` — referrer, campaign and unique-visitor counting
-  in our own tables, cookieless. Staged **unnumbered** on purpose (see below).
-- `test/analytics.test.mjs` — 75 checks.
+`analytics/` — eight documents, ten code modules, a migration, and 85 tests.
+All on `main`. `analytics/README.md` is the way in; `analytics/00-todo.md` is
+the live tracker; `analytics/07-audit.md` is the review and what it found.
 
-Verified: `tsc --noEmit` clean, `next build` clean, repo suite **846/846**
-unchanged, analytics suite 75/75.
+### Commits (in order)
+
+| Hash | What |
+| --- | --- |
+| `d2b9167` | The `analytics/` folder — one home for how we measure the site |
+| `2c32247` | The staged GA4 library: config, catalogue, salted ids, MP sender |
+| `16d36b1` | The six documents |
+| `d1f0ba8` | Merge the folder to `main` |
+| `11c95de` | Wave 1 — the money path and the SMS command surface |
+| `52603c8` | The browser tag AND the rewritten privacy policy, one commit |
+| `e9f0845` | HELP: stop replying — the carrier already answers it |
+| — | Waves 1b–6: engine outcomes, lifecycle, web surface, voice, user properties, migration 9961 |
+| `664a9ae` | Session close-out, version 1.1.6 |
+| `52a1e91` | Merge the audit fixes — three defects |
+
+### Git posture
+
+The instructions changed three times. Commit a folder to `main` first, then the
+branch; then stay inside that folder because several sessions were running;
+then commit what existed and hold `main`; then resume. All followed.
+
+**That constraint turned out to be the reason every merge was conflict-free.**
+Confining a large piece of work to one new folder while other sessions moved
+`app/`, `lib/` and `supabase/` meant zero overlapping paths, twice.
 
 ## Directional decisions
 
-1. **A classified ad is a "listing" in every GA event name.** GA4 reserves
-   `ad_click`, `ad_impression`, `ad_exposure` and `ad_query`, and discards
-   events using them with a `204` that looks like success. This product's most
-   important events would have vanished silently. Enforced by a test.
+1. **A classified ad is a "listing" in GA.** GA4 reserves `ad_click`,
+   `ad_impression`, `ad_exposure` and `ad_query` and discards events using them
+   behind a `204`. This product's most important events would have vanished
+   with nothing to search for. Enforced by a test.
 
-2. **Server-side first, browser tag second.** Most members never load a web
-   page. The Measurement Protocol path covers everyone and needs no consent
-   decision; the browser tag is the addition, not the foundation. This inverts
-   the usual order and is right for this audience.
+2. **Server-side first, browser tag second.** Most members never load a page.
+   The Measurement Protocol path covers everyone and needs no consent decision.
+   This inverts the usual order and is right for this audience.
 
-3. **Members are a salted SHA-256 of their phone, never the phone.** Off-web
-   events get a `client_id` *derived from that hash* rather than a random one —
-   a random id per text would turn one seller into hundreds of one-event users
-   and destroy every engagement metric in the property.
+3. **Members are a salted SHA-256, never the phone.** Off-web events derive
+   their `client_id` from that hash rather than a random one — a random id per
+   text would turn one seller into hundreds of one-event users.
 
-4. **GA is the behavioural layer; Supabase remains the record.** Money,
-   delivery, quotas and anything older than GA's 14-month retention stay
-   first-party. When the two disagree, Supabase is right.
+4. **GA is the behavioural layer; Supabase stays the record.** When they
+   disagree, Supabase is right.
 
-5. **The privacy policy conflict is real and must be resolved before the tag
-   ships.** `/privacy` states in writing: "No advertising cookies, **no
-   analytics trackers**, no third-party cookies, and no web beacons or tracking
-   pixels." The browser tag makes that false on deploy. Three options, a
-   recommendation, and drafted replacement copy are in
-   `analytics/05-privacy-and-consent.md`. Note that "no third-party cookies"
-   and "we do not track you around the internet" both stay **true** under the
-   recommended setup, provided Google Signals stays off.
+5. **Privacy option B**, chosen by the user: browser tag plus a rewritten
+   policy, shipped in the SAME commit so the page was never live promising
+   something the site contradicted.
 
-## Open — for the user
+6. **HELP is answered by the carrier now, not by us** (user decision) — it was
+   double-replying, and the carrier copy was stale.
 
-1. **Create the GA4 property** (`analytics/03-ga4-console-setup.md`). Nothing
-   can be verified until it exists. The two settings that cannot be fixed
-   retroactively: the reporting **time zone must be Eastern** (everything else
-   in this app buckets days in ET), and **data retention must be raised to 14
-   months** — it defaults to 2, and the deleted data does not come back.
-2. **Decide the privacy option** (A server-side only, B browser tag with the
-   policy rewritten, C cookieless tag). Recommendation is A now, B once the
-   policy is live.
-3. **Then wire, in the order in `04-wiring.md`.** Thirteen steps, each
-   independently useful and independently revertible.
+7. **The internal-traffic IP filter was DECLINED** (user decision). The
+   code-level admin exclusion is sturdier; an IP filter fails silently when a
+   home connection changes address.
 
-## Open — for whoever merges
+## What the audit found, and why it matters
 
-- **`HANDOFF.md` was deliberately NOT updated.** It is edited by every session
-  and would have been a guaranteed conflict against the parallel branches. Fold
-  this session's entry in at merge time.
-- **The §6 version bump was deliberately NOT applied.** It lives in the footer,
-  outside `analytics/`. Note also that no version string exists anywhere in the
-  current tree — `grep` finds none in `app/`, `lib/` or `components/` — so
-  whoever bumps it may be adding it for the first time.
-- **`analytics/sql/first-party-upgrade.sql` is unnumbered on purpose.**
-  Migrations here count DOWN and the lowest was `9967` when this was written,
-  but parallel sessions were actively claiming numbers. Rename to
-  `<lowest − 1>_analytics_upgrade.sql` **at the moment you move it**, not from
-  the number in any document.
-- **Do not add `analytics/` to `.vercelignore`.** Once `app/layout.tsx` imports
-  from it, it is part of the build. (`pay-by-phone/` is excluded there because
-  it is a separate deployable; this is not.)
+Three defects, and the ranking is the lesson.
 
-## Worth knowing later
+**Twelve events were on the lossy path.** `after.ts` takes Next's `after()` by
+injection, and the injection was registered only in the four API routes. Server
+actions never load those, so events fell back to unawaited fire-and-forget.
 
-- The Measurement Protocol **returns `204` for payloads it throws away** — wrong
-  event name, missing `client_id`, a 26th parameter, all `204`. Build every new
-  event against the debug endpoint (`GA_VALIDATE_ONLY=1`) first. This is the
-  single most expensive gotcha in GA4 server-side work.
-- `ANALYTICS_SALT` is a real secret. There are only ten billion US phone
-  numbers, so anyone holding it can reverse every hash by brute force.
-- Rotating that salt resets user continuity in GA — new hashes, new users,
-  broken cohorts. Rotate deliberately.
-- Step 4 of the wiring (carrying the `_ga` client id into Stripe checkout
-  metadata) is small, easy to skip, and skipping it makes **every payment on the
-  service arrive as "(direct)" forever**. It is the cheapest high-value line in
-  the whole plan.
+**Web ad posting emitted nothing.** `post_submit` fired only from the SMS
+engine, so every ad carried `channel: "sms"`. The report would have read **100%
+SMS with total confidence.**
+
+That is the sentence worth carrying forward: **a missing number gets
+investigated; a confident wrong one gets acted on.** Both defects produced
+plausible output and no error. Neither would have been caught by a test that
+only checked what the code does — they were caught by asking what the numbers
+would have to be if the code were right.
+
+The guard added afterwards reflects that: a unit test cannot catch "a file
+forgot an import", so the suite now reads `lib/*.ts` **statically** and fails
+if an emitting file lacks the registration. Verified to bite by removing one.
+
+**And the user found one I missed.** Page views were double-counted — Enhanced
+Measurement's history-based page views firing on top of ours. They found it by
+walking four pages in an incognito window and counting: 4 pages, 12 views. I had
+told them to leave Enhanced Measurement's page views alone without checking the
+sub-option. The habit that caught it — check a number by hand — is now the
+quarterly reminder in `06-operating-the-numbers.md`.
+
+## Open for the next session
+
+Nothing required. `analytics/00-todo.md` has the optional list: key events to
+star as they appear, `chat_message_sent`, the four explorations, the three
+alerts, Search Console, UTM tags on email links.
+
+**Two things to verify once the reports catch up:** page views should be
+roughly half (proving the double-count fix stuck), and `post_submit` should
+show both `sms` and `web` after an ad is posted from the website.
+
+⚠️ **Carried, and the operator's:** the Telnyx HELP auto-response is now the
+service's only answer to HELP and still advertises BUMP and CREDITS; the 10DLC
+campaign description still says "up to 4 digests/day".
+
+## Version
+
+**Left at 1.1.7.** This session moved it to 1.1.6 for the analytics work;
+session 018 then took it to 1.1.7. Everything after that merge was FIXES, and
+§6 says fixes do not bump.
+
+## Worth knowing
+
+- **The Measurement Protocol returns `204` for payloads it throws away.** Wrong
+  event name, missing `client_id`, a 26th parameter — all `204`. Build every
+  new event against the debug endpoint first.
+- **Registering a GA custom dimension is not retroactive**, and the Scope
+  dropdown does not reset between saves. Ten got created as Item scope, which
+  is GA4's tightest bucket at 10, and blocked further work.
+- **Firebase auto-creates GA4 properties** and one of them loads by default —
+  every setting is per-property.
+- **The container's clone was shallow**, which faked unrelated histories.
+  `git fetch --unshallow`.

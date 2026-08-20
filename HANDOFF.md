@@ -3,19 +3,18 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-20 (session 018 — batched ads, v1.1.7; all on main
-except one docs commit awaiting the user's word).
+**Last updated:** 2026-08-20 (session 018 — batched ads, v1.1.7, all on `main`;
+session 017's analytics work and its audit fixes are on `main` too).
 
 ## Session 018 (2026-08-20) — BATCHED ADS with the number burned into the picture
 
 **Version 1.1.6 → 1.1.7** (§6: three features, so the far-right digit moves).
 
-**Git state at handoff.** The user merges on their own command this session
-("wait to commit to main until I say so"). As of writing, `main` carries every
-code change (through `57362ae`) and is deployed; the branch
-`claude/batched-ads-numbered-images-aupcvh` is one DOCS-ONLY commit ahead
-(`656208f` — recording that the migrations were pasted, plus this handoff).
-Fast-forward main onto that branch when told; there is no code in it.
+**Git state.** All of it is on `main` and deployed. The session ran alongside
+session 017's analytics wrap, which landed its audit fixes on `main` the same
+day; the two merged with one conflict, in this file's date line, nowhere in
+the code. Session 018 developed on
+`claude/batched-ads-numbered-images-aupcvh` and merged on the user's word.
 
 **SMS is a digest again.** Session 016's one-text-per-ad instant send is
 retired. A batch is ONE text listing several ads, each headed by its AD NUMBER
@@ -132,123 +131,104 @@ Verified: tsc + build clean, unit 1033 → **1153** (new suites `batch` 82,
 
 Full detail: `Session log/018_2026-08-20_batched-ads-numbered-images/session_log.md`.
 
-## Session 017 (2026-08-20) — Google Analytics, end to end and LIVE
+## Session 017 (2026-08-20) — GOOGLE ANALYTICS, end to end and LIVE
 
-**Version 1.0.6 → 1.1.6** (§6: four+ features and a major change — the second
-digit moves, the third stays, per the user's stated rule).
+Closed after session 018 merged, so this sits below it by number and above it
+in time. Everything is on `main`; **version deliberately left at 1.1.7** — the
+features shipped earlier in this session already moved it to 1.1.6, and
+everything after the merge was FIXES, which §6 says do not bump.
 
 The site now measures itself across every channel it actually uses: the
 website, SMS, the voice line, email editions and Stripe. `analytics/` holds the
-reasoning, the code and the worklist; `analytics/00-todo.md` is the live
-tracker.
+reasoning, the code, the audit and the worklist — **`analytics/README.md` is
+the way in, `analytics/00-todo.md` is the live tracker.**
 
-Built in one folder first, deliberately: the session ran alongside several
-others, so everything stayed inside `analytics/` until the user confirmed the
-rest had closed. Every merge that day was conflict-free as a result. The wiring
-then went in as six verified waves, each committed separately.
+### ✅ Live and confirmed collecting
 
-**What is measured now.** Web: page_view on every navigation, view_item and
-view_item_list, select_item and ui_click from ONE delegated click listener,
-search with results_count, listing_reveal, chat_start, post_start, login,
-begin_checkout, the contact/town-hall/email forms. SMS: every inbound tagged
-with its parsed command (the `unknown` bucket is the cheapest product research
-this business has), post_submit at ACCEPTANCE, post_blocked with eight reasons,
-sign_up, unsubscribe, pic_pull, suppressed replies. Lifecycle: approved with
-wait_minutes, rejected, broadcast with reach and segments, sold with
-days_to_sell. Money: purchase from the WEBHOOK inside the ledger-ref guard,
-refund, auto_topup, starter_credit_granted. Voice: call_inbound at every
-outcome, card_saved. Plus email_edition_sent per edition.
+- **Property `G-0P031ZCC9Z`**, Analytics account `derrickwengerd`, Eastern
+  time, USD, 14-month retention, Google Signals OFF, reporting identity
+  Blended, Stripe unwanted-referral set.
+- **18 custom dimensions + 10 metrics** registered and checked against the
+  parameters the code actually sends.
+- **Both pipelines verified in production**: `page_view`/`first_visit`/`scroll`
+  from real visitors, and `sms_inbound` from the Measurement Protocol — which
+  proves the whole server chain, API secret through salted hashing to GA
+  accepting the payload.
+- **Migration `9961_analytics_upgrade.sql` PASTED.** `visit_stats_v2()` returns
+  views and unique people; `visit_days` records referring host and campaign.
 
-**✅ Migration `9961_analytics_upgrade.sql` was pasted 2026-08-20.** The
-first-party counter now records the referring host, campaign tags and a
-daily-rotating visitor token alongside the existing page-view count. Verify
-with `select * from visit_stats_v2();` in the SQL editor, or `/api/health` →
-`migration9961`.
+### ⚠️ Things a future session must not get wrong
 
-### ✅ The GA4 property EXISTS and is COLLECTING
+1. **A classified ad is a "listing" in GA.** GA4 RESERVES `ad_click`,
+   `ad_impression`, `ad_exposure`, `ad_query` and discards events using them
+   behind a `204` that looks like success. Enforced by a test.
+2. **`analytics/src/after.ts` takes `after()` by INJECTION.** `lib/engine.ts`,
+   `lib/moderation.ts` and `lib/digest-engine.ts` must never import
+   `next/server` — the test harness loads them under plain node. Every other
+   emitting file must import `@/analytics/src/register-after`. A static test
+   enforces both halves; it was added because the first version registered only
+   in the four API routes and silently degraded twelve events.
+3. **Never emit `purchase` from a success page.** It is webhook-only, inside
+   the ledger-ref guard.
+4. **`ANALYTICS_SALT` is a real secret** and rotating it resets every member's
+   GA identity.
+5. **The `/privacy` sentence "we do not track you around the internet" is
+   load-bearing.** It is true only while Google Signals stays off; there is a
+   comment above it in the code saying it must come out the same day anyone
+   turns Signals on.
 
-- **Measurement ID `G-0P031ZCC9Z`**, Analytics account `derrickwengerd`.
-- ⚠️ That account also holds `permitpro-9db15`, a **Firebase-auto-created
-  property for a different project** which loads by default. Every GA setting
-  is per-property — check the switcher says The Plain Exchange first. This cost
-  time once already.
+### The audit, and the three defects it found (all fixed, `52a1e91`)
 
-### ⚠️ OPERATOR ACTION QUEUE
+`analytics/07-audit.md` is the full review. The two worth remembering:
 
-DONE by the user this session: property created, retention 14 months, Google
-Signals off, reporting identity Blended, Stripe unwanted-referral, all three
-environment variables set in Vercel, privacy option chosen (browser tag +
-rewritten policy).
+- **Twelve events were on the lossy path** because the `after()` injection was
+  registered only in the API routes. No error — an undercount of unknown size
+  that still looked plausible.
+- **Web ad posting emitted NOTHING.** `post_submit` fired only from the SMS
+  engine, so every ad carried `channel: "sms"` and the report would have read
+  100% SMS with total confidence. Not a gap: **a missing number gets
+  investigated, a confident wrong one gets acted on** — and this one feeds
+  pricing, the welcome copy and the roadmap.
 
-STILL OPEN — the full list is `analytics/00-todo.md`:
+Also found in production by walking four pages and counting: **page views were
+double-counted**, because Enhanced Measurement's "Page changes based on browser
+history events" fires on every App Router navigation on top of ours. Fixed in
+the console. **Not retroactive — page-view figures before 2026-08-20 are ~2×.**
 
-✅ Migration 9961 pasted. ✅ All 18 custom definitions and 10 metrics
-registered. The measurement is complete and collecting end to end.
+### Open, none of it urgent (full list in `analytics/00-todo.md`)
 
-Left, none of it urgent:
+- Star the key events as they appear in Admin → Events → Recent events. Only
+  `purchase` is starred, by GA's default.
+- `chat_message_sent` and `categories_changed` are in the catalogue but not
+  emitted; `listing_expired` is deliberately skipped.
+- The four explorations and three alerts in `06-operating-the-numbers.md`.
+- Search Console link; a second Analytics Administrator.
+- UTM tags on email-edition links — SMS and email carry no `Referer`, so every
+  visitor our own messages drive lands as "direct". Email is free to tag; SMS
+  costs ~15 characters per send, which is the operator's call.
+- **DECLINED, deliberately:** the internal-traffic IP filter. The code-level
+  admin exclusion is sturdier. Consequence: the operator's signed-out and
+  incognito browsing IS counted.
 
-1. **Mark the key events** as they appear in Admin → Events → Recent events
-   (star icon). Only `purchase` is starred so far, by GA's default.
-2. **Set the internal-traffic filter to Active** — it ships as *Testing*, which
-   collects nothing. The tag skips the operator only while signed in as admin,
-   so their signed-out browsing is counted like anyone else's until this is on.
-3. **Edit the Telnyx HELP auto-response** — the app stopped replying to HELP
-   this session (it was double-replying), so the carrier keyword response is
-   now the service's ONLY answer, and carriers require one. It still advertises
-   BUMP and CREDITS, both removed in session 016. Not in version control, no
-   test can reach it.
+### ⚠️ Still the operator's, carried forward
 
-### Directional decisions
+- **The Telnyx HELP auto-response is now the service's ONLY answer to HELP**,
+  and carriers require one. The app stopped replying this session (it was
+  double-replying, and the carrier copy still advertises BUMP and CREDITS, both
+  removed in session 016). It is not in version control and no test can reach
+  it — check it whenever the messaging profile is touched.
+- **The 10DLC campaign description still says "up to 4 digests/day."** Carried
+  since session 016 addendum 3.
 
-1. **A classified ad is a "listing" in every GA event name.** GA4 reserves
-   `ad_click`, `ad_impression`, `ad_exposure` and `ad_query` and discards
-   events using them behind a `204` that looks like success. This product's
-   most important events would have vanished silently. Enforced by a test.
-2. **Server-side first, browser tag second.** Most members never load a web
-   page, so the Measurement Protocol path covers everyone and needs no consent
-   decision; the browser tag is the addition, not the foundation. This inverts
-   the usual order and is right for this audience.
-3. **Members are a salted SHA-256 of their phone, never the phone.** Off-web
-   events get a `client_id` *derived from that hash* — a random one per text
-   would turn one seller into hundreds of one-event users.
-4. **GA is the behavioural layer; Supabase stays the record.** Money, delivery,
-   quotas and anything past GA's 14-month retention stay first-party. When the
-   two disagree, Supabase is right.
-5. ⚠️ **`/privacy` currently promises the opposite of what GA does** — "No
-   advertising cookies, **no analytics trackers**, no third-party cookies".
-   The browser tag makes that false on deploy. Three options, a recommendation
-   and drafted replacement copy: `analytics/05-privacy-and-consent.md`. Note
-   "no third-party cookies" and "we do not track you around the internet" both
-   stay TRUE under the recommended setup, as long as Google Signals stays off.
+### Environment note
 
-### Notes for whoever picks this up
-
-- **Everything is wired.** `analytics/04-wiring.md` is now a record of where
-  each event sits and why it sits exactly there — most of those notes mark a
-  place where the obvious seam produces a WRONG number rather than a missing
-  one (post_submit at arrival would count refused ads; purchase on the success
-  page would book revenue that never happened).
-- **`analytics/src/after.ts` is the piece to understand before moving any
-  event.** Serverless kills fire-and-forget work once the response is sent, so
-  server events go through Next's `after()`. lib/engine.ts cannot import
-  `next/server` (the test suites load it under plain node, where it does not
-  resolve), so the implementation is INJECTED by the route handlers. Move an
-  event into a file with no registration and it silently falls back to inline.
-- **`analytics/sql/first-party-upgrade.sql` is unnumbered on purpose.** Rename
-  to `<lowest existing − 1>_analytics_upgrade.sql` at the moment you move it.
-  Parallel sessions took 9965 and 9966 this same day — pinning a number in
-  advance would have collided.
-- **Do not add `analytics/` to `.vercelignore`.** Once `app/layout.tsx` imports
-  from it, it is part of the build.
-- **Version 1.0.6 → 1.1.6.** Four features plus a major change: the analytics
-  system itself, the first-party upgrade, the privacy-policy rewrite, and the
-  HELP de-duplication. Per §6 the second digit moves and the third stays.
-- Environment note: the container's clone was **shallow**, which made `main`
-  and the working branch look like unrelated histories (`git merge-base`
-  failing, wildly wrong ahead/behind counts). `git fetch --unshallow` is the
-  one-command diagnosis; expect the same symptom in future web sessions.
+The container's clone was **shallow**, which made `main` and the working branch
+look like unrelated histories — `git merge-base` failing, wildly wrong
+ahead/behind counts. `git fetch --unshallow` is the one-command diagnosis.
+Expect it again in future web sessions.
 
 Full detail: `Session log/017_2026-08-20_google-analytics/session_log.md`.
+
 
 ## Session 016 addendum 5 (2026-08-20) — the feature-list batch, and a launch-day fix
 

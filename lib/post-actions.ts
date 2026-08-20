@@ -16,6 +16,9 @@
  * throws — it never sits inside a try/catch here).
  */
 
+import * as analytics from "@/analytics/src/server-events";
+import { afterResponse } from "@/analytics/src/after";
+import "@/analytics/src/register-after";
 import { redirect } from "next/navigation";
 import { readSession } from "@/lib/session";
 import {
@@ -95,13 +98,26 @@ async function postAdInner(formData: FormData): Promise<void> {
   const phone = await requireMemberPhone("/account/post");
 
   // Mirrors lib/engine.ts handleAdSubmission step for step from here on.
+  // Every way a web post can be refused, with the same short reason codes the
+  // SMS lane uses — so `reason` is one dimension across both channels rather
+  // than two vocabularies that cannot be compared.
+  const blocked = (reason: string) =>
+    afterResponse(() => analytics.postBlocked({ phone, channel: "web", reason }));
+
   const account = await ensureAccount(phone);
-  if (account.postingBannedAt) redirect("/account/post?error=banned");
+  if (account.postingBannedAt) {
+    blocked("posting_banned");
+    redirect("/account/post?error=banned");
+  }
 
   const body = stripEmoji(String(formData.get("body") ?? ""));
-  if (!body) redirect("/account/post?error=empty");
+  if (!body) {
+    blocked("empty");
+    redirect("/account/post?error=empty");
+  }
   const settings = await getEngineSettings();
   if (body.length > settings.maxChars) {
+    blocked("too_long");
     redirect(`/account/post?error=toolong&length=${body.length}&max=${settings.maxChars}`);
   }
 
@@ -113,6 +129,7 @@ async function postAdInner(formData: FormData): Promise<void> {
       { ownerPhone: phone, body, flagged: true },
       { status: "rejected", rejectedReason: "Automatic — offers an item we can't run." },
     );
+    blocked("word_filter");
     redirect("/account/post?error=autoreject");
   }
 
@@ -183,6 +200,7 @@ async function postAdInner(formData: FormData): Promise<void> {
   // Fast reject for the clearly-unfunded; the atomic charge below is the
   // authority under concurrency.
   if (balance < cost) {
+    blocked("no_balance");
     redirect(`/account/post?error=funds&cost=${cost}&balance=${balance}`);
   }
 
@@ -238,6 +256,7 @@ async function postAdInner(formData: FormData): Promise<void> {
   if (!charge) {
     // The balance was spent between the check and here — undo the ad instead
     // of leaving an unpaid pending record in the review queue.
+    blocked("charge_race");
     await rejectAdRecord(id, "Not enough money at submission.", "benign");
     redirect(`/account/post?error=funds&cost=${cost}&balance=${await getCreditBalance(phone)}`);
   }
@@ -253,6 +272,20 @@ async function postAdInner(formData: FormData): Promise<void> {
       console.error("[post] category suggestion not saved:", e);
     }
   }
+
+  // ACCEPTED — created, paid for, in the review queue. This is the WEB half of
+  // post_submit; without it every ad in the property looked like it arrived by
+  // text, which is not a gap but a confident wrong answer to the one question
+  // that shapes the whole roadmap.
+  afterResponse(() =>
+    analytics.postSubmitted({
+      phone,
+      channel: "web",
+      category: isCategoryKey(suggested) ? suggested : undefined,
+      photoCount: hasPhoto ? 1 : 0,
+      priceCents: cost,
+    }),
+  );
 
   await notifyAdminNewAd({ id, from: phone, hasPhoto, body, ...(hasPhoto && { photoSrc: photoSrc! }) });
 

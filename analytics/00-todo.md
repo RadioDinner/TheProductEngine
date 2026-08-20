@@ -63,15 +63,22 @@ a built-in GA4 item dimension.
 Six, and no more. Marking everything a conversion is the same as marking
 nothing.
 
-### 🧑 Filter out your own traffic
+### ⚪ Filter out your own traffic — DECLINED
 
 The tag already skips you when signed in as admin. Signed out, or in a private
 window, you are counted like anyone else — and on a service this size that is
 enough to distort every rate.
 
-- [ ] Admin → Data streams → Configure tag settings → Show all → **Define internal traffic**
-- [ ] Admin → **Data filters** → set Internal Traffic from *Testing* to **Active**
-      *(it ships inactive; this is the most-missed step in a GA4 setup)*
+**DECIDED 2026-08-20: not doing this.** The operator chose to leave their own
+IP unfiltered. Defensible — the code-level exclusion in `app/layout.tsx` skips
+the tag entirely while signed in as admin, which is the more reliable of the
+two guards: an IP filter stops matching silently whenever a home connection
+gets a new address, and never matches a phone on cellular.
+
+The consequence to remember when reading the numbers: **signed-out and
+incognito browsing by the operator IS counted.** At this traffic level a few
+test walks are visible in the totals, so treat a small day's figures with that
+in mind. Revisit if the operator's own visits ever become a meaningful share.
 
 ### ✅ Pipeline VERIFIED LIVE — 2026-08-20
 
@@ -141,29 +148,26 @@ This closes the code side entirely. Everything below is optional.
 
 Ranked by cost, not effort. The first two are real defects, not polish.
 
-### 🔴 Fix
+### ✅ Fixed 2026-08-20 — on the branch, NOT yet on `main`
 
-- [ ] **Register `setAfterImpl(after)` where server actions load it.** Only the
-      four API routes register it today, so twelve events — including two of
-      the six key events — fall back to unawaited fire-and-forget and can be
-      killed with the serverless invocation. An undercount of unknown size that
-      still looks plausible. ⚠️ `lib/moderation.ts` and `lib/digest-engine.ts`
-      must NOT import `next/server`: the test harness loads them under plain
-      node. Register in the calling server actions instead.
-- [x] **Untick Enhanced Measurement → Page views → advanced → "Page changes
-      based on browser history events".** ✅ DONE 2026-08-20. CONFIRMED double-counting in
-      production: GA fires its own page_view on every App Router navigation on
-      top of ours, so every page-view figure so far is ~2×. Console fix, not
-      code — the app side is already correct. Not retroactive; note the date.
-- [ ] **Emit `generate_lead`** in `startBusinessCheckout`. It is catalogued and
-      listed as a key event, and nothing sends it — so business advertising has
-      a funnel end (`purchase`) and no beginning.
+- [x] **`setAfterImpl(after)` registered in all eleven emitting server
+      actions** via `analytics/src/register-after.ts`. Twelve events were on
+      the unawaited fire-and-forget path, two of them key events. Guarded by a
+      static test that fails on a missing registration — verified to bite.
+- [x] **`generate_lead` emitted** in `startBusinessCheckout`, so business
+      advertising has a funnel beginning as well as an end.
+- [x] **Web ad posting emits `post_submit` and `post_blocked`.** Found while
+      fixing the other two: `post_submit` fired only on the SMS path, so every
+      ad looked like it arrived by text. Not a gap — a confident wrong answer.
+
+Verified on the rebased branch: tsc clean, build clean, suite **1156/1156**
+(analytics 85), abuse unchanged.
 
 ### 🟡 Worth doing
 
-- [ ] **Turn Enhanced Measurement's Site search OFF.** The custom `search`
-      event has shipped, so both now fire on every homepage search. Two numbers
-      for one thing.
+- [x] **Enhanced Measurement Site search turned OFF 2026-08-20** — the custom
+      `search` event carries `results_count`, which the automatic one cannot
+      know, and running both meant two numbers for one thing.
 - [ ] **Reconcile the catalogue.** `chat_message_sent` and `categories_changed`
       are listed but never emitted; `listing_expired` is deliberately skipped.
       Wire them or mark them planned in `events.ts`.

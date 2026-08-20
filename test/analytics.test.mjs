@@ -302,6 +302,90 @@ export async function run(t) {
     t.eq("an empty event list makes no request", calls.length, before);
   }
 
+  // ── Every emitting server action registers after() ────────────────────
+  // A static check, because this is the one bug class a unit test cannot
+  // reach: analytics/src/after.ts takes its implementation by injection, and
+  // a file that emits without importing the registration silently degrades to
+  // unawaited fire-and-forget. On serverless that means an undercount of
+  // unknown size that still looks entirely plausible — it happened, to twelve
+  // events including two key events, and nothing failed.
+  {
+    const { readdirSync, readFileSync } = await import("node:fs");
+
+    // Loaded by the unit and abuse suites under plain node, where next/server
+    // does not resolve. They must NOT import the registration; their CALLERS
+    // register instead, and registration is process-wide.
+    const TEST_LOADED = new Set(["engine.ts", "moderation.ts", "digest-engine.ts", "analytics.ts"]);
+
+    const offenders = [];
+    const testLoadedImportingNextServer = [];
+    for (const file of readdirSync("lib").filter((f) => f.endsWith(".ts"))) {
+      const src = readFileSync(`lib/${file}`, "utf8");
+      const emits = src.includes("analytics/src/server-events") || src.includes("afterResponse(");
+      if (!emits) continue;
+      if (TEST_LOADED.has(file)) {
+        if (src.includes('from "next/server"')) testLoadedImportingNextServer.push(file);
+        continue;
+      }
+      if (!src.includes("analytics/src/register-after")) offenders.push(file);
+    }
+    t.eq(
+      `every emitting server action registers after() (missing: ${offenders.join(", ") || "none"})`,
+      offenders.length,
+      0,
+    );
+    t.eq(
+      `test-loaded lib files never import next/server (violations: ${testLoadedImportingNextServer.join(", ") || "none"})`,
+      testLoadedImportingNextServer.length,
+      0,
+    );
+  }
+
+  // ── after(): the injection itself ─────────────────────────────────────
+  {
+    const mod = await import("../analytics/src/after");
+    mod.clearAfterImpl();
+    t.eq("with nothing registered, no implementation is reported", mod.afterImplRegistered(), false);
+
+    let ranInline = false;
+    mod.afterResponse(() => {
+      ranInline = true;
+    });
+    t.eq("unregistered work still runs, inline", ranInline, true);
+
+    const scheduled = [];
+    mod.setAfterImpl((work) => scheduled.push(work));
+    t.eq("registration is reported", mod.afterImplRegistered(), true);
+    mod.afterResponse(() => {});
+    t.eq("registered work is handed to the implementation", scheduled.length, 1);
+
+    // after() throws when called outside a request scope. The fallback must
+    // still run the work rather than losing it.
+    let ranAfterThrow = false;
+    mod.setAfterImpl(() => {
+      throw new Error("outside a request scope");
+    });
+    mod.afterResponse(() => {
+      ranAfterThrow = true;
+    });
+    t.eq("a throwing implementation falls back to inline", ranAfterThrow, true);
+
+    // A rejected promise from unawaited work must not escape — an unhandled
+    // rejection can take the process down, and analytics must never do that.
+    mod.clearAfterImpl();
+    let threw = false;
+    try {
+      mod.afterResponse(async () => {
+        throw new Error("boom");
+      });
+    } catch {
+      threw = true;
+    }
+    t.eq("a rejecting job never throws out of afterResponse", threw, false);
+
+    mod.clearAfterImpl();
+  }
+
   // ── The helpers callers will actually use ──────────────────────────────
   {
     t.eq("the ET day key is YYYY-MM-DD", /^\d{4}-\d{2}-\d{2}$/.test(server.etDayKey()), true);

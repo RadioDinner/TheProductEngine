@@ -10,6 +10,9 @@
  *
  * Outcomes are signaled repo-style: redirect() with query params.
  */
+import * as analytics from "@/analytics/src/server-events";
+import { afterResponse } from "@/analytics/src/after";
+import "@/analytics/src/register-after";
 import { randomUUID } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { gaClientIdFromCookie } from "@/analytics/src/ids";
@@ -55,6 +58,8 @@ export async function startBusinessCheckout(formData: FormData): Promise<void> {
     link = linkRaw;
   }
 
+  const gaCookie = (await cookies()).get("_ga")?.value;
+
   let phone: string | null = null;
   if (phoneRaw) {
     phone = normalizePhone(phoneRaw);
@@ -64,6 +69,24 @@ export async function startBusinessCheckout(formData: FormData): Promise<void> {
   // Pre-migration the package couldn't be stored after payment — refuse to
   // take money the system can't record ("not available yet" posture).
   if (!(await businessPackagesAvailable())) redirect("/advertising?error=unavailable");
+
+  // A business STARTING a sponsorship purchase — past every validation gate,
+  // about to be sent to payment. Emitted here rather than on completion
+  // because `purchase` already covers completion: without this the business
+  // funnel had an end and no beginning, so "how many start and how many
+  // finish" was unanswerable for the highest-value action on the site.
+  // Both the live and the simulated payment paths flow through this point.
+  afterResponse(() =>
+    analytics.custom(
+      { phone: phone ?? undefined, clientId: gaClientIdFromCookie(gaCookie) ?? undefined },
+      "generate_lead",
+      {
+        value: Math.round(tier.priceCents) / 100,
+        currency: "USD",
+        package_name: tier.id,
+      },
+    ),
+  );
 
   if (paymentsDevMode) {
     // Simulated payment, credit-pack style: dev tools must be explicitly on.
@@ -97,7 +120,7 @@ export async function startBusinessCheckout(formData: FormData): Promise<void> {
       phone,
       origin,
       // Attribution through the redirect — see analytics/04-wiring.md step 4.
-      gaClientId: gaClientIdFromCookie((await cookies()).get("_ga")?.value) ?? "",
+      gaClientId: gaClientIdFromCookie(gaCookie) ?? "",
     });
   } catch (e) {
     console.error("[business] checkout session failed:", e);
