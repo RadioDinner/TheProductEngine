@@ -98,17 +98,32 @@ That is `NEXT_PUBLIC_GA_MEASUREMENT_ID`.
 
 ### Enhanced measurement
 
-Leave the toggle on, then open its settings and turn **off**:
+**Leave the toggle on, and leave nearly all of it alone.** Enhanced Measurement
+is free data collected by Google's own tag; the only rule worth applying is
+**never measure the same thing twice in two different ways**, because the two
+numbers will disagree by a few percent forever and nobody will know which to
+believe.
 
-- **Site search** — we send `search` ourselves with a `results_count` the
-  automatic version cannot know.
-- **Form interactions** — this site's forms are server actions; the automatic
-  events fire on things that are not submissions and produce a confusing
-  duplicate of `post_submit`.
-- **Video engagement** — there is no video.
+Applying that rule here:
 
-Leave **on**: page views, scrolls, outbound clicks, file downloads. They cost
-nothing and occasionally answer a question.
+- **Site search — LEAVE ON.** The homepage search passes its query as `?q=`
+  (`app/page.tsx`), which is one of GA4's default search parameters, so the
+  automatic `view_search_results` works correctly with no configuration at all.
+  Turn it off only at the moment the custom `search` event ships (wiring step
+  7), which adds `results_count` — "people searched for this and got nothing"
+  is the actionable half, and the automatic version cannot know it. Until then,
+  turning this off buys nothing and costs all search data.
+- **Form interactions — off, but it is a preference.** Every form on this site
+  is a server action, so `form_destination` resolves to a Next action id rather
+  than anything readable, and `form_id`/`form_name` are usually empty. Every
+  form fires it — sign-in, search, chat, settings toggles — so `form_submit`
+  becomes an undifferentiated "somebody submitted something" that sits in the
+  events list looking like a conversion. Noise hygiene, not correctness.
+  Leaving it on breaks nothing.
+- **Video engagement — irrelevant either way.** It only fires on embedded
+  players, and there are none. Off is tidier; on costs nothing.
+
+Leave **on**: page views, scrolls, outbound clicks, file downloads.
 
 ---
 
