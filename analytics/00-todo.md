@@ -67,6 +67,12 @@ User-scoped:
 
 - [ ] `member_status`, `signup_channel`, `line_type`, `has_saved_card`
 
+✅ **Item-scoped clean-up DONE 2026-08-20** — ten dimensions had been created
+under Item scope (the form does not reset the Scope dropdown between saves, and
+Item is the tightest bucket in GA4 at 10). Archived; this property needs zero
+item-scoped, because every field the code puts in `items[]` is a built-in GA4
+item dimension.
+
 Metrics — ✅ **DONE 2026-08-20** (`photo_count`, `segments`, `recipients`,
 `wait_minutes`, `days_to_sell`, `reveals_left`, `pulls_left`,
 `duration_seconds`, `results_count`, `listing_count`)
