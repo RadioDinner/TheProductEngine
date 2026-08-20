@@ -381,7 +381,8 @@ The conflict, the options, and drafted replacement copy are in
                                                              done; refund + auto_topup
                                                              still to do
 [x] 4  ga_client_id          lib/payments.ts + both callers
-[ ] 5  browser tag           app/layout.tsx                  ← needs step 13 live first
+[x] 5  browser tag           app/layout.tsx                  shipped WITH step 13,
+                                                             in one commit
 [ ] 6  page coverage         the ten uncounted pages, /ad/<id>
 [ ] 7  listing events        ad page, reveal-actions, account-actions
 [ ] 8  lifecycle             admin-actions, digest-engine, email-digest
@@ -389,7 +390,7 @@ The conflict, the options, and drafted replacement copy are in
 [ ] 10 first-party upgrade   migration + lib/analytics.ts
 [x] 11 health probe          app/api/health/route.ts
 [x] 12 test suite            test/analytics.test.mjs, registered in test/run.mjs
-[ ] 13 privacy policy        app/privacy/page.tsx            ← before step 5
+[x] 13 privacy policy        app/privacy/page.tsx            same commit as step 5
 ```
 
 ### What step 2 still owes, and why it was split

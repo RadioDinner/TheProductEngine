@@ -11,7 +11,7 @@ export default function PrivacyPolicy() {
   return (
     <div className="container prose">
       <h1>Privacy policy</h1>
-      <p className="fine">Effective July 7, 2026 · Updated July 17, 2026</p>
+      <p className="fine">Effective July 7, 2026 · Updated August 20, 2026</p>
       <p>
         {site.name} is a classified ads service for {site.region} that runs on plain text
         messages and this website. This page says, in plain words, what information we
@@ -87,6 +87,13 @@ export default function PrivacyPolicy() {
         <li>To handle payments, credits, and refunds.</li>
         <li>To answer you when you write or call for help.</li>
       </ul>
+      {/* This sentence is true ONLY while Google Signals is off and ad
+          personalization is denied — see analytics/05-privacy-and-consent.md.
+          Google Signals is the switch that joins a visit to a signed-in Google
+          identity across other sites. It is off in the property, the browser tag
+          pushes allow_google_signals:false before config, and every server-side
+          event carries ad_user_data:DENIED. If anyone ever turns those on, this
+          sentence must come out the same day. */}
       <p>
         We do not use your information for advertising other people&rsquo;s products, and we
         do not track you around the internet.
@@ -124,6 +131,7 @@ export default function PrivacyPolicy() {
         <li>Our email provider, to deliver the email edition.</li>
         <li>Stripe, to process card payments.</li>
         <li>Our hosting and database providers, to run the website and store the records.</li>
+        <li>Google Analytics, to count visits and tell us how people find the site.</li>
       </ul>
       <p>
         None of them may use your information for their own marketing. Beyond that, we
@@ -155,13 +163,27 @@ export default function PrivacyPolicy() {
 
       <h2>Cookies</h2>
       <p>
-        This website uses one kind of cookie: the one that keeps you signed in. No
-        advertising cookies, no analytics trackers, no third-party cookies, and no web
-        beacons or tracking pixels — on the site or in our emails.
+        This website uses two kinds of cookie, both set by us, and neither one follows you
+        off this site. The first keeps you signed in. The second is a counting cookie for
+        Google Analytics, which we use to see how many people visit, which pages they
+        read, and how they found us — so we know whether the service is reaching the
+        people it is meant for.
       </p>
       <p>
-        We do count page visits, but the counter runs on our own server without cookies
-        and stores no personal information — it cannot identify you.
+        No advertising cookies, no third-party cookies, and no web beacons or tracking
+        pixels — on the site or in our emails. We have turned off Google&rsquo;s
+        advertising features, so nothing here is used to build an advertising profile of
+        you or to show you ads anywhere else.
+      </p>
+      <p>
+        Google Analytics is told what pages were viewed and what actions were taken. It is
+        never told your phone number, your email address, your name, or what your ads say.
+        When we need to recognize a returning member, we send a scrambled code that stands
+        in for the account — it cannot be turned back into your phone number.
+      </p>
+      <p>
+        We also count page visits with our own counter, which runs on our server without
+        cookies and stores no personal information.
       </p>
 
       <h2>How long we keep things</h2>

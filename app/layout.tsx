@@ -7,6 +7,9 @@ import { readSession } from "@/lib/session";
 import { countUnreadChats } from "@/lib/store";
 import { site } from "@/lib/config";
 import { MessagesBadge } from "@/components/MessagesBadge";
+import { GoogleAnalytics } from "@/analytics/src/GoogleAnalytics";
+import { hashedMemberId } from "@/analytics/src/ids";
+import { ANALYTICS_SALT, GA_MEASUREMENT_ID } from "@/analytics/src/config";
 import "./globals.css";
 import { HelpButton } from "@/components/HelpButton";
 
@@ -44,6 +47,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Initial badge count, server-rendered cheap (item 12); the client badge
   // polls /api/unread from there.
   const unread = session ? await countUnreadChats(session.phone) : 0;
+  // Analytics (analytics/). The OPERATOR is excluded outright, not just on
+  // /admin: on a service this size their own browsing would be a meaningful
+  // share of all traffic and would distort every rate on the dashboard. The
+  // console's IP filter covers them signed out; this covers them on cellular,
+  // on a borrowed laptop, and anywhere an IP filter quietly stops matching.
+  const isAdmin = session ? isAdminPhone(session.phone) : false;
+  // Salted on the SERVER — the salt never reaches the browser, and the hash
+  // cannot be turned back into a phone number without it.
+  const memberId = session ? hashedMemberId(session.phone, ANALYTICS_SALT) : "";
   return (
     <html lang="en" className={`${newsreader.variable} ${publicSans.variable}`}>
       <body>
@@ -132,6 +144,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </div>
         </footer>
         <HelpButton />
+        {!isAdmin && <GoogleAnalytics measurementId={GA_MEASUREMENT_ID} memberId={memberId} />}
       </body>
     </html>
   );
