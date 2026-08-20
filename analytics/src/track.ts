@@ -61,16 +61,44 @@ export function tagReady(): boolean {
   return typeof window !== "undefined" && typeof window.gtag === "function";
 }
 
-/** Send one event. Safe to call from anywhere, including during SSR. */
-export function track(name: string, params: GaParams = {}): void {
-  if (isDev()) {
-    const problem = eventNameProblem(name);
-    if (problem) console.warn(`[analytics] event "${name}" ${problem}`);
-    else if (!KNOWN.has(name)) {
-      console.warn(`[analytics] event "${name}" is not in the catalogue (analytics/src/events.ts)`);
+/**
+ * Events fired before the tag finished loading, waiting for it.
+ *
+ * This queue exists because of a real race: the tag is injected with Next's
+ * `afterInteractive` strategy, and a page's own effects also run at hydration.
+ * Which happens first is not guaranteed. Without a queue, the FIRST event of a
+ * page load — `view_item` on a listing, the one that answers "which ads are
+ * popular" — would silently vanish on some loads and not others. That is the
+ * worst kind of bug in analytics: it does not fail, it just quietly under-counts
+ * by an unknown amount, and the number still looks plausible.
+ */
+const pending: { name: string; params: GaParams }[] = [];
+let flushTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Stop waiting after this long — a blocked or absent tag is never coming. */
+const FLUSH_TIMEOUT_MS = 10_000;
+const FLUSH_INTERVAL_MS = 200;
+
+function startFlushing(): void {
+  if (flushTimer !== null || typeof window === "undefined") return;
+  const startedAt = Date.now();
+  flushTimer = setInterval(() => {
+    if (tagReady()) {
+      const queued = pending.splice(0, pending.length);
+      for (const event of queued) send(event.name, event.params);
     }
-  }
-  if (!tagReady()) return;
+    if (tagReady() || Date.now() - startedAt > FLUSH_TIMEOUT_MS) {
+      if (flushTimer !== null) clearInterval(flushTimer);
+      flushTimer = null;
+      // Drop whatever is left: an ad blocker, no JavaScript budget, or a
+      // measurement id that was never set. Holding them forever would leak.
+      pending.length = 0;
+    }
+  }, FLUSH_INTERVAL_MS);
+}
+
+/** The actual gtag call, once we know the tag is there. */
+function send(name: string, params: GaParams): void {
   const clean = sanitizeParams(scrubParams(params));
   if (isDev() && clean.dropped.length) {
     console.warn(`[analytics] "${name}" dropped parameters:`, clean.dropped.join(", "));
@@ -80,6 +108,26 @@ export function track(name: string, params: GaParams = {}): void {
   } catch {
     // An analytics call is never worth an exception in a click handler.
   }
+}
+
+/** Send one event. Safe to call from anywhere, including during SSR. */
+export function track(name: string, params: GaParams = {}): void {
+  if (isDev()) {
+    const problem = eventNameProblem(name);
+    if (problem) console.warn(`[analytics] event "${name}" ${problem}`);
+    else if (!KNOWN.has(name)) {
+      console.warn(`[analytics] event "${name}" is not in the catalogue (analytics/src/events.ts)`);
+    }
+  }
+  if (typeof window === "undefined") return; // server render — nothing to do
+  if (!tagReady()) {
+    // Queue rather than drop; see `pending` above. Bounded so a page that
+    // never loads the tag cannot grow this without limit.
+    if (pending.length < 50) pending.push({ name, params });
+    startFlushing();
+    return;
+  }
+  send(name, params);
 }
 
 /** A manual page_view, because the tag is configured with send_page_view:false. */

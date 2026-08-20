@@ -1197,18 +1197,6 @@ export async function handleInbound(msg: InboundSms, providerId?: string): Promi
   // going dark. The happy path is unchanged.
   try {
     const command = parseCommand(msg.text || "");
-
-    // Analytics, fire-and-forget (analytics/). Emitted here — after the dedup
-    // and the blocklist, before routing — so it counts every genuine inbound
-    // regardless of what happens to it next. `unknown` is the valuable bucket:
-    // each one is somebody who tried to use the service and was not
-    // understood. Never awaited; a no-op unless the GA env vars are set.
-    void analytics.smsInbound({
-      phone: msg.from,
-      command: command.kind,
-      hasMedia: !!msg.media?.length,
-    });
-
     const settings = await getEngineSettings();
 
     // STOP always takes effect (unsubscribe — honored even under attack); only

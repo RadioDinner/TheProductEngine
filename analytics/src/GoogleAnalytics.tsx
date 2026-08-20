@@ -33,6 +33,7 @@
 import Script from "next/script";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef } from "react";
+import { attachClickTracking } from "./clicks";
 
 interface Props {
   measurementId: string;
@@ -77,6 +78,12 @@ function PageViews() {
   return null;
 }
 
+/** One document-level click listener for the whole site — see clicks.ts. */
+function ClickTracking() {
+  useEffect(() => attachClickTracking(), []);
+  return null;
+}
+
 export function GoogleAnalytics({ measurementId, memberId, analyticsConsent = true }: Props) {
   // No id, no tag. This is what keeps preview deployments and local dev out of
   // the production property: the variable is set on production only.
@@ -118,6 +125,7 @@ ${memberId ? `gtag('set', { user_id: '${memberId}' });` : ""}
       <Suspense fallback={null}>
         <PageViews />
       </Suspense>
+      <ClickTracking />
     </>
   );
 }

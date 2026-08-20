@@ -1,8 +1,11 @@
 "use server";
 
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
+import { after } from "next/server";
 import { cookies, headers } from "next/headers";
 import { gaClientIdFromCookie } from "@/analytics/src/ids";
+import * as analytics from "@/analytics/src/server-events";
+import { getAdCategories } from "@/lib/engine-store";
 import { redirect } from "next/navigation";
 import { readSession } from "@/lib/session";
 import {
@@ -73,6 +76,18 @@ export async function startChat(formData: FormData): Promise<void> {
   await ensureAccount(ad.ownerPhone);
   const chatId = await ensureChat(adId, session.phone, ad.ownerPhone);
   if (chatId === null) redirect(`/ad/${adId}?chat=unavailable`);
+  // Interest turning into an actual conversation — the step after a number
+  // look-up, and the one that says the listing was worth acting on. Sent
+  // server-side with the browser's _ga id so it joins the same visit; inside
+  // after() so the redirect cannot cut it off.
+  const gaClientId = gaClientIdFromCookie((await cookies()).get("_ga")?.value) ?? undefined;
+  const chatCategory = (await getAdCategories([adId])).get(adId) ?? "uncategorized";
+  after(() =>
+    analytics.custom({ phone: session.phone, clientId: gaClientId }, "chat_start", {
+      listing_category: chatCategory,
+      items: [{ item_id: `ad_${adId}`, item_category: chatCategory }],
+    }),
+  );
   redirect(`/account/messages/${chatId}`);
 }
 

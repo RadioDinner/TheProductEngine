@@ -6,7 +6,7 @@
  * can never double-credit.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import {
   addLedgerEntry,
   ensureAccount,
@@ -132,15 +132,17 @@ async function handleBusinessPackage(
   if (result.outcome === "created") {
     // "created" only — "duplicate" is a Stripe retry of a payment already
     // counted, and "unsupported" is money taken that we could not store.
-    void analytics.purchaseCompleted({
-      phone: normalizePhone(meta.phone ?? "") || undefined,
-      clientId: meta.ga_client_id,
-      transactionId: ref,
-      amountCents: tier.priceCents,
-      productId: `sponsorship_${tier.id}`,
-      productCategory: "business_sponsorship",
-      paymentChannel: "web",
-    });
+    after(() =>
+      analytics.purchaseCompleted({
+        phone: normalizePhone(meta.phone ?? "") || undefined,
+        clientId: meta.ga_client_id,
+        transactionId: ref,
+        amountCents: tier.priceCents,
+        productId: `sponsorship_${tier.id}`,
+        productCategory: "business_sponsorship",
+        paymentChannel: "web",
+      }),
+    );
   }
   // "duplicate" = Stripe retry of an already-stored payment: correctly ignored.
   return result.outcome;
@@ -201,15 +203,17 @@ export async function POST(req: NextRequest) {
           // twice. GA also de-duplicates on transaction_id, but relying on
           // that alone would mean trusting a remote system to protect our
           // revenue figure. Fire-and-forget; a no-op unless GA is configured.
-          void analytics.purchaseCompleted({
-            phone,
-            clientId: session.metadata?.ga_client_id,
-            transactionId: ref,
-            amountCents,
-            productId: "credit_topup",
-            productCategory: "account_credit",
-            paymentChannel: "web",
-          });
+          after(() =>
+            analytics.purchaseCompleted({
+              phone,
+              clientId: session.metadata?.ga_client_id,
+              transactionId: ref,
+              amountCents,
+              productId: "credit_topup",
+              productCategory: "account_credit",
+              paymentChannel: "web",
+            }),
+          );
         }
         if (session.customer) {
           await setStripeCustomerId(phone, session.customer);

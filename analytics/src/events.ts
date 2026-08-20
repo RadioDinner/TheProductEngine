@@ -418,11 +418,13 @@ export const EVENT_CATALOGUE: readonly EventSpec[] = [
     params: [],
   },
   {
-    name: "outbound_click",
+    name: "ui_click",
     scope: "web",
-    trigger: "A tel: link or a Featured sponsor link is clicked.",
-    question: "Do the Featured slots deliver clicks worth charging for?",
-    params: ["link_type", "link_url"],
+    trigger:
+      "Any internal link or button, via the one delegated listener in analytics/src/clicks.ts.",
+    question:
+      "What do people actually click? One event with the text, destination and page section, rather than forty bespoke events nobody remembers to add. Listing clicks are excluded — they go to select_item, which handles high cardinality properly. External links are excluded too: GA4's Enhanced Measurement already reports those, and measuring one thing twice leaves two numbers that disagree.",
+    params: ["click_text", "click_href", "click_section"],
   },
 ] as const;
 

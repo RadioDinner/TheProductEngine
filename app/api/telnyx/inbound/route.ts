@@ -4,10 +4,12 @@
  * (Portal → Account → Public Key); without it (dev) requests are trusted.
  */
 import { createPublicKey, verify as edVerify } from "node:crypto";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { handleInbound } from "@/lib/engine";
+import { parseCommand } from "@/lib/commands";
 import { normalizePhone } from "@/lib/phone";
 import { isProduction } from "@/lib/env";
+import * as analytics from "@/analytics/src/server-events";
 
 const TELNYX_TOLERANCE_S = 300;
 
@@ -85,6 +87,24 @@ export async function POST(req: NextRequest) {
       : [];
     const providerId = typeof payload.id === "string" ? payload.id : undefined;
     if (from) {
+      // What people text us, counted (analytics/). `after()` rather than a
+      // bare `void`: on a serverless platform, work still pending when the
+      // response is returned can be killed with the invocation. A fire-and-
+      // forget analytics call would then be delivered *most* of the time,
+      // which is the worst possible failure — the count is wrong by an
+      // unknown amount and still looks plausible. after() keeps the function
+      // alive until it finishes, and keeps it off the reply's critical path.
+      //
+      // parseCommand is pure and cheap, so re-parsing here costs nothing and
+      // keeps the analytics import out of lib/engine.ts, which is the hottest
+      // file in the app and is loaded by the test harness.
+      after(() =>
+        analytics.smsInbound({
+          phone: from,
+          command: parseCommand(text || "").kind,
+          hasMedia: media.length > 0,
+        }),
+      );
       try {
         await handleInbound({ from, text, ...(media.length && { media }) }, providerId);
       } catch (e) {

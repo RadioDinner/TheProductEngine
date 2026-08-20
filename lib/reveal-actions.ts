@@ -7,9 +7,14 @@
  * a free repeat for an already-revealed ad. Owners and the admin never spend —
  * the ad page shows them the numbers without this action.
  */
+import { after } from "next/server";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { readSession } from "@/lib/session";
 import { getAd } from "@/lib/ads";
+import { getAdCategories } from "@/lib/engine-store";
+import { gaClientIdFromCookie } from "@/analytics/src/ids";
+import * as analytics from "@/analytics/src/server-events";
 import { ensureAccount, reserveRevealQuota } from "@/lib/store";
 import { getEngineSettings } from "@/lib/settings";
 import { isAdminPhone } from "@/lib/admin";
@@ -46,6 +51,31 @@ export async function revealNumber(formData: FormData): Promise<void> {
     settings.revealBankCap,
     today,
   );
+  // The strongest buyer signal this website produces. The sale itself happens
+  // on a phone call we cannot see, so a number look-up is the closest thing to
+  // a conversion we will ever record — and split by category it is the direct
+  // answer to "which kinds of ad actually get people to pick up the phone".
+  //
+  // Sent from the server rather than the browser because this is a server
+  // action: reading the _ga cookie here attaches it to the member's real
+  // browser session, so the look-up joins the visit that produced it instead
+  // of arriving as a stranger. Inside after() so it cannot be cut off by the
+  // redirect, and off the critical path of the member's click.
+  const gaClientId = gaClientIdFromCookie((await cookies()).get("_ga")?.value) ?? undefined;
+  const category = (await getAdCategories([adId])).get(adId) ?? "uncategorized";
+  after(() =>
+    quota.allowed
+      ? analytics.custom({ phone: session.phone, clientId: gaClientId }, "listing_reveal", {
+          listing_category: category,
+          reveals_left: quota.remaining,
+          items: [{ item_id: `ad_${adId}`, item_category: category }],
+        })
+      : analytics.custom({ phone: session.phone, clientId: gaClientId }, "listing_reveal_blocked", {
+          reason: "out_of_lookups",
+          listing_category: category,
+        }),
+  );
+
   // ?reveal=ok matters only pre-migration in prod (no reveal log yet): the ad
   // page trusts it solely when the log reads "unsupported" — the documented
   // unmetered degrade — so hand-typing it post-migration reveals nothing.

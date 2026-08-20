@@ -4,6 +4,7 @@ import { readSession } from "@/lib/session";
 import { categoriesSupported } from "@/lib/store";
 import { CATEGORIES, categoryLabel, isCategoryKey } from "@/lib/categories";
 import { recordVisit } from "@/lib/analytics";
+import { TrackEvent } from "@/analytics/src/TrackEvent";
 import { site } from "@/lib/config";
 import { etParts } from "@/lib/et";
 import { getEngineSettings } from "@/lib/settings";
@@ -102,6 +103,19 @@ export default async function Home({
 
   return (
     <>
+      {/* Which categories people browse, and how many listings they were
+          shown. results_count is the half that matters and the half GA cannot
+          work out on its own: a browse that returns nothing is a category we
+          are failing to supply, and it looks identical to a busy one in a
+          plain page-view count. */}
+      <TrackEvent
+        name="view_item_list"
+        params={{
+          item_list_name: category ? `category:${category}` : q ? "search" : "home",
+          listing_category: category ?? "all",
+          results_count: total,
+        }}
+      />
       {/* Visitor opt-in surface (10DLC CTA) — a signed-in member already
           subscribed, so the pitch would just be noise for them (item 11).
           The every-page HELP/STOP paragraph stays in the layout footer. */}

@@ -14,6 +14,7 @@ import { isAdminPhone } from "@/lib/admin";
 import { MaskedText, maskPhonesPlain } from "@/components/MaskedText";
 import { readSession } from "@/lib/session";
 import { recordVisit } from "@/lib/analytics";
+import { TrackEvent } from "@/analytics/src/TrackEvent";
 import { site } from "@/lib/config";
 
 function parseId(raw: string): number | null {
@@ -78,7 +79,7 @@ export default async function AdPage({
   const ad = await getAd(id);
   if (!ad) notFound();
   const { chat: chatParam, reveal: revealParam } = await searchParams;
-  await recordVisit("/ad");
+  await recordVisit(`/ad/${id}`);
 
   if (ad.status === "expired") {
     return (
@@ -130,6 +131,27 @@ export default async function AdPage({
 
   return (
     <div className="container ad-page">
+      {/* Which listings and categories people actually look at. Sent as
+          view_item with an items[] array rather than a custom event with an
+          ad_id parameter: GA4 buckets high-cardinality custom dimensions into
+          "(other)" once past the daily limit, which would quietly hollow out
+          this exact report at the moment the service got big enough for it to
+          matter. The items reports are built for high cardinality.
+          item_name is NEVER sent — an ad's title is member-written text, and
+          members put their phone numbers in it constantly. */}
+      <TrackEvent
+        name="view_item"
+        params={{
+          listing_category: adCategory ?? "uncategorized",
+          has_photo: (ad.photos?.length ?? 0) > 0,
+          items: [
+            {
+              item_id: `ad_${ad.id}`,
+              item_category: adCategory ?? "uncategorized",
+            },
+          ],
+        }}
+      />
       <p className="backlink">
         <Link href="/">← All ads</Link>
       </p>
