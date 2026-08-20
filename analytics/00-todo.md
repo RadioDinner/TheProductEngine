@@ -137,6 +137,49 @@ This closes the code side entirely. Everything below is optional.
 
 ---
 
+## 🔧 From the audit — 2026-08-20 (`07-audit.md`)
+
+Ranked by cost, not effort. The first two are real defects, not polish.
+
+### 🔴 Fix
+
+- [ ] **Register `setAfterImpl(after)` where server actions load it.** Only the
+      four API routes register it today, so twelve events — including two of
+      the six key events — fall back to unawaited fire-and-forget and can be
+      killed with the serverless invocation. An undercount of unknown size that
+      still looks plausible. ⚠️ `lib/moderation.ts` and `lib/digest-engine.ts`
+      must NOT import `next/server`: the test harness loads them under plain
+      node. Register in the calling server actions instead.
+- [ ] **Emit `generate_lead`** in `startBusinessCheckout`. It is catalogued and
+      listed as a key event, and nothing sends it — so business advertising has
+      a funnel end (`purchase`) and no beginning.
+
+### 🟡 Worth doing
+
+- [ ] **Turn Enhanced Measurement's Site search OFF.** The custom `search`
+      event has shipped, so both now fire on every homepage search. Two numbers
+      for one thing.
+- [ ] **Reconcile the catalogue.** `chat_message_sent` and `categories_changed`
+      are listed but never emitted; `listing_expired` is deliberately skipped.
+      Wire them or mark them planned in `events.ts`.
+- [ ] **Wire `chat_message_sent`** — chat starts are counted, depth is not, so
+      "do conversations continue or die after one message" is unanswerable.
+- [ ] **Set the three custom insights** in `06-operating-the-numbers.md`.
+      Nothing currently notices if collection stops.
+- [ ] **Sample the bot gap once.** The first-party counter counts crawlers and
+      GA filters them, so GA will read lower forever. Understand the ratio once
+      rather than rediscovering it as a "bug".
+- [ ] **UTM-tag the links in email editions** (free). SMS is an operator call —
+      ~15 characters, and at a segment boundary that is money on every send.
+
+### 🟢 Tidy
+
+- [ ] **Refresh `analytics/README.md`** — it still says the code is "imported by
+      nothing", the migration is "not yet numbered", and nothing is wired. All
+      true when written, all false now.
+
+---
+
 ## 🔵 Operational
 
 - [ ] Build the four explorations in `06-operating-the-numbers.md` (buyer

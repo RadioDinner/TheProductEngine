@@ -15,12 +15,12 @@ code that produces the numbers, and how to read them without fooling yourself.
 | [`04-wiring.md`](04-wiring.md) | Turn it on — the exact changes outside this folder, in the order to make them. |
 | [`05-privacy-and-consent.md`](05-privacy-and-consent.md) | **Read before wiring the browser tag.** The privacy policy currently promises the opposite of what GA does. |
 | [`06-operating-the-numbers.md`](06-operating-the-numbers.md) | Actually use the numbers: the Monday routine, four reports, and how not to read noise. |
+| [`07-audit.md`](07-audit.md) | **The 2026-08-20 review** — what is solid, and the ten weak spots found by reading the code. |
 
 ## The code
 
-Staged, typechecked, and **imported by nothing**. `tsc --noEmit` is clean and
-`next build` is clean with it present, because nothing in the app references it
-yet.
+**Live.** The app imports all of it — the browser tag from `app/layout.tsx`,
+the server helpers from the engine, the routes and the server actions.
 
 | File | What it is |
 | --- | --- |
@@ -31,23 +31,25 @@ yet.
 | `src/measurement-protocol.ts` | Server-side sender: batching, timeouts, validation, never throws. |
 | `src/server-events.ts` | One named helper per business moment, so wiring is a single line. |
 | `src/GoogleAnalytics.tsx` | The tag, as one component for `app/layout.tsx`. |
-|  `supabase/migrations/9961_analytics_upgrade.sql` | Our own counter, upgraded: referrer, campaign, and unique people. Cookieless. Not yet numbered — see `04-wiring.md` step 10. |
-| `test/analytics.test.mjs` | 75 checks over the rules GA4 breaks silently. |
+| `src/after.ts` | Keeps a server event alive past the response — serverless kills fire-and-forget work. |
+| `src/clicks.ts` | One delegated click listener for the whole site. |
+| `src/TrackEvent.tsx` | Lets a server-rendered page fire one event. |
+| `supabase/migrations/9961_analytics_upgrade.sql` | Our own counter, upgraded: referrer, campaign, unique people. Cookieless. **Pasted 2026-08-20.** |
+| `test/analytics.test.mjs` | 77 checks over the rules GA4 breaks silently. Runs in the main suite. |
 
 Run the tests:
 
 ```sh
-node --experimental-strip-types --disable-warning=ExperimentalWarning \
-     --loader ./test/abuse/alias-loader.mjs analytics/test/analytics.test.mjs
+npm test          # the analytics suite runs inside it
 ```
 
 ## The rule for this folder
 
-Nothing in `analytics/` is wired into the running app until `04-wiring.md` says
-so and someone applies it. Code staged here is **inert by design** — it can be
-read, reviewed and merged without changing a single byte of the site's
-behaviour. That is deliberate: measurement code that ships half-wired is worse
-than no measurement, because the numbers look real and are not.
+It was built staged and inert, then wired in six verified waves. The rule that
+produced that is still the rule for changes: **measurement that ships
+half-wired is worse than none, because the numbers look real and are not.**
+`04-wiring.md` is now the record of where each event sits and why it sits
+exactly there.
 
 ## The five things worth knowing before touching any of it
 
@@ -61,10 +63,12 @@ than no measurement, because the numbers look real and are not.
    (`src/measurement-protocol.ts`) matters more here than on almost any other
    site, and why it is step 2 of the wiring rather than an afterthought.
 
-3. **The privacy policy currently says we run no analytics trackers.** In
-   writing, on `/privacy`. Shipping the browser tag makes that false while it is
-   still published. `05-privacy-and-consent.md` has the conflict, three ways
-   forward, and drafted replacement copy.
+3. **The privacy policy was rewritten to match** what the tag actually does,
+   and shipped in the SAME commit as the tag. "No third-party cookies" and "we
+   do not track you around the internet" both remain TRUE — the second only
+   while Google Signals stays off. `05-privacy-and-consent.md` has the
+   reasoning; there is a comment above the sentence in the code saying it must
+   come out the same day anyone turns Signals on.
 
 4. **Google is never told who anyone is.** Members are a salted SHA-256 of their
    phone number, and the browser emitter strips anything phone- or email-shaped
