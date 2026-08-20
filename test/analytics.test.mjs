@@ -198,6 +198,15 @@ export async function run(t) {
     const noUser = mp.buildPayload({ clientId: "1.2", events: [] }, [{ name: "x" }]);
     t.eq("no user id means the key is absent, not empty", "user_id" in noUser.payload, false);
 
+    // debug_mode is what makes a SERVER event visible in DebugView. Without it
+    // a freshly wired integration is unverifiable for up to 48 hours, because
+    // the live endpoint answers 204 either way and the standard reports lag.
+    t.eq("debug_mode is off by default", "debug_mode" in ev.params, false);
+    const debug = mp.buildPayload({ clientId: "1.2", events: [], debugMode: true }, [
+      { name: "post_submit" },
+    ]);
+    t.eq("debug_mode rides on every event when asked for", debug.payload.events[0].params.debug_mode, true);
+
     const props = mp.buildPayload(
       {
         clientId: "1.2",

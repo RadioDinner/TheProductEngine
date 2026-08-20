@@ -282,17 +282,33 @@ history is one forgotten password away from losing all of it.
 In order. Do not skip to the reports — the standard reports lag by up to 24–48
 hours, and staring at an empty one teaches you nothing about whether it works.
 
-1. **Server events first, against the debug endpoint.** Set `GA_VALIDATE_ONLY=1`
-   and send one. `validateServerEvents()` in
-   `analytics/src/measurement-protocol.ts` returns Google's own complaints. An
-   empty array means the payload is acceptable. **The live endpoint returns 204
-   for payloads it throws away** — this is the only honest check.
-2. **Unset `GA_VALIDATE_ONLY`, send a real one, and watch DebugView.**
-   Reports → **DebugView** shows events within seconds. Server events appear
-   here when they carry `engagement_time_msec` and `session_id`, which the
-   library always adds.
-3. **Realtime** — Reports → Realtime, for the browser tag. Load a page and watch
-   the count move.
+0. **`/api/health`** — confirms the deployment actually has the variables. Note
+   it needs the operator bearer token in production:
+   `curl -H "Authorization: Bearer $CRON_SECRET" https://<site>/api/health`.
+   Look for `NEXT_PUBLIC_GA_MEASUREMENT_ID`, `GA_API_SECRET` and
+   `ANALYTICS_SALT` all true. **Vercel applies an environment change only on
+   the next deploy**, so if they are false after setting them, redeploy.
+1. **Validate the payload shape.** Set `GA_VALIDATE_ONLY=1` and send one event.
+   `validateServerEvents()` in `analytics/src/measurement-protocol.ts` returns
+   Google's own complaints; an empty array means the payload is acceptable.
+   **The live endpoint returns 204 for payloads it throws away** — this is the
+   only honest check of the shape.
+2. **Set `GA_DEBUG_MODE=1`, unset `GA_VALIDATE_ONLY`, and watch DebugView.**
+   Reports → **DebugView**, events within seconds.
+
+   > **Server events do NOT appear in DebugView by default.** DebugView shows
+   > only events flagged `debug_mode`, which the browser tag sets via the
+   > Google Analytics Debugger extension and which a Measurement Protocol
+   > event has to carry explicitly. `GA_DEBUG_MODE=1` is what adds it. Without
+   > that, a freshly wired server integration is unverifiable for up to 48
+   > hours — which reads exactly like a broken integration and sends people
+   > rewriting code that was working all along.
+
+   Turn it back off once you have seen the events land.
+3. **Realtime** — Reports → Realtime. Works for both the browser tag and server
+   events without any debug flag, because the library always sends
+   `engagement_time_msec` and `session_id`. Coarser than DebugView, but it is
+   the honest "is anything arriving at all" check.
 4. **Then wait a day** before drawing any conclusion from a standard report.
 
 If DebugView is empty for a server event but validation passed, the usual cause

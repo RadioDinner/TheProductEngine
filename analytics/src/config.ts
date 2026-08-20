@@ -51,6 +51,23 @@ export const ANALYTICS_SALT: string = process.env.ANALYTICS_SALT ?? "";
  */
 export const GA_VALIDATE_ONLY: boolean = process.env.GA_VALIDATE_ONLY === "1";
 
+/**
+ * When "1", every server event carries `debug_mode`, which is what makes it
+ * appear in GA4's DebugView.
+ *
+ * This is not a nicety. Measurement Protocol events are NOT shown in DebugView
+ * by default — the live endpoint answers 204 and the event vanishes into the
+ * standard reports, which lag by up to 48 hours. So the natural first question
+ * after wiring ("is anything arriving?") has no answer for two days unless
+ * this is on. Turn it on to verify the plumbing, watch the events land, then
+ * turn it off.
+ *
+ * Leaving it on is not harmful the way GA_VALIDATE_ONLY is — the events are
+ * still recorded normally — but it does route them through the debug stream,
+ * so switch it off once you have seen what you needed to see.
+ */
+export const GA_DEBUG_MODE: boolean = process.env.GA_DEBUG_MODE === "1";
+
 /** The browser tag is live only when a measurement id is configured. */
 export const browserTagEnabled: boolean = GA_MEASUREMENT_ID !== "";
 

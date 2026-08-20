@@ -87,6 +87,10 @@ export async function GET(req: NextRequest) {
       // endpoint, which stores nothing while reporting success. Everything
       // looks healthy and no data is recorded.
       GA_VALIDATE_ONLY: process.env.GA_VALIDATE_ONLY === "1",
+      // Makes server events visible in GA4 DebugView. Safe to leave on, but
+      // it routes events through the debug stream — switch it off once the
+      // plumbing has been seen to work.
+      GA_DEBUG_MODE: process.env.GA_DEBUG_MODE === "1",
     },
   };
 

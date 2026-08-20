@@ -28,6 +28,7 @@
  */
 import {
   GA_API_SECRET,
+  GA_DEBUG_MODE,
   GA_LIMITS,
   GA_MEASUREMENT_ID,
   GA_VALIDATE_ONLY,
@@ -57,6 +58,12 @@ export interface SendOptions {
   timestampMicros?: number;
   /** User-scoped dimensions: member_status, signup_channel, line_type… */
   userProperties?: Record<string, string | number>;
+  /**
+   * Adds `debug_mode` to every event, which is what makes a server-side event
+   * visible in GA4's DebugView. Defaults to the GA_DEBUG_MODE environment
+   * variable; pass it explicitly only in tests.
+   */
+  debugMode?: boolean;
   /** Injection seams for tests. */
   fetchImpl?: typeof fetch;
   endpointOverride?: string;
@@ -121,6 +128,7 @@ export function buildPayload(opts: SendOptions, events: ServerEvent[]): {
       engagement_time_msec: 1,
     };
     if (opts.sessionId !== undefined) base.session_id = String(opts.sessionId);
+    if (opts.debugMode ?? GA_DEBUG_MODE) base.debug_mode = true;
     const clean = sanitizeParams(base);
     for (const key of clean.dropped) dropped.push(`${event.name}.${key}`);
     return { name: event.name, params: clean.params };
