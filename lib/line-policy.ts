@@ -15,11 +15,11 @@ import { getLineType, setLineType } from "@/lib/store";
 import {
   isCacheable,
   lineMay,
-  lookupLineType,
   type LineType,
   type Privilege,
   type VoipPolicy,
 } from "@/lib/number-lookup";
+import { lookupLineType } from "@/lib/number-lookup-server";
 
 /** Pull the four switches out of EngineSettings. */
 export function policyFrom(settings: VoipPolicy): VoipPolicy {

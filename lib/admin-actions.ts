@@ -69,7 +69,8 @@ import { sniffImage, CONTENT_TYPE_BY_EXT } from "@/lib/image-sniff";
 import { supabaseConfigured } from "@/lib/db";
 import { stripEmoji } from "@/lib/content-filter";
 import { normalizePhone } from "@/lib/phone";
-import { lookupLineTypeDetailed } from "@/lib/number-lookup";
+import { type LineType } from "@/lib/number-lookup";
+import { lookupLineTypeDetailed } from "@/lib/number-lookup-server";
 
 /** Whitelisted return targets for shared ad actions — never trust a form string. */
 function backTarget(formData: FormData): string {
@@ -699,19 +700,38 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
  * number the operator typed to test the wiring shouldn't quietly become that
  * member's stored line type.
  */
-export async function adminTestLookup(formData: FormData): Promise<void> {
+export interface LookupTestResult {
+  phone: string;
+  type: LineType;
+  reason?: string;
+  status?: number;
+  carrier?: string;
+}
+
+/**
+ * Returns its result instead of redirecting, so the tester can render inline.
+ *
+ * It used to redirect back to /admin/settings with the answer in the query
+ * string, which meant every check was a full navigation — and the page jumped
+ * back to the top, away from the tool and the answer, every single time. A
+ * diagnostic you run repeatedly must not move the page out from under you.
+ */
+export async function adminTestLookup(
+  _prev: LookupTestResult | null,
+  formData: FormData,
+): Promise<LookupTestResult> {
   await requireAdmin();
-  const phone = normalizePhone(String(formData.get("testPhone") ?? ""));
-  if (!phone) redirect("/admin/settings?lookup=bad-number");
+  const raw = String(formData.get("testPhone") ?? "");
+  const phone = normalizePhone(raw);
+  if (!phone) return { phone: raw, type: "unchecked", reason: "bad-number" };
   const outcome = await lookupLineTypeDetailed(phone);
-  const params = new URLSearchParams({
-    lookup: outcome.reason ?? "ok",
-    lookupType: outcome.type,
-    lookupPhone: phone,
-    ...(outcome.carrier ? { lookupCarrier: outcome.carrier } : {}),
-    ...(outcome.status ? { lookupStatus: String(outcome.status) } : {}),
-  });
-  redirect(`/admin/settings?${params.toString()}`);
+  return {
+    phone,
+    type: outcome.type,
+    ...(outcome.reason ? { reason: outcome.reason } : {}),
+    ...(outcome.status ? { status: outcome.status } : {}),
+    ...(outcome.carrier ? { carrier: outcome.carrier } : {}),
+  };
 }
 
 // ---------- operator kill switches (PAUSE + UNDER ATTACK) ----------

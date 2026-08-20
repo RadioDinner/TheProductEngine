@@ -3,7 +3,6 @@ import Link from "next/link";
 import {
   adminBlockNumber,
   adminSaveSettings,
-  adminTestLookup,
   adminSetPause,
   adminSetUnderAttack,
   adminUnblockNumber,
@@ -12,12 +11,7 @@ import { getEngineSettings, getWordRules } from "@/lib/settings";
 import { listBlocked } from "@/lib/blocklist";
 import { formatPhone } from "@/lib/phone";
 import { formatPrice, site } from "@/lib/config";
-import {
-  isBurnerLine,
-  lineTypeLabel,
-  lookupReasonNote,
-  type LineType,
-} from "@/lib/number-lookup";
+import { LookupTester } from "@/components/LookupTester";
 import type { HandbookKey } from "@/lib/admin-handbook";
 import { Tip } from "@/components/Tip";
 
@@ -148,7 +142,7 @@ const FIELDS: { key: string; label: string; hint?: string; tip: HandbookKey }[] 
 export default async function AdminSettings({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>;
+  searchParams: Promise<{ saved?: string }>;
 }) {
   const params = await searchParams;
   const settings = await getEngineSettings();
@@ -162,34 +156,6 @@ export default async function AdminSettings({
     photoPrice2Cents: settings.photoPricesCents[1] ?? 0,
     photoPrice3Cents: settings.photoPricesCents[2] ?? 0,
   };
-
-  // Result of the "test a number" tool. Spelled out rather than reduced to a
-  // type, because the whole point is telling a WORKING check apart from a
-  // silently broken one.
-  const lookupCode = params.lookup;
-  const lookupType = (params.lookupType ?? "unchecked") as LineType;
-  const lookupResult = lookupCode ? (
-    <p className="notice" role="status">
-      {lookupCode === "ok" ? (
-        <>
-          <strong>The check is working.</strong>{" "}
-          {params.lookupPhone ? formatPhone(params.lookupPhone) : "That number"} is{" "}
-          <strong>{lineTypeLabel(lookupType)}</strong>
-          {params.lookupCarrier ? ` (${params.lookupCarrier})` : ""}.{" "}
-          {isBurnerLine(lookupType)
-            ? "The policy treats this as a throwaway line."
-            : "The policy treats this as a real number."}
-        </>
-      ) : (
-        <>
-          <strong>No answer &mdash; the check is NOT working.</strong>{" "}
-          {lookupReasonNote({ type: "unchecked", reason: lookupCode as never, status: Number(params.lookupStatus) || undefined })}{" "}
-          Until this is fixed the VoIP policy allows everything, which is the safe
-          direction but means it is doing nothing.
-        </>
-      )}
-    </p>
-  ) : null;
 
   return (
     <>
@@ -395,15 +361,7 @@ export default async function AdminSettings({
         working check from one that has been failing since the day you set it up. This
         costs about half a cent and is <em>not</em> saved to anyone&rsquo;s account.
       </p>
-      {lookupResult}
-      <form action={adminTestLookup} className="review-form">
-        <div className="inline-fields">
-          <input name="testPhone" type="tel" placeholder="Number to check…" required />
-          <button className="btn btn-sm" type="submit">
-            Check this number
-          </button>
-        </div>
-      </form>
+      <LookupTester />
 
       <h2 className="section-h">
         Word filter <Tip k="settings.wordFilter" />

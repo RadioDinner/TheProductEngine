@@ -48,6 +48,7 @@ itself; build details live in the session logs and HANDOFF.md.
 | 38 | **Insights: reset + recalculate on EVERY row** — a reset control on each row, and a recalculate that reflows any total the reset affects (resetting one number may change another's total) | session 016 | **listed, not built** — see note |
 | 39 | **"I need help!" button on nearly every page** — one click files a report carrying every diagnostic we can capture: who they are, whether they have an email, what page they clicked from, date and time, and whatever else is available — so problems can be fixed proactively instead of waiting to be told. Extends item 27 (Ask a question / Suggest an idea), which already emails the operator with contact info | session 016 | **listed, not built** |
 | 40 | **Version number in the website footer** — starting at **1.0.3**. The bump rule is now §6 of `new_session_instructions.md`: 3 or fewer features shipped → far-right digit; 4 or more (or a major change) → second digit; the first digit only ever moves when the user says so | session 016 | **listed, not built** |
+| 41 | **Users tab: a database-table view** — a spreadsheet-style grid of every member on /admin/users: number, email, status, ads sent, money spent, subscription start date, and as much else as we hold. Filter by column, drop and add columns, and SAVE named views of the data | session 016 | **listed, not built** — see note |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -463,3 +464,17 @@ itself; build details live in the session logs and HANDOFF.md.
 - **40 · Version number.** Needs a single source of truth (a constant in
   `lib/config.ts` is the obvious home) so the footer, `/api/health` and any
   future about-page all read the same value.
+
+- **41 · Users table view.** Columns we can already fill from what is stored,
+  so this needs no new data collection: phone, email, member id, member since,
+  subscribed/unsubscribed, email-subscribed, verified, posting-banned, offense
+  count, ads posted, ads sold, money spent, money added, current balance,
+  auto-top-up on/off, card on file, starter credit taken, PIC balance, last
+  active, categories subscribed, line type (session 016), blocked. Two things
+  to settle before building: (a) **saved views** need somewhere to live —
+  a small `admin_views` table keyed to the operator is the obvious shape, and
+  it is the only part needing a migration; (b) **paging vs. everything** —
+  the member list is small now but this screen is the one that gets slow
+  first, so sort/filter belong in the query, not in the page. Worth checking
+  whether it should share the CSV export path, if one is wanted, since "filter
+  then export" is usually the next request after a grid like this.
