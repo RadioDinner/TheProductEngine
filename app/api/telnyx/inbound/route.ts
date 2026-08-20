@@ -10,6 +10,12 @@ import { parseCommand } from "@/lib/commands";
 import { normalizePhone } from "@/lib/phone";
 import { isProduction } from "@/lib/env";
 import * as analytics from "@/analytics/src/server-events";
+import { setAfterImpl } from "@/analytics/src/after";
+
+// Hand Next's after() to the analytics layer. lib/engine.ts cannot import
+// next/server itself — the unit and abuse suites load it under plain node,
+// where that module does not resolve. See analytics/src/after.ts.
+setAfterImpl(after);
 
 const TELNYX_TOLERANCE_S = 300;
 

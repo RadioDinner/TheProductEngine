@@ -18,6 +18,9 @@ import { normalizePhone } from "@/lib/phone";
 import { createBusinessPackage } from "@/lib/business";
 import { getBusinessTier } from "@/lib/business-packages";
 import * as analytics from "@/analytics/src/server-events";
+import { setAfterImpl } from "@/analytics/src/after";
+
+setAfterImpl(after);
 
 const TOLERANCE_S = 300;
 

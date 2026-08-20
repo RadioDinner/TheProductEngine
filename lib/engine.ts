@@ -6,6 +6,7 @@
  */
 import { parseCommand } from "@/lib/commands";
 import * as analytics from "@/analytics/src/server-events";
+import { afterResponse } from "@/analytics/src/after";
 import { deriveTitle, adExpiresAt, type Ad } from "@/lib/ads";
 import {
   attachAdPhotos,
@@ -215,8 +216,15 @@ function payInstructions(): string {
 }
 
 async function handleAdSubmission(from: string, rawBody: string, media?: string[]): Promise<Reply> {
+  // Every way a post can be refused, counted with its reason. "Posting is
+  // down" is not actionable; "posting is down because the word filter is
+  // rejecting a third of ads" is. Reasons are short codes, never the member's
+  // own words — an ad body is exactly the text that must not reach Google.
+  const blocked = (reason: string) =>
+    afterResponse(() => analytics.postBlocked({ phone: from, channel: "sms", reason }));
   const account = await ensureAccount(from);
   if (account.postingBannedAt) {
+    blocked("posting_banned");
     return {
       body: `Your posting privileges are suspended. Contact us at ${site.supportPhone} or appeal at ThePlainExchange.com.`,
     };
@@ -225,6 +233,7 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   // default — the money and the seller directory are what need protecting,
   // and turning a paying seller away costs more than a burner gains.
   if (!(await mayUse(from, "posting", policyFrom(await getEngineSettings())))) {
+    blocked("line_type");
     return {
       body: `We can't post ads from this kind of number. Text or call us at ${site.supportPhone} and we'll help you get set up.`,
     };
@@ -235,12 +244,14 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   // message audit log. An ad that was ONLY emoji is now empty → same guidance.
   const body = stripEmoji(rawBody);
   if (!body) {
+    blocked("empty");
     return {
       body: `To post an ad, text AD NEW and your ad — for example: AD NEW Horse cart for sale, $1,000 OBO. Call 330-555-0142.`,
     };
   }
   const settings = await getEngineSettings();
   if (body.length > settings.maxChars) {
+    blocked("too_long");
     return {
       body: `Your ad is too long (${body.length}/${settings.maxChars} characters). Please shorten it and resend.`,
     };
@@ -258,6 +269,7 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
       },
       { status: "rejected", rejectedReason: "Automatic — offers an item we can't run." },
     );
+    blocked("word_filter");
     return {
       body: `Your ad can't be accepted — it appears to offer something we can't run. Nothing was charged. Text HELP for help or see ThePlainExchange.com/how-it-works.`,
     };
@@ -342,6 +354,7 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   // Fast reject for the clearly-unfunded; the atomic charge below is the
   // authority under concurrency.
   if (balance < cost) {
+    blocked(declineReason ? "card_declined" : "no_balance");
     const cardNote = declineReason ? ` We tried your saved card but it didn't go through (${declineReason}).` : "";
     return {
       body: `That ad costs ${formatPrice(cost)} and you have ${formatPrice(balance)} of ad credit.${cardNote} ${payInstructions()}. Text BAL to check your balance.`,
@@ -393,11 +406,26 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
     throw e;
   }
   if (!chargeNote) {
+    blocked("charge_race");
     await rejectAdRecord(id, "Not enough money at submission.", "benign");
     return {
       body: `That ad costs ${formatPrice(cost)} and your balance couldn't cover it just now — nothing was posted, and your money is still on your account. Text BAL to check it, then try again. ${payInstructions()}.`,
     };
   }
+
+  // ACCEPTED — created, paid for, and in the review queue. Emitted here and
+  // nowhere earlier: counting an ad when the text arrives would include every
+  // one the word filter, the balance check or the ban list then refused, and an
+  // inflated supply number is the figure the whole roadmap gets argued from.
+  // No category yet — the operator assigns that at review.
+  afterResponse(() =>
+    analytics.postSubmitted({
+      phone: from,
+      channel: "sms",
+      photoCount: savedPictures,
+      priceCents: cost,
+    }),
+  );
 
   await notifyAdminNewAd({ id, from, hasPhoto, body, ...(hasPhoto && { photoSrc: photoSrc! }) });
 
@@ -849,6 +877,11 @@ async function route(
             `Reply STOP to cancel, HELP for help.`,
         };
       }
+      // A NEW member — the already-subscribed branch above returned, so this
+      // cannot double-count somebody re-texting SUBSCRIBE. That distinction is
+      // the whole value of the number: "how many people joined" is a growth
+      // figure, "how many SUBSCRIBE texts arrived" is not.
+      afterResponse(() => analytics.signedUp({ phone: from, method: "sms" }));
       await setSubscribed(from, true);
       // Send the most recent digest right away so a new subscriber isn't
       // waiting hours for the next slot. Best-effort — must never break signup.
@@ -866,6 +899,7 @@ async function route(
     case "stop": {
       // No ensureAccount here: a STOP from an unknown number shouldn't mint an
       // account (+ starter free ads) — that was a cheap flood vector.
+      afterResponse(() => analytics.unsubscribed({ phone: from, channel: "sms" }));
       await setSubscribed(from, false);
       // Honor the opt-out immediately: drop any digest rows already queued for
       // this number so a broadcast composed before the STOP can't still send.
@@ -950,6 +984,9 @@ async function route(
         // Deduped: a number hammering PIC after running dry hears "you're out" at
         // most once every few hours, not on every pull (still bounded by the
         // hourly PIC cap, which already reserved this slot).
+        afterResponse(() =>
+          analytics.picPull({ phone: from, outcome: "out_of_pulls", pullsLeft: 0 }),
+        );
         const told = await countRecentOutboundContaining(from, PIC_LIMIT_MARKER, 3 * HOUR_MS);
         if (told > 0) return null;
         return { body: picLimitMessage(settings.picDailyAllowance, settings.picBankCap) };
@@ -965,6 +1002,12 @@ async function route(
         .slice(0, MAX_COMBINED_PHOTOS)
         .map((p) => absolute(p.src));
       const count = media.length;
+      // Granted, and only here: past the not-found and no-photo gates, with a
+      // pull actually spent. Pair the count with the per-MMS cost and this is
+      // what pictures cost the service per month.
+      afterResponse(() =>
+        analytics.picPull({ phone: from, outcome: "granted", pullsLeft: quota.remaining }),
+      );
       return {
         body:
           count > 1
@@ -1234,11 +1277,13 @@ export async function handleInbound(msg: InboundSms, providerId?: string): Promi
     if (!allowed) {
       // A real member just got silence. Counting it is how we find out whether
       // the abuse guards are biting the people they are meant to protect.
-      void analytics.smsReplySuppressed({
-        phone: msg.from,
-        reason: settings.underAttack ? "under_attack" : "rate_limit",
-        messageClass: kind,
-      });
+      afterResponse(() =>
+        analytics.smsReplySuppressed({
+          phone: msg.from,
+          reason: settings.underAttack ? "under_attack" : "rate_limit",
+          messageClass: kind,
+        }),
+      );
       return null;
     }
 
