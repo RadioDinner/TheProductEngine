@@ -41,8 +41,20 @@ one forgotten password away from losing all of it.
 account → property → business details → objectives → terms → data stream, and
 hands you the Measurement ID at the end.
 
-**Adding to an existing account:** **Admin** (gear, bottom left) → **Create** →
-**Property**.
+**Adding to an existing account:** **Admin** (gear, bottom of the left rail) →
+**Create** → **Property**.
+
+> **If you already use Firebase or Google Cloud, you probably already have a
+> property — and it is the wrong one.** Firebase auto-creates GA4 properties
+> named after the project with a random suffix (`permitpro-9db15`). It will be
+> the property that loads by default, so the Admin screens will look like they
+> are already set up. Do not reuse or rename it: it belongs to that Firebase
+> project. Create a separate property for this site.
+>
+> **Every setting below is per-property.** The switcher at the top of the page
+> keeps whatever property loaded last, so check it says `The Plain Exchange`
+> before each step — otherwise you spend an hour carefully configuring
+> somebody else's app.
 
 On the **account data-sharing checkboxes**, untick **"Google products and
 services"** — that is the setting that lets Google use this data for its own
@@ -282,11 +294,20 @@ what keeps test traffic out of the property, and it is more reliable than any
 runtime check.
 
 ```
-NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX   # public; ships in the page
+NEXT_PUBLIC_GA_MEASUREMENT_ID=G-0P031ZCC9Z   # public; ships in the page
 GA_API_SECRET=<from step 3>                  # server only
 ANALYTICS_SALT=<48+ random characters>       # server only, treat as a password
 # GA_VALIDATE_ONLY=1                         # temporary, for step 13
 ```
+
+The measurement id above is **this site's real one**, for the property created
+2026-08-20. It is recorded here because it is not a secret — it ships in the
+HTML of every page — and hunting for it in the console later is a nuisance.
+
+It still belongs in an environment variable rather than hardcoded in the app.
+That is what keeps preview and local builds out of the property: they simply do
+not have the variable set, which is more reliable than any runtime check of
+which environment we are in.
 
 Generate the salt with `openssl rand -hex 32`.
 
