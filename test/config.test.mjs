@@ -2,7 +2,7 @@
 // real dollars leaving a member's card, so the parser must reject anything
 // ambiguous and clamp the fat-finger range ($1–$5,000, the same ceiling as
 // the admin balance adjustment).
-import { adPriceCents, customAmountCents, engineDefaults, isTopUpPreset, TOP_UP_PRESETS_CENTS } from "../lib/config.ts";
+import { adPriceCents, customAmountCents, engineDefaults, isTopUpPreset, site, TOP_UP_PRESETS_CENTS } from "../lib/config.ts";
 
 export const name = "config";
 
@@ -48,4 +48,12 @@ export function run(t) {
   const ladder = [engineDefaults.costTextCents, ...engineDefaults.photoPricesCents];
   t.eq("the shipped ladder only climbs", ladder.every((p, i) => i === 0 || p > ladder[i - 1]), true);
   t.eq("costPhotoCents mirrors the one-picture rung", engineDefaults.costPhotoCents, engineDefaults.photoPricesCents[0]);
+
+  // ---- version stamp (feature 40) ----
+  // One constant behind the footer and /api/health, so "what's deployed?"
+  // can be answered from either end without them disagreeing.
+  t.eq("version is three dot-separated numbers", /^\d+\.\d+\.\d+$/.test(site.version), true);
+  // The bump rule (new_session_instructions.md §6) moves the first digit ONLY
+  // when the user says so — this pins that it hasn't drifted on its own.
+  t.eq("major version is still 1", site.version.split(".")[0], "1");
 }

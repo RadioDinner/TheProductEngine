@@ -14,8 +14,10 @@ import {
   mergeAccounts,
   resolveChatReport,
   setOffenseCount,
+  purgeMember,
   setPostingBanned,
   setVerified,
+  type PurgeCounts,
 } from "@/lib/store";
 import { headers } from "next/headers";
 import { dispatchSms } from "@/lib/outbound";
@@ -732,6 +734,45 @@ export async function adminTestLookup(
     ...(outcome.status ? { status: outcome.status } : {}),
     ...(outcome.carrier ? { carrier: outcome.carrier } : {}),
   };
+}
+
+/**
+ * Preview or run a member purge (/admin/purge).
+ *
+ * Two-step by construction: the first submit is always a dry run, and only a
+ * form carrying BOTH the exact phone it previewed and the typed word DELETE
+ * performs the deletion. That makes the destructive path impossible to reach
+ * by accident — a stray double-submit re-previews, it does not delete.
+ */
+export interface PurgeState {
+  phone: string;
+  counts?: PurgeCounts;
+  unsupported?: boolean;
+  notFound?: boolean;
+  deleted?: boolean;
+  error?: string;
+}
+
+export async function adminPurgeMember(
+  _prev: PurgeState | null,
+  formData: FormData,
+): Promise<PurgeState> {
+  await requireAdmin();
+  const phone = normalizePhone(String(formData.get("phone") ?? ""));
+  if (!phone) return { phone: "", error: "That isn't a 10-digit number." };
+
+  // The delete only happens when the operator typed DELETE **and** the
+  // confirmation is for the same number that was previewed — so editing the
+  // number after previewing drops back to a fresh preview rather than
+  // purging whoever is now in the box.
+  const confirmed =
+    String(formData.get("confirm") ?? "").trim().toUpperCase() === "DELETE" &&
+    normalizePhone(String(formData.get("previewedPhone") ?? "")) === phone;
+
+  const result = await purgeMember(phone, !confirmed);
+  if (result === "unsupported") return { phone, unsupported: true };
+  if (!result.found) return { phone, notFound: true };
+  return { phone, counts: result, deleted: Boolean(result.deleted) };
 }
 
 // ---------- operator kill switches (PAUSE + UNDER ATTACK) ----------

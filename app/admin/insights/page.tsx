@@ -103,8 +103,11 @@ export default async function AdminInsights({
         <>
           <h2 className="section-h">Activity (last {data.windowDays} days)</h2>
           <dl className="account-facts">
-            {stat("Texts received", data.totals.inboundMessages.toLocaleString())}
-            {stat("People who texted", data.totals.uniqueSenders.toLocaleString())}
+            {/* Two separate figures, and the labels now say which is which
+                (feature 36). "Texts received" / "People who texted" sat next
+                to each other reading like two versions of the same number. */}
+            {stat("Unique people who texted", data.totals.uniqueSenders.toLocaleString())}
+            {stat("Total texts inbound", data.totals.inboundMessages.toLocaleString())}
             {stat("Ads posted", data.totals.adsInWindow.toLocaleString())}
             {stat("Bumps", data.totals.bumpsInWindow.toLocaleString())}
             {stat("Money spent on ads", formatPrice(data.totals.creditsSpentInWindow))}

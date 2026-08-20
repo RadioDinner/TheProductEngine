@@ -125,7 +125,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Link href="/accessibility">Accessibility statement</Link>
             </p>
             <p>
-              © 2026 by {site.name}. Powered and secured by CodeFuseSolutions
+              © 2026 by {site.name}. Powered and secured by CodeFuseSolutions ·{" "}
+              <span className="footer-version">v{site.version}</span>
             </p>
           </div>
         </footer>

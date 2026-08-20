@@ -24,6 +24,8 @@ import { normalizePhone } from "@/lib/phone";
 import { USER_ID_MAX_ATTEMPTS, isRetirementActive, randomUserId } from "@/lib/user-id";
 import { decideCategoryConfirm, type ConfirmAction } from "@/lib/categories";
 import type { LineType } from "@/lib/number-lookup";
+import type { PurgeCounts } from "@/lib/store-supabase";
+export type { PurgeCounts };
 
 // ---------- shared types & rules ----------
 
@@ -1583,6 +1585,21 @@ export async function grantStarterCreditIfFirst(
  */
 export async function getAutoTopUp(phone: string): Promise<boolean> {
   return supabaseConfigured ? remote.getAutoTopUp(phone) : file.getAutoTopUp(phone);
+}
+
+/**
+ * Preview or perform a member purge (features 37/38, migration 9966).
+ *
+ * Supabase only. The file store is the dev fixture store — wiping a member
+ * there is `rm -rf .data`, and building a second implementation of a
+ * destructive operation just to have parity would be two chances to get a
+ * delete wrong instead of one.
+ */
+export async function purgeMember(
+  phone: string,
+  dryRun: boolean,
+): Promise<PurgeCounts | "unsupported"> {
+  return supabaseConfigured ? remote.purgeMember(phone, dryRun) : "unsupported";
 }
 
 /**

@@ -1097,6 +1097,46 @@ export async function setAutoTopUp(
   return data?.length ? "saved" : "unsupported";
 }
 
+export interface PurgeCounts {
+  found: boolean;
+  phone: string;
+  deleted?: boolean;
+  ads?: number;
+  messages?: number;
+  ledger_entries?: number;
+  ledger_net_cents?: number;
+  offenses?: number;
+  chats?: number;
+  reveals?: number;
+  ratings?: number;
+  sales?: number;
+  events?: number;
+  calls?: number;
+  queued_sends?: number;
+}
+
+/**
+ * Preview or perform a member purge (migration 9966). One transaction inside
+ * the database — see that migration for why this isn't a series of deletes
+ * from here, and for the deliberate, documented exception it makes to the
+ * append-only ledger rule.
+ */
+export async function purgeMember(
+  phone: string,
+  dryRun: boolean,
+): Promise<PurgeCounts | "unsupported"> {
+  const { data, error } = await db().rpc("purge_member", {
+    p_phone: phone,
+    p_dry_run: dryRun,
+  });
+  if (error) {
+    // 42883 = no such function: migration 9966 isn't pasted yet.
+    if (error.code === "42883" || error.code === "PGRST202") return "unsupported";
+    throw error;
+  }
+  return data as PurgeCounts;
+}
+
 /**
  * The cached line type for a number (migration 9967). "unchecked" covers both
  * "never asked" and "the column isn't there yet", so a pending migration

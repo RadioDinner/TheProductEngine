@@ -19,6 +19,19 @@ export const site = {
   supportPhonePlain: "2343010048",
   /** The address people are told to visit — no scheme, it is spoken copy. */
   webHost: "ThePlainExchange.com",
+  /**
+   * The site version, shown in the footer and on /api/health.
+   *
+   * Bumped at the end of any session that shipped work, by the rule in §6 of
+   * new_session_instructions.md: 3 or fewer features moves the far-right
+   * digit, 4 or more (or a major change) moves the SECOND digit — without
+   * resetting the third, which is the user's stated example and not a semver
+   * habit to "correct". The FIRST digit only ever moves when the user says so.
+   *
+   * This constant is the only place it is written down; the footer and the
+   * health probe both read it, so they can never disagree.
+   */
+  version: "1.0.3",
   tagline: "Buy and sell by text message",
   adsPerPage: 15,
 } as const;

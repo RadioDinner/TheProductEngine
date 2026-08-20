@@ -37,6 +37,7 @@ export const HANDBOOK_PAGES: { prefix: string; label: string; href: string }[] =
   { prefix: "subscribers", label: "Subscribers", href: "/admin/subscribers" },
   { prefix: "messages", label: "Message audit log", href: "/admin/messages" },
   { prefix: "calls", label: "Calls", href: "/admin/calls" },
+  { prefix: "purge", label: "Purge a member", href: "/admin/purge" },
   { prefix: "settings", label: "Settings", href: "/admin/settings" },
   { prefix: "smsdiag", label: "SMS diagnostics", href: "/admin/sms-diag" },
   { prefix: "concepts", label: "How it all hangs together", href: "/admin/help" },
@@ -439,6 +440,12 @@ const ENTRIES = {
     what: "Two lists on their own tab, edited as plain comma-separated text. Flag-only words sort their ads to the top of review; auto-reject words bounce instantly — nothing charged, no strike, logged for the audit trail. Matching is whole-word and ignores capitals, so \"gun\" catches Gun but not shotgun; short phrases work too.",
     why: "Session-001 founding ask, verbatim: \"a small rejection system to analyze for specific words … so I can add/remove words as I choose.\" Auto-reject charges nothing deliberately — a robot's judgement shouldn't cost a seller money; only your reject-violation does that. It moved off Settings into its own tab in session 016 (user decision) because the one-word-at-a-time widget made a real list unmanageable: you could not see it whole, paste one in, or move six words between lists without twelve clicks.",
     gotchas: "The boxes ARE the filter — a word you delete from a box stops being filtered when you save. Emptying both needs the confirm tick, so a mis-click can't quietly disarm every rule. A word typed into both boxes counts as auto-reject.",
+  },
+  "purge.purpose": {
+    title: "Purging a member",
+    what: "Deletes a member and everything attached to them — ads, pictures, logged texts and emails, ledger entries, conversations, number look-ups, ratings, sales, strikes, events, calls, queued sends — then the account. One transaction: it either all goes or none of it does.",
+    why: "Session 016, the user's problem: pre-launch testing left real rows behind and Insights was reading them. Nothing on Insights is a stored number — every figure is derived live from these rows — so there was no total to edit. Offered a cutoff date and per-row manual adjustments instead, the user chose to purge, which is the only option that makes every figure right everywhere at once and keeps them reconcilable.",
+    gotchas: "CANNOT BE UNDONE — no archive, no restore. It is the one place the append-only ledger rule is deliberately suspended, and it is for clearing your OWN test data, not for dealing with a member you have fallen out with: block or ban them instead, both of which keep the record. Preview always runs first and the word DELETE has to be typed; changing the number after previewing drops you back to a fresh preview rather than purging whoever is in the box. Sent digests keep their numbering and history, the member's six-digit id is retired for a year rather than reused, and blocked numbers stay blocked.",
   },
   "settings.lookup": {
     title: "Number checks (VoIP policy)",

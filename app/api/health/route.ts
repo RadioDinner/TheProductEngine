@@ -10,6 +10,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db, supabaseConfigured } from "@/lib/db";
 import { isProduction } from "@/lib/env";
 import { ringToPhones } from "@/lib/voice";
+import { site } from "@/lib/config";
 
 function keyKind(key: string | undefined): string {
   if (!key) return "missing";
@@ -48,6 +49,9 @@ export async function GET(req: NextRequest) {
   }
 
   const report: Record<string, unknown> = {
+    // Same constant the footer shows, so "what's deployed?" can be answered
+    // from either end and the two can never disagree.
+    version: site.version,
     mode: supabaseConfigured
       ? "supabase"
       : "fixtures/file store (misconfigured for Vercel — set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY)",
