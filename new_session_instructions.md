@@ -85,7 +85,29 @@ CoachAccountable API.** It is a copy of the official CA API docs.
   what the CA API "usually" looks like. Always check the file.
 - If something in the docs is ambiguous, ask the user before guessing.
 
-## 6. How the user updates these instructions
+## 6. Version number (user rule, session 016)
+
+The site shows a version number in the website footer. **Bump it at the end
+of every session in which anything shipped**, using the user's rule:
+
+- **3 or fewer features shipped** → increment the FAR RIGHT digit.
+  `1.0.3` becomes `1.0.4`.
+- **4 or more features shipped, or any major change** → increment the SECOND
+  digit. `1.0.3` becomes `1.1.3`.
+- **The FIRST digit only ever moves when the user says so.** Never bump it on
+  your own judgement, however big the change feels.
+
+Notes for whoever applies this:
+
+- The rule as written increments the second digit *without* resetting the
+  third (`1.0.3` → `1.1.3`, not `1.1.0`). That is the user's stated example —
+  follow it literally rather than "correcting" it to semver habits.
+- Count FEATURES, not commits: one feature may take several commits, and a
+  bug fix is not a feature. If a session shipped only fixes, leave the version
+  alone unless one of them was a major change.
+- Say in the session log which digit moved and why, so the count is auditable.
+
+## 7. How the user updates these instructions
 
 The user will occasionally say "update new_session_instructions" with new
 rules. When that happens:

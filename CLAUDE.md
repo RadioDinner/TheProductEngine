@@ -11,6 +11,11 @@ Standing orders for every session in this repo:
 2. Then read `HANDOFF.md` (repo root) — the live cross-session state document —
    before starting work, and keep it updated as project state changes.
 
+As of session 016 the site carries a VERSION NUMBER in the website footer,
+and §6 of `new_session_instructions.md` is the rule for bumping it at the end
+of any session that shipped work (3 or fewer features → far-right digit; 4+ or
+a major change → second digit; the FIRST digit only when the user says so).
+
 Note: this repo has no CoachAccountable code, so §5 of
 `new_session_instructions.md` (CA API docs) does not apply here. §4 DOES
 apply: as of session 009 (user decision, 2026-07-17) migrations under

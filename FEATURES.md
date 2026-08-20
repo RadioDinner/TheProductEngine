@@ -43,6 +43,11 @@ itself; build details live in the session logs and HANDOFF.md.
 | 33 | **Picture-set coaching + combined-photo confirmation** — an AD NEW with a picture now replies "send more pictures one at a time, up to 4 total; quiet for 10 minutes = the set is complete", and once a combined ad's pictures HAVE been quiet for 10 minutes the seller is texted the finished collage (MMS), so they see exactly the one photo buyers will get; a later picture re-arms one fresh confirmation | session 014 | **built** (⚠️ migration 9974 — until pasted the confirmation texts are silently off; the reply coaching works regardless) |
 | 34 | **Admin handbook tooltips** — a comprehensive operator handbook mined from the prompt history and session logs, delivered as little "?" boxes beside the admin features: each tip says what the control does, WHY it exists (the request/outage/decision that created it, cited by session number), and what to watch out for; the whole handbook also reads straight through at the bottom of /admin/help | session 015 | **built** (no migration) |
 | 35 | **Dollar pricing overhaul** — the credit system is replaced by dollar-denominated ad credit after a competitor-pricing review (their sheet: $65 with up to 4 pictures / $45 text-only, print). User decisions: **$45 text / $60 picture**; **+$15 website-listing add-on, FREE at launch** (machinery built, `web_addon_cents` = 0); **$150 starter credit** on every new member's first post (replaces the 3 free passes); **auto top-up** from the saved card at posting time (replaces BUYCREDIT/YES + the saved-card discount) plus check/phone via admin grants; **BUMP removed completely** ("completely gone, from everywhere, including the FAQ" — the admin re-run tool stays); **business packages repriced $199/$349/$599** (every tier must cost more than one ad). Full sheet + rationale: `docs/pricing.md` | session 016 | **built** (⚠️ migration 9973 — until pasted: prices are correct from code defaults, auto top-up stays OFF fail-closed, but legacy balances display 100× low; paste before launch) |
+| 36 | **Insights: manual adjustment + split sender rows** — the operator can correct an Insights figure by hand when it is wrong (money spent, ads served, and people-who-texted are all skewed by pre-launch testing). Also split the sender count into TWO rows: unique people who have texted, and total inbound texts | session 016 | **listed, not built** — see note |
+| 37 | **Insights: reset the Ads rows** — clear/rebase the all-time ad funnel counts (waiting / live / sold / expired / rejected), which testing threw off | session 016 | **listed, not built** — see note |
+| 38 | **Insights: reset + recalculate on EVERY row** — a reset control on each row, and a recalculate that reflows any total the reset affects (resetting one number may change another's total) | session 016 | **listed, not built** — see note |
+| 39 | **"I need help!" button on nearly every page** — one click files a report carrying every diagnostic we can capture: who they are, whether they have an email, what page they clicked from, date and time, and whatever else is available — so problems can be fixed proactively instead of waiting to be told. Extends item 27 (Ask a question / Suggest an idea), which already emails the operator with contact info | session 016 | **listed, not built** |
+| 40 | **Version number in the website footer** — starting at **1.0.3**. The bump rule is now §6 of `new_session_instructions.md`: 3 or fewer features shipped → far-right digit; 4 or more (or a major change) → second digit; the first digit only ever moves when the user says so | session 016 | **listed, not built** |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -424,3 +429,37 @@ itself; build details live in the session logs and HANDOFF.md.
     fresh confirmation). Pre-9974 the cron warns once and sends nothing;
     `/api/health` probes `migration9974`. Pure decision math + seller copy
     unit-tested (`lib/collage-confirm.ts`, `test/collage-confirm.test.mjs`).
+
+- **36/37/38 · Resetting Insights — a design question to settle BEFORE
+  building.** Insights stores no numbers. Every figure on that page is
+  derived, live, from the raw rows: inbound messages, the ad records, and the
+  append-only `credit_ledger`. So there is nothing to "reset" in place — the
+  build has to choose one of three shapes, and they are not equivalent:
+  - **(a) A launch cutoff.** One setting: ignore everything before a given
+    date. Fixes every skewed row at once, needs no per-row controls, and
+    keeps every number honest and reconcilable. This is almost certainly what
+    "my testing threw off the numbers" actually wants.
+  - **(b) Per-row manual offsets** (what item 36 literally asks for). Doable,
+    but it means the Insights figures stop tying out to the ledger and the
+    message log. For counts that is untidy; for MONEY it is a real problem —
+    the ledger is append-only precisely so the money can always be
+    reconstructed, and a hand-edited "money spent" would be the one number in
+    the system that cannot be traced to entries.
+  - **(c) Purge the test data.** Delete the test rows themselves. Every
+    number then becomes correct everywhere at once, permanently — not just on
+    Insights but in the ledger, the funnel and the audit log.
+  Recommendation: (c) for the pre-launch test junk, plus (a) as the standing
+  control, and reserve (b) for counts only — never for money. Worth ten
+  minutes with the user before writing any of it.
+- **36 · The two sender rows may already exist.** `/admin/insights` renders
+  "Texts received" (total inbound in the window) and "People who texted"
+  (unique senders) as separate figures today. If the ask is really about the
+  numbers being wrong rather than missing, this half of item 36 may reduce to
+  relabelling — check the page before building.
+- **39 · "I need help!"** worth capturing at build time: page URL, referrer,
+  signed-in member id/phone, whether an email is on file, timestamp, user
+  agent, viewport, and the last error the page saw. Ask whether the report
+  should also text/email the operator immediately or just queue in admin.
+- **40 · Version number.** Needs a single source of truth (a constant in
+  `lib/config.ts` is the obvious home) so the footer, `/api/health` and any
+  future about-page all read the same value.
