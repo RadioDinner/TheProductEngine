@@ -43,39 +43,17 @@ numbered documents; this is the tracker.
 
 ## 🔴 Do next
 
-### 🧑 Register the custom definitions — **not retroactive**
+### ✅ Custom definitions — DONE 2026-08-20
 
-**Admin → Data display → Custom definitions.** Nothing already collected gets
-these applied; they report from the day they are created. Every day of delay is
-a day of data that cannot be broken down later.
+All 18 registered and verified against the code: 15 event-scoped
+(`channel`, `listing_category`, `command`, `reason`, `outcome`,
+`payment_channel`, `click_text`, `click_section`, `click_href`, `has_photo`,
+`has_media`, `is_mms`, `contact_type`, `message_class`, `menu_choice`),
+3 user-scoped (`member_status`, `signup_channel`, `has_saved_card`), and all
+10 custom metrics with their units.
 
-Event-scoped dimensions:
-
-- [ ] `channel` — sms / web / email / voice
-- [ ] `listing_category`
-- [ ] `command` — the SMS vocabulary, incl. `unknown`
-- [ ] `reason`
-- [ ] `method`
-- [ ] `outcome`
-- [ ] `payment_channel`
-- [ ] `click_text`
-- [ ] `click_section`
-- [ ] `results_count`
-- [ ] `has_photo`
-
-User-scoped:
-
-- [ ] `member_status`, `signup_channel`, `line_type`, `has_saved_card`
-
-✅ **Item-scoped clean-up DONE 2026-08-20** — ten dimensions had been created
-under Item scope (the form does not reset the Scope dropdown between saves, and
-Item is the tightest bucket in GA4 at 10). Archived; this property needs zero
-item-scoped, because every field the code puts in `items[]` is a built-in GA4
-item dimension.
-
-Metrics — ✅ **DONE 2026-08-20** (`photo_count`, `segments`, `recipients`,
-`wait_minutes`, `days_to_sell`, `reveals_left`, `pulls_left`,
-`duration_seconds`, `results_count`, `listing_count`)
+Zero item-scoped, which is correct: every field the code puts in `items[]` is
+a built-in GA4 item dimension.
 
 ### 🧑 Mark the key events
 
