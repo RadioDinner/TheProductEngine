@@ -8,6 +8,8 @@
  * a rolling-24h billed-segment budget. Idempotency comes from the
  * one-digest-per-slot rule plus the outbox unique key.
  */
+import * as analytics from "@/analytics/src/server-events";
+import { afterResponse } from "@/analytics/src/after";
 import { getEngineSettings, effectiveSmsCaps, type EngineSettings } from "@/lib/settings";
 import { safeGapRange } from "@/lib/paced-release";
 import {
@@ -425,6 +427,27 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   });
   await enqueueDigestOutbox(rows);
 
+  // Reach per ad, and what it cost to deliver. `recipients` is the edition's
+  // SMS recipient count and `segments` the total billed segments across the
+  // whole edition — deliberately per-EDITION rather than apportioned per ad,
+  // because the rows are packed together and splitting the cost between ads
+  // would be an invented number. Pair recipients with the per-segment rate and
+  // this is what reaching the list actually costs.
+  const editionSegments = rows.reduce((sum, r) => sum + (r.segments ?? 0), 0);
+  for (const ad of items) {
+    if (!deliveredAdIds.has(ad.id)) continue;
+    const owner = ad.ownerPhone;
+    afterResponse(() =>
+      analytics.listingBroadcast({
+        phone: owner,
+        category: categoriesByAd.get(ad.id) ?? undefined,
+        recipients: smsRecipients,
+        segments: editionSegments,
+        isMms: settings.photosInBroadcast,
+      }),
+    );
+  }
+
   // Compose + enqueue the matching email edition (mirrors the SMS digest),
   // filtered per recipient the same way as the SMS side.
   const recipients = await listEmailRecipientsWithCategories();
@@ -498,6 +521,21 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
     for (const s of sponsors) {
       await markSponsorRan(s.id, day, `sent-now#${smsDigestId}`);
     }
+  }
+
+  // One event per EDITION, under the operator's identity — not one per
+  // recipient. Per recipient this would be four hundred events for one send
+  // and would drown every other number in the property.
+  if (emailRows.length) {
+    const sentCount = emailRows.length;
+    afterResponse(() =>
+      analytics.emailEditionSent({
+        operatorPhone: site.smsNumberPlain,
+        recipients: sentCount,
+        listingCount: items.length,
+        slotHour,
+      }),
+    );
   }
 
   // Deliver now — don't make "send early" wait for the next cron tick.

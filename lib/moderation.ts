@@ -4,6 +4,8 @@
  * three). The admin portal is UI over these functions; the dev simulator
  * calls them directly.
  */
+import * as analytics from "@/analytics/src/server-events";
+import { afterResponse } from "@/analytics/src/after";
 import {
   approveAdRecord,
   getAdRecord,
@@ -36,6 +38,15 @@ async function notify(phone: string, body: string): Promise<void> {
   if (sent) await logMessage({ direction: "outbound", channel: "sms", address: phone, body });
 }
 
+/** Minutes an ad waited in the review queue. The operator controls this
+ * number directly, and it shapes the seller's whole experience of the
+ * service — a figure worth watching as a median, never a mean: one ad
+ * approved after a weekend away drags an average badly. */
+function waitMinutes(createdAt: string, now: number): number {
+  const ms = now - Date.parse(createdAt);
+  return Number.isFinite(ms) && ms > 0 ? Math.round(ms / 60000) : 0;
+}
+
 export async function approveAd(
   id: number,
   editedBody?: string,
@@ -61,6 +72,15 @@ export async function approveAd(
   // pass picks up anything else that was queued too, which is what empties
   // the overnight and Sunday queue on the first approval of the morning.
   const now = new Date();
+  afterResponse(() =>
+    analytics.listingApproved({
+      phone: ad.ownerPhone,
+      category: category ?? undefined,
+      channel: "sms",
+      waitMinutes: waitMinutes(ad.createdAt, now.getTime()),
+      photoCount: ad.photo ? 1 : 0,
+    }),
+  );
   const open = smsWindowOpen(now, settings);
   await notify(
     ad.ownerPhone,
@@ -92,6 +112,12 @@ export async function rejectAd(
   // ad — otherwise a concurrent double-submit would refund or strike twice.
   const transitioned = await rejectAdRecord(id, reason, kind);
   if (!transitioned) return;
+  // Only past the transition guard: a concurrent double-submit must not
+  // report two rejections for one ad. `kind` is the code, never the
+  // operator's typed reason — that is free text about a member's ad.
+  afterResponse(() =>
+    analytics.listingRejected({ phone: ad.ownerPhone, channel: "sms", reason: kind }),
+  );
 
   if (kind === "benign") {
     // Full refund of whatever the submission charged (spec Q4/Q8) — the base

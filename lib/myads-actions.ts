@@ -14,6 +14,8 @@
  * NOTE: this file is intentionally separate from lib/account-actions.ts.
  */
 
+import * as analytics from "@/analytics/src/server-events";
+import { afterResponse } from "@/analytics/src/after";
 import { redirect } from "next/navigation";
 import { readSession } from "@/lib/session";
 import {
@@ -102,6 +104,18 @@ export async function markMineSold(formData: FormData): Promise<void> {
   }
 
   await markAdSold(ad.id);
+  // Same event as the SMS lane, distinguished by channel — so "do web sellers
+  // close faster than text sellers" is one breakdown rather than a guess.
+  afterResponse(() =>
+    analytics.listingSold({
+      phone,
+      channel: "web",
+      daysToSell: Math.max(
+        0,
+        Math.round((Date.now() - Date.parse(ad.approvedAt ?? ad.createdAt)) / 86_400_000),
+      ),
+    }),
+  );
 
   if (!buyer) redirect(`${BACK}?sold=done&id=${ad.id}`);
 

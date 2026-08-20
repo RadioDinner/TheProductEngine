@@ -104,6 +104,12 @@ const STOP_MARKER = "unsubscribed and won't get more";
 const ERROR_REPLY_MARKER = "something went wrong on our end";
 const HOUR_MS = 60 * 60 * 1000;
 
+/** Whole days between an ISO timestamp and now — for days_to_sell. */
+function daysBetween(iso: string, nowMs: number): number {
+  const ms = nowMs - Date.parse(iso);
+  return Number.isFinite(ms) && ms > 0 ? Math.round(ms / 86_400_000) : 0;
+}
+
 // Ratings-flow conversation windows (FEATURES item 2): the seller has two
 // days to name the buyer; each side has a week to send their RATE 1–5.
 const BUYER_PHONE_CONTEXT_MS = 48 * HOUR_MS;
@@ -767,6 +773,17 @@ async function handleSold(from: string, id: number | null): Promise<Reply> {
     return { body: `Ad #${id} is still waiting for review — you can mark it sold once it's approved.` };
   }
   await markAdSold(id);
+  // The outcome the whole service exists to produce. days_to_sell is the
+  // number that proves it works — and the one to put in front of a business
+  // advertiser. Measured from approval (when buyers could first see it), not
+  // from submission, so review latency does not inflate it.
+  afterResponse(() =>
+    analytics.listingSold({
+      phone: from,
+      channel: "sms",
+      daysToSell: daysBetween(ad.approvedAt ?? ad.createdAt, Date.now()),
+    }),
+  );
   // Ratings flow (FEATURES item 2): ask who bought it, so buyer and seller
   // become CONFIRMED parties who may rate each other. If contexts aren't
   // available yet (migration 9984), the plain confirmation stands alone.

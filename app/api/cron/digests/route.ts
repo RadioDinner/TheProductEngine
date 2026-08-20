@@ -7,12 +7,16 @@
  * Set CRON_SECRET to require `Authorization: Bearer <secret>` (Vercel sends
  * this automatically for cron invocations when the env var exists).
  */
+import { setAfterImpl } from "@/analytics/src/after";
 import { timingSafeEqual } from "node:crypto";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest, after } from "next/server";
 import { drainDigestOutbox, runQueuedBroadcasts } from "@/lib/digest-engine";
 import { runDueEmailDigests } from "@/lib/email-digest";
 import { expireDueAds } from "@/lib/engine-store";
 import { isProduction } from "@/lib/env";
+
+// Digest sends emit analytics; keep them alive past the response.
+setAfterImpl(after);
 
 /** Vercel function ceiling; the drain's own time budget stays safely under it. */
 export const maxDuration = 60;
