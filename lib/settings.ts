@@ -17,8 +17,14 @@ export interface EngineSettings {
   costPhotoCents: number;
   /** Picture-ad prices in CENTS by picture count: [1 pic, 2 pics, 3 pics]. */
   photoPricesCents: number[];
-  /** Broadcasts carry the photo (MMS) instead of "Reply PIC 12". */
+  /** Each picture ad in a batch gets its own badged picture message (MMS).
+   * Off = the batch is text only and pictures come from PIC pulls. */
   photosInBroadcast: boolean;
+  /** Send a batch as soon as this many ads are waiting (0 = time only). */
+  batchMinAds: number;
+  /** Send whatever is waiting once the oldest ad has waited this long,
+   * in minutes (0 = count only). */
+  batchMaxWaitMinutes: number;
   /** Members who may ever receive the starter credit (0 = no cap). */
   starterCreditLimit: number;
   /** Website-listing add-on in CENTS. 0 = included free for every ad. */
@@ -99,6 +105,8 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   costPhotoCents: "ad_price_photo_cents",
   photoPricesCents: "ad_price_photo_cents_by_count",
   photosInBroadcast: "photos_in_broadcast",
+  batchMinAds: "batch_min_ads",
+  batchMaxWaitMinutes: "batch_max_wait_minutes",
   starterCreditLimit: "starter_credit_limit",
   webAddonCents: "web_addon_cents",
   starterCreditCents: "starter_credit_cents",
@@ -169,6 +177,8 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     costPhotoCents: engineDefaults.costPhotoCents,
     photoPricesCents: [...engineDefaults.photoPricesCents],
     photosInBroadcast: engineDefaults.photosInBroadcast,
+    batchMinAds: engineDefaults.batchMinAds,
+    batchMaxWaitMinutes: engineDefaults.batchMaxWaitMinutes,
     starterCreditLimit: engineDefaults.starterCreditLimit,
     webAddonCents: engineDefaults.webAddonCents,
     starterCreditCents: engineDefaults.starterCreditCents,

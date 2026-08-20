@@ -108,6 +108,35 @@ export async function GET(req: NextRequest) {
       // missing one breaks a whole surface (9989: every inbound SMS command;
       // 9988: digest composition + /admin/digests). Surface drift here instead
       // of leaving it to be inferred from 500s.
+      // Migration 9959: who filed a help report. Until it is pasted, reports
+      // still file (and the operator's email still names the person) — they
+      // just land without the contact columns, so the admin list can't show
+      // who to call back.
+      const helpContact = await db()
+        .from("help_reports")
+        .select("contact_phone", { count: "exact", head: true });
+      report.migration9959 = helpContact.error
+        ? {
+            applied: false,
+            code: helpContact.error.code,
+            error: helpContact.error.message,
+            fix: "run supabase/migrations/9959_help_report_contact.sql in the SQL editor",
+          }
+        : { applied: true };
+      // Migration 9960: batched ads. digests.slot_key is what makes a batch
+      // idempotent; without it the composer falls back to a synthetic
+      // scheduled_for identity, which works but is unreadable in the admin
+      // history — and the three batch config rows are unset, so the code
+      // defaults stand in.
+      const slotKey = await db().from("digests").select("slot_key", { count: "exact", head: true });
+      report.migration9960 = slotKey.error
+        ? {
+            applied: false,
+            code: slotKey.error.code,
+            error: slotKey.error.message,
+            fix: "run supabase/migrations/9960_batched_ads.sql in the SQL editor",
+          }
+        : { applied: true };
       // Migration 9961: the first-party analytics upgrade. Until it is pasted,
       // recordVisit falls back to bump_page_view and referrer/visitor counts
       // are simply not collected — nothing breaks, so without this probe the

@@ -31,7 +31,7 @@ export const site = {
    * This constant is the only place it is written down; the footer and the
    * health probe both read it, so they can never disagree.
    */
-  version: "1.1.6",
+  version: "1.1.7",
   tagline: "Buy and sell by text message",
   adsPerPage: 15,
 } as const;
@@ -102,13 +102,32 @@ export const engineDefaults = {
    * to older callers and to the refund matcher. Derived, never edited alone. */
   costPhotoCents: 3000,
   /**
-   * Do broadcasts carry the picture (MMS to every subscriber), or does the ad
-   * say "Reply PIC 12"? OFF is the launch answer and the one that scales: an
-   * MMS costs ~$0.035 per subscriber, so at $30 a picture ad auto-sending
-   * stops breaking even around 850 subscribers, while an on-demand pull costs
-   * that only for the handful who ask. The website carries every picture.
+   * Does each picture ad in a batch get its own picture message?
+   *
+   * ON since session 018 (user decision, after a competitor's batch: a text
+   * listing four ads, then a picture per picture-ad, each stamped with its ad
+   * number). A picture ad is the premium product — the seller paid for the
+   * picture to be SEEN, and a buyer scrolling a text list stops at a photo.
+   *
+   * It is still the most expensive thing this service sends: one MMS per
+   * picture ad per subscriber, ~$0.035 each. Only the FIRST picture goes out
+   * (PIC pulls up to two more on request, the rest live on the website), which
+   * is what keeps a three-picture ad from costing three times as much to
+   * broadcast. Turn this OFF to fall back to a text-only batch.
    */
-  photosInBroadcast: false,
+  photosInBroadcast: true,
+  /**
+   * When a batch goes out (user decision, session 018): "I'll run the batch
+   * every hour, or as soon as I have 3 or 4 ads."
+   *
+   * Whichever comes first — 3 ads waiting, or the oldest one having waited an
+   * hour. The count rule is what makes a busy morning feel live; the timer is
+   * what stops a lone ad sitting all day because nothing else arrived. Both
+   * only ever fire inside the send window, so nothing goes out overnight.
+   * Set either to 0 to disable that trigger (never both, or nothing sends).
+   */
+  batchMinAds: 3,
+  batchMaxWaitMinutes: 60,
   /**
    * Website-listing add-on in cents. 0 (launch value) = every ad lists on
    * the website automatically, free. Set to 1500 to start charging +$15:
@@ -162,8 +181,14 @@ export const engineDefaults = {
    * segments — raise it deliberately as the list grows. 0 pauses SMS digests.
    * This is an SMS COST cap only — the 0-segment email edition is exempt and
    * keeps flowing; use the outbound stops to quiet other channels.
+   *
+   * Raised from 12,000 in session 018, when picture messages started riding
+   * batches: a picture counts 3 (MMS_SEGMENT_COST — roughly Telnyx's own
+   * MMS-to-segment price ratio), so the old ceiling would have halted sending
+   * most days rather than catching a runaway. It is a segment-EQUIVALENT
+   * budget now: 1 = one text segment, 3 = one picture.
    */
-  digestDailySegmentBudget: 12000,
+  digestDailySegmentBudget: 40000,
   /**
    * Insights: flag a number that requests more than this many pictures (PIC)
    * in a rolling 24h as "excessive" on the admin dashboard. Purely a reporting

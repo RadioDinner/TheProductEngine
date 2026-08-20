@@ -118,12 +118,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 Ask a question
               </Link>
               <Link className="btn btn-sm btn-secondary" href="/contact?type=idea">
-                Suggest an idea
+                Suggest a feature
               </Link>
             </p>
             <p>
               Text <strong>SUBSCRIBE</strong> to <strong>{site.smsNumber}</strong> for the ads —
-              ads arrive as they&rsquo;re posted, 7am&ndash;9pm Mon&ndash;Sat; msg &amp; data rates may apply. Text <strong>HELP</strong>{" "}
+              ads arrive in batches, 7am&ndash;9pm Mon&ndash;Sat; msg &amp; data rates may apply. Text <strong>HELP</strong>{" "}
               for help, <strong>STOP</strong> to cancel ·{" "}
               <Link href="/email">Get the ads by email</Link> ·{" "}
               <Link href="/how-it-works">How it works</Link> ·{" "}

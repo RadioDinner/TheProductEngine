@@ -51,11 +51,12 @@ export default async function SmsProgram() {
 
       <h2>Message frequency</h2>
       <p>
-        Message frequency varies. Each classified ad is texted to you{" "}
-        <strong>as it is posted and approved</strong> — one message per ad, and a picture ad
-        arrives with its picture — plus a reply to any command you text us (for example, a
-        balance check or an ad confirmation). How many that comes to on a given day depends on
-        how many neighbors post; a slow day may be none at all.
+        Message frequency varies. Classified ads are texted to you{" "}
+        <strong>in batches through the day</strong> — several ads in one message, each with
+        its own ad number, followed by one picture message for each ad in that batch that has
+        a picture — plus a reply to any command you text us (for example, a balance check or
+        an ad confirmation). How many that comes to on a given day depends on how many
+        neighbors post; a slow day may be none at all.
       </p>
       <p>
         Ads are only ever sent between <strong>7am and 9pm, Monday through Saturday</strong>.

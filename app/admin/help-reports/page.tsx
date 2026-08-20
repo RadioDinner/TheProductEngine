@@ -78,6 +78,16 @@ export default async function AdminHelpReports({
                 <span className="status-muted">· {when(r.createdAt)}</span>{" "}
                 {r.resolvedAt && <span className="status-muted">· done</span>}
               </p>
+              {(r.firstName || r.contactPhone || r.contactEmail) && (
+                <p>
+                  <strong>
+                    Get back to{" "}
+                    {[r.firstName, r.lastName].filter(Boolean).join(" ") || "them"}
+                  </strong>
+                  {r.contactPhone ? ` · ${formatPhone(r.contactPhone)}` : ""}
+                  {r.contactEmail ? ` · ${r.contactEmail}` : ""}
+                </p>
+              )}
               {r.note ? (
                 <p>&ldquo;{r.note}&rdquo;</p>
               ) : (

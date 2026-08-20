@@ -26,9 +26,10 @@ export default async function Faq() {
       <h2>What is {site.name}?</h2>
       <p>
         Local classified ads for {site.region}, delivered by text message. Sellers text
-        their ads in; everyone who subscribes gets each ad by text as it’s posted, up to four
-        times a day. The ads are also listed on this website, and there&rsquo;s an email
-        edition if you prefer email.
+        their ads in; everyone who subscribes gets them in batches through the day — several
+        ads in one text, each with its own ad number, and a picture for the ads that have
+        one. The ads are also listed on this website, and there&rsquo;s an email edition if
+        you prefer email.
       </p>
 
       <h2>Do I need a smartphone or the internet?</h2>
@@ -71,15 +72,18 @@ export default async function Faq() {
       <h2>Who sees my ad, and when?</h2>
       <p>
         Every ad is read and approved by a person first — usually the same day. Once
-        approved, it goes straight out to subscribers, and it stays listed on this website for
-        30 days. You&rsquo;ll get a text with your ad&rsquo;s number when it&rsquo;s in.
+        approved, it goes out to subscribers with the next batch of ads, and it stays listed
+        on this website for 30 days. You&rsquo;ll get a text with your ad&rsquo;s number when
+        it&rsquo;s in.
       </p>
 
       <h2>How do pictures work?</h2>
       <p>
-        When a text says an ad has a picture, reply <span className="cmd">PIC</span>{" "}and
-        the ad&rsquo;s number — like <span className="cmd">PIC 1042</span> — and the picture
-        comes back to you by text, free. On the website, pictures show right on the ad.
+        An ad with pictures sends one of them right after the batch, in its own message,
+        with the ad number marked in the corner so you know which ad it belongs to. Want to
+        see more? Reply <span className="cmd">PIC</span> and the ad&rsquo;s number — like{" "}
+        <span className="cmd">PIC 1042</span> — and up to two more come back by text, free.
+        The rest are on this website, where every picture shows right on the ad.
       </p>
 
       <h2>Why wasn&rsquo;t my ad accepted?</h2>

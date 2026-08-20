@@ -24,11 +24,16 @@ import { parseCommand } from "../lib/commands.ts";
 export const name = "categories";
 
 export function run(t) {
-  // ---- the WELCOME PACKAGE (session 016) ----
+  // ---- the WELCOME PACKAGE (session 016, messages 1-2 revised session 018) ----
   // The user wrote these five messages and said "HONOR EVERYTHING I PROMISED
   // IN IT". So: each is pinned verbatim, AND every command it names is fed
   // through the real parser below. A promise in this text that the engine
   // does not answer is a failing test, not a support ticket.
+  //
+  // Session 018 (batched ads) rewrote what messages 1 and 2 PROMISE, on the
+  // user's instruction: ads arrive as a batch rather than one text at a time,
+  // one picture per ad goes out with it carrying the ad number, and PIC pulls
+  // up to two more. The pins moved with the promise; everything else stands.
   const WELCOME_ARGS = {
     siteName: "The Plain Exchange",
     siteUrl: "ThePlainExchange.com",
@@ -42,12 +47,12 @@ export function run(t) {
   t.eq(
     "1 verbatim",
     welcome[0],
-    "Welcome to The Plain Exchange!\n\nAds post from 7am to 9pm Mon - Sat.\n\nText ad $20; 1 pic $30, 2 pics $40, 3 pics $50.\n\nYou have $40 of free ad credit!",
+    "Welcome to The Plain Exchange!\n\nAds come in batches - several in one text, each with its own ad number - 7am to 9pm Mon - Sat.\n\nText ad $20; 1 pic $30, 2 pics $40, 3 pics $50.\n\nYou have $40 of free ad credit!",
   );
   t.eq(
     "2 verbatim",
     welcome[1],
-    "To post, text AD NEW and your ad, like:\n\nAD NEW Hay for sale, $5/bale. Call 330-555-0142\n\nYou can reply PIC and the ad number like (PIC 1022) to receive the pictures for the ad\n\nWhen posting an AD you can send up to 8 pictures, but the first 3 will be the only ones available via text. You can see the rest on ThePlainExchange.com!",
+    "To post, text AD NEW and your ad, like:\n\nAD NEW Hay for sale, $5/bale. Call 330-555-0142\n\nWhen posting an AD you can send up to 8 pictures. The first one goes out with the batch, marked with your ad number.\n\nSee more pictures by replying PIC and the ad number, like PIC 1022 - that sends up to 2 more. The rest are on ThePlainExchange.com!",
   );
   t.eq(
     "3 verbatim",

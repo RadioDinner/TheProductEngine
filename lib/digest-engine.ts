@@ -20,7 +20,6 @@ import {
   createExtraDigest,
   digestSegmentsSentSince,
   stampReleaseSchedule,
-  digestsSentOnDay,
   enqueueDigestOutbox,
   finalizeDigest,
   finalizeExtraDigest,
@@ -35,7 +34,6 @@ import {
   queuedOutboxCount,
   requeueOutbox,
   reserveSms,
-  smsDigestOutboxPhonesOnDay,
   type OutboxInsert,
   type OutboxRow,
   type StoredAd,
@@ -46,7 +44,7 @@ import {
   listSubscribersWithCategories,
 } from "@/lib/store";
 import { adMatchesCategories, partitionKey } from "@/lib/categories";
-import { unsubscribeUrl } from "@/lib/email";
+import { unsubscribeUrl, siteUrl } from "@/lib/email";
 import { composeEmailHtml, composeEmailText } from "@/lib/email-digest";
 import { sms } from "@/lib/sms";
 import { email } from "@/lib/email";
@@ -55,73 +53,124 @@ import { notifyAdminDigestHalted } from "@/lib/notify";
 import { pauseBlocks } from "@/lib/outbound";
 import { listBlocked } from "@/lib/blocklist";
 import { etParts } from "@/lib/et";
-import { composeEmailSubject } from "@/lib/ad-display";
+import { composeEmailSubject, deriveTitle } from "@/lib/ad-display";
 import { gsmSanitize, packMessages, segmentation } from "@/lib/sms-segments";
 import { listDueSponsors, markSponsorRan } from "@/lib/business";
 import { sponsorLine } from "@/lib/business-packages";
-
-const SLOT_LABELS: Record<number, string> = {
-  7: "morning",
-  12: "noon",
-  16: "afternoon",
-  20: "evening",
-};
+import { textedAdPhotos } from "@/lib/photo-collage";
+import { badgeLabel } from "@/lib/ad-badge";
+import { storeBadgedPhoto } from "@/lib/photos";
 
 /**
- * Max GSM-7 characters per digest message. Ads are packed whole into as few
- * messages as possible under this ceiling — big enough to keep segment count
- * near-minimal (packing waste is small), small enough that each message stays
- * a clean, reliably-delivered SMS (never an MMS) on a flip phone. ~4 segments.
+ * Max GSM-7 characters in ONE batch text — exactly six concatenated segments.
+ *
+ * This is the answer to "how is a competitor fitting all that in a text
+ * without it becoming an MMS": they aren't fitting it in one. A long SMS is
+ * split by the sender into 153-character segments carrying a reassembly
+ * header, and the handset glues them back together — the reader sees one
+ * message, the carrier bills six. Nothing about length turns an SMS into an
+ * MMS; only attaching media does. So the ceiling here is a COST decision, not
+ * a technical limit: ads are packed whole into as few messages as possible
+ * under it, and 6 segments comfortably holds a 4-ad batch with its header and
+ * footer, which is what the user's competitor sends.
  */
-export const DIGEST_MSG_MAX_GSM = 612;
+export const BATCH_MSG_MAX_GSM = 918;
 
 /**
- * Compose a digest as a list of SMS-ready messages: ad text GSM-sanitized so a
+ * One ad's line in a batch text.
+ *
+ * Numbered by AD NUMBER, not by position in the batch (user decision, session
+ * 018): the competitor numbers 1-4 and the numbers mean nothing an hour
+ * later, while "1024" is the same number the badge on the picture shows, the
+ * one PIC takes, the one SOLD takes, and the one on the website.
+ *
+ * `picturesRide` = each picture ad's photo is following as its own message,
+ * so the line only advertises PIC when there are MORE pictures to pull. With
+ * pictures off (a text-only batch) every picture ad advertises PIC, because
+ * that is then the only way to see anything.
+ */
+export function batchAdLine(ad: StoredAd, picturesRide: boolean): string {
+  const pictures = textedAdPhotos(ad.photo, ad.morePhotos).length;
+  let suffix = "";
+  if (pictures > 0 && !picturesRide) suffix = ` Pic? Reply PIC ${ad.id}`;
+  else if (pictures > 1) suffix = ` More pics: PIC ${ad.id}`;
+  return `${ad.id}) ${ad.body}${suffix}`;
+}
+
+/**
+ * Compose a batch as a list of SMS-ready messages: ad text GSM-sanitized so a
  * stray emoji can't flip the whole broadcast to costly UCS-2, ads kept whole,
- * packed into the fewest messages under the single-SMS ceiling. This is what
- * gets enqueued and delivered per subscriber.
+ * blank lines between them (a newline is one septet and a flip-phone screen
+ * needs the air), packed into the fewest messages under the ceiling above.
+ * This is what gets enqueued and delivered per subscriber.
  */
 export type DigestEdition = "early" | "extra";
 
-export function composeDigestMessages(
+export function composeBatchMessages(
   now: Date,
-  slotHour: number,
   items: StoredAd[],
-  firstOfDay: boolean,
-  edition?: DigestEdition,
-  digestNo?: number | null,
-  sponsorLines?: string[],
+  opts: {
+    edition?: DigestEdition;
+    digestNo?: number | null;
+    sponsorLines?: string[];
+    /** Each picture ad's photo follows as its own message. */
+    picturesRide?: boolean;
+  } = {},
 ): string[] {
   const dateLabel = now.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     timeZone: "America/New_York",
   });
-  // Label admin-triggered editions so subscribers aren't confused by an
-  // off-schedule digest ("(sent early)") or one that repeats ads ("extra").
-  const label =
-    edition === "extra"
-      ? "extra edition"
-      : `${SLOT_LABELS[slotHour] ?? `${slotHour}:00`}${edition === "early" ? " (sent early)" : ""}`;
-  // Every sent digest carries its edition number (FEATURES item 5); omitted
-  // only while migration 9982 is pending.
+  // Label admin-triggered editions so subscribers aren't confused by one that
+  // repeats ads they already had ("extra edition").
+  const label = opts.edition === "extra" ? " extra edition" : "";
+  // Every batch carries its edition number (FEATURES item 5); omitted only
+  // while migration 9982 is pending.
   const header = gsmSanitize(
-    `Plain Exchange${digestNo ? ` No. ${digestNo}` : ""} ${dateLabel} ${label}:`,
+    `${site.name}${opts.digestNo ? ` No. ${opts.digestNo}` : ""} - ${dateLabel}${label}:`,
   );
-  const adLines = items.map((ad) =>
-    gsmSanitize(`#${ad.id} ${ad.body}${ad.photo ? ` Pic? Reply PIC ${ad.id}` : ""}`),
-  );
+  const picturesRide = opts.picturesRide ?? false;
+  // A blank line between ads: `packMessages` joins lines with "\n", so an
+  // empty leading line is what puts air between them. Cheap (one septet) and
+  // it is the difference between a readable list and a wall of text.
+  const adLines = items.flatMap((ad) => ["", gsmSanitize(batchAdLine(ad, picturesRide))]);
   // Business sponsor lines (item 17) ride FIRST, right under the header —
-  // clearly labeled ("Sponsor: …"), OUTSIDE the cap-10 member ads (they are
-  // extra lines, never one of the FIFO slots), and GSM-sanitized through the
-  // same packer so a sponsor's text can't flip the broadcast to UCS-2 pricing.
-  const sponsors = (sponsorLines ?? []).map((line) => gsmSanitize(line));
+  // clearly labeled ("Sponsor: …"), OUTSIDE the member ads (they are extra
+  // lines, never one of the FIFO slots), and GSM-sanitized through the same
+  // packer so a sponsor's text can't flip the broadcast to UCS-2 pricing.
+  const sponsors = (opts.sponsorLines ?? []).flatMap((line) => ["", gsmSanitize(line)]);
   return packMessages({
     header,
     adLines: [...sponsors, ...adLines],
-    footer: firstOfDay ? "Reply STOP to end" : undefined,
-    maxGsm: DIGEST_MSG_MAX_GSM,
+    footer: batchFooter(items, picturesRide),
+    maxGsm: BATCH_MSG_MAX_GSM,
   });
+}
+
+/**
+ * The standing footer, on EVERY batch (session 018).
+ *
+ * It used to ride only the first text of the day, back when a text was one ad
+ * and the footer was a per-ad tax. A batch is a handful a day, so the ~60
+ * septets buy the two things a subscriber needs in front of them — how to
+ * place an ad, and how to stop — on every message rather than once at dawn.
+ * That is also the posture carriers expect of a bulk program.
+ *
+ * The PIC line names a REAL ad from this batch, and only when one of them
+ * actually has more pictures to pull: an example that answers "that's the
+ * only picture" teaches the wrong thing.
+ */
+export function batchFooter(items: StoredAd[], picturesRide: boolean): string {
+  const pullable = items.find(
+    (ad) => textedAdPhotos(ad.photo, ad.morePhotos).length > (picturesRide ? 1 : 0),
+  );
+  return [
+    "",
+    "Reply AD to place an ad.",
+    ...(pullable ? [`For pictures, reply PIC and the ad number, like PIC ${pullable.id}.`] : []),
+    "Reply STOP to end.",
+  ].join("\n");
 }
 
 export interface SlotResult {
@@ -134,43 +183,71 @@ export interface SlotResult {
 }
 
 /**
- * Category-aware SMS composition (item 22): ONE combined digest per
- * subscriber per slot, carrying only their categories' ads (+ every
- * uncategorized ad + the sponsor lines, which ride regardless of categories).
+ * What one picture ad contributes to a batch: its own message, carrying the
+ * ad's FIRST picture with the ad number burned into the corner.
+ *
+ * One picture per ad, never the set (user decision, session 018): the
+ * remaining two are a PIC pull away and the rest are on the website, so a
+ * three-picture ad costs one MMS per subscriber to broadcast instead of
+ * three. `url` is already badged and absolute by the time it gets here —
+ * resolveBroadcastPictures does that work once per batch, not once per
+ * subscriber.
+ */
+export interface BatchPicture {
+  adId: number;
+  url: string;
+  caption: string;
+}
+
+/**
+ * An MMS is not billed in segments, but the digest budget counts in them, so
+ * a picture message has to be worth SOMETHING or the cost breaker would watch
+ * pictures ride out for free. Telnyx bills an MMS at roughly three times a
+ * GSM segment, so that is what one costs against `digestDailySegmentBudget`.
+ * The text riding inside an MMS is free, which is why a caption doesn't add.
+ */
+export const MMS_SEGMENT_COST = 3;
+
+/** The caption on a picture message — the ad number and enough of the ad to
+ * recognise it. Short on purpose: the picture is the message, and a handset
+ * that shows text before images should show something useful first. */
+export function pictureCaption(ad: StoredAd): string {
+  return gsmSanitize(`${ad.id}) ${deriveTitle(ad.body)}`);
+}
+
+/**
+ * Category-aware SMS composition (item 22): ONE batch per subscriber, carrying
+ * only their categories' ads (+ every uncategorized ad + the sponsor lines,
+ * which ride regardless of categories).
  *
  * Subscribers are grouped by their EFFECTIVE category set and each distinct
- * set's edition is composed/packed exactly once, then its parts enqueued to
- * that whole group — composition cost is O(distinct sets), not O(subscribers),
- * and the ALL group's edition is byte-identical to the pre-category digest.
- * A subscriber whose filtered edition is empty (and no sponsors ride) gets
- * nothing this slot, and an EMPTY-SET subscriber gets nothing at all — not
- * even sponsor lines ("You're not getting any ads now" must stay true).
+ * set's batch is composed/packed exactly once, then its parts enqueued to that
+ * whole group — composition cost is O(distinct sets), not O(subscribers), and
+ * the ALL group's batch is byte-identical to the uncategorized one. A
+ * subscriber whose filtered batch is empty (and no sponsors ride) gets nothing,
+ * and an EMPTY-SET subscriber gets nothing at all — not even sponsor lines
+ * ("You're not getting any ads now" must stay true).
  *
- * The Reply-STOP footer is decided PER GROUP: the slot-global firstOfDay, or
- * — when `phonesTextedToday` is supplied — a group none of whose phones has
- * had a digest enqueued yet today (a selective group's first digest of the
- * day carries the opt-out notice even when the ALL group's ran hours ago).
+ * Parts are ordered text-first, then one part per picture: the drain sends in
+ * columnar order (everyone gets part 1 before anyone gets part 2), so every
+ * subscriber reads the list before the pictures land under it, and a run that
+ * dies halfway leaves people with the ads rather than orphan photos.
  *
- * Returns the ad ids that landed in ≥1 group's edition (`deliveredAdIds`) so
- * the caller can finalize/consume ONLY what was actually delivered.
+ * Returns the ad ids that landed in ≥1 group's batch (`deliveredAdIds`) so the
+ * caller can finalize/consume ONLY what was actually delivered.
  */
 export function buildCategorizedSmsRows(params: {
   digestId: number;
   now: Date;
-  slotHour: number;
   items: StoredAd[];
   /** Ad id → category (getAdCategories); missing ids read uncategorized. */
   categoriesByAd: Map<number, string | null>;
-  firstOfDay: boolean;
-  /** Phones already enqueued an SMS digest today — the per-group footer
-   * signal. Only consulted when firstOfDay is false (undefined = day-global
-   * behavior: no footer past the first slot). */
-  phonesTextedToday?: Set<string>;
   edition?: DigestEdition;
   digestNo: number | null;
   sponsorLines: string[];
-  /** Attach each picture ad's photo as MMS instead of prompting for PIC. */
-  photosInBroadcast?: boolean;
+  /** Ad id → the badged, absolute picture URL to broadcast for it. Empty =
+   * a text-only batch (photosInBroadcast off, or nothing could be prepared). */
+  pictures?: Map<number, string>;
   recipients: { phone: string; categories: string[] | null }[];
 }): { rows: OutboxInsert[]; recipients: number; deliveredAdIds: Set<number> } {
   const groups = new Map<string, { categories: string[] | null; phones: string[] }>();
@@ -180,67 +257,100 @@ export function buildCategorizedSmsRows(params: {
     if (group) group.phones.push(r.phone);
     else groups.set(key, { categories: r.categories, phones: [r.phone] });
   }
+  const pictures = params.pictures ?? new Map<number, string>();
   const rows: OutboxInsert[] = [];
   const deliveredAdIds = new Set<number>();
   let recipients = 0;
   for (const group of groups.values()) {
-    // The warned-dark empty set gets NOTHING this slot — including sponsors.
+    // The warned-dark empty set gets NOTHING — including sponsors.
     if (group.categories && group.categories.length === 0) continue;
     const filtered = params.items.filter((ad) =>
       adMatchesCategories(params.categoriesByAd.get(ad.id) ?? null, group.categories),
     );
-    // Nothing in their categories and no sponsor lines riding — no digest for
-    // this group this slot.
+    // Nothing in their categories and no sponsor lines riding — no batch for
+    // this group.
     if (!filtered.length && !params.sponsorLines.length) continue;
     for (const ad of filtered) deliveredAdIds.add(ad.id);
-    const groupFirstOfDay =
-      params.firstOfDay ||
-      (params.phonesTextedToday !== undefined &&
-        group.phones.every((p) => !params.phonesTextedToday!.has(p)));
-    const messages = composeDigestMessages(
-      params.now,
-      params.slotHour,
-      filtered,
-      groupFirstOfDay,
-      params.edition,
-      params.digestNo,
-      params.sponsorLines,
-    );
+    const messages = composeBatchMessages(params.now, filtered, {
+      edition: params.edition,
+      digestNo: params.digestNo,
+      sponsorLines: params.sponsorLines,
+      picturesRide: pictures.size > 0,
+    });
     const partSegments = messages.map((m) => segmentation(m).segments);
-    // Whether the picture rides along (MMS to every subscriber) or the ad
-    // says "Reply PIC 12" is a SETTING, off by default — an MMS costs ~$0.035
-    // per subscriber, so at a $30 picture ad auto-sending stops breaking even
-    // near 850 subscribers, while an on-demand pull costs that only for the
-    // few who ask. The website carries every picture either way.
-    const media = params.photosInBroadcast
-      ? filtered.map((ad) => ad.photo?.src).filter((url): url is string => Boolean(url))
-      : [];
+    // One picture message per picture ad IN THIS GROUP's batch — a subscriber
+    // never receives a photo for an ad their list didn't carry.
+    const groupPictures: BatchPicture[] = filtered
+      .filter((ad) => pictures.has(ad.id))
+      .map((ad) => ({ adId: ad.id, url: pictures.get(ad.id)!, caption: pictureCaption(ad) }));
     for (const phone of group.phones) {
       recipients++;
+      const parts = messages.length + groupPictures.length;
       for (let i = 0; i < messages.length; i++) {
         rows.push({
           digestId: params.digestId,
           channel: "sms",
           address: phone,
           part: i + 1,
-          parts: messages.length,
+          parts,
           body: messages[i],
           segments: partSegments[i],
-          ...(i === 0 && media.length && { media }),
         });
       }
+      groupPictures.forEach((picture, i) => {
+        rows.push({
+          digestId: params.digestId,
+          channel: "sms",
+          address: phone,
+          part: messages.length + i + 1,
+          parts,
+          body: picture.caption,
+          segments: MMS_SEGMENT_COST,
+          media: [picture.url],
+        });
+      });
     }
   }
   return { rows, recipients, deliveredAdIds };
 }
 
-/** Catch-up messages for a brand-new subscriber: the most recent digest's ads. */
+/**
+ * Prepare the pictures a batch will broadcast: for each picture ad, its FIRST
+ * picture with the ad number stamped into the corner, as an absolute URL
+ * Telnyx can fetch.
+ *
+ * Done ONCE per batch, before any row is built, because the work is a fetch,
+ * a sharp render and an upload per ad — per subscriber it would be thousands.
+ * Every failure degrades one step at a time: no badge → the clean original;
+ * no absolute URL → skip that ad's picture and let its line advertise PIC.
+ * A picture problem must never stop the ads going out.
+ */
+export async function resolveBroadcastPictures(items: StoredAd[]): Promise<Map<number, string>> {
+  const pictures = new Map<number, string>();
+  for (const ad of items) {
+    const first = textedAdPhotos(ad.photo, ad.morePhotos)[0];
+    if (!first) continue;
+    // Telnyx needs an ABSOLUTE media URL: re-hosted photos already carry one,
+    // but a site-relative src (fixtures, pre-re-hosting ads) must be prefixed
+    // or the MMS send 400s and nobody gets the picture.
+    const absolute = first.src.startsWith("http") ? first.src : `${siteUrl}${first.src}`;
+    const badged = await storeBadgedPhoto(absolute, badgeLabel(ad.id));
+    pictures.set(ad.id, badged ?? absolute);
+  }
+  return pictures;
+}
+
+/**
+ * Catch-up messages for a brand-new subscriber: the most recent batch's ads.
+ *
+ * Text only, always — a signup burst must never fan out MMS, and someone who
+ * just joined has no history to make sense of loose photos anyway. Picture
+ * ads advertise PIC, which is exactly what PIC is for here.
+ */
 export function composeCatchupMessages(items: StoredAd[]): string[] {
-  const header = gsmSanitize(`${site.name} — most recent ads:`);
-  const adLines = items.map((ad) =>
-    gsmSanitize(`#${ad.id} ${ad.body}${ad.photo ? ` Pic? Reply PIC ${ad.id}` : ""}`),
-  );
-  return packMessages({ header, adLines, maxGsm: DIGEST_MSG_MAX_GSM });
+  const header = gsmSanitize(`${site.name} - most recent ads:`);
+  const adLines = items.flatMap((ad) => ["", gsmSanitize(batchAdLine(ad, false))]);
+  return packMessages({ header, adLines, maxGsm: BATCH_MSG_MAX_GSM });
 }
 
 /**
@@ -394,12 +504,6 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
 
   // Compose + enqueue the SMS edition.
   const { day } = etParts(now);
-  const firstOfDay = (await digestsSentOnDay(day)) === 0;
-  // Per-group STOP-footer signal: which phones already had an SMS digest
-  // enqueued today (only needed once the day-global firstOfDay has passed).
-  const phonesTextedToday = firstOfDay
-    ? undefined
-    : new Set(await smsDigestOutboxPhonesOnDay(day));
   const digestNo = await allocateDigestNumber(smsDigestId);
   // Sponsor lines (item 17) ride the first digest of the day — an early/extra
   // edition counts (and a later scheduled slot then skips them for the day).
@@ -411,18 +515,18 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   );
   // Per-category-set composition — same machinery as the scheduled run.
   const categoriesByAd = await getAdCategories(items.map((a) => a.id));
+  const pictures = settings.photosInBroadcast
+    ? await resolveBroadcastPictures(items)
+    : new Map<number, string>();
   const { rows, recipients: smsRecipients, deliveredAdIds } = buildCategorizedSmsRows({
     digestId: smsDigestId,
     now,
-    slotHour,
     items,
     categoriesByAd,
-    firstOfDay,
-    phonesTextedToday,
     edition,
     digestNo,
     sponsorLines: sponsors.map((s) => sponsorLine(s)),
-    photosInBroadcast: settings.photosInBroadcast,
+    pictures,
     recipients: subscribers,
   });
   await enqueueDigestOutbox(rows);
@@ -594,6 +698,25 @@ export function nextSendLabel(
   return `at ${openLabel}`; // every day is quiet — nonsense config, say something sane
 }
 
+/**
+ * How long a seller should expect to wait for the batch their approved ad
+ * will ride, in words. "Right away" is no longer true (session 018) and a
+ * seller who was told "going out now" and then waited forty minutes has been
+ * lied to; this is the honest version, built from the same settings the
+ * trigger uses.
+ */
+export function batchWaitLabel(
+  settings: Pick<EngineSettings, "batchMinAds" | "batchMaxWaitMinutes">,
+): string {
+  const minutes = Math.max(0, Math.floor(settings.batchMaxWaitMinutes || 0));
+  if (!minutes) return "with the next batch of ads";
+  if (minutes < 60) return `with the next batch of ads, within ${minutes} minutes`;
+  const hours = Math.round(minutes / 60);
+  return hours === 1
+    ? "with the next batch of ads, usually within the hour"
+    : `with the next batch of ads, within about ${hours} hours`;
+}
+
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 /** 7 -> "7am", 13 -> "1pm", 0 -> "12am". */
@@ -611,16 +734,16 @@ export function etWeekday(day: string): number {
 }
 
 /**
- * Compose ONE SMS edition — a set of ads packed per category group, enqueued
- * to the outbox for delivery. Since session 016 an edition is a SINGLE ad
- * sent the moment it is approved; the machinery (category packing, the
- * per-group STOP footer, sponsor lines, the blocklist, outbox dedup) is the
- * digest's, unchanged, because all of it is per-edition rather than
- * per-schedule. `slotKey` is what makes an edition idempotent: composing the
- * same key twice is a no-op.
+ * Compose ONE SMS batch — a set of ads packed per category group, enqueued to
+ * the outbox for delivery, with a picture message per picture ad behind it.
+ * The machinery (category packing, sponsor lines, the blocklist, outbox
+ * dedup) is the digest's, unchanged, because all of it was always
+ * per-edition rather than per-schedule. `slotKey` is what makes a batch
+ * idempotent: composing the same key twice is a no-op.
  */
 async function composeSmsEdition(args: {
   items: StoredAd[];
+  bumpRecords?: { id: number; adId: number }[];
   slotKey: string;
   slotHour: number;
   now: Date;
@@ -629,7 +752,7 @@ async function composeSmsEdition(args: {
   const { items, slotKey, slotHour, now } = args;
   const { day } = etParts(now);
   const { id: digestId, finalized } = await createDigestIfAbsent(slotKey, slotHour);
-  // finalized = this edition was fully composed+enqueued already. A row that
+  // finalized = this batch was fully composed+enqueued already. A row that
   // exists but never finalized means a previous run died mid-enqueue — fall
   // through and redo it (the outbox unique key dedups the rows).
   if (finalized) return { slotKey, items: 0, recipients: 0, skipped: true };
@@ -638,18 +761,11 @@ async function composeSmsEdition(args: {
     return { slotKey, items: 0, recipients: 0, skipped: true };
   }
 
-  const firstOfDay = (await digestsSentOnDay(day)) === 0;
-  // Per-group STOP-footer signal (item 22): which phones already had an SMS
-  // edition enqueued today, so a group whose first text of the day comes
-  // later still gets the opt-out footer and nobody gets it twice.
-  const phonesTextedToday = firstOfDay
-    ? undefined
-    : new Set(await smsDigestOutboxPhonesOnDay(day));
   const digestNo = await allocateDigestNumber(digestId);
   // Business sponsor lines (item 17, reworked session 016): each scheduled
   // sponsor rides ONE ad text a day — "a ride once a day, throughout the
-  // day" — so an edition carries at most ONE sponsor and the day's sponsors
-  // spread across the day's ads instead of stacking on the 7am text.
+  // day" — so a batch carries at most ONE sponsor and the day's sponsors
+  // spread across the day's batches instead of stacking on the 7am text.
   // listDueSponsors already excludes packages that rode today and those
   // whose reserved week isn't running.
   const sponsors = (await listDueSponsors(day)).slice(0, 1);
@@ -660,17 +776,19 @@ async function composeSmsEdition(args: {
     (s) => !blocked.has(s.phone),
   );
   const categoriesByAd = await getAdCategories(items.map((a) => a.id));
+  // Badge and stage the pictures ONCE for the whole batch, before any row is
+  // built — see resolveBroadcastPictures.
+  const pictures = args.settings.photosInBroadcast
+    ? await resolveBroadcastPictures(items)
+    : new Map<number, string>();
   const { rows, recipients, deliveredAdIds } = buildCategorizedSmsRows({
     digestId,
     now,
-    slotHour,
     items,
     categoriesByAd,
-    firstOfDay,
-    phonesTextedToday,
     digestNo,
     sponsorLines: sponsors.map((s) => sponsorLine(s)),
-    photosInBroadcast: args.settings.photosInBroadcast,
+    pictures,
     recipients: subscribers,
   });
   const queued = await enqueueDigestOutbox(rows);
@@ -691,15 +809,15 @@ async function composeSmsEdition(args: {
   await finalizeDigest(
     digestId,
     items.filter((a) => consumed.has(a.id)).map((a) => a.id),
-    [],
+    (args.bumpRecords ?? []).filter((b) => consumed.has(b.adId)).map((b) => b.id),
     consumed.size,
     items.filter((a) => consumed.has(a.id)).map((a) => a.id),
   );
-  // Consume each sponsor's paid day only after the edition is enqueued and
+  // Consume each sponsor's paid day only after the batch is enqueued and
   // finalized: a crash mid-compose leaves the day uncounted and the redo
   // picks the sponsors up again (the outbox unique key dedups). Skipped when
   // nothing was delivered — a paid sponsor day must not burn on an
-  // undelivered edition.
+  // undelivered batch.
   if (rows.length || consumed.size) {
     for (const s of sponsors) {
       await markSponsorRan(s.id, day, slotKey);
@@ -708,18 +826,72 @@ async function composeSmsEdition(args: {
   return { slotKey, items: consumed.size, recipients, queued, skipped: false };
 }
 
-/** The edition key for a single ad — one ad, one text, forever idempotent. */
-function adSlotKey(adId: number): string {
-  return `ad#${adId}`;
+/**
+ * The batch's idempotency key: the head of the queue it was built from.
+ *
+ * It has to be STABLE for a given queue (two overlapping cron ticks must
+ * compose the same key, or both would enqueue the same ads and every
+ * subscriber would get the batch twice) and UNIQUE across batches (a key that
+ * repeats would be skipped as already-sent). The head new ad is stable —
+ * it stays the head until it is consumed, and once consumed it can never head
+ * another batch. The head BUMP id joins it because an admin re-run of an ad
+ * that already broadcast would otherwise reuse its old key and be swallowed;
+ * bump ids are fresh per re-run.
+ */
+export function batchSlotKey(newAdId: number | null, bumpId: number | null): string {
+  return `batch#${newAdId ?? 0}#${bumpId ?? 0}`;
 }
 
 /**
- * Send every approved ad that hasn't gone out yet, one text per ad (user
- * decision, session 016). Called on approval — so an ad goes the moment you
- * say yes — and on every cron tick, which is what drains the overnight and
- * Sunday queue the next time the window opens.
+ * Is there a batch to send right now? (User decision, session 018: "I'll run
+ * the batch every hour, or as soon as I have 3 or 4 ads.")
  *
- * `force` skips the window check: the operator's "send now" on /admin/digests.
+ * Two triggers, whichever comes first:
+ *  - COUNT: `batchMinAds` are waiting. What makes a busy morning feel live.
+ *  - AGE: the oldest has waited `batchMaxWaitMinutes`. What stops a lone ad
+ *    sitting all day because nothing else came in — and, at the top of the
+ *    morning, what empties the overnight queue.
+ *
+ * Setting either to 0 turns that trigger off; with both off nothing would ever
+ * send, so a zero pair falls back to sending whatever is waiting (the least
+ * surprising reading of an obvious misconfiguration — an ad the seller paid
+ * for must never be stranded by a typo in Settings).
+ *
+ * Pure: the caller supplies the clock, so every boundary is unit-testable.
+ */
+export function batchReady(
+  queued: { approvedAt?: string; createdAt: string }[],
+  now: Date,
+  settings: Pick<EngineSettings, "batchMinAds" | "batchMaxWaitMinutes">,
+): boolean {
+  if (!queued.length) return false;
+  const minAds = Math.max(0, Math.floor(settings.batchMinAds || 0));
+  const maxWait = Math.max(0, Math.floor(settings.batchMaxWaitMinutes || 0));
+  if (!minAds && !maxWait) return true;
+  if (minAds && queued.length >= minAds) return true;
+  if (!maxWait) return false;
+  // The queue is ordered oldest-first, but don't trust the caller's ordering
+  // for a decision this cheap to make correctly.
+  const oldest = Math.min(
+    ...queued.map((ad) => Date.parse(ad.approvedAt ?? ad.createdAt)).filter(Number.isFinite),
+  );
+  if (!Number.isFinite(oldest)) return true; // unparseable timestamps: send, don't strand
+  return now.getTime() - oldest >= maxWait * 60_000;
+}
+
+/**
+ * Send the waiting ads as ONE BATCH (user decision, session 018 — restoring
+ * batching, which instant send replaced in session 016): one text listing
+ * every ad in the batch by ad number, then one picture message per picture
+ * ad. Called on approval — so a batch can go the moment the count is met —
+ * and on every cron tick, which is what applies the hourly trigger and drains
+ * the overnight and Sunday queue when the window opens.
+ *
+ * ONE batch per pass, deliberately: a backlog of thirty ads goes out as
+ * successive batches over successive ticks, never as one thirty-ad wall.
+ *
+ * `force` skips the window and readiness checks: the operator's "send now" on
+ * /admin/digests.
  */
 export async function runQueuedBroadcasts(
   now = new Date(),
@@ -728,21 +900,23 @@ export async function runQueuedBroadcasts(
   const settings = await getEngineSettings();
   if (!opts.force && !smsWindowOpen(now, settings)) return [];
   const { hour } = etParts(now);
-  // digestCap bounds one pass, not the day: whatever is left rides the next
-  // tick, so a flood can never blow the function's time budget.
-  const queued = await getNewDigestAds(settings.digestCap);
-  const results: SlotResult[] = [];
-  for (const ad of queued) {
-    results.push(
-      await composeSmsEdition({
-        items: [ad],
-        slotKey: adSlotKey(ad.id),
-        slotHour: hour,
-        now,
-        settings,
-      }),
-    );
-  }
+  // digestCap bounds ONE batch, not the day: whatever is left rides the next
+  // tick, so a flood can never blow the function's time budget — or a
+  // subscriber's screen.
+  const { newAds, bumpAds, bumpRecords } = await selectDigestItems(settings.digestCap);
+  const items = [...newAds, ...bumpAds];
+  if (!items.length) return [];
+  if (!opts.force && !batchReady(newAds.length ? newAds : items, now, settings)) return [];
+  const results: SlotResult[] = [
+    await composeSmsEdition({
+      items,
+      bumpRecords,
+      slotKey: batchSlotKey(newAds[0]?.id ?? null, bumpRecords[0]?.id ?? null),
+      slotHour: hour,
+      now,
+      settings,
+    }),
+  ];
   return results;
 }
 

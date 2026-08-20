@@ -4,11 +4,13 @@ import { readSession } from "@/lib/session";
 import { recordVisit } from "@/lib/analytics";
 import { site } from "@/lib/config";
 import { formatPhone } from "@/lib/phone";
+import { getAccount } from "@/lib/store";
 import { submitFeedback } from "@/lib/contact-actions";
+import { CONTACT_MAX, NAME_MAX } from "@/lib/contact-details";
 
 export const metadata: Metadata = {
-  title: `Ask a question or suggest an idea — ${site.name}`,
-  description: `Send ${site.name} a question or an idea — we read every one and get back to you.`,
+  title: `Ask a question or suggest a feature — ${site.name}`,
+  description: `Send ${site.name} a question or a feature idea — we read every one and get back to you.`,
 };
 
 export default async function ContactPage({
@@ -20,9 +22,21 @@ export default async function ContactPage({
   const session = await readSession();
   await recordVisit("/contact");
 
+  // Signed in? Fill the contact fields in for them (user request, session
+  // 018). The NAME is never prefilled because an account does not carry one —
+  // and guessing a name from a phone number would be worse than asking.
+  let memberEmail = "";
+  if (session) {
+    try {
+      memberEmail = (await getAccount(session.phone))?.email ?? "";
+    } catch {
+      memberEmail = "";
+    }
+  }
+
   const isIdea = params.type === "idea";
   const kind = isIdea ? "idea" : "question";
-  const heading = isIdea ? "Suggest an idea" : "Ask a question";
+  const heading = isIdea ? "Suggest a feature" : "Ask a question";
 
   return (
     <div className="container account">
@@ -42,7 +56,7 @@ export default async function ContactPage({
         <>
           <p>
             {isIdea
-              ? `Have an idea to make ${site.name} better? Tell us — we read every one.`
+              ? `Have an idea for a feature that would make ${site.name} better? Tell us — we read every one.`
               : `Have a question? Send it our way and we&rsquo;ll get back to you.`}{" "}
             Prefer to talk? Call {site.supportPhone}.
           </p>
@@ -53,13 +67,33 @@ export default async function ContactPage({
             </Link>
             {" · "}
             <Link href="/contact?type=idea" aria-current={isIdea ? "page" : undefined}>
-              Suggest an idea
+              Suggest a feature
             </Link>
           </p>
 
           {params.error === "empty" && (
             <p className="form-error" role="alert">
               Please write your {isIdea ? "idea" : "question"} first.
+            </p>
+          )}
+          {params.error === "badfirstName" && (
+            <p className="form-error" role="alert">
+              Please enter your first name.
+            </p>
+          )}
+          {params.error === "badlastName" && (
+            <p className="form-error" role="alert">
+              Please enter your last name.
+            </p>
+          )}
+          {params.error === "badphone" && (
+            <p className="form-error" role="alert">
+              That phone number doesn&rsquo;t look right — 10 digits, like (330) 555-0123.
+            </p>
+          )}
+          {params.error === "bademail" && (
+            <p className="form-error" role="alert">
+              That email doesn&rsquo;t look right — check it and try again.
             </p>
           )}
           {params.error === "toolong" && (
@@ -92,8 +126,26 @@ export default async function ContactPage({
           <form action={submitFeedback}>
             <input type="hidden" name="kind" value={kind} />
             <div className="field">
-              <label htmlFor="c-name">Your name</label>
-              <input id="c-name" name="name" type="text" maxLength={80} placeholder="Optional" />
+              <label htmlFor="c-first">Your first name</label>
+              <input
+                id="c-first"
+                name="firstName"
+                type="text"
+                required
+                autoComplete="given-name"
+                maxLength={NAME_MAX}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="c-last">Your last name</label>
+              <input
+                id="c-last"
+                name="lastName"
+                type="text"
+                required
+                autoComplete="family-name"
+                maxLength={NAME_MAX}
+              />
             </div>
             <div className="field">
               <label htmlFor="c-phone">Phone</label>
@@ -101,7 +153,8 @@ export default async function ContactPage({
                 id="c-phone"
                 name="phone"
                 type="tel"
-                maxLength={120}
+                autoComplete="tel"
+                maxLength={CONTACT_MAX}
                 defaultValue={session ? formatPhone(session.phone) : ""}
                 placeholder="(330) 555-0123"
               />
@@ -112,15 +165,18 @@ export default async function ContactPage({
                 id="c-email"
                 name="email"
                 type="email"
-                maxLength={120}
+                autoComplete="email"
+                maxLength={CONTACT_MAX}
+                defaultValue={memberEmail}
                 placeholder="you@example.com"
               />
             </div>
             <p className="fine">
               Leave a phone number or an email — whichever is easier for us to reach you.
+              One of the two is enough.
             </p>
             <div className="field">
-              <label htmlFor="c-message">{isIdea ? "Your idea" : "Your question"}</label>
+              <label htmlFor="c-message">{isIdea ? "Your feature idea" : "Your question"}</label>
               <textarea
                 id="c-message"
                 name="message"
