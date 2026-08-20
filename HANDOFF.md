@@ -3,8 +3,95 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-20 (session 018 — batched ads, v1.1.7, all on `main`;
-session 017's analytics work and its audit fixes are on `main` too).
+**Last updated:** 2026-08-20 (session 019 — admin dashboard + the members grid,
+v1.1.8, on `main`).
+
+## Session 019 (2026-08-20) — THE ADMIN DASHBOARD, and the members table as a real grid
+
+**Version 1.1.7 → 1.1.8** (§6: two features, far-right digit). On `main` — the
+user said mid-session "commit directly to main". **No migration this session.**
+
+### `/admin` is now a DASHBOARD. The review queue moved to `/admin/review`.
+
+Same page, new address. Every `redirect("/admin")` in `lib/admin-actions.ts`
+(approve, reject, resolve a chat report, approve/decline an event) points at
+`/admin/review` now, and the nav carries both. An old `/admin` bookmark lands
+on the dashboard, which links straight through.
+
+The dashboard shows four tiles — **SMS subscribers, Email subscribers, Active
+ads, Waiting for review** — plus the system-health panel. The user asked for
+the first three and the health status; **"Waiting for review" was added on top,
+deliberately**, because moving the queue off the landing page would otherwise
+mean an ad could sit for days unnoticed.
+
+**System health** (`lib/system-health.ts`, pure + unit-pinned) says **"All
+systems go"** when ads and messages are both on, nothing is paused and texting
+is configured. Three levels, worst-wins:
+
+- `stopped` — an ads pause, a messages pause, or **TELNYX_API_KEY missing**
+  (which outranks the pauses in the headline: un-pausing wouldn't help).
+- `attention` — under-attack mode, a delivery backlog INSIDE the send window,
+  or Resend / Stripe / Supabase unconfigured.
+- `go` — all clear.
+
+⚠️ **Quiet hours are NOT a fault, on purpose.** Outside the send window ads
+queue by design, so the panel stays green and the summary says when the next
+batch goes; an overnight queue is likewise not a backlog. Both are pinned by
+tests. Colouring a normal night red is how a health panel teaches its operator
+to ignore it.
+
+### The members table is a database-viewer grid now (/admin/users/table)
+
+The user's complaint was a horizontal scrollbar. Two causes: `.admin` caps the
+whole portal at **48rem**, and nothing ever fitted the columns to the space.
+
+**The mechanism to remember: rendered widths are always refitted to the width
+available (`fitColumnWidths` in lib/user-table.ts), so stored widths behave as
+PROPORTIONS, not pixels.** Dragging a column wider takes the space from its
+neighbour — the total never changes, so no scrollbar can appear. The grid
+measures `clientWidth` (which excludes the vertical scrollbar; measuring the
+border box instead puts the horizontal scrollbar straight back). The page
+breaks out of the 48rem column with `.admin-wide`.
+
+A horizontal scrollbar still appears in exactly one case — more columns ticked
+on than fit at `MIN_COLUMN_WIDTH` (72px) each — and the page says so in red.
+
+`components/UserGrid.tsx` is the client grid: sticky heading row + sticky
+per-column filter row, frozen row-number gutter, ruled/zebra cells, ellipsis
+with the full value on hover, drag-and-drop reorder (⠿ grip, or focus it and
+press ← →), drag-to-resize, click-to-sort, a columns picker, rows-per-page and
+Reset layout.
+
+### Things a future session must not get wrong here
+
+1. **`validColumns` preserves REQUEST order now**, not catalogue order — that
+   is what carries a dragged column order. One array still drives both the
+   headings and the cells.
+2. **Filters ride one query parameter per column** (`f.email=yoder`). The old
+   comma-joined `f=col:value,…` split any value containing a comma into two
+   broken filters. It is still READ for old bookmarks; nothing writes it.
+   Saved views post their filters as JSON for the same reason.
+3. **Date filters are VALIDATED now.** They never were — any string went
+   straight to `.gte(column, value)`, so "last tuesday" in a date box reached
+   Postgres as a cast error and 500'd the page.
+4. **A bare day against a timestamp column means the whole DAY.**
+   `=2026-08-01` is `>= the 1st AND < the 2nd`; `<=2026-08-01` is `< the 2nd`.
+5. Filter boxes take `>= <= > < =` on numbers/money/dates and `=exact` /
+   `!not` on text. A bare value still means at-least / on-or-after / contains,
+   so every saved view keeps its meaning.
+6. `admin_saved_views.config` gained an optional `widths` key. It is jsonb and
+   `normalizeView` tolerates its absence — old views open at default widths.
+7. **Filtering and sorting stay in the DATABASE.** Doing either in the browser
+   would filter only the 50 rows on screen: it would look right and be wrong.
+
+Verified: tsc + build clean, unit **1153 → 1249** (new `system-health` 37;
+`user-table` 50 → 101), abuse 17/17. Plus a real Chromium walk, **37/37** — no
+scrollbar at 1440px or 900px, columns sum to the container exactly, resize
+preserves the total, sort/filter/drag/keyboard-reorder all exercised. (The
+grid can't render in dev — it is one database VIEW — so the walk ran against a
+temporary `GRID_DEMO=1` fixture branch that was removed before committing.)
+
+Full detail: `Session log/019_2026-08-20_admin-dashboard-users-table/session_log.md`.
 
 ## Session 018 (2026-08-20) — BATCHED ADS with the number burned into the picture
 

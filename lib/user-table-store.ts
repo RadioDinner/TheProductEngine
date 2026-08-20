@@ -8,7 +8,7 @@
  */
 import { db, supabaseConfigured } from "@/lib/db";
 import {
-  filterPlan,
+  filterClauses,
   normalizeView,
   type Filter,
   type SavedViewConfig,
@@ -72,11 +72,36 @@ export async function queryUserRows(
     .select("*", { count: "exact" });
 
   for (const filter of q.filters) {
-    const plan = filterPlan(filter);
-    if (!plan) continue;
-    if (plan.op === "ilike") query = query.ilike(filter.column, plan.value);
-    else if (plan.op === "eq") query = query.eq(filter.column, plan.value);
-    else query = query.gte(filter.column, plan.value);
+    // One filter can be several comparisons ("on this day" is a range), and
+    // every clause's column has already been checked against the catalogue —
+    // filterClauses returns nothing at all for a column it doesn't know.
+    for (const clause of filterClauses(filter)) {
+      switch (clause.op) {
+        case "ilike":
+          query = query.ilike(filter.column, clause.value);
+          break;
+        case "nilike":
+          query = query.not(filter.column, "ilike", clause.value);
+          break;
+        case "eq":
+          query = query.eq(filter.column, clause.value);
+          break;
+        case "neq":
+          query = query.neq(filter.column, clause.value);
+          break;
+        case "lte":
+          query = query.lte(filter.column, clause.value);
+          break;
+        case "gt":
+          query = query.gt(filter.column, clause.value);
+          break;
+        case "lt":
+          query = query.lt(filter.column, clause.value);
+          break;
+        default:
+          query = query.gte(filter.column, clause.value);
+      }
+    }
   }
 
   const from = Math.max(0, q.page) * q.pageSize;

@@ -29,6 +29,7 @@ const SUITES = [
   "contact-details",
   "paced-release",
   "user-table",
+  "system-health",
   "myads",
   "reveal-quota",
   "business",

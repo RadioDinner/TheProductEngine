@@ -76,7 +76,14 @@ import { normalizePhone } from "@/lib/phone";
 import { type LineType } from "@/lib/number-lookup";
 import { lookupLineTypeDetailed } from "@/lib/number-lookup-server";
 import { resolveHelpReport } from "@/lib/help-report-store";
-import { parseFilter, parseSort, validColumns } from "@/lib/user-table";
+import {
+  filterParams,
+  parseFilter,
+  parseSort,
+  parseWidths,
+  validColumns,
+  type Filter,
+} from "@/lib/user-table";
 import { deleteView, saveView } from "@/lib/user-table-store";
 import { readSession } from "@/lib/session";
 
@@ -100,7 +107,7 @@ export async function adminApprove(formData: FormData): Promise<void> {
         ? String(rawCategory)
         : null;
   if (Number.isInteger(id)) await approveAd(id, body, category);
-  redirect("/admin");
+  redirect("/admin/review");
 }
 
 export async function adminReject(formData: FormData): Promise<void> {
@@ -113,7 +120,7 @@ export async function adminReject(formData: FormData): Promise<void> {
       ? "Please include a price and a way to reach you, then send it again."
       : "It offers an item we can't run.");
   if (Number.isInteger(id)) await rejectAd(id, reason, kind);
-  redirect("/admin");
+  redirect("/admin/review");
 }
 
 /** Edit an ad's public text (and, where the form offers it, its category)
@@ -176,7 +183,7 @@ export async function adminResolveChatReport(formData: FormData): Promise<void> 
   const id = Number(formData.get("id"));
   const resolution = formData.get("decision") === "resolved" ? "resolved" : "dismissed";
   if (Number.isInteger(id)) await resolveChatReport(id, resolution);
-  redirect("/admin");
+  redirect("/admin/review");
 }
 
 /** Approve a pending town-hall event (item 18): it appears on the homepage
@@ -185,7 +192,7 @@ export async function adminApproveEvent(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = Number(formData.get("id"));
   if (Number.isInteger(id)) await resolveEvent(id, "approved");
-  redirect("/admin");
+  redirect("/admin/review");
 }
 
 /** Decline a pending town-hall event — simple by design: listings are FREE
@@ -194,7 +201,7 @@ export async function adminDeclineEvent(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = Number(formData.get("id"));
   if (Number.isInteger(id)) await resolveEvent(id, "declined");
-  redirect("/admin");
+  redirect("/admin/review");
 }
 
 /** Approve (→ website gallery) or discard an emailed-in extra picture. */
@@ -835,25 +842,52 @@ export async function adminSaveUserView(formData: FormData): Promise<void> {
   const session = await readSession();
   const name = String(formData.get("name") ?? "").trim().slice(0, 60);
   const back = String(formData.get("cols") ?? "");
-  if (!session || !name) redirect(`/admin/users/table?cols=${encodeURIComponent(back)}`);
+  const columns = validColumns(back ? back.split(",") : undefined);
+
+  // Filters arrive as JSON, not the old comma-joined "col:value" string: a
+  // filter value containing a comma silently split into two broken filters.
+  // Every entry still goes back through parseFilter, so nothing unrecognised
+  // can be stored — a saved view is read back later and turned into a query.
+  let filters: Filter[] = [];
+  try {
+    const raw = JSON.parse(String(formData.get("filters") ?? "[]")) as unknown;
+    if (Array.isArray(raw)) {
+      filters = raw
+        .map((f) => parseFilter((f ?? {}) as Partial<Filter>))
+        .filter((f): f is Filter => f !== null);
+    }
+  } catch {
+    /* an unreadable filter payload saves the layout without filters */
+  }
+
+  const backTo = `/admin/users/table?${new URLSearchParams({
+    cols: columns.join(","),
+    ...filterParams(filters),
+  })}`;
+  if (!session || !name) redirect(backTo);
 
   const sort = parseSort(formData.get("sort"), formData.get("dir"));
-  const filters = String(formData.get("f") ?? "")
-    .split(",")
-    .map((pair) => {
-      const idx = pair.indexOf(":");
-      return idx < 0 ? null : parseFilter({ column: pair.slice(0, idx), value: pair.slice(idx + 1) });
-    })
-    .filter((f): f is NonNullable<typeof f> => f !== null);
+
+  // Widths come from the operator's own browser (the grid stores them there),
+  // so treat the payload as untrusted: parseWidths keeps only real columns and
+  // clamps every value to a sane pixel range.
+  let widths: Record<string, number> = {};
+  try {
+    const raw = String(formData.get("widths") ?? "");
+    if (raw) widths = parseWidths(JSON.parse(raw));
+  } catch {
+    /* unreadable widths just mean the layout opens at its default sizes */
+  }
 
   const result = await saveView(session.phone, name, {
-    columns: validColumns(back ? back.split(",") : undefined),
+    columns,
     filters,
     sortColumn: sort.column,
     sortAscending: sort.ascending,
+    widths,
   });
   if (result === "unsupported") redirect("/admin/users/table?error=migration9962");
-  redirect(`/admin/users/table?cols=${encodeURIComponent(back)}`);
+  redirect(backTo);
 }
 
 /** Delete one of the operator's own saved views. */
@@ -861,8 +895,11 @@ export async function adminDeleteUserView(formData: FormData): Promise<void> {
   await requireAdmin();
   const session = await readSession();
   const id = Number(formData.get("id"));
+  const cols = validColumns(String(formData.get("cols") ?? "").split(",")).join(",");
   if (session && Number.isInteger(id)) await deleteView(session.phone, id);
-  redirect("/admin/users/table");
+  // Back to the layout they were looking at, not a reset one — deleting a
+  // saved view shouldn't also throw away the columns on screen.
+  redirect(`/admin/users/table?cols=${encodeURIComponent(cols)}`);
 }
 
 // ---------- operator kill switches (PAUSE + UNDER ATTACK) ----------

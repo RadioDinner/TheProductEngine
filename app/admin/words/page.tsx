@@ -93,7 +93,7 @@ export default async function AdminWords({
             />
             <p className="fine">
               These don&rsquo;t block anything. An ad containing one sorts to the top of the{" "}
-              <Link href="/admin">Review</Link> queue so you see it first and decide
+              <Link href="/admin/review">Review</Link> queue so you see it first and decide
               yourself. Use it for the things that usually need a second look.
             </p>
           </div>

@@ -1,266 +1,196 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
-import {
-  adminApprove,
-  adminApproveEvent,
-  adminDeclineEvent,
-  adminReject,
-  adminResolveChatReport,
-} from "@/lib/admin-actions";
-import { getAdCategories, getPendingAds } from "@/lib/engine-store";
-import { categoriesSupported, listChatReports } from "@/lib/store";
-import { CATEGORIES } from "@/lib/categories";
-import { findLinks } from "@/lib/content-filter";
-import { formatPhone } from "@/lib/phone";
+import { getDashboardStats } from "@/lib/dashboard";
+import { getEngineSettings } from "@/lib/settings";
+import { hourLabel, nextSendLabel, smsWindowOpen } from "@/lib/digest-engine";
+import { systemHealth, type HealthLevel } from "@/lib/system-health";
+import { countOpenHelpReports } from "@/lib/help-report-store";
+import type { HandbookKey } from "@/lib/admin-handbook";
+import { supabaseConfigured } from "@/lib/db";
 import { site } from "@/lib/config";
-import { etParts } from "@/lib/et";
-import { formatEventDay } from "@/lib/town-hall";
-import { listPendingEvents } from "@/lib/town-hall-store";
-import { countAdsAwaitingPictures } from "@/lib/engine-store";
 import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
-  title: `Review queue — ${site.name} admin`,
+  title: `Dashboard — ${site.name} admin`,
 };
 
-function submitted(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/New_York",
-  });
+export const dynamic = "force-dynamic";
+
+/** Past this many undelivered sends, a queue is a backlog worth a look rather
+ * than the normal few-minutes-of-draining. */
+const BACKLOG = 40;
+
+function Stat({
+  label,
+  value,
+  note,
+  href,
+  tip,
+}: {
+  label: string;
+  value: number;
+  note?: string;
+  href: string;
+  tip?: HandbookKey;
+}) {
+  return (
+    <Link href={href} className="stat-tile">
+      <span className="stat-label">
+        {label}
+        {tip ? <Tip k={tip} /> : null}
+      </span>
+      <span className="stat-value">{value.toLocaleString()}</span>
+      {note ? <span className="stat-note">{note}</span> : null}
+    </Link>
+  );
 }
 
-export default async function AdminReview() {
-  const pending = await getPendingAds();
-  // Picture ads still collecting photos are deliberately NOT in the queue yet
-  // (session 016) — surfaced as a count so a "missing" ad is never a mystery.
-  const settling = await countAdsAwaitingPictures();
-  // Member-reported chat messages (item 13) — empty until migration 9980.
-  const reports = await listChatReports();
-  // Town hall submissions (item 18) — empty until migration 9977.
-  const pendingEvents = await listPendingEvents();
-  const todayDay = etParts(new Date()).day;
-  // Category dropdown (item 22): the operator assigns the category here at
-  // review. Hidden until migration 9976 — approvals then work exactly as
-  // before. A web-posted ad's seller suggestion pre-fills the dropdown.
-  const withCategories = await categoriesSupported();
-  const adCategories = withCategories
-    ? await getAdCategories(pending.map((ad) => ad.id))
-    : new Map<number, string | null>();
+function dot(level: HealthLevel): string {
+  return level === "go" ? "●" : level === "attention" ? "▲" : "■";
+}
+
+export default async function AdminDashboard() {
+  const settings = await getEngineSettings();
+  const stats = await getDashboardStats();
+  const openHelp = await countOpenHelpReports();
+
+  const now = new Date();
+  const windowOpen = smsWindowOpen(now, settings);
+  const health = systemHealth({
+    adsPaused: settings.adsPaused,
+    outboundPaused: settings.outboundPaused,
+    underAttack: settings.underAttack,
+    windowOpen,
+    windowLabel: `${hourLabel(settings.smsWindowStartHour)}–${hourLabel(
+      settings.smsWindowEndHour,
+    )}, Mon–Sat`,
+    nextSendLabel: nextSendLabel(now, settings),
+    queuedDeliveries: stats.queuedDeliveries,
+    backlogThreshold: BACKLOG,
+    databaseLive: supabaseConfigured,
+    textingConfigured: Boolean(process.env.TELNYX_API_KEY),
+    emailConfigured: Boolean(process.env.RESEND_API_KEY),
+    paymentsConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
+  });
 
   return (
     <>
       <h1>
-        Review queue <Tip k="review.queue" />
+        Dashboard <Tip k="dashboard.overview" />
       </h1>
-      <p className="fine">
-        Badges mark word-filter matches <Tip k="review.flagged" />, links{" "}
-        <Tip k="review.linkBadge" />, and pictures <Tip k="review.pictureBadge" />. Edit
-        freely before approving <Tip k="review.editText" />, file the ad with the category
-        dropdown <Tip k="review.category" />, and settle the money with the right reject
-        button <Tip k="review.reject" />.
-      </p>
-      {pending.length === 0 && settling === 0 && <p>Nothing waiting for review.</p>}
-      {settling > 0 && (
-        <p className="fine">
-          {settling === 1
-            ? "1 picture ad is still collecting pictures"
-            : `${settling} picture ads are still collecting pictures`}{" "}
-          — they appear here once the seller stops sending (about 10 minutes) or hits the
-          4-picture maximum, so you never approve an ad that is only half its photos.
+
+      {/* ---------------- the numbers ---------------- */}
+      <div className="stat-grid">
+        <Stat
+          label="SMS subscribers"
+          value={stats.smsSubscribers}
+          note="numbers getting the ad texts"
+          href="/admin/subscribers"
+          tip="dashboard.smsSubscribers"
+        />
+        <Stat
+          label="Email subscribers"
+          value={stats.emailSubscribers}
+          note="addresses getting the editions"
+          href="/admin/subscribers"
+          tip="dashboard.emailSubscribers"
+        />
+        <Stat
+          label="Active ads"
+          value={stats.activeAds}
+          note={
+            stats.awaitingBroadcast > 0
+              ? `${stats.liveOnSite.toLocaleString()} on the website · ${stats.awaitingBroadcast.toLocaleString()} waiting to go out`
+              : `${stats.liveOnSite.toLocaleString()} on the website`
+          }
+          href="/admin/ads?status=approved"
+          tip="dashboard.activeAds"
+        />
+        <Stat
+          label="Waiting for review"
+          value={stats.pendingReview}
+          note={
+            stats.settlingPictures > 0
+              ? `${stats.settlingPictures} more still collecting pictures`
+              : stats.pendingReview === 0
+                ? "nothing waiting on you"
+                : "ads need your yes or no"
+          }
+          href="/admin/review"
+          tip="dashboard.pendingReview"
+        />
+      </div>
+
+      {/* ---------------- system health ---------------- */}
+      <section className={`health health--${health.level}`} aria-labelledby="health-h">
+        <p className="health-head">
+          <span className="health-dot" aria-hidden="true">
+            {dot(health.level)}
+          </span>
+          <strong id="health-h">{health.headline}</strong> <Tip k="dashboard.health" />
         </p>
-      )}
-      <ul className="sim-pending">
-        {pending.map((ad) => {
-          const links = findLinks(ad.body);
-          return (
-          <li key={ad.id} className="myad-row">
-            <p className="myad-title">
-              #{ad.id} from {formatPhone(ad.ownerPhone)}
-              {ad.flagged && <span className="ad-sold"> Flagged</span>}
-              {links.length > 0 && <span className="ad-sold"> 🔗 Link</span>}
-              {ad.photo && <span className="ad-sold"> 📷 Picture ad</span>}
-              <span className="status-muted"> · {submitted(ad.createdAt)}</span>
-            </p>
-            {links.length > 0 && (
-              <p className="myad-dates">
-                Contains a link ({links.join(", ")}) — edit it out before approving, or reject.
-              </p>
-            )}
-            {ad.photo && (
-              <a href={ad.photo.src} target="_blank" rel="noreferrer" title="Open full-size photo">
-                <Image
-                  className="ad-thumb"
-                  src={ad.photo.src}
-                  alt={ad.photo.alt}
-                  width={88}
-                  height={88}
-                />
-              </a>
-            )}
-            <form action={adminApprove} className="review-form">
-              <input type="hidden" name="id" value={ad.id} />
-              <label className="visually-hidden" htmlFor={`body-${ad.id}`}>
-                Ad text (editable)
-              </label>
-              <textarea id={`body-${ad.id}`} name="body" rows={3} defaultValue={ad.body} />
-              {withCategories && (
-                <p className="fine">
-                  <label htmlFor={`category-${ad.id}`}>Category </label>
-                  <select
-                    id={`category-${ad.id}`}
-                    name="category"
-                    defaultValue={adCategories.get(ad.id) ?? ""}
-                    className="admin-select"
-                  >
-                    <option value="">Uncategorized — rides every digest</option>
-                    {CATEGORIES.map((c) => (
-                      <option key={c.key} value={c.key}>
-                        {c.label} — {c.menu}
-                      </option>
-                    ))}
-                  </select>
-                </p>
-              )}
-              <button className="btn btn-sm" type="submit">
-                Approve
-              </button>
-            </form>
-            <form action={adminReject} className="review-form review-reject">
-              <input type="hidden" name="id" value={ad.id} />
-              <label className="visually-hidden" htmlFor={`reason-${ad.id}`}>
-                Rejection reason
-              </label>
-              <input
-                id={`reason-${ad.id}`}
-                name="reason"
-                type="text"
-                placeholder="Reason texted to the seller (optional — a default is used)"
-              />
-              <div className="sim-actions">
-                <button className="btn btn-sm btn-secondary" name="kind" value="benign" type="submit">
-                  Reject — refund
-                </button>
-                <button className="btn btn-sm btn-secondary" name="kind" value="violation" type="submit">
-                  Reject — violation (strike)
-                </button>
-              </div>
-            </form>
-          </li>
-          );
-        })}
-      </ul>
-      {reports.length > 0 && (
+        <p className="health-summary">{health.summary}</p>
+        <ul className="health-list">
+          {health.items.map((item) => (
+            <li key={item.key} className={`health-item health-item--${item.level}`}>
+              <span className="health-dot" aria-hidden="true">
+                {dot(item.level)}
+              </span>
+              <span className="health-label">{item.label}</span>
+              <span className="health-state">{item.state}</span>
+              {/* Spell it out only where it earns the line: anything that isn't
+               * green, and the send window, which is the one green state that
+               * still explains why nothing is moving. Eight rows of prose
+               * saying "this is fine" is how a panel stops being read. */}
+              {item.detail && (item.level !== "go" || item.key === "window") ? (
+                <span className="health-detail">{item.detail}</span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        <p className="fine">
+          Both pauses live on <Link href="/admin/settings">Settings</Link>. Turning one ON
+          texts subscribers a notice only if you tick the box; turning one off is always
+          silent.
+        </p>
+      </section>
+
+      {/* ---------------- what needs a person ---------------- */}
+      {(stats.pendingReview > 0 || openHelp > 0) && (
         <>
-          <h2 className="section-h">
-            Reported chat messages <Tip k="review.chatReports" />
-          </h2>
-          <p className="fine">
-            A member pressed &ldquo;Report this message&rdquo; in their conversation. The full
-            thread is in the <Link href="/admin/messages">message log</Link> (filter by the
-            sender&apos;s number). Resolving or dismissing only clears the report — any real
-            action stays yours on the sender&apos;s user page.
-          </p>
-          <ul className="sim-pending">
-            {reports.map((r) => (
-              <li key={r.messageId} className="myad-row">
-                <p className="myad-title">
-                  Chat #{r.chatId}
-                  {r.adId ? <> · about ad #{r.adId}</> : null} · from{" "}
-                  <Link href={`/admin/users?phone=${r.senderPhone}`}>
-                    {r.senderMemberId ? `Member ${r.senderMemberId}` : formatPhone(r.senderPhone)}
-                  </Link>{" "}
-                  ({formatPhone(r.senderPhone)})
-                  <span className="status-muted">
-                    {" "}
-                    · sent {submitted(r.at)} · reported {submitted(r.reportedAt)} by{" "}
-                    {formatPhone(r.reporterPhone)}
-                  </span>
-                </p>
-                {r.photo && (
-                  <a href={r.photo} target="_blank" rel="noreferrer" title="Open full-size photo">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={r.photo}
-                      alt={`Reported picture in chat #${r.chatId}`}
-                      style={{ maxWidth: 160, maxHeight: 120, border: "1px solid #ccc" }}
-                    />
-                  </a>
-                )}
-                <p className="sim-body">{r.body || "(picture only)"}</p>
-                <form action={adminResolveChatReport} className="sim-actions">
-                  <input type="hidden" name="id" value={r.messageId} />
-                  <button className="btn btn-sm" name="decision" value="resolved" type="submit">
-                    Resolved — clear it
-                  </button>
-                  <button
-                    className="btn btn-sm btn-secondary"
-                    name="decision"
-                    value="dismissed"
-                    type="submit"
-                  >
-                    Dismiss report
-                  </button>
-                </form>
+          <h2 className="section-h">Waiting on you</h2>
+          <ul className="myads">
+            {stats.pendingReview > 0 && (
+              <li className="myad-row">
+                <Link href="/admin/review">
+                  {stats.pendingReview} ad{stats.pendingReview === 1 ? "" : "s"} in the
+                  review queue
+                </Link>{" "}
+                <span className="status-muted">
+                  — nothing broadcasts or appears on the website without your yes.
+                </span>
               </li>
-            ))}
+            )}
+            {openHelp > 0 && (
+              <li className="myad-row">
+                <Link href="/admin/help-reports">
+                  {openHelp} open help report{openHelp === 1 ? "" : "s"}
+                </Link>{" "}
+                <span className="status-muted">
+                  — a member pressed &ldquo;I need help!&rdquo; and is waiting.
+                </span>
+              </li>
+            )}
           </ul>
         </>
       )}
-      {pendingEvents.length > 0 && (
-        <>
-          <h2 className="section-h">
-            Town hall events <Tip k="review.townHall" />
-          </h2>
-          <p className="fine">
-            Community events for the <Link href="/town-hall">town hall board</Link>.
-            Listings are free in v1, so declining charges nothing and refunds nothing.
-            Approved events show on the homepage sidebar and /town-hall until their date
-            passes, then drop off by themselves.
-          </p>
-          <ul className="sim-pending">
-            {pendingEvents.map((event) => (
-              <li key={event.id} className="myad-row">
-                <p className="myad-title">
-                  {event.title}
-                  <span className="status-muted">
-                    {" "}
-                    · from {formatPhone(event.ownerPhone)} · submitted{" "}
-                    {submitted(event.createdAt)}
-                  </span>
-                </p>
-                <p className="myad-dates">
-                  {formatEventDay(event.eventDate)}
-                  {event.timeText ? ` · ${event.timeText}` : ""}
-                  {event.placeText ? ` · ${event.placeText}` : ""}
-                  {event.eventDate < todayDay && (
-                    <span className="ad-sold"> Date already passed</span>
-                  )}
-                </p>
-                <p className="sim-body">{event.body}</p>
-                <div className="sim-actions">
-                  <form action={adminApproveEvent}>
-                    <input type="hidden" name="id" value={event.id} />
-                    <button className="btn btn-sm" type="submit">
-                      Approve
-                    </button>
-                  </form>
-                  <form action={adminDeclineEvent}>
-                    <input type="hidden" name="id" value={event.id} />
-                    <button className="btn btn-sm btn-secondary" type="submit">
-                      Decline
-                    </button>
-                  </form>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+
+      <p className="fine">
+        Version {site.version}. Deeper numbers live on{" "}
+        <Link href="/admin/reports">Reports</Link> and{" "}
+        <Link href="/admin/insights">Insights</Link>; every member is on the{" "}
+        <Link href="/admin/users/table">members table</Link>.
+      </p>
     </>
   );
 }

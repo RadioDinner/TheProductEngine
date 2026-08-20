@@ -1,0 +1,12 @@
+--- 2026-08-20 (session 019 start) ---
+I want to remove the horizontal scrollbar on the users table on the admin page when I log in. I also want it more "TABLE" looking. Like a pervasive database viewer table or excel, I want to be able to drag and drop columns, resize them, filter by columns, sort by columns, etc.
+
+I also want an ADMIN dashboard that appears when I go to /admin . I want to put a few items on that screen. I'll start with "current SMS subscribers" and "Current email subscribers". Also include "active ads". And then a system health status. When ads and messages are on and not paused and running, put status "All systems go"
+
+Don't commit anything for now, until I tell you to
+
+--- 2026-08-20 ---
+after you build/fix this, lets look at the open money questions from previous sessions
+
+--- 2026-08-20 ---
+youre good to commit as soon as you have work completed, commit directly to main

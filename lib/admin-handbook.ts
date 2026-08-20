@@ -26,7 +26,8 @@ export interface HandbookEntry {
 
 /** Page groupings for the read-through view on /admin/help. */
 export const HANDBOOK_PAGES: { prefix: string; label: string; href: string }[] = [
-  { prefix: "review", label: "Review queue", href: "/admin" },
+  { prefix: "dashboard", label: "Dashboard", href: "/admin" },
+  { prefix: "review", label: "Review queue", href: "/admin/review" },
   { prefix: "digests", label: "Digests", href: "/admin/digests" },
   { prefix: "reports", label: "Reports", href: "/admin/reports" },
   { prefix: "insights", label: "Insights", href: "/admin/insights" },
@@ -45,7 +46,46 @@ export const HANDBOOK_PAGES: { prefix: string; label: string; href: string }[] =
 ];
 
 const ENTRIES = {
-  /* ---------------- Review queue (/admin) ---------------- */
+  /* ---------------- Dashboard (/admin) ---------------- */
+
+  "dashboard.overview": {
+    title: "What this page is for",
+    what: "The first screen after you sign in: whether the service is running, how many people are subscribed by text and by email, how many ads are live, and anything sitting waiting on you. Every figure links to the page that owns it.",
+    why: "Session 019, the user's ask: an admin dashboard at /admin, starting with current SMS subscribers, current email subscribers, active ads and a system health status. The review queue used to be here and moved to its own Review tab — it is still one click away, and its count is on this page so a waiting ad can never go unnoticed.",
+    gotchas: "Every number is counted fresh on each load, straight from the database, so it can disagree with a figure on Reports only if the two are asking different questions — and where they overlap they are defined to match. Subscriber counts here and on Subscribers use the same definition; \"active ads\" means approved and still running, so sold, expired and deleted ads are out.",
+  },
+  "dashboard.health": {
+    title: "The system health verdict",
+    what: "One line saying whether the service is working, with the checks it is built from underneath. \"All systems go\" means ads are on, messages are on, neither pause is set, texting is configured and nothing is backed up. Anything else names what is wrong and where to fix it.",
+    why: "The user's session-019 ask, in their words: \"when ads and messages are on and not paused and running, put status 'All systems go'\". The point is a single glance that answers \"is my service actually running?\" without opening Settings, Digests and the Vercel dashboard in turn.",
+    gotchas: "Quiet hours are NOT a fault. Outside the send window ads queue by design — that window is a promise the compliance copy makes to every subscriber — so the panel stays green and the summary tells you when the next batch goes. Colouring a normal night red would teach you to ignore the panel, which is the only way a health panel can really fail. A pause, by contrast, is always red, because only you can clear it.",
+  },
+  "dashboard.smsSubscribers": {
+    title: "Current SMS subscribers",
+    what: "Numbers currently subscribed to the ad texts. Counted the same way the Subscribers tab lists them: a member with a phone number and a live subscription date.",
+    why: "The first figure the user asked for. It is the size of the audience every approved ad reaches, so it is the number that decides what an ad is worth and what a batch costs to send.",
+    gotchas: "A STOP clears the subscription date, so this figure drops the moment someone opts out and rises again on a fresh re-subscribe. It counts SUBSCRIBERS, not members — someone with an account who never subscribed is not in here.",
+  },
+  "dashboard.emailSubscribers": {
+    title: "Current email subscribers",
+    what: "Addresses currently subscribed to the email editions, including email-only signups who have no phone account at all.",
+    why: "The user's second figure. Email is the channel with no per-message cost and no carrier to answer to, which makes it the cheapest place for the list to grow.",
+    gotchas: "Someone can be on both lists; the two tiles are not exclusive and should not be added together to get \"total audience\".",
+  },
+  "dashboard.activeAds": {
+    title: "Active ads",
+    what: "Ads running right now — approved, and not sold, expired, rejected or deleted. The note underneath splits them into the ones already on the website and the ones approved but still waiting for their batch to go out.",
+    why: "The user's third figure. It answers \"how much is actually for sale on my service today\", which is the number a seller, a sponsor and a buyer all care about.",
+    gotchas: "An ad only appears on the website once it has actually broadcast, so the two halves of the note are genuinely different states, not a rounding difference. A big \"waiting to go out\" number outside the send window is normal; a big one during the window means look at Digests.",
+  },
+  "dashboard.pendingReview": {
+    title: "Waiting for review",
+    what: "Ads sitting in the review queue for your yes or no, with a count of any picture ads still collecting pictures underneath.",
+    why: "The review queue moved off /admin in session 019 to make room for the dashboard. Its count stayed here so moving the page could never mean an ad quietly waits for days — the tile is the reminder the old landing page used to be.",
+    gotchas: "Picture ads still collecting are deliberately NOT in the queue yet: they appear once the seller stops sending (about ten minutes) or hits the four-picture maximum, so you never approve an ad that is only half its photos.",
+  },
+
+  /* ---------------- Review queue (/admin/review) ---------------- */
 
   "review.queue": {
     title: "Why every ad waits for you",
@@ -457,9 +497,9 @@ const ENTRIES = {
   },
   "users.table": {
     title: "The members table",
-    what: "Every member as one spreadsheet: numbers, emails, dates, ads posted and sold, money spent, added and on hand, texts in, last active, line type, card on file, strikes, bans, blocks and more. Tick columns on and off, filter by any column, click a heading to sort, and save a named layout for yourself.",
-    why: "Session 016, the user's ask for a \"database table viewer like screen\" — the search-one-member page answers \"what about this person\", and this answers \"who are my members\": who spends, who has gone quiet, who signed up and never posted.",
-    gotchas: "It is one database VIEW over live data, so every number matches its source exactly — money comes off the same append-only ledger the member's own page reads, and ad counts come off the ad rows themselves. Filtering and sorting happen in the database, not in the page, which is what keeps it quick as the list grows. Money filters are in DOLLARS, the way the column reads. Everything lives in the URL, so a filtered layout can be bookmarked or handed to someone else; saved views are per operator, and saving over a name replaces it.",
+    what: "Every member as one spreadsheet: numbers, emails, dates, ads posted and sold, money spent, added and on hand, texts in, last active, line type, card on file, strikes, bans, blocks and more. Drag a heading's ⠿ handle to move a column, drag the line between two headings to resize, type under a heading to filter, click a heading to sort, and save a named layout for yourself.",
+    why: "Session 016, the user's ask for a \"database table viewer like screen\" — the search-one-member page answers \"what about this person\", and this answers \"who are my members\": who spends, who has gone quiet, who signed up and never posted. Rebuilt as a real grid in session 019 on the user's follow-up: \"remove the horizontal scrollbar … like a pervasive database viewer table or excel.\"",
+    gotchas: "The columns are always refitted to the width of the screen, so dragging one wider takes the space from its neighbour rather than pushing the page sideways — that is why there is no horizontal scrollbar. It comes back only if you tick on more columns than can fit at their minimum width, and the page says so when that happens. Long values are clipped with an ellipsis; hover a cell to see it in full. It is one database VIEW over live data, so every number matches its source exactly, and filtering and sorting happen in the database rather than in the page — which is what keeps it quick as the list grows. Money filters are in DOLLARS, the way the column reads, and filter boxes take >= <= > < = in front of a number or a date. Columns, order, filters and sort all live in the URL, so a layout can be bookmarked or handed to someone else; widths live in your own browser. Saved layouts are per operator, and saving over a name replaces it.",
   },
   "users.archive": {
     title: "Archive vs delete",
