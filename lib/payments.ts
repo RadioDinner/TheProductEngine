@@ -31,6 +31,15 @@ export async function createCheckoutSession(args: {
    * instead (the member success page only shows the buyer their own order). */
   successUrl?: string;
   cancelUrl?: string;
+  /**
+   * The payer's GA client id, read from their `_ga` cookie by the caller.
+   * Carried through Stripe so the webhook — which confirms the payment minutes
+   * later, on a server, with no browser attached — can attribute the sale to
+   * the visit that produced it. Without it every payment on the service lands
+   * in GA as "(direct)". Empty for phone and admin orders, which is correct:
+   * those genuinely had no browser. See analytics/04-wiring.md step 4.
+   */
+  gaClientId?: string;
 }): Promise<string> {
   const params = new URLSearchParams({
     mode: "payment",
@@ -49,6 +58,7 @@ export async function createCheckoutSession(args: {
     "payment_intent_data[setup_future_usage]": "off_session",
     "payment_intent_data[metadata][phone]": args.phone,
     "payment_intent_data[metadata][topup_cents]": String(args.amountCents),
+    ...(args.gaClientId && { "metadata[ga_client_id]": args.gaClientId }),
   });
   const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
     method: "POST",
@@ -83,6 +93,8 @@ export async function createBusinessCheckoutSession(args: {
   link: string | null;
   phone: string | null;
   origin: string;
+  /** See createCheckoutSession above — the same attribution seam. */
+  gaClientId?: string;
 }): Promise<string> {
   const params = new URLSearchParams({
     mode: "payment",
@@ -98,6 +110,7 @@ export async function createBusinessCheckoutSession(args: {
     "metadata[ad_text]": args.adText,
     ...(args.link && { "metadata[link]": args.link }),
     ...(args.phone && { "metadata[phone]": args.phone }),
+    ...(args.gaClientId && { "metadata[ga_client_id]": args.gaClientId }),
   });
   const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
     method: "POST",

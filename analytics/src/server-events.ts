@@ -55,9 +55,13 @@ export async function emit(
   events: ServerEvent[],
   userProperties?: Record<string, string | number>,
 ): Promise<void> {
-  const id = identity(who);
-  if (!id.clientId) return; // nothing to attribute this to — see ids.ts
   try {
+    // Inside the try, deliberately. Callers invoke these with `void` and never
+    // await, so anything that throws out here becomes an unhandled rejection —
+    // which on some runtimes takes the process with it. An analytics call must
+    // not be able to kill a member's text message.
+    const id = identity(who);
+    if (!id.clientId) return; // nothing to attribute this to — see ids.ts
     await sendServerEvents({
       clientId: id.clientId,
       userId: id.userId,
@@ -311,10 +315,26 @@ export function smsInbound(args: {
   phone?: string;
   /** parseCommand(...).kind — "ad", "pic", "subscribe", "unknown", … */
   command: string;
-  isMember: boolean;
+  /** Whether the message carried pictures. */
+  hasMedia?: boolean;
+  /**
+   * Optional, and optional on purpose: the natural place to emit this is right
+   * after the command is parsed, which is before anything has looked the
+   * sender up. Adding an account read there would put a database round trip in
+   * front of every inbound text purely to enrich an analytics event — the
+   * wrong trade. Pass it from callers that already hold the account.
+   */
+  isMember?: boolean;
 }): Promise<void> {
   return emit(args, [
-    { name: "sms_inbound", params: { command: args.command, is_member: args.isMember } },
+    {
+      name: "sms_inbound",
+      params: {
+        command: args.command,
+        has_media: args.hasMedia ?? false,
+        ...(args.isMember === undefined ? {} : { is_member: args.isMember }),
+      },
+    },
   ]);
 }
 

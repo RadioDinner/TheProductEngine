@@ -76,6 +76,17 @@ export async function GET(req: NextRequest) {
       TWILIO_ACCOUNT_SID: Boolean(process.env.TWILIO_ACCOUNT_SID),
       TWILIO_AUTH_TOKEN: Boolean(process.env.TWILIO_AUTH_TOKEN),
       VOICE_RING_TO: ringToPhones().length,
+      // Google Analytics (analytics/). Booleans only — the api secret and the
+      // salt are secrets and must never appear in a response.
+      // All three must be true before ANY server-side event is sent; missing
+      // the salt is a refusal, not a fallback to raw phone numbers.
+      NEXT_PUBLIC_GA_MEASUREMENT_ID: Boolean(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID),
+      GA_API_SECRET: Boolean(process.env.GA_API_SECRET),
+      ANALYTICS_SALT: Boolean(process.env.ANALYTICS_SALT),
+      // TRUE IN PRODUCTION IS A SILENT OUTAGE: events go to GA's validation
+      // endpoint, which stores nothing while reporting success. Everything
+      // looks healthy and no data is recorded.
+      GA_VALIDATE_ONLY: process.env.GA_VALIDATE_ONLY === "1",
     },
   };
 

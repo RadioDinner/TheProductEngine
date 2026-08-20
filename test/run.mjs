@@ -37,6 +37,7 @@ const SUITES = [
   "photo-collage",
   "collage-confirm",
   "admin-handbook",
+  "analytics",
 ];
 
 let totalPass = 0;

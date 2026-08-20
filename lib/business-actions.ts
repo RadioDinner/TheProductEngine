@@ -11,7 +11,8 @@
  * Outcomes are signaled repo-style: redirect() with query params.
  */
 import { randomUUID } from "node:crypto";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { gaClientIdFromCookie } from "@/analytics/src/ids";
 import { redirect } from "next/navigation";
 import { businessPackagesAvailable, createBusinessPackage } from "@/lib/business";
 import {
@@ -95,6 +96,8 @@ export async function startBusinessCheckout(formData: FormData): Promise<void> {
       link,
       phone,
       origin,
+      // Attribution through the redirect — see analytics/04-wiring.md step 4.
+      gaClientId: gaClientIdFromCookie((await cookies()).get("_ga")?.value) ?? "",
     });
   } catch (e) {
     console.error("[business] checkout session failed:", e);

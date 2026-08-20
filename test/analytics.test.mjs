@@ -28,11 +28,11 @@ process.env.ANALYTICS_SALT = "test-salt";
 export const name = "analytics";
 
 export async function run(t) {
-  const events = await import("../src/events");
-  const ids = await import("../src/ids");
-  const mp = await import("../src/measurement-protocol");
-  const server = await import("../src/server-events");
-  const track = await import("../src/track");
+  const events = await import("../analytics/src/events");
+  const ids = await import("../analytics/src/ids");
+  const mp = await import("../analytics/src/measurement-protocol");
+  const server = await import("../analytics/src/server-events");
+  const track = await import("../analytics/src/track");
 
   // ── The catalogue is legal GA4 ─────────────────────────────────────────
   {
@@ -245,24 +245,34 @@ export async function run(t) {
     t.eq("the measurement id rides on the query string", calls[0].url.includes("measurement_id="), true);
     t.eq("the api secret rides on the query string", calls[0].url.includes("api_secret="), true);
 
-    const exploding = async () => {
-      throw new Error("network is down");
-    };
-    const failed = await mp.sendServerEvents({
-      clientId: "1.2",
-      events: [{ name: "post_submit" }],
-      fetchImpl: exploding,
-      endpointOverride: "https://example.test/mp",
-    });
+    // The next two checks make the library log on purpose. Muting console.error
+    // around them keeps a deliberate failure from reading like a broken suite —
+    // a stack trace in passing output is how people learn to ignore output.
+    const realError = console.error;
+    console.error = () => {};
+    let failed;
+    let rejected;
+    try {
+      const exploding = async () => {
+        throw new Error("network is down");
+      };
+      failed = await mp.sendServerEvents({
+        clientId: "1.2",
+        events: [{ name: "post_submit" }],
+        fetchImpl: exploding,
+        endpointOverride: "https://example.test/mp",
+      });
+      rejected = await mp.sendServerEvents({
+        clientId: "1.2",
+        events: [{ name: "post_submit" }],
+        fetchImpl: async () => ({ status: 400, ok: false, json: async () => ({}) }),
+        endpointOverride: "https://example.test/mp",
+      });
+    } finally {
+      console.error = realError;
+    }
     t.eq("a network failure is reported, not thrown", failed.ok, false);
     t.eq("and nothing is counted as sent", failed.eventsSent, 0);
-
-    const rejected = await mp.sendServerEvents({
-      clientId: "1.2",
-      events: [{ name: "post_submit" }],
-      fetchImpl: async () => ({ status: 400, ok: false, json: async () => ({}) }),
-      endpointOverride: "https://example.test/mp",
-    });
     t.eq("a 400 is not counted as sent", rejected.eventsSent, 0);
 
     const noClient = await mp.sendServerEvents({

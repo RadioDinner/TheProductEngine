@@ -1,7 +1,8 @@
 "use server";
 
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { gaClientIdFromCookie } from "@/analytics/src/ids";
 import { redirect } from "next/navigation";
 import { readSession } from "@/lib/session";
 import {
@@ -128,9 +129,12 @@ export async function startStripeCheckout(formData: FormData): Promise<void> {
   const requestHeaders = await headers();
   const origin =
     process.env.SITE_URL || `https://${requestHeaders.get("host") ?? "localhost:3000"}`;
+  // Carry the browser's GA client id through Stripe so the webhook can credit
+  // this sale to the visit that earned it (analytics/04-wiring.md step 4).
+  const gaClientId = gaClientIdFromCookie((await cookies()).get("_ga")?.value) ?? "";
   let url: string;
   try {
-    url = await createCheckoutSession({ amountCents, phone, origin });
+    url = await createCheckoutSession({ amountCents, phone, origin, gaClientId });
   } catch (e) {
     console.error("[payments] checkout session failed:", e);
     redirect("/account?checkout=error#credits");

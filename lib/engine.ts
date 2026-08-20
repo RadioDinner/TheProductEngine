@@ -5,6 +5,7 @@
  * (both directions) lands in the message audit log.
  */
 import { parseCommand } from "@/lib/commands";
+import * as analytics from "@/analytics/src/server-events";
 import { deriveTitle, adExpiresAt, type Ad } from "@/lib/ads";
 import {
   attachAdPhotos,
@@ -1193,6 +1194,18 @@ export async function handleInbound(msg: InboundSms, providerId?: string): Promi
   // going dark. The happy path is unchanged.
   try {
     const command = parseCommand(msg.text || "");
+
+    // Analytics, fire-and-forget (analytics/). Emitted here — after the dedup
+    // and the blocklist, before routing — so it counts every genuine inbound
+    // regardless of what happens to it next. `unknown` is the valuable bucket:
+    // each one is somebody who tried to use the service and was not
+    // understood. Never awaited; a no-op unless the GA env vars are set.
+    void analytics.smsInbound({
+      phone: msg.from,
+      command: command.kind,
+      hasMedia: !!msg.media?.length,
+    });
+
     const settings = await getEngineSettings();
 
     // STOP always takes effect (unsubscribe — honored even under attack); only
@@ -1220,7 +1233,16 @@ export async function handleInbound(msg: InboundSms, providerId?: string): Promi
       caps.picsPerHour,
       HOUR_MS,
     );
-    if (!allowed) return null;
+    if (!allowed) {
+      // A real member just got silence. Counting it is how we find out whether
+      // the abuse guards are biting the people they are meant to protect.
+      void analytics.smsReplySuppressed({
+        phone: msg.from,
+        reason: settings.underAttack ? "under_attack" : "rate_limit",
+        messageClass: kind,
+      });
+      return null;
+    }
 
     const reply = await route(msg, command, settings);
     if (!reply) return null;

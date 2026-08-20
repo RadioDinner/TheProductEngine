@@ -17,6 +17,7 @@ import { formatPrice } from "@/lib/config";
 import { normalizePhone } from "@/lib/phone";
 import { createBusinessPackage } from "@/lib/business";
 import { getBusinessTier } from "@/lib/business-packages";
+import * as analytics from "@/analytics/src/server-events";
 
 const TOLERANCE_S = 300;
 
@@ -59,6 +60,15 @@ interface CheckoutSessionPayload {
     business_name?: string;
     ad_text?: string;
     link?: string;
+    /**
+     * The browser's GA client id, carried through checkout (lib/account-
+     * actions.ts, lib/business-actions.ts). Without it a payment confirmed by
+     * webhook lands in GA as a brand-new user and every sale on the service is
+     * attributed to "(direct)" forever — the acquisition report is then wrong
+     * in exactly the place it matters most. Absent for phone and admin orders,
+     * which is correct: those visits genuinely had no browser.
+     */
+    ga_client_id?: string;
   };
 }
 
@@ -119,6 +129,19 @@ async function handleBusinessPackage(
         `link=${meta.link ?? "-"} phone=${meta.phone ?? "-"}`,
     );
   }
+  if (result.outcome === "created") {
+    // "created" only — "duplicate" is a Stripe retry of a payment already
+    // counted, and "unsupported" is money taken that we could not store.
+    void analytics.purchaseCompleted({
+      phone: normalizePhone(meta.phone ?? "") || undefined,
+      clientId: meta.ga_client_id,
+      transactionId: ref,
+      amountCents: tier.priceCents,
+      productId: `sponsorship_${tier.id}`,
+      productCategory: "business_sponsorship",
+      paymentChannel: "web",
+    });
+  }
   // "duplicate" = Stripe retry of an already-stored payment: correctly ignored.
   return result.outcome;
 }
@@ -173,6 +196,19 @@ export async function POST(req: NextRequest) {
             kind: "purchase",
             note: `Added ${formatPrice(amountCents)} of ad credit`,
             ref,
+          });
+          // Inside the ref guard, so a Stripe retry cannot report the money
+          // twice. GA also de-duplicates on transaction_id, but relying on
+          // that alone would mean trusting a remote system to protect our
+          // revenue figure. Fire-and-forget; a no-op unless GA is configured.
+          void analytics.purchaseCompleted({
+            phone,
+            clientId: session.metadata?.ga_client_id,
+            transactionId: ref,
+            amountCents,
+            productId: "credit_topup",
+            productCategory: "account_credit",
+            paymentChannel: "web",
           });
         }
         if (session.customer) {

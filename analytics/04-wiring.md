@@ -373,17 +373,45 @@ The conflict, the options, and drafted replacement copy are in
 ## Checklist
 
 ```
-[ ] 1  .env.example + Vercel production variables
-[ ] 2  SMS events            app/api/telnyx/inbound/route.ts
-[ ] 3  purchase / refund     app/api/stripe/webhook/route.ts
-[ ] 4  ga_client_id          lib/account-actions.ts, lib/business-actions.ts
-[ ] 5  browser tag           app/layout.tsx           ← needs step 13 live first
+[x] 1  .env.example                                          (values set in Vercel: user)
+[~] 2  SMS events            lib/engine.ts                   sms_inbound +
+                                                             sms_reply_suppressed done;
+                                                             the rest below
+[~] 3  purchase              app/api/stripe/webhook/route.ts top-ups + sponsorships
+                                                             done; refund + auto_topup
+                                                             still to do
+[x] 4  ga_client_id          lib/payments.ts + both callers
+[ ] 5  browser tag           app/layout.tsx                  ← needs step 13 live first
 [ ] 6  page coverage         the ten uncounted pages, /ad/<id>
 [ ] 7  listing events        ad page, reveal-actions, account-actions
 [ ] 8  lifecycle             admin-actions, digest-engine, email-digest
 [ ] 9  voice                 app/api/voice/route.ts
 [ ] 10 first-party upgrade   migration + lib/analytics.ts
-[ ] 11 health probe          app/api/health/route.ts
-[ ] 12 test suite            test/run.mjs
-[ ] 13 privacy policy        app/privacy/page.tsx     ← before step 5
+[x] 11 health probe          app/api/health/route.ts
+[x] 12 test suite            test/analytics.test.mjs, registered in test/run.mjs
+[ ] 13 privacy policy        app/privacy/page.tsx            ← before step 5
 ```
+
+### What step 2 still owes, and why it was split
+
+`sms_inbound` and `sms_reply_suppressed` went in at one seam in
+`lib/engine.ts` — straight after `parseCommand`, and at the point a send slot
+is refused. Both are pure reads of state already in hand, so they carry no risk
+to the message path.
+
+The rest of the SMS events — `sign_up`, `unsubscribe`, `post_submit`,
+`pic_pull` — were deliberately **not** wired from the same place, because from
+there they would be wrong:
+
+- **`post_submit` at the route** would count ads that the word filter, the
+  balance check or the blocklist then refused. An inflated supply number is
+  worse than no supply number: it is the figure the whole roadmap is argued
+  from.
+- **`sign_up` on a `subscribe` command** would count every re-subscribe by an
+  existing member as a new one.
+- **`pic_pull`** has an outcome — served, out of pulls, throttled — that is
+  only known inside the handler.
+
+Each belongs at the point in `route()` where the outcome is settled. That is a
+second pass through `lib/engine.ts`'s command cases, and it should be done
+deliberately rather than bolted onto this one.
