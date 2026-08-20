@@ -26,7 +26,7 @@ large surface:
 
 ---
 
-## 🔴 1. Server-action events are on the lossy path
+## ✅ 1. Server-action events were on the lossy path — FIXED
 
 **The biggest finding, and it is invisible from the reports.**
 
@@ -55,12 +55,16 @@ was written to avoid.
 That includes **two of the six key events**. The symptom is not an error — it
 is an undercount of unknown size that still looks entirely plausible.
 
-**Fix:** register the implementation where server actions will load it.
-`lib/reveal-actions.ts` and `lib/account-actions.ts` already import
-`next/server`, so it costs no new dependency there. **`lib/moderation.ts` and
-`lib/digest-engine.ts` must NOT** — both are loaded by the test harness under
-plain node, where `next/server` does not resolve. For those, the admin server
-actions that call them are the right place.
+**Fixed** with `analytics/src/register-after.ts`, a side-effect import now in
+all eleven emitting server-action files. `lib/engine.ts`, `lib/moderation.ts`
+and `lib/digest-engine.ts` deliberately do NOT import it — the test harness
+loads them under plain node, where `next/server` does not resolve — and are
+covered by their callers, since registration is process-wide.
+
+**Guarded by a static test**, because a unit test cannot catch a missing
+import: the suite reads `lib/*.ts` and fails if an emitting file lacks the
+registration, or if a test-loaded file imports `next/server`. Verified to bite —
+stripping one import drops the suite to 84/85.
 
 ---
 
@@ -95,7 +99,7 @@ in the product; judge users from the standard reports.
 
 ---
 
-## 🔴 2. `generate_lead` is a key event that nothing emits
+## ✅ 2. `generate_lead` was a key event nothing emitted — FIXED
 
 It is in the catalogue, it is on the list of six key events to mark in the
 console, and **no code path sends it**. Business sponsorship checkout emits
@@ -106,8 +110,30 @@ is created) and no beginning. "How many businesses start buying and how many
 finish" is unanswerable, and business advertising is the highest-value single
 action on the site.
 
-**Fix:** emit it in `lib/business-actions.ts` `startBusinessCheckout`, beside
-the existing `gaClientId` read, with `value`, `currency` and the tier.
+**Fixed** in `startBusinessCheckout`, past every validation gate and before the
+payment hand-off, so the live and simulated paths both emit it. Carries
+`value`, `currency` and `package_name`.
+
+---
+
+## ✅ 3. Web ad posting emitted NOTHING — found during the fix, now FIXED
+
+Not in the original list; found while wiring the two above, and worse than
+either.
+
+`post_submit` fired only from `lib/engine.ts` — the SMS path.
+`lib/post-actions.ts`, every ad posted through the website, emitted nothing.
+
+That is not a gap. Every ad in the property carried `channel: "sms"`, so the
+report would have read **100% SMS** with total confidence, and "are ads coming
+by text or by web?" — the question that shapes pricing, the welcome message and
+the roadmap — would have been answered *wrongly* rather than not at all. A
+missing number gets investigated; a confident wrong one gets acted on.
+
+**Fixed:** `post_submit` where the web ad is created, paid for and queued for
+review, carrying the seller's suggested category and the real price; plus
+`post_blocked` at all five web refusal points, reusing the SMS lane's reason
+codes so `reason` is one comparable dimension across both channels.
 
 ---
 

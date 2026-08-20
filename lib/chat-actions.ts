@@ -13,6 +13,7 @@
  * (when the send_chat RPC didn't already make it) and the SMS nudge run in
  * next/server after() — after the response is sent.
  */
+import "@/analytics/src/register-after";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { readSession } from "@/lib/session";

@@ -14,6 +14,7 @@
  * NOTE: this file is intentionally separate from lib/account-actions.ts.
  */
 
+import "@/analytics/src/register-after";
 import * as analytics from "@/analytics/src/server-events";
 import { afterResponse } from "@/analytics/src/after";
 import { redirect } from "next/navigation";

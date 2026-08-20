@@ -1,5 +1,6 @@
 "use server";
 
+import "@/analytics/src/register-after";
 import { afterResponse } from "@/analytics/src/after";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
 import { after } from "next/server";

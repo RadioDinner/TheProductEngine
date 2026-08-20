@@ -1,5 +1,6 @@
 "use server";
 
+import "@/analytics/src/register-after";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";

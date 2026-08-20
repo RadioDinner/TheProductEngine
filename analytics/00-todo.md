@@ -141,23 +141,20 @@ This closes the code side entirely. Everything below is optional.
 
 Ranked by cost, not effort. The first two are real defects, not polish.
 
-### 🔴 Fix
+### ✅ Fixed 2026-08-20 — on the branch, NOT yet on `main`
 
-- [ ] **Register `setAfterImpl(after)` where server actions load it.** Only the
-      four API routes register it today, so twelve events — including two of
-      the six key events — fall back to unawaited fire-and-forget and can be
-      killed with the serverless invocation. An undercount of unknown size that
-      still looks plausible. ⚠️ `lib/moderation.ts` and `lib/digest-engine.ts`
-      must NOT import `next/server`: the test harness loads them under plain
-      node. Register in the calling server actions instead.
-- [x] **Untick Enhanced Measurement → Page views → advanced → "Page changes
-      based on browser history events".** ✅ DONE 2026-08-20. CONFIRMED double-counting in
-      production: GA fires its own page_view on every App Router navigation on
-      top of ours, so every page-view figure so far is ~2×. Console fix, not
-      code — the app side is already correct. Not retroactive; note the date.
-- [ ] **Emit `generate_lead`** in `startBusinessCheckout`. It is catalogued and
-      listed as a key event, and nothing sends it — so business advertising has
-      a funnel end (`purchase`) and no beginning.
+- [x] **`setAfterImpl(after)` registered in all eleven emitting server
+      actions** via `analytics/src/register-after.ts`. Twelve events were on
+      the unawaited fire-and-forget path, two of them key events. Guarded by a
+      static test that fails on a missing registration — verified to bite.
+- [x] **`generate_lead` emitted** in `startBusinessCheckout`, so business
+      advertising has a funnel beginning as well as an end.
+- [x] **Web ad posting emits `post_submit` and `post_blocked`.** Found while
+      fixing the other two: `post_submit` fired only on the SMS path, so every
+      ad looked like it arrived by text. Not a gap — a confident wrong answer.
+
+Verified on the rebased branch: tsc clean, build clean, suite **1156/1156**
+(analytics 85), abuse unchanged.
 
 ### 🟡 Worth doing
 

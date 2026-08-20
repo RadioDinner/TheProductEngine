@@ -1,5 +1,6 @@
 "use server";
 
+import "@/analytics/src/register-after";
 import * as analytics from "@/analytics/src/server-events";
 import { afterResponse } from "@/analytics/src/after";
 import { gaClientIdFromCookie } from "@/analytics/src/ids";
