@@ -1459,6 +1459,30 @@ export async function claimDigestOutbox(limit: number): Promise<OutboxRow[]> {
     .sort((a, b) => a.part - b.part || a.id - b.id);
 }
 
+/**
+ * Stamp a release schedule across the waiting backlog (migration 9963), and
+ * report how many ads were scheduled. 0 = nothing worth pacing.
+ *
+ * Degrades to 0 when the function isn't there yet: the queue simply drains at
+ * full speed, which is exactly what it did before this feature existed.
+ */
+export async function stampReleaseSchedule(
+  threshold: number,
+  minMinutes: number,
+  maxMinutes: number,
+): Promise<number> {
+  const { data, error } = await db().rpc("stamp_release_schedule", {
+    p_threshold: threshold,
+    p_min_minutes: minMinutes,
+    p_max_minutes: maxMinutes,
+  });
+  if (error) {
+    if (error.code === "42883" || error.code === "PGRST202") return 0;
+    throw error;
+  }
+  return Number(data) || 0;
+}
+
 export async function markOutboxSent(id: number): Promise<void> {
   const { error } = await db()
     .from("digest_outbox")

@@ -1812,3 +1812,12 @@ a.btn-sm:hover {
     display: none;
   }
 }
+
+/* The members-table column picker: a lot of checkboxes that would otherwise
+   run down the page in a single column. */
+.col-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.15rem 1rem;
+  margin-bottom: 0.75rem;
+}

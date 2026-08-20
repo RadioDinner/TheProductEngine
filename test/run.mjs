@@ -25,6 +25,8 @@ const SUITES = [
   "upload-limits",
   "number-lookup",
   "help-reports",
+  "paced-release",
+  "user-table",
   "myads",
   "reveal-quota",
   "business",

@@ -9,6 +9,7 @@
  * one-digest-per-slot rule plus the outbox unique key.
  */
 import { getEngineSettings, effectiveSmsCaps, type EngineSettings } from "@/lib/settings";
+import { safeGapRange } from "@/lib/paced-release";
 import {
   allocateDigestNumber,
   claimDigestOutbox,
@@ -16,6 +17,7 @@ import {
   createDigestIfAbsent,
   createExtraDigest,
   digestSegmentsSentSince,
+  stampReleaseSchedule,
   digestsSentOnDay,
   enqueueDigestOutbox,
   finalizeDigest,
@@ -749,7 +751,43 @@ export async function drainDigestOutbox(
   const budget = settings.digestDailySegmentBudget;
   // Operator kill switch: a PARTIAL or FULL pause both stop bulk (digest)
   // sending. Rows stay queued and resume when the pause is lifted.
+  //
+  // The SEND WINDOW is enforced here as well as at compose. It used to be
+  // checked only when composing, which is fine while rows are created and
+  // drained minutes apart — but a queue that has been HELD (an ads pause, a
+  // tripped budget, an outage) empties the instant the hold lifts, whatever
+  // the hour. Resume a pause at 6am and every stored-up ad would have gone
+  // out at 6am, breaking the 7am-9pm promise the compliance copy makes to
+  // every subscriber. SMS rows wait for the window; EMAIL rows are exempt,
+  // since the window is an SMS courtesy and an inbox has no bedtime.
   const paused = pauseBlocks("bulk", settings);
+  const windowShut = !smsWindowOpen(new Date(startedAt), settings);
+
+  // Paced release (session 016, user decision): before claiming anything,
+  // give a BACKLOG its release times. Stamping here rather than at the moment
+  // a pause lifts means every way a queue can back up is covered — a pause, an
+  // outage, the overnight window, a tripped budget — not just the one we
+  // thought of. It is idempotent (only ever stamps rows with no release time),
+  // so overlapping cron ticks can't re-roll a schedule that is part-sent.
+  //
+  // Skipped while paused or outside the window: scheduling a spread that
+  // starts before sending is even allowed would waste most of the gaps on
+  // time nothing could have sent in anyway.
+  if (!paused && !windowShut) {
+    const { min, max } = safeGapRange(settings);
+    try {
+      const paced = await stampReleaseSchedule(settings.pacedReleaseOver, min, max);
+      if (paced > 0) {
+        console.log(
+          `[digest] pacing a backlog of ${paced} ads at ${min}-${max} minute gaps`,
+        );
+      }
+    } catch (e) {
+      // Never let scheduling stop sending: the un-paced behaviour is the old
+      // behaviour, which is worse but not broken.
+      console.error("[digest] could not stamp a release schedule:", e);
+    }
+  }
   // UNDER ATTACK throttle: cap how many rows a single run may send, so the
   // broadcast trickles out (≈ cap per cron tick) instead of firing at once.
   const runCap =
@@ -794,6 +832,14 @@ export async function drainDigestOutbox(
       const chunk = batch.slice(i, i + SEND_CONCURRENCY);
       await Promise.all(
         chunk.map(async (row) => {
+          // Outside the send window an SMS row is left claimed and released
+          // at the end of the run, exactly like a budget-deferred row — so
+          // the claim still reaches the email rows behind it, and the text
+          // goes out on the next tick after the window opens.
+          if (row.channel === "sms" && windowShut) {
+            deferredSms.push(row.id);
+            return;
+          }
           // SMS over the segment budget: leave it claimed (skipped this run) so
           // the claim reaches the exempt email rows behind it; released at the
           // end. Email rows (segments 0) always pass.

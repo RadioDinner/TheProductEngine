@@ -1097,6 +1097,42 @@ export async function setAutoTopUp(
   return data?.length ? "saved" : "unsupported";
 }
 
+/**
+ * Archive or restore a member (migration 9964). Reversible by design — the
+ * counterpart to purgeMember, which is not.
+ */
+export async function setMemberArchived(
+  phone: string,
+  archived: boolean,
+  reason: string,
+): Promise<{ found: boolean; adsTouched: number } | "unsupported"> {
+  const { data, error } = await db().rpc("set_member_archived", {
+    p_phone: phone,
+    p_archived: archived,
+    p_reason: reason || null,
+  });
+  if (error) {
+    if (error.code === "42883" || error.code === "PGRST202") return "unsupported";
+    throw error;
+  }
+  const row = data as { found: boolean; ads_touched?: number };
+  return { found: row.found, adsTouched: row.ads_touched ?? 0 };
+}
+
+/** When was this member archived? Null = active. */
+export async function getArchivedAt(phone: string): Promise<string | null> {
+  const { data, error } = await db()
+    .from("users")
+    .select("archived_at")
+    .eq("phone", phone)
+    .maybeSingle();
+  if (error) {
+    if (error.code === "42703") return null; // migration 9964 pending
+    throw error;
+  }
+  return (data?.archived_at as string | null) ?? null;
+}
+
 export interface PurgeCounts {
   found: boolean;
   phone: string;

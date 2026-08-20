@@ -70,6 +70,11 @@ export interface EngineSettings {
   underAttack: boolean;
   /** Global outbound sends/minute ceiling, enforced only while underAttack. */
   outboundThrottlePerMin: number;
+  /** Spread a backlog when MORE than this many ads wait. 0 = never pace. */
+  pacedReleaseOver: number;
+  /** Random gap between paced ads, in minutes. */
+  pacedGapMinMinutes: number;
+  pacedGapMaxMinutes: number;
   /** Master switch for Twilio line-type lookups. Off = no lookups, no policy. */
   lookupEnabled: boolean;
   /** A throwaway line may receive the free starter credit. */
@@ -121,6 +126,9 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   outboundPaused: "outbound_paused",
   underAttack: "under_attack",
   outboundThrottlePerMin: "outbound_throttle_per_min",
+  pacedReleaseOver: "paced_release_over",
+  pacedGapMinMinutes: "paced_gap_min_minutes",
+  pacedGapMaxMinutes: "paced_gap_max_minutes",
   lookupEnabled: "lookup_enabled",
   voipStarterCredit: "voip_starter_credit",
   voipReveals: "voip_reveals",
@@ -188,6 +196,9 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     outboundPaused: engineDefaults.outboundPaused,
     underAttack: engineDefaults.underAttack,
     outboundThrottlePerMin: engineDefaults.outboundThrottlePerMin,
+    pacedReleaseOver: engineDefaults.pacedReleaseOver,
+    pacedGapMinMinutes: engineDefaults.pacedGapMinMinutes,
+    pacedGapMaxMinutes: engineDefaults.pacedGapMaxMinutes,
     lookupEnabled: engineDefaults.lookupEnabled,
     voipStarterCredit: engineDefaults.voipStarterCredit,
     voipReveals: engineDefaults.voipReveals,

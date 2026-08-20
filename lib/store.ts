@@ -1588,6 +1588,26 @@ export async function getAutoTopUp(phone: string): Promise<boolean> {
 }
 
 /**
+ * Archive or restore a member (migration 9964). The reversible counterpart to
+ * purgeMember: nothing is destroyed, their money stays theirs, and restoring
+ * puts them back exactly as they were.
+ */
+export async function setMemberArchived(
+  phone: string,
+  archived: boolean,
+  reason: string,
+): Promise<{ found: boolean; adsTouched: number } | "unsupported"> {
+  return supabaseConfigured
+    ? remote.setMemberArchived(phone, archived, reason)
+    : "unsupported";
+}
+
+/** When was this member archived? Null = active (or migration 9964 pending). */
+export async function getArchivedAt(phone: string): Promise<string | null> {
+  return supabaseConfigured ? remote.getArchivedAt(phone) : null;
+}
+
+/**
  * Preview or perform a member purge (features 37/38, migration 9966).
  *
  * Supabase only. The file store is the dev fixture store — wiping a member

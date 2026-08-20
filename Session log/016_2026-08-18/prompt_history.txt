@@ -343,3 +343,64 @@ I posted all the migrations
 --- prompt (2026-08-19, continued session, sent mid-turn) ---
 did you build controls into who can sign up? And how to make sure the use a real
 number?
+
+--- prompt (2026-08-20, continued session) ---
+Lets setup a toggleable number check with twilio. I want to make sure some goober with
+a google voice or text now accounts can't claim a ton of accounts. Or could I set it up
+that the voip numbers don't have "reveal number" priveledges, etc
+
+--- prompt (2026-08-20, continued session) ---
+I have the migration run and the twilio environment variable added
+
+--- prompt (2026-08-20, continued session) ---
+the number test is working, but when I test a number the page scrolls all the way to the
+top. I don't want that to happen.
+
+--- prompt (2026-08-20, continued session) ---
+A couple features to put on the list to build... Hold off on building them for now
+[1) Insights manual adjustment + split sender rows; 2) reset the Ads rows; 3) reset +
+recalculate on every row; 4) "I need help!" button with full diagnostics on nearly every
+page; 5) version number in the footer at 1.0.3, plus the bump rule for
+new_session_instructions]
+
+--- prompt (2026-08-20, continued session, sent mid-turn) ---
+Add this to the feature list, in the Users tab, I want a database table viewer like
+screen, where I can see all my users, their numbers and emails, their status, ads sent,
+credits spent, subscription start date, as much data as I can get. Then I can filter by
+column, drop or add columns, and save views of the data
+
+--- prompt (2026-08-20, continued session) ---
+For now, pause committing to main for this session. I will instruct you when to commit.
+
+--- prompt (2026-08-20, continued session) ---
+lets start working on features
+[AskUserQuestion answers: Insights fix = "Purge the test data"; help alerts =
+"Email me immediately, plus queue for review"]
+
+--- prompt (2026-08-20, continued session) ---
+commit it to main, quick!
+
+--- prompt (2026-08-20, continued session) ---
+then start working on the other features. All migrations are run
+
+--- prompt (2026-08-20, continued session) ---
+I TOLD YOU TO NOT COMMIT UNTIL I TELL YOU TO!
+Also, I have in my advertising, a note that says ads start running on Aug 31. If I click
+"pause ads" now and then click "Resume ads" at 6 am August 31st, will that be sufficient?
+Also, I want a toggle or a question to load when I press the button on whether or not i
+want to announce the pause or do it silently.
+I also want the ability to delete a user from the users table. If I delete them they're
+gone. I also want an archive feature. If I archive them, I can restore them. I want the
+ability to do both
+
+--- prompt (2026-08-20, continued session) ---
+I want the resume to honor the window. Resume ONLY if the window is open, if not, wait
+until the window IS open.
+If there is a queue upon resume, if the queue is greater than 4, start sending in 12 to
+18 minute increments. Randomize the gap. Make this a setting.
+
+--- prompt (2026-08-20, continued session, sent mid-turn) ---
+build feature 41 too
+
+--- prompt (2026-08-20, continued session) ---
+merge it

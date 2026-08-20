@@ -43,12 +43,15 @@ itself; build details live in the session logs and HANDOFF.md.
 | 33 | **Picture-set coaching + combined-photo confirmation** — an AD NEW with a picture now replies "send more pictures one at a time, up to 4 total; quiet for 10 minutes = the set is complete", and once a combined ad's pictures HAVE been quiet for 10 minutes the seller is texted the finished collage (MMS), so they see exactly the one photo buyers will get; a later picture re-arms one fresh confirmation | session 014 | **built** (⚠️ migration 9974 — until pasted the confirmation texts are silently off; the reply coaching works regardless) |
 | 34 | **Admin handbook tooltips** — a comprehensive operator handbook mined from the prompt history and session logs, delivered as little "?" boxes beside the admin features: each tip says what the control does, WHY it exists (the request/outage/decision that created it, cited by session number), and what to watch out for; the whole handbook also reads straight through at the bottom of /admin/help | session 015 | **built** (no migration) |
 | 35 | **Dollar pricing overhaul** — the credit system is replaced by dollar-denominated ad credit after a competitor-pricing review (their sheet: $65 with up to 4 pictures / $45 text-only, print). User decisions: **$45 text / $60 picture**; **+$15 website-listing add-on, FREE at launch** (machinery built, `web_addon_cents` = 0); **$150 starter credit** on every new member's first post (replaces the 3 free passes); **auto top-up** from the saved card at posting time (replaces BUYCREDIT/YES + the saved-card discount) plus check/phone via admin grants; **BUMP removed completely** ("completely gone, from everywhere, including the FAQ" — the admin re-run tool stays); **business packages repriced $199/$349/$599** (every tier must cost more than one ad). Full sheet + rationale: `docs/pricing.md` | session 016 | **built** (⚠️ migration 9973 — until pasted: prices are correct from code defaults, auto top-up stays OFF fail-closed, but legacy balances display 100× low; paste before launch) |
-| 36 | **Insights: manual adjustment + split sender rows** — the operator can correct an Insights figure by hand when it is wrong (money spent, ads served, and people-who-texted are all skewed by pre-launch testing). Also split the sender count into TWO rows: unique people who have texted, and total inbound texts | session 016 | **listed, not built** — see note |
-| 37 | **Insights: reset the Ads rows** — clear/rebase the all-time ad funnel counts (waiting / live / sold / expired / rejected), which testing threw off | session 016 | **listed, not built** — see note |
-| 38 | **Insights: reset + recalculate on EVERY row** — a reset control on each row, and a recalculate that reflows any total the reset affects (resetting one number may change another's total) | session 016 | **listed, not built** — see note |
-| 39 | **"I need help!" button on nearly every page** — one click files a report carrying every diagnostic we can capture: who they are, whether they have an email, what page they clicked from, date and time, and whatever else is available — so problems can be fixed proactively instead of waiting to be told. Extends item 27 (Ask a question / Suggest an idea), which already emails the operator with contact info | session 016 | **listed, not built** |
-| 40 | **Version number in the website footer** — starting at **1.0.3**. The bump rule is now §6 of `new_session_instructions.md`: 3 or fewer features shipped → far-right digit; 4 or more (or a major change) → second digit; the first digit only ever moves when the user says so | session 016 | **listed, not built** |
-| 41 | **Users tab: a database-table view** — a spreadsheet-style grid of every member on /admin/users: number, email, status, ads sent, money spent, subscription start date, and as much else as we hold. Filter by column, drop and add columns, and SAVE named views of the data | session 016 | **listed, not built** — see note |
+| 36 | **Insights: manual adjustment + split sender rows** — the operator can correct an Insights figure by hand when it is wrong (money spent, ads served, and people-who-texted are all skewed by pre-launch testing). Also split the sender count into TWO rows: unique people who have texted, and total inbound texts | session 016 | **built** (labels split; correcting the numbers is done by PURGING the rows — see 37/38) |
+| 37 | **Insights: reset the Ads rows** — clear/rebase the all-time ad funnel counts (waiting / live / sold / expired / rejected), which testing threw off | session 016 | **built** as the purge tool (⚠️ migration 9966) |
+| 38 | **Insights: reset + recalculate on EVERY row** — a reset control on each row, and a recalculate that reflows any total the reset affects (resetting one number may change another's total) | session 016 | **built** as the purge tool — every figure is derived, so removing the rows recalculates all of them at once (⚠️ migration 9966) |
+| 39 | **"I need help!" button on nearly every page** — one click files a report carrying every diagnostic we can capture: who they are, whether they have an email, what page they clicked from, date and time, and whatever else is available — so problems can be fixed proactively instead of waiting to be told. Extends item 27 (Ask a question / Suggest an idea), which already emails the operator with contact info | session 016 | **built** (⚠️ migration 9965 — until pasted the button still works and still emails, it just isn't queued) |
+| 40 | **Version number in the website footer** — starting at **1.0.3**. The bump rule is now §6 of `new_session_instructions.md`: 3 or fewer features shipped → far-right digit; 4 or more (or a major change) → second digit; the first digit only ever moves when the user says so | session 016 | **built** (no migration — one constant in lib/config.ts, read by the footer and /api/health) |
+| 41 | **Users tab: a database-table view** — a spreadsheet-style grid of every member on /admin/users: number, email, status, ads sent, money spent, subscription start date, and as much else as we hold. Filter by column, drop and add columns, and SAVE named views of the data | session 016 | **built** (⚠️ migration 9962 — one database view + saved views table) |
+| 42 | **Announce-or-silent pause** — when turning a pause ON, choose whether subscribers are told. Silent is the default; the broadcast is opt-in | session 016 | **built** (no migration) |
+| 43 | **Paced release** — when more than N ads are waiting, spread them out with a RANDOM gap (12–18 min default) instead of firing the whole backlog at once; threshold and gap range are settings | session 016 | **built** (⚠️ migration 9963) |
+| 44 | **Archive + restore a member** — the reversible counterpart to delete: set someone aside (off the website, out of the lists, no ads going out) without destroying anything, and put them back exactly as they were | session 016 | **built** (⚠️ migration 9964) |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -478,3 +481,24 @@ itself; build details live in the session logs and HANDOFF.md.
   first, so sort/filter belong in the query, not in the page. Worth checking
   whether it should share the CSV export path, if one is wanted, since "filter
   then export" is usually the next request after a grid like this.
+
+- **36/37/38 · How the "reset" landed.** Offered a cutoff date, per-row manual
+  offsets, or a purge, the user chose the purge — the only option that makes
+  every figure right everywhere at once AND keeps them reconcilable with the
+  rows underneath. The "two rows" half of 36 turned out to be a labelling
+  problem: both figures already existed, reading as two versions of the same
+  number. They are now "Unique people who texted" and "Total texts inbound".
+- **42 · Silent by default was the point.** The notice used to be automatic,
+  which is right for an outage and wrong for everything else — pausing ads
+  before launch would have texted every subscriber that the service is in
+  technical trouble when it plainly isn't.
+- **43 · Where the schedule is stamped.** In the DRAIN, not at the moment a
+  pause lifts, so every way a queue backs up is covered (pause, outage,
+  overnight window, tripped budget) rather than only the one we thought of.
+  The gaps are random because a fixed interval is itself a machine signature.
+  Do the arithmetic on a big backlog: 20 ads at a 15-minute average is five
+  hours, so what doesn't clear inside a day's window goes the next day.
+- **44 · Archive vs delete.** Two tools on purpose. Archive is for a real
+  person and changes nothing they own — no refund, no text, ledger untouched,
+  their money still theirs. Delete (the purge tool) is for your own test data
+  and cannot be walked back. The user page and the handbook both say so.

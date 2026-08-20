@@ -248,6 +248,14 @@ export const engineDefaults = {
    * VoIP switches only ever apply to a POSITIVELY identified throwaway line —
    * see lib/number-lookup.ts for why this withholds privileges rather than
    * blocking signups. */
+  /* Paced release (session 016): when a backlog builds — an ads pause, an
+   * outage, the overnight window — spread it out instead of firing it all at
+   * once. Below the threshold nothing is paced and ads go the instant they
+   * are approved, which is what instant send is for. */
+  pacedReleaseOver: 4,
+  pacedGapMinMinutes: 12,
+  pacedGapMaxMinutes: 18,
+
   lookupEnabled: false,
   voipStarterCredit: false,
   voipReveals: false,

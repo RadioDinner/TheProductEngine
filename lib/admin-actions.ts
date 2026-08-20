@@ -15,6 +15,7 @@ import {
   resolveChatReport,
   setOffenseCount,
   purgeMember,
+  setMemberArchived,
   setPostingBanned,
   setVerified,
   type PurgeCounts,
@@ -74,6 +75,9 @@ import { normalizePhone } from "@/lib/phone";
 import { type LineType } from "@/lib/number-lookup";
 import { lookupLineTypeDetailed } from "@/lib/number-lookup-server";
 import { resolveHelpReport } from "@/lib/help-report-store";
+import { parseFilter, parseSort, validColumns } from "@/lib/user-table";
+import { deleteView, saveView } from "@/lib/user-table-store";
+import { readSession } from "@/lib/session";
 
 /** Whitelisted return targets for shared ad actions — never trust a form string. */
 function backTarget(formData: FormData): string {
@@ -579,6 +583,9 @@ const SETTING_MAX: Record<string, number> = {
   revealAbusePerDay: 1000,
   categoryConfirmsPerHour: 100,
   outboundThrottlePerMin: 10000,
+  pacedReleaseOver: 500,
+  pacedGapMinMinutes: 240,
+  pacedGapMaxMinutes: 240,
 };
 
 /** Settings the admin types in DOLLARS (converted to cents on save). */
@@ -639,6 +646,9 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
     "revealAbusePerDay",
     "categoryConfirmsPerHour",
     "outboundThrottlePerMin",
+    "pacedReleaseOver",
+    "pacedGapMinMinutes",
+    "pacedGapMaxMinutes",
   ]) {
     const value = num(key);
     if (value !== null) update[key] = value;
@@ -786,6 +796,70 @@ export async function adminResolveHelpReport(formData: FormData): Promise<void> 
   redirect(`/admin/help-reports${formData.get("all") === "1" ? "?all=1" : ""}`);
 }
 
+/**
+ * Archive or restore a member (user request, session 016).
+ *
+ * The reversible half of the pair. Deliberately NOT confirmed with a typed
+ * word the way purging is: the whole reason archive exists is that it can be
+ * undone, so making it feel as heavy as a delete would push people toward
+ * the delete instead.
+ */
+export async function adminSetArchived(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const phone = normalizePhone(String(formData.get("phone") ?? ""));
+  if (!phone) redirect("/admin/users");
+  const archived = String(formData.get("archived")) === "yes";
+  const reason = String(formData.get("reason") ?? "").trim().slice(0, 200);
+  const result = await setMemberArchived(phone, archived, reason);
+  if (result === "unsupported") {
+    redirect(`/admin/users?phone=${phone}&error=migration9964`);
+  }
+  redirect(`/admin/users?phone=${phone}&saved=${archived ? "archived" : "restored"}`);
+}
+
+/**
+ * Save the current members-table layout under a name (feature 41).
+ *
+ * Scoped to the operator's own phone, so two people using the admin don't
+ * overwrite each other's layouts. Everything is re-parsed through the column
+ * catalogue on the way in — a saved view is read back later and turned into a
+ * query, so it must not be able to store a column name nothing recognises.
+ */
+export async function adminSaveUserView(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const session = await readSession();
+  const name = String(formData.get("name") ?? "").trim().slice(0, 60);
+  const back = String(formData.get("cols") ?? "");
+  if (!session || !name) redirect(`/admin/users/table?cols=${encodeURIComponent(back)}`);
+
+  const sort = parseSort(formData.get("sort"), formData.get("dir"));
+  const filters = String(formData.get("f") ?? "")
+    .split(",")
+    .map((pair) => {
+      const idx = pair.indexOf(":");
+      return idx < 0 ? null : parseFilter({ column: pair.slice(0, idx), value: pair.slice(idx + 1) });
+    })
+    .filter((f): f is NonNullable<typeof f> => f !== null);
+
+  const result = await saveView(session.phone, name, {
+    columns: validColumns(back ? back.split(",") : undefined),
+    filters,
+    sortColumn: sort.column,
+    sortAscending: sort.ascending,
+  });
+  if (result === "unsupported") redirect("/admin/users/table?error=migration9962");
+  redirect(`/admin/users/table?cols=${encodeURIComponent(back)}`);
+}
+
+/** Delete one of the operator's own saved views. */
+export async function adminDeleteUserView(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const session = await readSession();
+  const id = Number(formData.get("id"));
+  if (session && Number.isInteger(id)) await deleteView(session.phone, id);
+  redirect("/admin/users/table");
+}
+
 // ---------- operator kill switches (PAUSE + UNDER ATTACK) ----------
 
 /**
@@ -807,6 +881,16 @@ export async function adminSetPause(formData: FormData): Promise<void> {
   const wasOn = which === "ads" ? settings.adsPaused : settings.outboundPaused;
   await saveEngineSettings(which === "ads" ? { adsPaused: on } : { outboundPaused: on });
   if (!on || wasOn) redirect("/admin/settings?saved=pause");
+
+  // Announce or stay quiet (user decision, session 016). The notice used to
+  // be automatic, which is right for an OUTAGE and wrong for everything else:
+  // pausing ads before launch, or for an evening, would have texted every
+  // subscriber that the service is in technical trouble when it plainly
+  // isn't. The form asks; "announce" has to be chosen explicitly, so a pause
+  // is silent unless you say otherwise.
+  if (formData.get("announce") !== "yes") {
+    redirect("/admin/settings?saved=pause&notice=silent");
+  }
 
   const notice =
     which === "ads"

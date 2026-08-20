@@ -6,6 +6,7 @@ import {
   adminInviteUser,
   adminMergeUsers,
   adminPhoneOrderCheckout,
+  adminSetArchived,
   adminSetBan,
   adminSetStrikes,
   adminSetVerified,
@@ -17,6 +18,7 @@ import {
   getCreditBalance,
   getLedger,
   getRatingSummary,
+  getArchivedAt,
   getLineType,
   getVerifiedAt,
   searchAccounts,
@@ -57,6 +59,10 @@ export default async function AdminUsers({
   const params = await searchParams;
   const phone = params.phone ? normalizePhone(params.phone) : null;
   const account = phone ? await getAccount(phone) : null;
+  // Null when they're active, when migration 9964 is pending, or when no
+  // member is selected — all three mean "show the archive button, not the
+  // restore one", which is the safe direction.
+  const archivedAt = phone ? await getArchivedAt(phone) : null;
   // Phone-order panel: is a card on file? (best-effort; display only). A card
   // saved through the pay-by-phone line lives on a Stripe customer this
   // account hasn't stored yet — resolveStripeCustomer adopts it right here,
@@ -76,6 +82,9 @@ export default async function AdminUsers({
   return (
     <>
       <h1>Users</h1>
+      <p className="admin-nav">
+        <Link href="/admin/users/table">See all members as a table</Link>
+      </p>
       {params.saved === "invite" && (
         <p className="notice" role="status">
           {params.reason ?? "Invite sent."}
@@ -489,6 +498,64 @@ export default async function AdminUsers({
               </button>
             </form>
           </div>
+
+          <h3 className="subsection-h">
+            Archive or delete <Tip k="users.archive" />
+          </h3>
+          {params.error === "migration9964" && (
+            <p className="notice" role="alert">
+              Archiving isn&rsquo;t available yet — paste migration <strong>9964</strong>{" "}
+              in the Supabase SQL editor.
+            </p>
+          )}
+          {params.saved === "archived" && (
+            <p className="notice" role="status">
+              Archived. They keep their balance and their history, and their ads are off
+              the website and out of the send queue until you restore them.
+            </p>
+          )}
+          {params.saved === "restored" && (
+            <p className="notice" role="status">
+              Restored — back exactly as they were.
+            </p>
+          )}
+          {archivedAt ? (
+            <p className="fine">
+              <strong>Archived</strong> since {shortDate(archivedAt)}. Nothing was
+              destroyed: their balance, ads and history are intact and restoring puts
+              them back exactly as they were.
+            </p>
+          ) : (
+            <p className="fine">
+              <strong>Archive</strong> sets a member aside — off the website, out of the
+              subscriber lists, no ads going out — without destroying anything. Their
+              money stays theirs, and restoring returns them exactly as they were. It is
+              the right choice for a real person: someone who asked to be taken off, a
+              seller gone quiet, an account you want out of the way while you work out
+              what is going on.
+            </p>
+          )}
+          <div className="sim-actions">
+            <form action={adminSetArchived} className="inline-form">
+              <input type="hidden" name="phone" value={phone} />
+              <input type="hidden" name="archived" value={archivedAt ? "no" : "yes"} />
+              {!archivedAt && (
+                <input name="reason" type="text" placeholder="Why (optional)" />
+              )}
+              <button className="btn btn-sm btn-secondary" type="submit">
+                {archivedAt ? "Restore this member" : "Archive this member"}
+              </button>
+            </form>
+            <Link className="btn btn-sm btn-secondary" href="/admin/purge">
+              Delete permanently…
+            </Link>
+          </div>
+          <p className="fine">
+            <strong>Deleting is not archiving.</strong> It removes the member and
+            everything they touched, with no archive and no restore — meant for clearing
+            out your own test data, not for handling a real customer. It opens on its own
+            page, previews exactly what would go, and makes you type DELETE.
+          </p>
 
           <h3 className="subsection-h">Ads</h3>
           <ul className="myads">

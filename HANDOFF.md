@@ -3,7 +3,82 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-19 (session 016 addendum 4).
+**Last updated:** 2026-08-20 (session 016 addendum 5).
+
+## Session 016 addendum 5 (2026-08-20) — the feature-list batch, and a launch-day fix
+
+Features 36-41 from the user's list, plus three that came out of building
+them. All on `main`.
+
+**39 · "I need help!"** (⚠️ migration 9965). A button fixed to the corner of
+every page; one press files a report carrying the page, who they were signed
+in as, whether we hold an email for them, referrer, browser, screen size,
+timezone and the last error the page threw. **The typed note is optional and
+that is the feature** — a stuck member usually cannot describe what went
+wrong, so the diagnostics describe it for them; requiring a sentence first
+would lose exactly the reports worth having. Emails the operator immediately
+AND queues at /admin/help-reports (user decision): the email is how you find
+out, the queue is how you spot patterns. Identity is read server-side from the
+session, never from the form.
+
+**41 · The members table** (⚠️ migration 9962). /admin/users/table — 24
+columns, per-column filters, click-to-sort, saved layouts per operator. It is
+one database VIEW, so filtering and sorting happen in the database rather than
+by pulling everything into the page; this is the admin screen that would get
+slow first. Column names from a request are checked against a catalogue before
+they can reach PostgREST — that is a security boundary, and most of the 50 new
+tests are on it.
+
+**37/38 · Purge, not "reset"** (⚠️ migration 9966, addendum 4 covers the
+build). Worth restating why: Insights stores no numbers, so there was nothing
+to edit. **36** turned out to be a labelling problem — both sender figures
+already existed.
+
+**40 · Version in the footer.** One constant in lib/config.ts, read by the
+footer and /api/health. Currently **1.0.3**, the value the user specified.
+The bump rule is now §6 of new_session_instructions.md and applies from the
+NEXT session — it was deliberately not applied in the same session that
+introduced the number, or 1.0.3 would never have shipped as 1.0.3.
+
+**42 · Pausing is now silent unless you tick "tell subscribers."** The notice
+used to be automatic, which is right for an outage and wrong for a planned
+hold — pausing ads before launch would have told everyone the service was in
+technical trouble.
+
+**43 · Paced release** (⚠️ migration 9963). Past a threshold (default: more
+than 4 waiting) each ad gets its own release time, spaced by a RANDOM gap
+(12-18 min default, both settings). Random because a fixed interval is itself
+a machine signature. Stamped in the DRAIN, not when a pause lifts, so every
+way a queue backs up is covered; idempotent, so overlapping cron ticks cannot
+re-roll a part-sent schedule.
+
+**44 · Archive + restore** (⚠️ migration 9964). The reversible counterpart to
+the purge. Changes nothing the member owns — no refund, no text, ledger
+untouched — so restoring returns them exactly as they were. The user page
+pushes you toward archive for anyone real; delete is for test data.
+
+### ⚠️ A LAUNCH-DAY BUG, found and fixed
+
+The user's plan was to pause ads and resume at **6am on Aug 31**. The send
+window (7am-9pm) was enforced when an ad is COMPOSED but **not when the queue
+is DRAINED** — so a backlog held through a pause would have emptied the
+instant it lifted, whatever the hour, breaking the window the compliance copy
+promises every subscriber. Resuming at 6am would have texted everyone at 6am.
+Held SMS now waits for the window; email is exempt (an inbox has no bedtime).
+The pause panel also now states which case you are in, so "Resume" is never a
+guess.
+
+Two things about that plan the operator still owns: a backlog goes out in one
+burst unless paced (hence 43), and **sellers are charged when they post, not
+when it sends** — anyone posting before the 31st pays and waits.
+
+### Migrations to paste: 9962, 9963, 9964, 9965, 9966
+
+Every one degrades safely until pasted — the feature says so plainly rather
+than failing.
+
+Verified: tsc + build clean, unit 878 → **956** (new suites `paced-release` 28
+and `user-table` 50), abuse 17/17.
 
 ## Session 016 addendum 4 (2026-08-19) — the upload outage, the word-filter tab, settings honesty
 

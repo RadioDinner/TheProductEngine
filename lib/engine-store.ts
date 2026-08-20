@@ -152,6 +152,8 @@ export interface OutboxRow {
   lastError?: string;
   claimedAt?: string;
   sentAt?: string;
+  /** Paced release (migration 9963): not claimable before this. Absent = now. */
+  releaseAt?: string;
   createdAt: string;
 }
 
@@ -939,11 +941,14 @@ const file = {
     const store = load();
     const outbox = store.outbox ?? [];
     const staleBefore = Date.now() - OUTBOX_RECLAIM_MS;
+    const nowMs = Date.now();
     const claimable = outbox
       .filter(
         (r) =>
-          r.status === "queued" ||
-          (r.status === "sending" && Date.parse(r.claimedAt ?? r.createdAt) < staleBefore),
+          (r.status === "queued" ||
+            (r.status === "sending" && Date.parse(r.claimedAt ?? r.createdAt) < staleBefore)) &&
+          // Paced release: not due yet means not claimable (migration 9963).
+          (!r.releaseAt || Date.parse(r.releaseAt) <= nowMs),
       )
       .sort((a, b) => a.part - b.part || a.id - b.id)
       .slice(0, limit);
@@ -1501,6 +1506,21 @@ export async function enqueueDigestOutbox(rows: OutboxInsert[]): Promise<number>
  * part 1s first, FIFO within a part). Rows claimed by a run that died are
  * reclaimed after 10 minutes.
  */
+/**
+ * Stamp a paced release schedule across the backlog (migration 9963), or 0
+ * when there is nothing worth pacing. Supabase only: pacing exists to protect
+ * a live 10DLC campaign from a burst, and the dev fixture store sends nothing.
+ */
+export async function stampReleaseSchedule(
+  threshold: number,
+  minMinutes: number,
+  maxMinutes: number,
+): Promise<number> {
+  return supabaseConfigured
+    ? remote.stampReleaseSchedule(threshold, minMinutes, maxMinutes)
+    : 0;
+}
+
 export async function claimDigestOutbox(limit: number): Promise<OutboxRow[]> {
   return supabaseConfigured ? remote.claimDigestOutbox(limit) : file.claimDigestOutbox(limit);
 }

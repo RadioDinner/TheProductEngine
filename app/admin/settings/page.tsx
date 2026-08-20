@@ -11,6 +11,7 @@ import { getEngineSettings, getWordRules } from "@/lib/settings";
 import { listBlocked } from "@/lib/blocklist";
 import { formatPhone } from "@/lib/phone";
 import { formatPrice, site } from "@/lib/config";
+import { hourLabel, smsWindowOpen } from "@/lib/digest-engine";
 import { LookupTester } from "@/components/LookupTester";
 import type { HandbookKey } from "@/lib/admin-handbook";
 import { Tip } from "@/components/Tip";
@@ -132,6 +133,23 @@ const FIELDS: { key: string; label: string; hint?: string; tip: HandbookKey }[] 
     tip: "settings.picAbuseFlag",
   },
   {
+    key: "pacedReleaseOver",
+    label: "Spread a backlog when more than this many ads wait",
+    hint: "0 turns spreading off — a backed-up queue then goes out all at once, which is what carriers notice on a new campaign",
+    tip: "settings.pacedRelease",
+  },
+  {
+    key: "pacedGapMinMinutes",
+    label: "Shortest gap when spreading (minutes)",
+    tip: "settings.pacedRelease",
+  },
+  {
+    key: "pacedGapMaxMinutes",
+    label: "Longest gap when spreading (minutes)",
+    hint: "each ad waits a random gap between the two — a fixed interval is itself a machine signature",
+    tip: "settings.pacedRelease",
+  },
+  {
     key: "outboundThrottlePerMin",
     label: "Under-attack outbound throttle (per minute)",
     hint: "global sends/minute ceiling, enforced ONLY while UNDER ATTACK mode is on (excess defers to the next tick)",
@@ -147,6 +165,10 @@ export default async function AdminSettings({
   const params = await searchParams;
   const settings = await getEngineSettings();
   const words = await getWordRules();
+  // Shown on the pause panel: "Resume" behaves differently depending on
+  // whether anything could actually send right now, and the operator should
+  // not have to work that out from the clock.
+  const windowOpen = smsWindowOpen(new Date(), settings);
   const blocked = await listBlocked();
   // The picture ladder is ONE setting (an array) but three form fields — the
   // operator thinks in "what does a 2-picture ad cost", not in array indexes.
@@ -190,6 +212,11 @@ export default async function AdminSettings({
           <form action={adminSetPause} className="inline-form">
             <input type="hidden" name="which" value="ads" />
             <input type="hidden" name="on" value={settings.adsPaused ? "no" : "yes"} />
+            {!settings.adsPaused && (
+              <label className="sim-photo-toggle">
+                <input type="checkbox" name="announce" value="yes" /> tell subscribers
+              </label>
+            )}
             <button
               className={settings.adsPaused ? "btn btn-sm" : "btn btn-sm btn-secondary"}
               type="submit"
@@ -200,6 +227,11 @@ export default async function AdminSettings({
           <form action={adminSetPause} className="inline-form">
             <input type="hidden" name="which" value="outbound" />
             <input type="hidden" name="on" value={settings.outboundPaused ? "no" : "yes"} />
+            {!settings.outboundPaused && (
+              <label className="sim-photo-toggle">
+                <input type="checkbox" name="announce" value="yes" /> tell subscribers
+              </label>
+            )}
             <button
               className={settings.outboundPaused ? "btn btn-sm" : "btn btn-sm btn-secondary"}
               type="submit"
@@ -215,10 +247,33 @@ export default async function AdminSettings({
           moderation notices); the ads keep flowing, and so do sign-in codes, alerts to
           you, and the outage notice itself. The two are independent — use either or both.
         </p>
+        {settings.adsPaused && (
+          <p className="notice" role="status">
+            {windowOpen ? (
+              <>
+                The send window is <strong>open</strong>. Resuming now starts the queue
+                moving within a few minutes.
+              </>
+            ) : (
+              <>
+                The send window is <strong>shut</strong> right now (ads run{" "}
+                {hourLabel(settings.smsWindowStartHour)}&ndash;
+                {hourLabel(settings.smsWindowEndHour)}, Mon&ndash;Sat). You can resume any
+                time — <strong>nothing goes out until the window opens</strong>, so
+                resuming at six in the morning is safe: the first text waits for{" "}
+                {hourLabel(settings.smsWindowStartHour)}.
+              </>
+            )}
+          </p>
+        )}
         <p className="fine">
-          Turning either one ON <strong>texts every subscriber</strong> a plain-language
-          notice, so nobody is left wondering why the service went quiet. Turning it back
-          off is silent — the ads returning is its own announcement.
+          <strong>Pausing is silent unless you tick &ldquo;tell subscribers.&rdquo;</strong>{" "}
+          Tick it for a real outage — a plain-language notice goes to every subscriber so
+          nobody is left wondering why the service went quiet. Leave it unticked for a
+          planned or private pause: holding ads before launch, or stopping for an evening,
+          shouldn&rsquo;t tell everyone the service is in technical trouble when it
+          isn&rsquo;t. Turning a pause back OFF is always silent — the ads returning is its
+          own announcement.
         </p>
         <div className="sim-actions">
           <form action={adminSetUnderAttack} className="inline-form">
