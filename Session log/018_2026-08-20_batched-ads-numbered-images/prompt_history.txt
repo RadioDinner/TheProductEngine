@@ -47,3 +47,6 @@ how is this taking you so long
 
 --- 2026-08-20 (mid-session) ---
 commit this to main
+
+--- 2026-08-20 (mid-session) ---
+did you update the welcome messages
