@@ -404,3 +404,10 @@ build feature 41 too
 
 --- prompt (2026-08-20, continued session) ---
 merge it
+
+--- prompt (2026-08-20, continued session) ---
+all migrations are ran. Version to 1.0.6
+
+--- prompt (2026-08-20, continued session) ---
+write the handoff for this session, commit all remaining changes to main and wrap this
+session

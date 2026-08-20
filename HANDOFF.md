@@ -72,10 +72,16 @@ Two things about that plan the operator still owns: a backlog goes out in one
 burst unless paced (hence 43), and **sellers are charged when they post, not
 when it sends** — anyone posting before the 31st pays and waits.
 
-### Migrations to paste: 9962, 9963, 9964, 9965, 9966
+### Migrations: ALL PASTED (user confirmed 2026-08-20)
 
-Every one degrades safely until pasted — the feature says so plainly rather
-than failing.
+9962-9966 are live, so every feature above is fully on rather than degrading.
+
+Each was written to degrade safely until pasted; that safety net is no longer
+load-bearing but stays in the code.
+
+**Version is 1.0.6** (`site.version` in lib/config.ts — set directly by the
+user). The bump rule in new_session_instructions §6 applies from the NEXT
+session.
 
 Verified: tsc + build clean, unit 878 → **956** (new suites `paced-release` 28
 and `user-table` 50), abuse 17/17.
