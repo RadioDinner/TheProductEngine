@@ -63,15 +63,22 @@ a built-in GA4 item dimension.
 Six, and no more. Marking everything a conversion is the same as marking
 nothing.
 
-### 🧑 Filter out your own traffic
+### ⚪ Filter out your own traffic — DECLINED
 
 The tag already skips you when signed in as admin. Signed out, or in a private
 window, you are counted like anyone else — and on a service this size that is
 enough to distort every rate.
 
-- [ ] Admin → Data streams → Configure tag settings → Show all → **Define internal traffic**
-- [ ] Admin → **Data filters** → set Internal Traffic from *Testing* to **Active**
-      *(it ships inactive; this is the most-missed step in a GA4 setup)*
+**DECIDED 2026-08-20: not doing this.** The operator chose to leave their own
+IP unfiltered. Defensible — the code-level exclusion in `app/layout.tsx` skips
+the tag entirely while signed in as admin, which is the more reliable of the
+two guards: an IP filter stops matching silently whenever a home connection
+gets a new address, and never matches a phone on cellular.
+
+The consequence to remember when reading the numbers: **signed-out and
+incognito browsing by the operator IS counted.** At this traffic level a few
+test walks are visible in the totals, so treat a small day's figures with that
+in mind. Revisit if the operator's own visits ever become a meaningful share.
 
 ### ✅ Pipeline VERIFIED LIVE — 2026-08-20
 
