@@ -32,10 +32,11 @@ days_to_sell. Money: purchase from the WEBHOOK inside the ledger-ref guard,
 refund, auto_topup, starter_credit_granted. Voice: call_inbound at every
 outcome, card_saved. Plus email_edition_sent per edition.
 
-**⚠️ ONE THING IS OWED: paste `supabase/migrations/9961_analytics_upgrade.sql`.**
-Until then `recordVisit` falls back to the old counter and warns once; nothing
-breaks, and referrer/campaign/unique-visitor data is simply not collected.
-`/api/health` → `migration9961`.
+**✅ Migration `9961_analytics_upgrade.sql` was pasted 2026-08-20.** The
+first-party counter now records the referring host, campaign tags and a
+daily-rotating visitor token alongside the existing page-view count. Verify
+with `select * from visit_stats_v2();` in the SQL editor, or `/api/health` →
+`migration9961`.
 
 ### ✅ The GA4 property EXISTS and is COLLECTING
 
@@ -54,15 +55,17 @@ rewritten policy).
 
 STILL OPEN — the full list is `analytics/00-todo.md`:
 
-1. **Paste `supabase/migrations/9961_analytics_upgrade.sql`.**
-2. **Register the custom definitions** — 11 dimensions + 7 metrics. ⚠️ NOT
-   retroactive: they report from the day they are created, so every day of
-   delay is a day that cannot be broken down later.
-3. **Mark the six key events.**
-4. **Set the internal-traffic filter to Active** — it ships as *Testing*, which
+✅ Migration 9961 pasted. ✅ All 18 custom definitions and 10 metrics
+registered. The measurement is complete and collecting end to end.
+
+Left, none of it urgent:
+
+1. **Mark the key events** as they appear in Admin → Events → Recent events
+   (star icon). Only `purchase` is starred so far, by GA's default.
+2. **Set the internal-traffic filter to Active** — it ships as *Testing*, which
    collects nothing. The tag skips the operator only while signed in as admin,
    so their signed-out browsing is counted like anyone else's until this is on.
-5. **Edit the Telnyx HELP auto-response** — the app stopped replying to HELP
+3. **Edit the Telnyx HELP auto-response** — the app stopped replying to HELP
    this session (it was double-replying), so the carrier keyword response is
    now the service's ONLY answer, and carriers require one. It still advertises
    BUMP and CREDITS, both removed in session 016. Not in version control, no

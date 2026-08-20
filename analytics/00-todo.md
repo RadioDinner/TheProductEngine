@@ -123,16 +123,17 @@ is asking yet.
 
 ---
 
-## 🔴 One paste, and it is on you
+## ✅ Migration 9961 — PASTED 2026-08-20
 
-- [ ] **Paste `supabase/migrations/9961_analytics_upgrade.sql`** into the
-      Supabase SQL Editor. Never `supabase db push` — the CLI applies in
-      ascending order, which under this repo's descending scheme is
-      newest-first.
+`recordVisit` now records the referring host, campaign tags and a
+daily-rotating visitor token through `bump_visit`, alongside the page-view
+count it always kept.
 
-Until it is pasted, `recordVisit` falls back to the old counter and warns once;
-nothing breaks, and referrer/campaign/unique-visitor data is simply not
-collected. `/api/health` → `migration9961` tells you which state you are in.
+Verify: `select * from visit_stats_v2();` returns five columns (views today,
+last 7, all time, and unique people today and last 7). Or `/api/health` →
+`migration9961: { applied: true }`.
+
+This closes the code side entirely. Everything below is optional.
 
 ---
 
