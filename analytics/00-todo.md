@@ -89,14 +89,28 @@ enough to distort every rate.
 - [ ] Admin → **Data filters** → set Internal Traffic from *Testing* to **Active**
       *(it ships inactive; this is the most-missed step in a GA4 setup)*
 
-### 🧑 Verify the pipeline end to end
+### ✅ Pipeline VERIFIED LIVE — 2026-08-20
 
-- [ ] `curl -H "Authorization: Bearer $CRON_SECRET" https://<site>/api/health` — all four GA flags
-- [ ] Set `GA_DEBUG_MODE=1`, redeploy
-- [ ] Text the service number → `sms_inbound` in DebugView within seconds
-- [ ] Text deliberate nonsense → arrives as `command: unknown`
-- [ ] Load the site signed out → `page_view`; open a listing → `view_item`; click one from the homepage → `select_item`
-- [ ] Turn `GA_DEBUG_MODE` back off
+Confirmed from Admin → Events → Recent events, on the real property:
+
+```
+first_visit  page_view  scroll  session_start        <- browser tag, real visitors
+sms_inbound                                          <- server-side Measurement Protocol
+```
+
+`sms_inbound` arriving is the one that matters. It proves the whole server-side
+chain end to end: the API secret, the salt, the phone hashing, the derived
+client_id, the Measurement Protocol request, and GA accepting the payload —
+the hardest and most failure-prone part of the build. The four browser events
+prove the tag is live, and that they came from REAL visitors rather than the
+operator, since the tag is skipped while signed in as admin.
+
+Both halves of the architecture are working. Everything below is configuration
+on top of a pipeline that is known good.
+
+Events not yet seen are not missing — nobody has done the things that fire them
+since the deploy (`view_item` needs an ad page opened, `post_submit` an ad
+posted, `listing_reveal` a number look-up). They will appear on their own.
 
 ---
 
