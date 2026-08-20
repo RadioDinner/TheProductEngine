@@ -64,6 +64,37 @@ actions that call them are the right place.
 
 ---
 
+## 🔴 1b. Page views were double-counted — CONFIRMED IN PRODUCTION
+
+Found by walking four pages in an incognito window and seeing twelve views.
+
+The app side is correct: `send_page_view: false` on the config call, and
+`PageViews` sends exactly one manual event per path change, guarded against
+repeats. The duplicate comes from GA: **Enhanced Measurement → Page views →
+"Page changes based on browser history events"**, on by default, fires GA's own
+`page_view` on every History API change — which is every App Router client
+navigation.
+
+This is the classic Next.js App Router + GA4 double-count, and it only appears
+once SPA page views are implemented properly. Doing nothing manual would have
+hidden it; doing it right exposed it.
+
+**Fix (console, not code):** untick that sub-option. Leave *Page views* itself
+on — the config call already suppresses the automatic initial view, and the
+manual event covers it.
+
+**Not retroactive.** Every page-view figure collected before the fix is roughly
+2×. Note the date and do not compare across it. Only views were affected —
+every other event is sent once, from one place.
+
+A related, milder observation from the same walk: Realtime showed **2 active
+users for one person**. Setting `user_id` mid-session (at sign-in) can make GA
+briefly count the pre- and post-identification activity as two identities under
+Blended reporting identity. Realtime user counts are the least reliable number
+in the product; judge users from the standard reports.
+
+---
+
 ## 🔴 2. `generate_lead` is a key event that nothing emits
 
 It is in the catalogue, it is on the list of six key events to mark in the
