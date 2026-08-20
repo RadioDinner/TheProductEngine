@@ -21,6 +21,7 @@ import {
 } from "@/lib/store";
 import { getEngineSettings } from "@/lib/settings";
 import {
+  batchWaitLabel,
   drainDigestOutbox,
   hourLabel,
   nextSendLabel,
@@ -67,10 +68,12 @@ export async function approveAd(
       console.error(`[moderation] category not saved for ad #${id}:`, e);
     }
   }
-  // Instant send (session 016, user decision): the ad goes out the moment it
-  // is approved, inside the send window — no waiting for a digest slot. The
-  // pass picks up anything else that was queued too, which is what empties
-  // the overnight and Sunday queue on the first approval of the morning.
+  // Batched send (session 018, user decision — replacing session 016's
+  // one-text-per-ad): approving adds the ad to the waiting queue and then
+  // asks whether a batch is due. It usually is not, and that is the point:
+  // the batch goes when enough ads are ready or the oldest has waited long
+  // enough. The same pass is what empties the overnight and Sunday queue on
+  // the first tick of the morning.
   const now = new Date();
   afterResponse(() =>
     analytics.listingApproved({
@@ -85,7 +88,7 @@ export async function approveAd(
   await notify(
     ad.ownerPhone,
     open
-      ? `Your ad #${id} is approved and is going out to subscribers now. Text STATUS ${id} any time to check it.`
+      ? `Your ad #${id} is approved. It goes out to subscribers ${batchWaitLabel(settings)}. Text STATUS ${id} any time to check it.`
       : `Your ad #${id} is approved. It goes out ${nextSendLabel(now, settings)} — texts only go out between ${hourLabel(settings.smsWindowStartHour)} and ${hourLabel(settings.smsWindowEndHour)}, Monday through Saturday. Text STATUS ${id} any time to check it.`,
   );
   if (!open) return;

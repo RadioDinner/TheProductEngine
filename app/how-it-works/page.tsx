@@ -14,7 +14,7 @@ const COMMANDS: { cmd: string; what: string }[] = [
   { cmd: "STOP", what: "Stop getting the ads. Reply START to come back." },
   { cmd: "HELP", what: "Get this list of commands by text." },
   { cmd: "AD NEW your ad text", what: "Post an ad. Attach a picture if you have one." },
-  { cmd: "PIC 1234", what: "Get the picture for ad number 1234." },
+  { cmd: "PIC 1234", what: "See more pictures of ad number 1234 (up to two)." },
   { cmd: "STATUS 1234", what: "Check if an ad is still available or sold." },
   { cmd: "SOLD 1234", what: "Mark your ad sold (your ads only)." },
   { cmd: "MYADS", what: "List your ads and their status." },
@@ -36,17 +36,17 @@ export default async function HowItWorks() {
       <h2>Get the ads</h2>
       <p>
         Text <span className="cmd">SUBSCRIBE</span> to <strong>{site.smsNumber}</strong>.
-        You’ll get each new ad by text as soon as it’s posted — 7am to 9pm, Monday through Saturday,
-        afternoon, and evening. It’s free, though message and data rates may apply from your
-        phone company. Reply <span className="cmd">STOP</span> any time to quit, or{" "}
+        You’ll get the ads in batches through the day — several in one text, each with its
+        own ad number — between 7am and 9pm, Monday through Saturday. It’s free, though
+        message and data rates may apply from your phone company. Reply <span className="cmd">STOP</span> any time to quit, or{" "}
         <span className="cmd">HELP</span> for help. See the{" "}
         <Link href="/sms">text message program terms</Link> and{" "}
         <Link href="/privacy">privacy policy</Link>.
       </p>
       <p>
-        When an ad has a picture, the text says so. Reply{" "}
-        <span className="cmd">PIC 1234</span> (the ad’s number) and the picture comes back to
-        you by text.
+        An ad with pictures sends one of them right after the batch, in its own message,
+        marked with the ad number in the corner. Reply <span className="cmd">PIC 1234</span>{" "}
+        (the ad’s number) for up to two more; the rest are on this website.
       </p>
 
       <h2>Get the ads by email</h2>
@@ -72,8 +72,9 @@ export default async function HowItWorks() {
       </figure>
       <p>
         Every ad is read and approved by a person before it runs. Once approved, your ad goes
-        out to subscribers right away — with its picture, if it has one — and is listed on this website for {s.expiryDays} days. You’ll
-        get a text with your ad’s number when it’s in.{" "}
+        out to subscribers with the next batch — with its first picture, if it has one,
+        marked with your ad number — and is listed on this website for {s.expiryDays} days.
+        You’ll get a text with your ad’s number when it’s in.{" "}
         <strong>
           Your first post comes with {formatPrice(s.starterCreditCents)} of ad credit on the
           house

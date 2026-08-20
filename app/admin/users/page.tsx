@@ -362,7 +362,12 @@ export default async function AdminUsers({
               </button>
             </div>
           </form>
-          <p className="fine">Dollars, decimals allowed — this is how a mailed check or cash payment lands on the account.</p>
+          <p className="fine">
+            Dollars, decimals allowed — this is how a mailed check or cash payment lands on
+            the account. <strong>Silent:</strong> nothing is texted or emailed to the member.
+            The only buttons on this page that message them are &ldquo;Text them the
+            link&rdquo; below and the invite on Add a member.
+          </p>
 
           <h3 className="subsection-h">
             Phone order — card payment by phone <Tip k="users.phoneOrder" />

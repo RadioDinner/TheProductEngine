@@ -908,15 +908,77 @@ export async function expireDueAds(): Promise<number> {
   return data?.length ?? 0;
 }
 
+/**
+ * The identity timestamp a slot key maps to on a database with no `slot_key`
+ * column (migration 9960 pending).
+ *
+ * A CALENDAR key ("2026-08-20#7", "2026-08-20#email#12") keeps exactly the
+ * timestamp it has always had, so every digest already in the table is still
+ * found by the same key that wrote it.
+ *
+ * Anything else is a BATCH key, and it must not be pushed through the same
+ * arithmetic: "batch#1022#0" would produce "batchT0:00:00Z", which Postgres
+ * rejects outright — the bug that made every session-016 per-ad edition
+ * ("ad#1022") throw in production while working perfectly against the file
+ * store in development. Those keys get a synthetic instant in 1970 instead:
+ * deterministic (the same key always lands on the same row, which is what
+ * makes composing idempotent), unique per key, valid, and unmistakable for a
+ * real slot when read by eye.
+ */
+export function slotIdentityTimestamp(slotKey: string): string {
+  const parts = slotKey.split("#");
+  const day = parts[0];
+  const tail = parts[parts.length - 1];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(day) && /^\d{1,2}$/.test(tail)) {
+    return `${day}T${tail.padStart(2, "0")}:00:00Z`;
+  }
+  // FNV-1a over the key → milliseconds after the epoch (at most ~49 days, so
+  // always 1970). A hash rather than the ids themselves because a key's shape
+  // may change again; what matters is that it is stable and collision-free in
+  // practice, and this path only exists until the migration is pasted.
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < slotKey.length; i++) {
+    hash ^= slotKey.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return new Date(hash).toISOString();
+}
+
+/** Set once a query proves the digests table predates migration 9960. */
+let slotKeyUnsupported = false;
+
+function slotKeySchemaMissing(error: { code?: string } | null): boolean {
+  // 42703 = unknown column (select/filter); PGRST204 = PostgREST's schema
+  // cache has no such column (insert).
+  return error?.code === "42703" || error?.code === "PGRST204";
+}
+
 export async function createDigestIfAbsent(
   slotKey: string,
   slotHour: number,
   channel: "sms" | "email" = "sms",
 ): Promise<{ id: number; created: boolean; finalized: boolean }> {
   void slotHour;
-  // slotKey ends "#HH" (ET) → canonical scheduled_for used purely as identity.
-  const parts = slotKey.split("#");
-  const scheduledFor = `${parts[0]}T${parts[parts.length - 1].padStart(2, "0")}:00:00Z`;
+  // Since session 018 the digest's identity is its SLOT KEY, stored in its own
+  // column (migration 9960). scheduled_for keeps carrying a real, readable
+  // instant — but it is no longer what makes a batch unique, because two
+  // batches can legitimately fall in the same hour.
+  if (!slotKeyUnsupported) {
+    const found = await findDigestBySlotKey(slotKey, channel);
+    if (found === "unsupported") {
+      slotKeyUnsupported = true;
+      console.error(
+        "[digest] digests.slot_key is missing (paste migration 9960) — batch identity falls back to a synthetic scheduled_for",
+      );
+    } else if (found) {
+      return found;
+    } else {
+      const created = await insertDigest(slotKey, channel);
+      if (created !== "unsupported") return created;
+      slotKeyUnsupported = true;
+    }
+  }
+  const scheduledFor = slotIdentityTimestamp(slotKey);
   // Select-first: the cron re-checks the already-composed slot every 5
   // minutes, and the old insert-first pattern painted the operator's
   // Postgres error log red with a handled-but-logged 23505 on EVERY tick
@@ -963,11 +1025,58 @@ export async function createDigestIfAbsent(
   return { id: data.id as number, created: true, finalized: false };
 }
 
+/** The slot_key lookup. "unsupported" = migration 9960 is not pasted. */
+async function findDigestBySlotKey(
+  slotKey: string,
+  channel: "sms" | "email",
+): Promise<{ id: number; created: boolean; finalized: boolean } | null | "unsupported"> {
+  const { data, error } = await db()
+    .from("digests")
+    .select("id, sent_at")
+    .eq("channel", channel)
+    .eq("slot_key", slotKey)
+    .maybeSingle();
+  if (error) {
+    if (slotKeySchemaMissing(error)) return "unsupported";
+    throw error;
+  }
+  if (!data) return null;
+  return { id: data.id as number, created: false, finalized: data.sent_at != null };
+}
+
+/**
+ * Insert a digest carrying its slot key. scheduled_for is the real instant —
+ * it still has a UNIQUE (channel, county, scheduled_for) constraint on it, so
+ * a second batch inside the same hour has to differ; `now` carries
+ * milliseconds, which is enough, and a genuine collision resolves by
+ * re-reading the row that won.
+ */
+async function insertDigest(
+  slotKey: string,
+  channel: "sms" | "email",
+): Promise<{ id: number; created: boolean; finalized: boolean } | "unsupported"> {
+  const { data, error } = await db()
+    .from("digests")
+    .insert({ channel, slot_key: slotKey, scheduled_for: new Date().toISOString() })
+    .select("id")
+    .single();
+  if (!error) return { id: data.id as number, created: true, finalized: false };
+  if (slotKeySchemaMissing(error)) return "unsupported";
+  if (error.code === "23505") {
+    // Either a concurrent run took this slot key, or two inserts landed on the
+    // same millisecond. Re-read by slot key: that is the identity that matters.
+    const found = await findDigestBySlotKey(slotKey, channel);
+    if (found && found !== "unsupported") return found;
+    return insertDigest(slotKey, channel); // millisecond collision — try again
+  }
+  throw error;
+}
+
 export async function getSmsDigestAdIds(slotKey: string): Promise<number[] | null> {
-  // slotKey is "day#hour"; the table's slot identity is the canonical
-  // scheduled_for that createDigestIfAbsent writes for it.
-  const parts = slotKey.split("#");
-  const scheduledFor = `${parts[0]}T${parts[parts.length - 1].padStart(2, "0")}:00:00Z`;
+  // Nothing calls this since session 016 (the email edition reads
+  // getUnemailedBroadcastAds instead); kept, and kept correct, because it is
+  // the natural way to ask "what did that slot carry?".
+  const scheduledFor = slotIdentityTimestamp(slotKey);
   const { data: digest, error } = await db()
     .from("digests")
     .select("id, sent_at")
@@ -1037,11 +1146,11 @@ export async function finalizeDigest(
 }
 
 export async function listRecentDigests(limit: number): Promise<DigestRecord[]> {
-  // The table has no slot_key/slot_hour columns — the slot identity lives in
-  // scheduled_for, written by createDigestIfAbsent as "<day>T<HH>:00:00Z"
-  // (canonical ET identity, not a real instant). Derive both back from it.
-  // digest_no (migration 9982) is fetched with a fallback so this page never
-  // 500s while the migration is pending (the e50f73d lesson).
+  // slot_key (migration 9960) is the identity a batch was composed under, and
+  // what the admin history should show. Older rows have none, so the fallback
+  // derives a label from scheduled_for the way this always did. Both optional
+  // columns are fetched with a retry so the page never 500s while a migration
+  // is pending (the e50f73d lesson).
   const fetchRecent = (columns: string) =>
     db()
       .from("digests")
@@ -1050,8 +1159,13 @@ export async function listRecentDigests(limit: number): Promise<DigestRecord[]> 
       .order("id", { ascending: false })
       .limit(limit);
   let { data, error } = await fetchRecent(
-    "id, channel, scheduled_for, item_count, sent_at, created_at, digest_no",
+    "id, channel, scheduled_for, item_count, sent_at, created_at, digest_no, slot_key",
   );
+  if (error?.code === "42703") {
+    ({ data, error } = await fetchRecent(
+      "id, channel, scheduled_for, item_count, sent_at, created_at, digest_no",
+    ));
+  }
   if (error?.code === "42703") {
     ({ data, error } = await fetchRecent(
       "id, channel, scheduled_for, item_count, sent_at, created_at",
@@ -1063,15 +1177,18 @@ export async function listRecentDigests(limit: number): Promise<DigestRecord[]> 
     const scheduled = String(row.scheduled_for ?? "");
     const day = scheduled.slice(0, 10);
     const hour = Number(scheduled.slice(11, 13));
-    // Slot digests are written with a whole-hour identity; anything with
+    // Pre-9960 rows: a whole-hour identity is a slot; anything carrying
     // minutes/seconds is an admin "extra" edition — label it as such.
     const isExtra = scheduled.slice(14, 19) !== "00:00" && scheduled.length >= 19;
+    const storedKey = (row.slot_key as string | null) ?? null;
     return {
       id: row.id as number,
       channel: row.channel as DigestRecord["channel"],
-      slotKey: isExtra
-        ? `${day}#extra#${scheduled.slice(11, 16)}`
-        : `${day}#${Number.isFinite(hour) ? hour : "?"}`,
+      slotKey:
+        storedKey ??
+        (isExtra
+          ? `${day}#extra#${scheduled.slice(11, 16)}`
+          : `${day}#${Number.isFinite(hour) ? hour : "?"}`),
       slotHour: Number.isFinite(hour) ? hour : 0,
       itemCount: (row.item_count as number | null) ?? 0,
       digestNo: (row.digest_no as number | null) ?? null,
@@ -1132,8 +1249,7 @@ export async function allocateDigestNumber(digestId: number): Promise<number | n
 }
 
 export async function getSmsDigestNumber(slotKey: string): Promise<number | null> {
-  const parts = slotKey.split("#");
-  const scheduledFor = `${parts[0]}T${parts[parts.length - 1].padStart(2, "0")}:00:00Z`;
+  const scheduledFor = slotIdentityTimestamp(slotKey);
   const { data, error } = await db()
     .from("digests")
     .select("digest_no")

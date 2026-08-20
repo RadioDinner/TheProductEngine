@@ -24,6 +24,13 @@ export interface HelpReport extends HelpDiagnostics {
   phone: string | null;
   memberId: string | null;
   hasEmail: boolean;
+  /** Who filed it and how to reach them (session 018 — required on the form).
+   * Absent on reports filed before that, and on any report stored while
+   * migration 9959 is still unpasted. */
+  firstName?: string | null;
+  lastName?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
   createdAt: string;
   resolvedAt: string | null;
   resolvedNote: string | null;
@@ -70,8 +77,11 @@ export function reportSummary(report: {
   path: string;
   phone?: string | null;
   note?: string;
+  /** What they typed into the form — preferred over the session phone,
+   * because a name is what an operator scanning their inbox recognises. */
+  name?: string | null;
 }): string {
-  const who = report.phone ? report.phone : "a signed-out visitor";
+  const who = report.name || report.phone || "a signed-out visitor";
   const note = report.note ? `: "${report.note.slice(0, 60)}${report.note.length > 60 ? "…" : ""}"` : "";
   return `Help needed on ${report.path} from ${who}${note}`;
 }

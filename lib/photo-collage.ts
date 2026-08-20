@@ -50,6 +50,9 @@ export const MAX_AD_PHOTOS = 8;
  * - `collage/` — a combined multi-picture image (always at ad_photos position
  *   0 when present; safe to delete when replaced by a recompose);
  * - `parts/` — an individual source picture of a collage;
+ * - `badged/` — a send-only copy of a picture with the ad number burned into
+ *   the corner (session 018). Never an ad_photos row: it exists so the MMS a
+ *   batch sends can be identified, while the website keeps the clean original;
  * - bare path — a single-picture ad's photo, or an emailed-in extra. */
 export const AD_PHOTOS_BUCKET = "ad-photos";
 const PUBLIC_MARKER = `/object/public/${AD_PHOTOS_BUCKET}/`;
@@ -78,6 +81,27 @@ export function websiteAdPhotos<T extends { src: string }>(photos: T[]): T[] {
   const parts = rest.filter((p) => isCombinePartSrc(p.src));
   if (!parts.length) return photos;
   return [...parts, ...rest.filter((p) => !isCombinePartSrc(p.src))];
+}
+
+/**
+ * The pictures the TEXT channel can carry for one ad, in the order a buyer
+ * should see them: picture 1 first (the one a batch broadcasts, badged with
+ * the ad number), then the extras a PIC pull sends. Anything past
+ * MAX_COMBINED_PHOTOS lives on the website only — that is exactly what "the
+ * first 3 go out by text, the rest on the website" means, and this is the one
+ * place that decides it, so the batch, the PIC reply and the welcome copy can
+ * never disagree about which picture is which.
+ *
+ * A legacy combined ad (position 0 is a `collage/`) hands back its ORIGINAL
+ * pictures, not the collage: since session 018 exactly one picture goes out
+ * per ad, so the individual photo is the honest thing to send.
+ */
+export function textedAdPhotos<T extends { src: string }>(
+  photo: T | undefined,
+  morePhotos: T[] | undefined,
+): T[] {
+  const all = [...(photo ? [photo] : []), ...(morePhotos ?? [])];
+  return websiteAdPhotos(all).slice(0, MAX_COMBINED_PHOTOS);
 }
 
 /** The page: portrait 4:5, like a print photo mat. Every collage is this

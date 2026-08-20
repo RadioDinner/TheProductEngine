@@ -62,7 +62,7 @@ export type RehostResult = { ok: true; url: string } | { ok: false; reason: stri
 
 /** Which provenance folder an upload lands in (markers documented on
  * AD_PHOTOS_BUCKET in lib/photo-collage.ts). */
-export type PhotoFolder = "collage" | "parts";
+export type PhotoFolder = "collage" | "parts" | "badged";
 
 /** Telnyx-hosted media (api.telnyx.com/v2/media style) requires API-key auth
  * to fetch; send the bearer ONLY to telnyx.com hosts, never anywhere else. */
@@ -300,6 +300,38 @@ export async function rehostInboundPhoto(src: string): Promise<string | null> {
     return null;
   }
   return result.url;
+}
+
+/**
+ * A send-only copy of an ad's picture with its ad number burned into the
+ * corner (session 018 batches — lib/ad-badge.ts explains why the number has
+ * to be IN the picture). Stored under `badged/` and never added to ad_photos,
+ * so the website and the review queue keep showing the clean original.
+ *
+ * Returns null on ANY failure — a missing sharp binding, unreadable bytes, a
+ * storage hiccup. Every caller then broadcasts the unbadged picture, because a
+ * picture with no number still sells the item and no picture at all does not.
+ */
+export async function storeBadgedPhoto(src: string, label: string): Promise<string | null> {
+  if (!supabaseConfigured) return null;
+  try {
+    const fetched = await fetchImageBytes(src);
+    if (!fetched.ok) {
+      console.error("[photos] badge skipped, could not fetch the picture:", fetched.reason);
+      return null;
+    }
+    const { stampAdNumber } = await import("@/lib/ad-badge");
+    const stamped = await stampAdNumber(fetched.bytes, label);
+    const stored = await storeImageBytes(stamped, "badged");
+    if (!stored.ok) {
+      console.error("[photos] badge skipped, storage failed:", stored.reason);
+      return null;
+    }
+    return stored.url;
+  } catch (e) {
+    console.error("[photos] badge skipped:", e instanceof Error ? e.message : e);
+    return null;
+  }
 }
 
 /**

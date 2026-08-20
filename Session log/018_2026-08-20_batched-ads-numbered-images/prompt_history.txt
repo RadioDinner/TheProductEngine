@@ -1,0 +1,43 @@
+--- 2026-08-20 (session 018 start) ---
+[Attached image: a competitor's photo message — a white gas cook stove, with a
+bright yellow "AD 2" badge in the TOP-RIGHT corner of the picture.]
+
+Ok I want to make yet another change to how my ads send out. I want to batch ads again. So, one of my competitors does this, and I think it makes sense. However, he is sending individual pictures with each ad. For instance, I got this message
+
+"AdHub:
+
+1) Gazebo for sale  Ph: 330-275-9541
+
+
+2) 20 inch natural gas cook stove top works great oven doesn't work great for canning ,make offer, near charm               3304621279
+
+
+3) Forsale.  pigmy goats. 4 adult nannys 125 ea..4 young billys.100 ea.obo.contact 3304730425
+
+
+4) Large dining table. No leaves. Great condition. $400
+ Chicken hoop $2500
+330-231-3986
+
+If you want to place an ad Reply  (AD)
+
+Reply STOP to opt out."
+
+then, I got 3 separate picture messages. Each message had the number of ad in the digest.
+
+I want my system to be similar. How is he getting away with putting so many characters in a message without it becoming MMS? I want to make so I can send out the ads in a similar way. I'll run the batch every hour, or as soon as I have 3 or 4 ads.
+
+But, something I want to do that is different than his system, he numbered his ads 1 to 4 in this batch. I want to use the ad number. So one batch could be 1022, 1023, 1024 and 1025. I want you to automatically put a number marker in the bottom right corner of the FIRST picture that comes in. Only 1 picture will be sent out. To see additional pictures, reply PIC followed by the AD number like (PIC 1024) and it'll send up to 2 more. The rest will be on the website. You'll need to change some of the welcome messags to honor this format. I'll upload an emaxmple of how he auto numbers his images.
+
+--- 2026-08-20 (mid-session) ---
+wait to commit to main until I tell you
+
+--- 2026-08-20 (mid-session) ---
+I also want the ability to Silently update someones balance. I think it messages them now if I do it from the admin end, right?
+
+--- 2026-08-20 (mid-session) ---
+I also want a "suggest a feature" button thing on the website, where people can suggest features for the platform. I awnt it to be a fairly simple form with their name, first and last, their phone and or email, make them optional fields if we have at least one. They'd need to enter 1 of the following, the email or phone. 
+
+Also, on the report a problem screen, I want you to reqeuire their first and last name, as well as a phone number or email.
+
+If the user is logged in for either of these features, automatically pull in their phone and or email.

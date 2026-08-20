@@ -8,7 +8,7 @@ import {
   adminRevertAd,
   adminSendDigest,
 } from "@/lib/admin-actions";
-import { selectDigestItems, nextSlotOccurrence } from "@/lib/digest-engine";
+import { hourLabel, selectDigestItems, nextSlotOccurrence } from "@/lib/digest-engine";
 import {
   listHeldNewAds,
   listRecentDigests,
@@ -143,9 +143,18 @@ export default async function AdminDigests({
       )}
       {params.senderror && <p className="fine">✗ Not sent: {params.senderror}</p>}
       <p>
-        Slots: {slots.length ? slots.map(slotLabel).join(", ") : "none"} (email edition goes out at
-        the same times) <Tip k="digests.slots" /> · next digest composes at{" "}
-        <strong>{nextSlotLabel}</strong> · capacity {settings.digestCap} ads per digest
+        Batches go out{" "}
+        <strong>
+          {settings.batchMinAds > 0
+            ? `as soon as ${settings.batchMinAds} ads are waiting`
+            : "on the timer only"}
+          {settings.batchMaxWaitMinutes > 0
+            ? `, or ${settings.batchMaxWaitMinutes} minutes after the oldest was approved`
+            : ""}
+        </strong>{" "}
+        <Tip k="settings.batchTriggers" /> — inside the send window only ({hourLabel(settings.smsWindowStartHour)}–
+        {hourLabel(settings.smsWindowEndHour)}, Mon–Sat) · capacity {settings.digestCap} ads per
+        batch, each picture ad adding its own picture message
         {queued > 0 && (
           <>
             {" "}
@@ -155,13 +164,18 @@ export default async function AdminDigests({
         )}
       </p>
 
+      <p className="fine">
+        Email editions: {slots.length ? slots.map(slotLabel).join(", ") : "none"}{" "}
+        <Tip k="digests.slots" /> · next email edition composes at <strong>{nextSlotLabel}</strong>
+      </p>
+
       <h2>
-        Queued for the next digest ({total}) <Tip k="digests.queue" />
+        Queued for the next batch ({total}) <Tip k="digests.queue" />
       </h2>
       {total === 0 && (
         <p>
           Nothing waiting — approved ads that haven&apos;t broadcast yet and queued bumps appear
-          here. (An empty slot sends nothing.)
+          here. (An empty queue sends nothing.)
         </p>
       )}
       {total > 0 && (

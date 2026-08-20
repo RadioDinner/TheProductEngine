@@ -85,7 +85,13 @@ insert into config (key, value) values
   ('sms_replies_per_hour',    '20'),
   ('sms_pics_per_hour',       '12'),
   ('sms_global_per_hour',     '500'),
-  ('digest_daily_segment_budget', '12000'),
+  -- Cost breaker, in segment-equivalents: 1 = one GSM segment, 3 = one
+  -- picture message (session 018 batches broadcast pictures).
+  ('digest_daily_segment_budget', '40000'),
+  -- When a batch goes out: whichever comes first (session 018).
+  ('batch_min_ads',            '3'),
+  ('batch_max_wait_minutes',   '60'),
+  ('photos_in_broadcast',      'true'),
   ('pic_abuse_per_day',        '15'),
   ('pic_daily_allowance',      '3'),
   ('pic_bank_cap',             '20'),

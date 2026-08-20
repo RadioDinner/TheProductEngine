@@ -294,8 +294,9 @@ const ENTRIES = {
   },
   "users.credits": {
     title: "Adjust balance (and why the note is required)",
-    what: "The balance is an append-only ledger in dollars: every grant, purchase, spend, and refund is a line, and the balance is the sum. Adjusting requires a non-zero dollar amount AND a note (\"phone order,\" \"check #204\") — the note is the audit trail.",
+    what: "The balance is an append-only ledger in dollars: every grant, purchase, spend, and refund is a line, and the balance is the sum. Adjusting requires a non-zero dollar amount AND a note (\"phone order,\" \"check #204\") — the note is the audit trail. It is SILENT: the member is never texted or emailed about a balance change made here.",
     why: "Money histories should be append-only (a bug can't silently overwrite a balance, and you can always see exactly what happened) — same session-001 log-everything ethos as the message log. Cash or check payments go through here, deliberately outside Stripe — the session-016 decision: \"they can send a check after a phone conversation.\"",
+    gotchas: "Nothing on this panel messages the member except \"Text them the link\" (a checkout link, which is the whole point of that button) and Add a member (which sends the invite). Billing a saved card, keying a card into checkout yourself, and adjusting the balance are all silent — the member sees the new balance when they reply BAL or open their account page.",
   },
   "users.phoneOrder": {
     title: "Phone order",
@@ -367,10 +368,16 @@ const ENTRIES = {
     why: "Session 016: \"Every new account ships with $150 ad credit.\" At $150 that covers 3 text ads or 2 picture ads; the user's earlier \"3 free ads of any kind\" promise would need $180 (3 × the picture price). First-post-only is the session-005 anti-abuse rule — minted numbers that never post cost nothing.",
   },
   "settings.digestCap": {
-    title: "Max ads per pass",
-    what: "The FIFO cap on how many queued ads ONE pass handles — one text-send run, or one email edition; the overflow rides the next one. Sponsor lines ride OUTSIDE this cap.",
-    why: "From the founding spec (session 001), when it capped a digest's size in SMS segments. Session 016 retired the SMS digest — ads now go out one text per ad, as soon as they're approved — so the cap stopped shaping any single message. It still earns its keep as a throughput bound: it is the most ads one drain can push, so a flood of approvals can't turn into a hundred texts at once, and it is still the literal length control on the email editions.",
-    gotchas: "Not a daily limit and never a reason an ad doesn't send — a capped pass just leaves the rest queued for the next one, minutes later. Set it too low and a busy morning trickles out slowly.",
+    title: "Max ads per batch",
+    what: "The FIFO cap on how many queued ads ONE batch carries — one batch text, or one email edition; the overflow rides the next one. Sponsor lines ride OUTSIDE this cap.",
+    why: "From the founding spec (session 001), when it capped a digest's size in SMS segments. Session 016 briefly made it a pure throughput bound (one text per ad); session 018 brought batching back, so it is once again the literal length control on the message subscribers receive.",
+    gotchas: "Not a daily limit and never a reason an ad doesn't send — a capped batch just leaves the rest queued for the next one. Remember it caps PICTURES too: a batch of 10 picture ads is 10 picture messages to every subscriber.",
+  },
+  "settings.batchTriggers": {
+    title: "When a batch goes out",
+    what: "Two triggers, whichever comes first: enough ads are waiting (the count), or the oldest has waited long enough (the timer). Defaults are 3 ads / 60 minutes. Setting one to 0 turns that trigger off; setting BOTH to 0 falls back to sending whatever is waiting, because a paid ad must never be stranded by a typo here.",
+    why: "The user's session-018 words: \"I'll run the batch every hour, or as soon as I have 3 or 4 ads.\" The count is what makes a busy morning feel live; the timer is what stops a single ad sitting all day waiting for company it never gets.",
+    gotchas: "Both triggers only ever fire inside the send window, so nothing goes out overnight — the overnight queue leaves as one batch when the window opens, because by then the oldest ad has long passed the timer. Approving an ad checks the count trigger immediately, so approving the third ad sends the batch there and then.",
   },
   "settings.maxChars": {
     title: "Max ad length",

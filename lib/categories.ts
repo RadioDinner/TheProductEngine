@@ -91,7 +91,11 @@ export function welcomeMessages(args: {
   const welcome = [
     `Welcome to ${args.siteName}!`,
     "",
-    `Ads post from ${args.windowLabel}.`,
+    // What a subscriber actually receives, in the shape they receive it
+    // (session 018): a batch of ads in ONE text, each numbered, with the
+    // pictures following. Saying this up front is what makes the first batch
+    // read as the service working rather than four texts going wrong.
+    `Ads come in batches - several in one text, each with its own ad number - ${args.windowLabel}.`,
     "",
     args.priceLine,
     ...(args.starterCreditLabel
@@ -104,9 +108,9 @@ export function welcomeMessages(args: {
     "",
     "AD NEW Hay for sale, $5/bale. Call 330-555-0142",
     "",
-    "You can reply PIC and the ad number like (PIC 1022) to receive the pictures for the ad",
+    `When posting an AD you can send up to ${MAX_AD_PHOTOS} pictures. The first one goes out with the batch, marked with your ad number.`,
     "",
-    `When posting an AD you can send up to ${MAX_AD_PHOTOS} pictures, but the first ${MAX_TEXTED_PHOTOS} will be the only ones available via text. You can see the rest on ${args.siteUrl}!`,
+    `See more pictures by replying PIC and the ad number, like PIC 1022 - that sends up to ${MAX_TEXTED_PHOTOS - 1} more. The rest are on ${args.siteUrl}!`,
   ].join("\n");
 
   // Every command named here is honoured by the parser — see the unit suite,

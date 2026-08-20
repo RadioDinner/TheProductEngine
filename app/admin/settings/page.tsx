@@ -55,9 +55,21 @@ const FIELDS: { key: string; label: string; hint?: string; tip: HandbookKey }[] 
   },
   {
     key: "digestCap",
-    label: "Max ads per pass",
-    hint: "how many queued ads one send or email edition handles; the rest ride the next one",
+    label: "Max ads per batch",
+    hint: "how many queued ads one batch text or email edition carries; the rest ride the next one",
     tip: "settings.digestCap",
+  },
+  {
+    key: "batchMinAds",
+    label: "Send a batch once this many ads are waiting",
+    hint: "the count trigger — 3 means a batch goes out as soon as the third ad is approved. 0 turns it off",
+    tip: "settings.batchTriggers",
+  },
+  {
+    key: "batchMaxWaitMinutes",
+    label: "…or once the oldest has waited this long (minutes)",
+    hint: "the timer trigger, so a lone ad never waits all day for company. 0 turns it off",
+    tip: "settings.batchTriggers",
   },
   { key: "maxChars", label: "Max ad length (characters)", tip: "settings.maxChars" },
   {

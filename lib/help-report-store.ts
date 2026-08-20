@@ -42,7 +42,14 @@ export interface NewHelpReport extends HelpDiagnostics {
   phone: string | null;
   memberId: string | null;
   hasEmail: boolean;
+  firstName?: string | null;
+  lastName?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
 }
+
+/** Set once an insert proves the table predates migration 9959. */
+let contactColumnsUnsupported = false;
 
 /** File a report. "unsupported" = migration 9965 pending; the caller still
  * emails, so the operator hears about it either way. */
@@ -61,7 +68,7 @@ export async function addHelpReport(
     save(shape);
     return "saved";
   }
-  const { error } = await db().from("help_reports").insert({
+  const base = {
     note: input.note ?? null,
     phone: input.phone,
     member_id: input.memberId,
@@ -72,7 +79,26 @@ export async function addHelpReport(
     viewport: input.viewport ?? null,
     timezone: input.timezone ?? null,
     last_error: input.lastError ?? null,
-  });
+  };
+  const withContact = {
+    ...base,
+    first_name: input.firstName ?? null,
+    last_name: input.lastName ?? null,
+    contact_phone: input.contactPhone ?? null,
+    contact_email: input.contactEmail ?? null,
+  };
+  const insert = (row: Record<string, unknown>) => db().from("help_reports").insert(row);
+  let { error } = await insert(contactColumnsUnsupported ? base : withContact);
+  // Migration 9959 pending: store the report WITHOUT the contact columns
+  // rather than losing it. The operator still gets the email, which carries
+  // the name and number in full.
+  if (error && (error.code === "42703" || error.code === "PGRST204")) {
+    contactColumnsUnsupported = true;
+    console.error(
+      "[help] help_reports contact columns are missing (paste migration 9959) — filing without them",
+    );
+    ({ error } = await insert(base));
+  }
   if (error) {
     if (error.code === "42P01" || error.code === "PGRST205") return "unsupported";
     throw error;
@@ -89,25 +115,35 @@ export async function listHelpReports(
     const all = load().reports;
     return (openOnly ? all.filter((r) => !r.resolvedAt) : all).slice(0, limit);
   }
-  let q = db()
-    .from("help_reports")
-    .select(
-      "id, note, phone, member_id, has_email, path, referrer, user_agent, viewport, timezone, last_error, resolved_at, resolved_note, created_at",
-    )
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (openOnly) q = q.is("resolved_at", null);
-  const { data, error } = await q;
+  const query = (columns: string) => {
+    const q = db()
+      .from("help_reports")
+      .select(columns)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    return openOnly ? q.is("resolved_at", null) : q;
+  };
+  const CORE =
+    "id, note, phone, member_id, has_email, path, referrer, user_agent, viewport, timezone, last_error, resolved_at, resolved_note, created_at";
+  let { data, error } = await query(
+    `${CORE}, first_name, last_name, contact_phone, contact_email`,
+  );
+  // Migration 9959 pending — read what is there rather than 500 the page.
+  if (error?.code === "42703") ({ data, error } = await query(CORE));
   if (error) {
     if (error.code === "42P01" || error.code === "PGRST205") return "unsupported";
     throw error;
   }
-  return (data ?? []).map((r) => ({
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
     id: r.id as number,
     note: (r.note as string | null) ?? undefined,
     phone: (r.phone as string | null) ?? null,
     memberId: (r.member_id as string | null) ?? null,
     hasEmail: Boolean(r.has_email),
+    firstName: (r.first_name as string | null) ?? null,
+    lastName: (r.last_name as string | null) ?? null,
+    contactPhone: (r.contact_phone as string | null) ?? null,
+    contactEmail: (r.contact_email as string | null) ?? null,
     path: r.path as string,
     referrer: (r.referrer as string | null) ?? undefined,
     userAgent: (r.user_agent as string | null) ?? undefined,

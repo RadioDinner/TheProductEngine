@@ -73,7 +73,12 @@ import {
   removeHostedPhotos,
   storeImageBytes,
 } from "@/lib/photos";
-import { MAX_AD_PHOTOS, MAX_COMBINED_PHOTOS } from "@/lib/photo-collage";
+import {
+  MAX_AD_PHOTOS,
+  MAX_COMBINED_PHOTOS,
+  textedAdPhotos,
+  websiteAdPhotos,
+} from "@/lib/photo-collage";
 import { sniffImage } from "@/lib/image-sniff";
 import { siteUrl } from "@/lib/email";
 import { supabaseConfigured } from "@/lib/db";
@@ -130,11 +135,11 @@ function slotTimeShort(hour: number): string {
 function welcomeMessage(settings: EngineSettings): string {
   // The fallback welcome, used only where the category menu can't be offered.
   // It describes the SEND WINDOW, not settings.slots: since session 016 slots
-  // are the EMAIL edition times, and an SMS member's ads arrive one at a time
-  // as they're approved. Telling them "digests at 7, 12, 4 and 8" would name
-  // hours nothing texts them at.
+  // are the EMAIL edition times, and an SMS member's ads arrive in BATCHES
+  // through the day (session 018). Telling them "digests at 7, 12, 4 and 8"
+  // would name hours nothing texts them at.
   return (
-    `Welcome to ${site.name}! Ads go out as soon as they're approved, ` +
+    `Welcome to ${site.name}! Ads come in batches, several to a text, ` +
     `${hourLabel(settings.smsWindowStartHour)} to ${hourLabel(settings.smsWindowEndHour)} Mon-Sat. ` +
     `To place your own ad, text AD NEW and your ad - for example: ` +
     `AD NEW Hay for sale, $5/bale. Call 330-555-0142. Text HELP for all commands.`
@@ -470,10 +475,10 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
         ? ` (${MAX_AD_PHOTOS} pictures is the most one ad can hold.)`
         : ` (We could only save ${savedPictures} of your ${sentPictures} pictures.)`;
   }
-  // Instant send (session 016): approved ads go out immediately, so the
-  // honest promise is "when it's approved" — with the window spelled out only
-  // when it actually delays them (a 5am sender needs to know; a 2pm sender
-  // does not, and every extra sentence is a billed segment).
+  // Batched send (session 018): an approved ad rides the next batch, so the
+  // honest promise is "when it's approved and it goes out" — with the window
+  // spelled out only when it actually delays them (a 5am sender needs to know;
+  // a 2pm sender does not, and every extra sentence is a billed segment).
   const windowNote = smsWindowOpen(new Date(), settings)
     ? ""
     : ` Ads go out ${hourLabel(settings.smsWindowStartHour)}-${hourLabel(settings.smsWindowEndHour)}, Mon-Sat, so yours will send ${nextSendLabel(new Date(), settings)} at the earliest.`;
@@ -901,7 +906,7 @@ async function route(
       if (account.subscribedAt) {
         return {
           body:
-            `You're already subscribed. Ads come as they're posted, ` +
+            `You're already subscribed. Ads come in batches, several to a text, ` +
             `${hourLabel(settings.smsWindowStartHour)} to ${hourLabel(settings.smsWindowEndHour)} Mon-Sat. ` +
             `Reply STOP to cancel, HELP for help.`,
         };
@@ -995,6 +1000,25 @@ async function route(
         };
       }
       if (!ad.photo) return { body: `Ad #${command.id} has no picture.` };
+      // What PIC sends depends on what the broadcast already sent (session
+      // 018). With picture messages riding the batch, picture 1 is already on
+      // every subscriber's phone — badged with this ad number — so PIC is the
+      // "show me MORE" command and sends up to two extras. With them off, no
+      // picture has gone anywhere and PIC sends the first three, as it always
+      // did. The texted set stops at three either way; the rest are on the
+      // website, which is what the welcome promises.
+      const texted = textedAdPhotos(ad.photo, ad.morePhotos);
+      const wanted = settings.photosInBroadcast ? texted.slice(1) : texted;
+      const onWebsite = websiteAdPhotos([ad.photo, ...(ad.morePhotos ?? [])]).length;
+      if (!wanted.length) {
+        // No pull spent: there is nothing to send, and charging for that would
+        // be the meanest possible reading of the quota.
+        return {
+          body:
+            `Ad #${command.id} has just the one picture and it went out with the ad.` +
+            (onWebsite > texted.length ? ` More at ${site.webHost}.` : ``),
+        };
+      }
       // Daily allowance + rolling bank — the real MMS cost control. Charged only
       // here, once we're actually about to send a photo (past the not-found /
       // no-photo gates), so a mistyped id never burns a pull. ensureAccount so an
@@ -1020,28 +1044,27 @@ async function route(
         if (told > 0) return null;
         return { body: picLimitMessage(settings.picDailyAllowance, settings.picBankCap) };
       }
-      // Pictures are no longer composited (session 016), so PIC sends the
-      // ad's FIRST MAX_COMBINED_PHOTOS pictures as one MMS — that is exactly
-      // what "the first 3 are available by text" promises. Telnyx needs
-      // ABSOLUTE media URLs: re-hosted photos already carry one, but a
-      // site-relative src (fixtures, pre-re-hosting ads) must be prefixed or
-      // the MMS send 400s and the requester hears nothing.
+      // Telnyx needs ABSOLUTE media URLs: re-hosted photos already carry one,
+      // but a site-relative src (fixtures, pre-re-hosting ads) must be
+      // prefixed or the MMS send 400s and the requester hears nothing.
       const absolute = (src: string) => (src.startsWith("http") ? src : `${siteUrl}${src}`);
-      const media = [ad.photo, ...(ad.morePhotos ?? [])]
-        .slice(0, MAX_COMBINED_PHOTOS)
-        .map((p) => absolute(p.src));
+      const media = wanted.map((p) => absolute(p.src));
       const count = media.length;
+      const more = onWebsite > texted.length ? ` See them all at ${site.webHost}.` : ``;
       // Granted, and only here: past the not-found and no-photo gates, with a
       // pull actually spent. Pair the count with the per-MMS cost and this is
       // what pictures cost the service per month.
       afterResponse(() =>
         analytics.picPull({ phone: from, outcome: "granted", pullsLeft: quota.remaining }),
       );
+      // "more" only when picture 1 already went out with the batch — otherwise
+      // these ARE the ad's pictures, not extras.
+      const label = settings.photosInBroadcast ? "more photos" : "photos";
       return {
         body:
           count > 1
-            ? `${count} photos for ad #${command.id} — ${deriveTitle(ad.body)}. See them all at ${site.webHost}:`
-            : `Photo for ad #${command.id} — ${deriveTitle(ad.body)}:`,
+            ? `${count} ${label} for ad #${command.id} - ${deriveTitle(ad.body)}.${more}`
+            : `Photo for ad #${command.id} - ${deriveTitle(ad.body)}.${more}`,
         media,
       };
     }

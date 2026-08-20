@@ -25,12 +25,39 @@ import {
   sanitizeDiagnostics,
   type HelpDiagnostics,
 } from "@/lib/help-reports";
+import {
+  contactLine,
+  contactProblemMessage,
+  parseContactDetails,
+  type ContactProblem,
+} from "@/lib/contact-details";
 import { addHelpReport } from "@/lib/help-report-store";
 
 export interface HelpSubmitState {
   ok?: boolean;
   queued?: boolean;
   error?: string;
+  /** A form problem, with the sentence to show. Distinct from `error`, which
+   * means "we could not file this" — one is the member's to fix, the other
+   * is ours. */
+  problem?: ContactProblem;
+  message?: string;
+}
+
+/** What the panel can fill in for a signed-in member (user request, session
+ * 018: "automatically pull in their phone and or email"). Read from the
+ * SESSION, never from the form — and only when the panel is opened, so a
+ * signed-in member's account isn't fetched on every page render of the site.
+ * The name is not stored on an account, so it is always theirs to type. */
+export async function helpPrefill(): Promise<{ phone: string; email: string }> {
+  const session = await readSession();
+  if (!session) return { phone: "", email: "" };
+  try {
+    const account = await getAccount(session.phone);
+    return { phone: formatPhone(session.phone), email: account?.email ?? "" };
+  } catch {
+    return { phone: formatPhone(session.phone), email: "" };
+  }
 }
 
 const esc = (s: string) =>
@@ -40,6 +67,19 @@ export async function submitHelpReport(
   _prev: HelpSubmitState | null,
   formData: FormData,
 ): Promise<HelpSubmitState> {
+  // Who they are and how to reach them — REQUIRED since session 018 (user
+  // decision). The note above this stays optional: the diagnostics say what
+  // broke, and this says who to call about it.
+  const contact = parseContactDetails({
+    firstName: stripEmoji(String(formData.get("firstName") ?? "")),
+    lastName: stripEmoji(String(formData.get("lastName") ?? "")),
+    phone: String(formData.get("contactPhone") ?? ""),
+    email: String(formData.get("contactEmail") ?? ""),
+  });
+  if (!contact.ok) {
+    return { problem: contact.problem, message: contactProblemMessage(contact.problem) };
+  }
+  const who = contact.details;
   const raw: Partial<HelpDiagnostics> = {
     path: String(formData.get("path") ?? "/"),
     referrer: String(formData.get("referrer") ?? ""),
@@ -74,7 +114,17 @@ export async function submitHelpReport(
   // migration 9965 isn't pasted — the email below still goes.
   let queued = false;
   try {
-    queued = (await addHelpReport({ ...diag, phone, memberId, hasEmail })) === "saved";
+    queued =
+      (await addHelpReport({
+        ...diag,
+        phone,
+        memberId,
+        hasEmail,
+        firstName: who.firstName,
+        lastName: who.lastName,
+        contactPhone: who.phone,
+        contactEmail: who.email,
+      })) === "saved";
   } catch (e) {
     console.error("[help] could not queue report:", e);
   }
@@ -83,6 +133,8 @@ export async function submitHelpReport(
   if (to) {
     const lines = [
       `Someone pressed "I need help!" on the website.`,
+      ``,
+      `Get back to them: ${contactLine(who)}`,
       ``,
       `Page: ${diag.path}`,
       diag.referrer ? `Came from: ${diag.referrer}` : null,
@@ -105,6 +157,7 @@ export async function submitHelpReport(
     ].filter((l) => l !== null);
     const html = `<div style="max-width:600px;font-family:'Segoe UI',Arial,sans-serif;color:#20262b;">
       <p style="font-size:16px;"><strong>Someone pressed &ldquo;I need help!&rdquo;</strong></p>
+      <p style="font-size:15px;">Get back to them: <strong>${esc(contactLine(who))}</strong></p>
       <p style="font-size:14px;">Page: <strong>${esc(diag.path)}</strong><br/>
       ${phone ? `Signed in as: ${esc(formatPhone(phone))}` : "Signed in: no"}${
         memberId ? `<br/>Member id: ${esc(memberId)}` : ""
@@ -130,7 +183,12 @@ export async function submitHelpReport(
       await dispatchEmail(
         {
           to,
-          subject: `${site.name}: ${reportSummary({ path: diag.path, phone, note: diag.note })}`,
+          subject: `${site.name}: ${reportSummary({
+            path: diag.path,
+            phone,
+            note: diag.note,
+            name: `${who.firstName} ${who.lastName}`,
+          })}`,
           html,
           text: lines.join("\n"),
         },
