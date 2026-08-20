@@ -224,23 +224,69 @@ wrong in exactly the place it matters most.
 
 ## 9. Register the custom definitions
 
-**Admin → Data display → Custom definitions.** Create each one from
-`02-measurement-plan.md`, matching the parameter names exactly — they are
-case-sensitive and cannot be renamed later without breaking historical data.
+**Admin → Data display → Custom definitions.** Verified against the parameters
+the code actually sends — the names are case-sensitive and **cannot be renamed
+later without breaking historical data**.
 
-Event-scoped dimensions: `channel`, `listing_category`, `command`, `reason`,
-`method`, `outcome`, `payment_channel`.
+> **The dropdown only lists parameters GA has already seen.** A newly wired
+> event will not be in it. Type the name and GA offers it as a custom entry —
+> that works, and it is the normal way to do this.
+>
+> **"Dimension name" is only the report label. "Event parameter" must match the
+> code exactly.**
 
-User-scoped dimensions: `member_status`, `signup_channel`, `line_type`,
-`has_saved_card`.
+### Event-scoped dimensions
 
-Custom metrics (set the unit — `wait_minutes` is *minutes*, `days_to_sell` is
-*standard*, not currency): `photo_count`, `segments`, `recipients`,
-`wait_minutes`, `days_to_sell`, `reveals_left`, `duration_seconds`.
+| Dimension name | Event parameter | Description |
+| --- | --- | --- |
+| Channel | `channel` | sms, web, email or voice |
+| Listing category | `listing_category` | The ad's category |
+| SMS command | `command` | What was texted — `unknown` is the valuable one |
+| Reason | `reason` | Why something was blocked, rejected or refunded |
+| Outcome | `outcome` | granted / out_of_pulls / charged / declined / answered |
+| Payment channel | `payment_channel` | web, phone, auto_topup or admin |
+| Click text | `click_text` | The words on the thing that was clicked |
+| Click section | `click_section` | Which part of the page it was in |
+| Click target | `click_href` | Where it went |
+| Has photo | `has_photo` | Whether the ad carries a picture |
+| Has media | `has_media` | Whether an inbound text carried pictures |
+| Is MMS | `is_mms` | Whether a broadcast went as MMS |
+| Contact type | `contact_type` | question or idea |
+| Message class | `message_class` | Which SMS class a suppressed reply was |
+| Menu choice | `menu_choice` | What the caller pressed |
 
-> Registering a dimension is **not** retroactive. It reports from the day it is
-> created. Do this before the events start flowing, not after you go looking for
-> one.
+### User-scoped dimensions
+
+| Dimension name | Parameter | Description |
+| --- | --- | --- |
+| Member status | `member_status` | subscriber, seller or business |
+| Signup channel | `signup_channel` | How the member first arrived |
+| Has saved card | `has_saved_card` | Strongest predictor of a second purchase |
+
+### Custom metrics (mind the unit)
+
+| Metric name | Parameter | Unit |
+| --- | --- | --- |
+| Photo count | `photo_count` | Standard |
+| Segments | `segments` | Standard |
+| Recipients | `recipients` | Standard |
+| Review wait | `wait_minutes` | **Minutes** |
+| Days to sell | `days_to_sell` | Standard |
+| Reveals left | `reveals_left` | Standard |
+| Picture pulls left | `pulls_left` | Standard |
+| Call duration | `duration_seconds` | **Seconds** |
+| Search results | `results_count` | Standard |
+| Listings in edition | `listing_count` | Standard |
+
+### Do NOT create these
+
+`search_term`, `method`, `value`, `currency`, `transaction_id`, `item_id`,
+`item_category`, `item_list_name`, and anything `page_*`. GA4 already has them
+as built-in dimensions. A custom one would sit beside the real one reporting
+the same data, and nobody would ever be sure which they were reading.
+
+> Registering a dimension is **not retroactive** — it reports from the day it
+> is created. Every day of delay is a day that cannot be broken down later.
 
 ---
 
