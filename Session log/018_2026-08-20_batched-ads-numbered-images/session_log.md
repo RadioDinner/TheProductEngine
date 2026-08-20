@@ -189,6 +189,31 @@ one-look confirmation if there is ever doubt.
   now include picture cost. Fine, but the number changed meaning; worth a note
   if anyone charts it across the session-018 boundary.
 
+## Asked but not decided — unused balances and "what is my income"
+
+The user asked, late in the session, whether the policy forfeits an unused
+balance after some period ("$50 on the account, no ad ever posted"), and how
+to measure ACTUAL income when fifty prepayments that never become ads are
+$2,500 collected and nothing earned.
+
+**Checked, and reported to them: the policy says the opposite today.** Both
+`/refund-policy` and the terms carry "Ad credit has no cash value, doesn't
+expire, and can't be transferred; refunds of money you added are at our
+discretion, except where the law says otherwise." There is no forfeiture or
+dormancy language anywhere; every refund rule is about one ad's charge.
+
+Nothing was changed. The notes toward an answer are in HANDOFF.md under the
+session-018 heading — the short of it: expiring GRANTED credit is safe and
+expiring a member's own money is not (state gift-card and unclaimed-funds law,
+plus the reputational arithmetic of a $50 clause in a word-of-mouth
+community); a dormancy NUDGE converts dead balances instead of confiscating
+them; and the income question is really deferred-revenue accounting, which the
+ledger can already answer with a report that separates cash collected from
+revenue earned from the balance still owed. Two data gaps would need fixing
+first: Insights' "Money added" ignores `adjustment`, so checks and cash are
+invisible in it, and `adjustment` covers both real payments and courtesy
+credits.
+
 ## Verified
 
 tsc clean · build clean · unit **1033 → 1153** (new suites `batch` 82,

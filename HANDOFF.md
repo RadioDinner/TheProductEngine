@@ -3,14 +3,19 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-20 (session 018 — batched ads, v1.1.7, ON A BRANCH).
+**Last updated:** 2026-08-20 (session 018 — batched ads, v1.1.7; all on main
+except one docs commit awaiting the user's word).
 
 ## Session 018 (2026-08-20) — BATCHED ADS with the number burned into the picture
 
 **Version 1.1.6 → 1.1.7** (§6: three features, so the far-right digit moves).
 
-⚠️ **ON THE BRANCH `claude/batched-ads-numbered-images-aupcvh`, NOT main** —
-the user said "wait to commit to main until I tell you". Pushed and waiting.
+**Git state at handoff.** The user merges on their own command this session
+("wait to commit to main until I say so"). As of writing, `main` carries every
+code change (through `57362ae`) and is deployed; the branch
+`claude/batched-ads-numbered-images-aupcvh` is one DOCS-ONLY commit ahead
+(`656208f` — recording that the migrations were pasted, plus this handoff).
+Fast-forward main onto that branch when told; there is no code in it.
 
 **SMS is a digest again.** Session 016's one-text-per-ad instant send is
 retired. A batch is ONE text listing several ads, each headed by its AD NUMBER
@@ -77,6 +82,50 @@ non-calendar key. Pinned by a regression test.
 - **Adjusting a balance was ALREADY silent** (the user asked). Nothing on
   /admin/users texts the member except "Text them the link" and the Add-a-
   member invite. The page and the handbook now say so.
+
+### ⚠️ OPEN QUESTION THE USER RAISED — unused balances, and what income IS
+
+Asked near the end of the session and NOT yet decided. Worth picking up first
+next session, because the answer shapes both a policy page and a report.
+
+**Their question, in two parts:** does the policy say anything about
+forfeiting an unused balance after N days ("someone puts $50 on, never posts
+an ad") — and how do they measure ACTUAL income, since fifty people prepaying
+$50 and never posting is $2,500 collected but nothing earned.
+
+**What the policy says today** (checked, both pages): nothing about
+forfeiture, and the opposite is published in two places —
+`/refund-policy` and the terms both read *"Ad credit has no cash value,
+**doesn't expire**, and can't be transferred; refunds of money you added are
+at our discretion, except where the law says otherwise."* Every refund rule
+that exists is about one ad's charge (declined → back to balance, ran →
+spent), never about the balance itself.
+
+**Notes toward an answer, none of it acted on:**
+- Retracting "doesn't expire" for money already taken is the shakiest version
+  of this, legally and reputationally — in a community that runs on word of
+  mouth, a forfeiture clause on a neighbour's $50 is an expensive way to save
+  $50. Prepaid balances also touch state gift-card and unclaimed-funds law
+  (Ohio has both); a real forfeiture rule wants an Ohio attorney or CPA
+  first, not a code change.
+- The safe version of the same idea: expire GRANTED credit (the starter
+  credit — never the member's money) rather than purchased balance, and add a
+  **dormancy nudge** — after N days, text "you still have $50 on your account"
+  — which turns a dead balance into either an ad or a clean refund.
+- The accounting answer is separate from the policy answer, and is the part
+  that actually answers "what is my income": money in is a LIABILITY until an
+  ad runs. Cash collected ≠ revenue earned. The ledger already has the
+  material (`purchase` / `grant` / `spend` / `refund` / `adjustment` kinds) —
+  what is missing is a report that separates:
+  **cash collected** (purchases + check/cash adjustments) · **revenue earned**
+  (spends − refunds) · **unearned balance still owed**, split cash-backed vs
+  granted · **granted credit issued** (a marketing cost, never revenue).
+  ⚠️ Two data gaps to fix if that report is built: Insights' "Money added"
+  counts only `purchase`, so **checks and cash entered through Adjust balance
+  are invisible in it today**, and `adjustment` is used for both real payments
+  and courtesy credits, so the two need distinguishing before cash-collected
+  can be computed honestly. Spending grants before cash is the fair default
+  ordering, and it keeps the refundable liability as small as it truly is.
 
 Verified: tsc + build clean, unit 1033 → **1153** (new suites `batch` 82,
 `contact-details` 38), abuse unchanged (the two 🔴 are the annotated notes).
