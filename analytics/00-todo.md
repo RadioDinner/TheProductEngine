@@ -158,9 +158,9 @@ Verified on the rebased branch: tsc clean, build clean, suite **1156/1156**
 
 ### 🟡 Worth doing
 
-- [ ] **Turn Enhanced Measurement's Site search OFF.** The custom `search`
-      event has shipped, so both now fire on every homepage search. Two numbers
-      for one thing.
+- [x] **Enhanced Measurement Site search turned OFF 2026-08-20** — the custom
+      `search` event carries `results_count`, which the automatic one cannot
+      know, and running both meant two numbers for one thing.
 - [ ] **Reconcile the catalogue.** `chat_message_sent` and `categories_changed`
       are listed but never emitted; `listing_expired` is deliberately skipped.
       Wire them or mark them planned in `events.ts`.
