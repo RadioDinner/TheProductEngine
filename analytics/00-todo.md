@@ -67,10 +67,9 @@ User-scoped:
 
 - [ ] `member_status`, `signup_channel`, `line_type`, `has_saved_card`
 
-Metrics (mind the unit — `wait_minutes` is minutes, `days_to_sell` is standard):
-
-- [ ] `photo_count`, `segments`, `recipients`, `wait_minutes`, `days_to_sell`,
-      `reveals_left`, `duration_seconds`
+Metrics — ✅ **DONE 2026-08-20** (`photo_count`, `segments`, `recipients`,
+`wait_minutes`, `days_to_sell`, `reveals_left`, `pulls_left`,
+`duration_seconds`, `results_count`, `listing_count`)
 
 ### 🧑 Mark the key events
 
