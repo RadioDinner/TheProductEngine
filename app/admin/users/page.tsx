@@ -26,6 +26,7 @@ import {
 } from "@/lib/store";
 import { listAdsByOwner } from "@/lib/ads";
 import { formatPhone, normalizePhone } from "@/lib/phone";
+import { moneyPosition } from "@/lib/money";
 import { TOP_UP_PRESETS_CENTS, formatPrice, site } from "@/lib/config";
 import { paymentsDevMode, resolveStripeCustomer, savedCardOnFile } from "@/lib/payments";
 import { getEngineSettings } from "@/lib/settings";
@@ -55,6 +56,7 @@ export default async function AdminUsers({
     error?: string;
     detail?: string;
     reason?: string;
+    max?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -67,6 +69,11 @@ export default async function AdminUsers({
   // member is selected — all three mean "show the archive button, not the
   // restore one", which is the safe direction.
   const archivedAt = phone ? await getArchivedAt(phone) : null;
+  // The ledger is read ONCE and the split derived from it, so the balance, the
+  // refundable figure and the money history below can never disagree — they
+  // are three views of the same rows (session 019, lib/money.ts).
+  const ledger = phone ? await getLedger(phone) : [];
+  const position = moneyPosition(ledger);
   // Phone-order panel: is a card on file? (best-effort; display only). A card
   // saved through the pay-by-phone line lives on a Stripe customer this
   // account hasn't stored yet — resolveStripeCustomer adopts it right here,
@@ -184,6 +191,15 @@ export default async function AdminUsers({
           {params.error === "grant" && (
             <p className="form-error" role="alert">
               A non-zero amount and a note are both required.
+            </p>
+          )}
+          {params.error === "payout" && (
+            <p className="form-error" role="alert">
+              <strong>Nothing was paid out.</strong> That is more than this member has
+              ever put in. At most{" "}
+              <strong>{formatPrice(Number(params.max ?? 0))}</strong> can go back to their
+              card — the rest of their balance is ad credit we gave them, which has no cash
+              value and is never refundable. <Tip k="users.refundable" />
             </p>
           )}
           {params.saved === "bill" && params.detail && (
@@ -336,7 +352,21 @@ export default async function AdminUsers({
             )}
             <div>
               <dt>Ad-credit balance</dt>
-              <dd>{formatPrice(await getCreditBalance(phone))}</dd>
+              <dd>{formatPrice(position.balanceCents)}</dd>
+            </div>
+            <div>
+              <dt>
+                Refundable <Tip k="users.refundable" />
+              </dt>
+              <dd>
+                {formatPrice(position.cashRemainingCents)}
+                {position.grantRemainingCents > 0 && (
+                  <span className="status-muted">
+                    {" "}
+                    · {formatPrice(position.grantRemainingCents)} is credit we gave
+                  </span>
+                )}
+              </dd>
             </div>
             <div>
               <dt>
@@ -360,6 +390,11 @@ export default async function AdminUsers({
           <form action={adminGrantCredits} className="review-form">
             <input type="hidden" name="phone" value={phone} />
             <div className="inline-fields">
+              <select name="kind" aria-label="What kind of adjustment" className="admin-select">
+                <option value="payment">Payment received (check, cash, phone)</option>
+                <option value="courtesy">Courtesy credit / make-good</option>
+                <option value="payout">Money sent back to them</option>
+              </select>
               <input
                 name="delta"
                 type="number"
@@ -376,9 +411,13 @@ export default async function AdminUsers({
           </form>
           <p className="fine">
             Dollars, decimals allowed — this is how a mailed check or cash payment lands on
-            the account. <strong>Silent:</strong> nothing is texted or emailed to the member.
-            The only buttons on this page that message them are &ldquo;Text them the
-            link&rdquo; below and the invite on Add a member.
+            the account. <strong>Say which kind it is</strong> <Tip k="users.adjustKind" />:
+            a payment is their money and stays refundable, a courtesy credit never is, and
+            money sent back is capped at the{" "}
+            <strong>{formatPrice(position.cashRemainingCents)}</strong> refundable above.
+            Use a negative amount for a payout. <strong>Silent:</strong> nothing is texted
+            or emailed to the member. The only buttons on this page that message them are
+            &ldquo;Text them the link&rdquo; below and the invite on Add a member.
           </p>
 
           <h3 className="subsection-h">
@@ -599,7 +638,7 @@ export default async function AdminUsers({
               </tr>
             </thead>
             <tbody>
-              {(await getLedger(phone)).map((entry, i) => (
+              {ledger.map((entry, i) => (
                 <tr key={i}>
                   <td className="nowrap">{shortDate(entry.at)}</td>
                   <td>{entry.note}</td>

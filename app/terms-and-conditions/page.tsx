@@ -103,7 +103,14 @@ export default async function TermsAndConditions() {
         Ad credit has no cash value, doesn&rsquo;t expire, and can&rsquo;t be transferred
         or redeemed for money. Refunds of money you added are at our discretion, except
         where the law says otherwise; charges for declined-for-ordinary-reasons ads are
-        returned as described above.
+        returned as described above. When we do send unused money back to your card we
+        return it <strong>minus the card processing fee (about 5%)</strong>, which our
+        card processor keeps whether or not a payment is refunded — never when the fault
+        is ours. <strong>Free credit we gave you</strong> — welcome credit, invitation
+        credit, or credit added to make something right —{" "}
+        <strong>is not money and is never refundable</strong>; posting an ad spends that
+        free credit before it spends anything you paid. Full detail on the{" "}
+        <Link href="/refund-policy">refund policy</Link> page.
       </p>
 
       <h2>Buying and selling</h2>

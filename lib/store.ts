@@ -236,7 +236,26 @@ export type MergeOutcome =
 
 export const OFFENSE_BAN_THRESHOLD = 3;
 
-export type LedgerKind = "grant" | "purchase" | "spend" | "refund" | "adjustment";
+/**
+ * What a ledger row IS. The last three arrived with migration 9957, which
+ * split the old catch-all `adjustment` — see lib/money.ts for why it matters:
+ *
+ *   grant / courtesy   credit given away. NEVER refundable as cash.
+ *   purchase / payment real money in (Stripe / a cheque or cash). Refundable.
+ *   spend              an ad charge.
+ *   refund             credit returned to the BALANCE when an ad didn't run.
+ *   payout             money actually sent back out to a card.
+ *   adjustment         the pre-9957 catch-all, kept for history.
+ */
+export type LedgerKind =
+  | "grant"
+  | "purchase"
+  | "spend"
+  | "refund"
+  | "adjustment"
+  | "payment"
+  | "courtesy"
+  | "payout";
 
 /** Credits are an append-only ledger; the balance is the sum of deltas. */
 export interface LedgerEntry {

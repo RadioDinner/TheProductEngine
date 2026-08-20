@@ -70,6 +70,23 @@ export default async function RefundPolicy() {
         transferred; refunds of money you added are at our discretion, except where the
         law says otherwise.
       </p>
+      <p>
+        If we send unused money back to your card, we return it{" "}
+        <strong>minus the card processing fee (about 5%)</strong>. That fee was charged
+        when your payment came in and our card processor keeps it whether or not the
+        payment is later refunded, so it is a cost we have already paid rather than a
+        charge for asking. <strong>There is no fee when the fault is ours</strong> — a
+        double charge, an ad we pulled, an outage, or anything else we got wrong is
+        returned in full.
+      </p>
+      <p>
+        <strong>Free ad credit is not money and is never refundable.</strong> Welcome
+        credit, credit that comes with an invitation, and any credit we add to make
+        something right are ours to give, not cash you paid us. If your balance is part
+        money and part free credit, only the part you actually paid can come back — and
+        when you post an ad we spend your free credit first, so your own money stays
+        yours for as long as it honestly can.
+      </p>
 
       <h2>What has no charge to refund</h2>
       <p>

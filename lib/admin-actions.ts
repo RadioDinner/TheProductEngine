@@ -10,7 +10,9 @@ import {
   ensureAccount,
   getAccount,
   getCreditBalance,
+  getLedger,
   hasLedgerRef,
+  type LedgerKind,
   listSubscribersWithCategories,
   mergeAccounts,
   resolveChatReport,
@@ -71,6 +73,7 @@ import {
 import { removeHostedPhotos, storeImageBytes } from "@/lib/photos";
 import { sniffImage, CONTENT_TYPE_BY_EXT } from "@/lib/image-sniff";
 import { supabaseConfigured } from "@/lib/db";
+import { refundableCents } from "@/lib/money";
 import { stripEmoji } from "@/lib/content-filter";
 import { normalizePhone } from "@/lib/phone";
 import { type LineType } from "@/lib/number-lookup";
@@ -419,11 +422,25 @@ export async function adminTextCheckoutLink(formData: FormData): Promise<void> {
   redirect(`/admin/users?phone=${out.phone}&saved=phoneorder_link`);
 }
 
+/**
+ * Move a member's balance by hand: a cheque arrived, a phone order, a
+ * make-good, or money going back out to their card.
+ *
+ * Since session 019 the form must say WHICH of those it is, because the four
+ * are not interchangeable (lib/money.ts): a payment is refundable cash, a
+ * courtesy credit never is, and a payout is money leaving. Writing them all as
+ * `adjustment` is what made "how much may I refund this person?" unanswerable.
+ *
+ * The guard that matters: **a payout can never exceed the member's refundable
+ * cash.** That is the user's session-019 ask — someone who adds $20, collects
+ * the $40 starter credit and asks for their money back gets $20, not $60, and
+ * the page refuses rather than relying on the operator to notice.
+ */
 export async function adminGrantCredits(formData: FormData): Promise<void> {
   await requireAdmin();
   const phone = normalizePhone(String(formData.get("phone") ?? ""));
   // The form takes DOLLARS (checks, cash, make-goods); the ledger stores
-  // cents. Clamp to ±$5,000 so a fat-fingered grant can't mint a fortune.
+  // cents. Clamp to ±$5,000 so a fat-fingered entry can't mint a fortune.
   const dollars = Number(String(formData.get("delta") ?? "").trim());
   const deltaCents = Math.round(dollars * 100);
   const note = String(formData.get("note") ?? "").trim();
@@ -436,8 +453,33 @@ export async function adminGrantCredits(formData: FormData): Promise<void> {
   ) {
     redirect(`/admin/users?phone=${phone}&error=grant`);
   }
-  await addLedgerEntry(phone, { delta: deltaCents, kind: "adjustment", note });
+
+  const kind = ledgerKindFor(String(formData.get("kind") ?? ""), deltaCents);
+
+  if (kind === "payout") {
+    // Read the ledger fresh here rather than trusting anything the form
+    // carried: this is the money-out check, so it reads the same source the
+    // member's own balance does.
+    const refundable = refundableCents(await getLedger(phone));
+    if (-deltaCents > refundable) {
+      redirect(
+        `/admin/users?phone=${phone}&error=payout&max=${refundable}`,
+      );
+    }
+  }
+
+  await addLedgerEntry(phone, { delta: deltaCents, kind, note });
   redirect(`/admin/users?phone=${phone}&saved=grant`);
+}
+
+/** Which ledger kind the Adjust-balance form asked for. Anything unrecognised
+ * falls back to the legacy `adjustment`, which lib/money.ts treats
+ * conservatively — an unclassified row can never fund a refund. */
+function ledgerKindFor(raw: string, deltaCents: number): LedgerKind {
+  if (deltaCents < 0) return raw === "payout" ? "payout" : "adjustment";
+  if (raw === "payment") return "payment";
+  if (raw === "courtesy") return "courtesy";
+  return "adjustment";
 }
 
 /** Merge another identity (a phone account, or an email signup) into the
