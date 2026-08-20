@@ -52,6 +52,8 @@ itself; build details live in the session logs and HANDOFF.md.
 | 42 | **Announce-or-silent pause** — when turning a pause ON, choose whether subscribers are told. Silent is the default; the broadcast is opt-in | session 016 | **built** (no migration) |
 | 43 | **Paced release** — when more than N ads are waiting, spread them out with a RANDOM gap (12–18 min default) instead of firing the whole backlog at once; threshold and gap range are settings | session 016 | **built** (⚠️ migration 9963) |
 | 44 | **Archive + restore a member** — the reversible counterpart to delete: set someone aside (off the website, out of the lists, no ads going out) without destroying anything, and put them back exactly as they were | session 016 | **built** (⚠️ migration 9964) |
+| 45 | **Batched ads with numbered pictures** — ads go out in BATCHES again (a competitor's shape, the user's numbering): ONE text listing several ads, each headed by its AD NUMBER (1022, not 1), then ONE picture message per picture ad with the ad number burned into the picture's bottom-right corner. Only the first picture ever goes out; `PIC 1024` pulls up to two more; the rest live on the website. The batch fires as soon as 3 ads are waiting or the oldest has waited an hour, whichever comes first (both settings) | session 018 | **built** (⚠️ migration 9960) |
+| 46 | **Required contact on the feedback forms** — the problem report ("I need help!") and the feature-suggestion form both require a first and last name plus a phone OR an email (each optional on its own, one of the two required); a signed-in member gets the contact fields filled in automatically. The suggestion form is the renamed "Suggest an idea" (item 27) | session 018 | **built** (⚠️ migration 9959) |
 
 ## Item notes (decisions made while building — flag anything to change)
 
@@ -502,3 +504,26 @@ itself; build details live in the session logs and HANDOFF.md.
   person and changes nothing they own — no refund, no text, ledger untouched,
   their money still theirs. Delete (the purge tool) is for your own test data
   and cannot be walked back. The user page and the handbook both say so.
+
+- **45 · Why the number is IN the picture.** A picture arriving as its own
+  message says nothing about which of the four ads above it belongs to. The
+  badge is the only thing tying photo to line — and to `PIC 1024`, which is
+  how a buyer asks for more. It is drawn as vector PATHS, not `<text>`:
+  librsvg needs a font fontconfig can find, the serverless runtime ships
+  none, and a `<text>` badge renders BLANK there while looking perfect on any
+  developer machine. Do not "simplify" it back.
+  One picture per ad, never the set: a three-picture ad would otherwise cost
+  three MMS to every subscriber. The cost breaker counts a picture as 3
+  segment-equivalents and its ceiling rose from 12,000 to 40,000 to match —
+  at the old number it would have halted sending most days.
+  Batching also RESTORED the admin re-run (bumps ride a batch again) and
+  fixed a latent production bug: session 016's per-ad slot key `ad#1022` was
+  squeezed into a timestamp column as `adT1022:00:00Z`, which Postgres
+  rejects, so every instant-send compose threw in prod while the dev file
+  store was perfectly happy. Batches carry a real `slot_key`.
+- **46 · The problem report kept its optional NOTE.** That was the whole
+  point of item 39 — a stuck member usually cannot describe what went wrong,
+  and the diagnostics describe it for them. What changed is the REPLY: a
+  report nobody can answer is a mystery instead of a person to call back. The
+  same rules now cover the question form on /contact, which previously
+  accepted a signed-in session in place of typed contact details.

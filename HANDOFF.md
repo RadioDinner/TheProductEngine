@@ -3,7 +3,74 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-20 (session 017 — analytics live, v1.1.6).
+**Last updated:** 2026-08-20 (session 018 — batched ads, v1.1.7, ON A BRANCH).
+
+## Session 018 (2026-08-20) — BATCHED ADS with the number burned into the picture
+
+**Version 1.1.6 → 1.1.7** (§6: two features, so the far-right digit moves).
+
+⚠️ **ON THE BRANCH `claude/batched-ads-numbered-images-aupcvh`, NOT main** —
+the user said "wait to commit to main until I tell you". Pushed and waiting.
+
+**SMS is a digest again.** Session 016's one-text-per-ad instant send is
+retired. A batch is ONE text listing several ads, each headed by its AD NUMBER
+(`1022) Gazebo for sale…`), then ONE picture message per picture ad with
+`AD 1022` burned into the picture's bottom-right corner. Only the FIRST
+picture ever broadcasts; `PIC 1024` pulls up to two more; the rest are on the
+website. Triggers: 3 ads waiting OR the oldest having waited 60 minutes,
+whichever first, both settings, both only inside the send window. One batch
+per pass, so a backlog trickles out as successive batches.
+
+**⚠️ TWO MIGRATIONS TO PASTE: `9960_batched_ads.sql` and
+`9959_help_report_contact.sql`.** Both degrade safely; `/api/health` →
+`migration9960`, `migration9959`.
+
+### ⚠️ A LATENT PRODUCTION BUG, found and fixed here
+
+`digests` has no slot-key column — the identity was squeezed into
+`scheduled_for`. Session 016's per-ad key `ad#1022` therefore became
+`adT1022:00:00Z`, which **Postgres rejects**: every instant-send compose threw
+in prod while working perfectly in dev (the file store keys on the raw
+string). Unnoticed because ads are paused for the pre-launch hold. Fixed with
+a real `digests.slot_key` (9960) plus a valid synthetic fallback for any
+non-calendar key. Pinned by a regression test.
+
+### Things to know before touching this
+
+- **`lib/ad-badge.ts` draws every glyph as a vector PATH, deliberately.**
+  sharp renders SVG via librsvg; `<text>` needs a font fontconfig can find and
+  the serverless runtime ships none — a `<text>` badge renders BLANK there
+  while looking perfect locally. The unit suite renders one for real and
+  probes pixels. Do not "simplify" it.
+- **A picture costs 3 segment-equivalents** against
+  `digestDailySegmentBudget`, which rose 12,000 → 40,000 to match. At the old
+  ceiling the breaker would have halted sending most days. Watch this number
+  as the list grows; it is what a busy day costs.
+- **Paced release is now largely dormant** (it paces digests, and batching
+  means there is rarely more than one undelivered). Batching IS the burst
+  control now.
+- **Admin re-runs work again** — bumps ride batches, which per-ad editions
+  never picked up.
+- Public copy swept to match: welcome sequence, FAQ, how-it-works, /sms
+  program terms, T&Cs frequency disclosure, footer, the approval text.
+
+### Also shipped (user asks, same session)
+
+- **Problem report + feature suggestion now require a name and a way back**
+  (first, last, and phone OR email — each optional alone). Shared pure rules
+  in `lib/contact-details.ts`; signed-in members get the contact fields
+  prefilled (fetched when the panel OPENS, and only into empty fields).
+  "Suggest an idea" is renamed **Suggest a feature**; the question tab shares
+  the rules. The problem report's NOTE stays optional — that was always the
+  point of item 39.
+- **Adjusting a balance was ALREADY silent** (the user asked). Nothing on
+  /admin/users texts the member except "Text them the link" and the Add-a-
+  member invite. The page and the handbook now say so.
+
+Verified: tsc + build clean, unit 1033 → **1148** (new suites `batch` 82,
+`contact-details` 33), abuse unchanged (the two 🔴 are the annotated notes).
+
+Full detail: `Session log/018_2026-08-20_batched-ads-numbered-images/session_log.md`.
 
 ## Session 017 (2026-08-20) — Google Analytics, end to end and LIVE
 
