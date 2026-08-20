@@ -891,21 +891,24 @@ async function route(
       return welcomeFor(from, settings);
     }
     case "help":
-      return {
-        body:
-          // "Up to 4 digests/day" until session 016, when ads stopped being
-          // batched. It now describes the SEND WINDOW, which is the honest
-          // version of the same promise: the hours we will and won't text
-          // you. See docs/ — the registered 10DLC campaign wording needs to
-          // match this, and describing a cadence we no longer send is exactly
-          // what carrier audits look for.
-          `${site.name} classifieds by text. Ads sent ` +
-          `${hourLabel(settings.smsWindowStartHour)}-${hourLabel(settings.smsWindowEndHour)} Mon-Sat. ` +
-          `Msg&data rates may apply. ` +
-          `Cmds: SUBSCRIBE for ads. AD NEW your ad to post. PIC 1234 for a picture. ` +
-          `SOLD/STATUS/MY ADS/BAL. Reply STOP to cancel. ` +
-          `Help: call ${site.supportPhone} or ThePlainExchange.com/sms`,
-      };
+      // ⚠️ HELP IS ANSWERED BY THE CARRIER, NOT BY US (user decision,
+      // session 017). The Telnyx messaging profile's keyword auto-response
+      // replies to HELP; this app used to reply as well, so every member who
+      // texted HELP got TWO messages and paid for two.
+      //
+      // The operational consequence, and it is not small: **that Telnyx
+      // auto-response is now the only HELP answer this service gives, and
+      // carriers require one.** If it is ever cleared — profile rebuilt,
+      // number moved, settings reset — HELP goes unanswered and the 10DLC
+      // posture breaks, with nothing in this codebase to notice. It is not
+      // visible from here, it is not in version control, and no test can
+      // reach it. Check it whenever the messaging profile is touched.
+      //
+      // The text it must carry, per CTIA: the program name, that message and
+      // data rates may apply, how to stop, and how to reach a human. The
+      // reply that used to live here is in this file's history if the wording
+      // is ever wanted back.
+      return null;
     case "ad":
       return handleAdSubmission(from, command.body, msg.media);
     case "pic": {
@@ -1218,6 +1221,13 @@ export async function handleInbound(msg: InboundSms, providerId?: string): Promi
       if (recentStop > 0) return null;
       return sendReply(msg.from, reply, settings);
     }
+
+    // HELP is answered by the carrier's keyword auto-response now, not by us
+    // (see the "help" case in route()). Returning here rather than routing
+    // means it does not spend the member's hourly reply allowance either — a
+    // command we send nothing for must not be able to use up the budget that a
+    // real command needs.
+    if (command.kind === "help") return null;
 
     // Reserve a send slot atomically BEFORE routing, so an over-cap command is
     // dropped whole — never charged with its confirmation silently suppressed.

@@ -251,9 +251,9 @@ async function scAdversarialBodies() {
 async function scGlobalBreaker() {
   reset();
   // 600 distinct numbers each send 1 command in the same hour -> global 500/hr cap
-  for (let i = 0; i < 600; i++) await send("332" + String(2000000 + i), "HELP");
+  for (let i = 0; i < 600; i++) await send("332" + String(2000000 + i), "BAL");
   const all = await stats(undefined);
-  verdict("12. Global breaker: 600 numbers × HELP (same hour)", all.outSms <= 520,
+  verdict("12. Global breaker: 600 numbers × BAL (same hour)", all.outSms > 0 && all.outSms <= 520,
     `  total outbound replies=${all.outSms}  cost=$${all.cost}\n` +
     `  -> service-wide cap (500/hr) bounds total command-reply spend regardless of how many numbers pile on.`);
 }
