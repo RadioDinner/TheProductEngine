@@ -21,10 +21,13 @@ website. Triggers: 3 ads waiting OR the oldest having waited 60 minutes,
 whichever first, both settings, both only inside the send window. One batch
 per pass, so a backlog trickles out as successive batches.
 
-**⚠️ THREE MIGRATIONS TO PASTE: `9960_batched_ads.sql`,
-`9959_help_report_contact.sql` and `9958_member_names.sql`.** All three
-degrade safely; `/api/health` → `migration9960`, `migration9959`,
-`migration9958`.
+**✅ MIGRATIONS 9958, 9959 AND 9960 ARE PASTED** (user confirmed 2026-08-20),
+so every part of this session is fully on rather than degrading: batches carry
+a real `slot_key`, pictures ride, problem reports store who filed them, and a
+feedback form teaches a member's name to their account. Each was written to
+degrade safely until pasted; that safety net is no longer load-bearing but
+stays in the code. `/api/health` (with CRON_SECRET) probes all twenty
+migrations by name if you ever want to confirm the whole set at once.
 
 ### ⚠️ A LATENT PRODUCTION BUG, found and fixed here
 

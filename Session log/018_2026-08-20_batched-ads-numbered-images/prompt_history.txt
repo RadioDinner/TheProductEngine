@@ -58,3 +58,6 @@ I need some good way of measuring my ACTUAL income because, this is a crazy infl
 
 --- 2026-08-20 (mid-session) ---
 Also! if they ever fill out a "submit an idea" or " I need help" form, save their names to their user account
+
+--- 2026-08-20 (mid-session) ---
+these are all applied all the outstanding migrations

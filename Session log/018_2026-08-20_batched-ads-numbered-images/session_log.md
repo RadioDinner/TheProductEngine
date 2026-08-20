@@ -145,7 +145,7 @@ The columns are read LAZILY, never through `USER_SELECT` — the same rule
 every page, and a core select naming a column that a pending migration has not
 created yet is how a whole site 500s.
 
-## ⚠️ Three migrations to paste
+## ✅ Migrations — ALL PASTED (user confirmed, same day)
 
 0. `supabase/migrations/9958_member_names.sql` — `users.first_name/last_name`.
 1. `supabase/migrations/9960_batched_ads.sql` — `digests.slot_key`, the two
@@ -154,8 +154,9 @@ created yet is how a whole site 500s.
 2. `supabase/migrations/9959_help_report_contact.sql` — the four contact
    columns on `help_reports`.
 
-All three degrade safely until pasted; `/api/health` probes `migration9960`,
-`migration9959` and `migration9958`.
+All three were pasted by the user on 2026-08-20, so nothing in this session is
+running degraded. `/api/health` probes all twenty migrations by name — the
+one-look confirmation if there is ever doubt.
 
 ## Directional decisions
 
@@ -175,7 +176,9 @@ All three degrade safely until pasted; `/api/health` probes `migration9960`,
 
 ## Open / next
 
-- **Paste both migrations**, then watch the first real batch.
+- Migrations are in. **Watch the first real batch** — the thing to look at is
+  whether the picture messages land in the right order behind the text and
+  whether the badge is legible on a real phone photo rather than a test one.
 - The 10DLC campaign description still says "up to 4 digests/day" (carried
   since session 016). Batching makes that closer to true than instant send did,
   but the filing is still the operator's to update. The Telnyx HELP
