@@ -41,3 +41,9 @@ I also want a "suggest a feature" button thing on the website, where people can 
 Also, on the report a problem screen, I want you to reqeuire their first and last name, as well as a phone number or email.
 
 If the user is logged in for either of these features, automatically pull in their phone and or email.
+
+--- 2026-08-20 (mid-session) ---
+how is this taking you so long
+
+--- 2026-08-20 (mid-session) ---
+commit this to main
