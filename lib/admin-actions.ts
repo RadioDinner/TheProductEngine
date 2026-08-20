@@ -74,6 +74,13 @@ import { removeHostedPhotos, storeImageBytes } from "@/lib/photos";
 import { sniffImage, CONTENT_TYPE_BY_EXT } from "@/lib/image-sniff";
 import { supabaseConfigured } from "@/lib/db";
 import { refundableCents } from "@/lib/money";
+import { etParts } from "@/lib/et";
+import { featuredSchedule } from "@/lib/featured-schedule";
+import {
+  decideFeaturedRequest,
+  listBookedStartDays,
+  listPendingRequests,
+} from "@/lib/featured-requests";
 import { stripEmoji } from "@/lib/content-filter";
 import { normalizePhone } from "@/lib/phone";
 import { type LineType } from "@/lib/number-lookup";
@@ -205,6 +212,45 @@ export async function adminDeclineEvent(formData: FormData): Promise<void> {
   const id = Number(formData.get("id"));
   if (Number.isInteger(id)) await resolveEvent(id, "declined");
   redirect("/admin/review");
+}
+
+/**
+ * Approve or decline a featured / premium-listing request (session 019).
+ *
+ * Approving BOOKS a start day, and the day it books is computed from the same
+ * `lib/featured-schedule.ts` arithmetic the public request page quotes — so
+ * the date the business was told and the date they actually get are the same
+ * number, not two implementations that agree until they don't.
+ *
+ * `queueAhead` comes from the form because it is a property of where the
+ * request sits in the list the operator is looking at. It is re-derived from
+ * stored order rather than trusted: a stale page must not let a later request
+ * jump the line by carrying a smaller number.
+ */
+export async function adminDecideFeaturedRequest(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  const decision = String(formData.get("decision")) === "approved" ? "approved" : "declined";
+  if (!Number.isInteger(id)) redirect("/admin/featured");
+
+  let startDay: string | null = null;
+  if (decision === "approved") {
+    const pending = await listPendingRequests();
+    // Where this request REALLY sits, by submission time — not where the page
+    // that was open thought it sat.
+    const queueAhead = Math.max(0, pending.findIndex((r) => r.id === id));
+    const booked = await listBookedStartDays();
+    const today = etParts(new Date()).day;
+    startDay = featuredSchedule({ approvedStarts: booked, today, queueAhead }).nextStartDay;
+  }
+
+  const outcome = await decideFeaturedRequest(id, decision, startDay);
+  if (outcome === "unsupported") redirect("/admin/featured?error=migration9956");
+  redirect(
+    decision === "approved"
+      ? `/admin/featured?saved=booked&day=${startDay}`
+      : "/admin/featured?saved=declined",
+  );
 }
 
 /** Approve (→ website gallery) or discard an emailed-in extra picture. */

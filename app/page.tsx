@@ -105,8 +105,15 @@ export default async function Home({
   const featured = await listActiveFeaturedSpots();
   const toRotator = (spots: typeof featured): RotatorSpot[] =>
     spots.map((s) => ({ id: s.id, src: s.src, caption: s.caption, linkUrl: s.linkUrl }));
+  // Four spots, two stacked on each side (user, session 019). Slots 1-2 are
+  // the left column, 3-4 the right — the same rotation rules as before, just
+  // four of them.
   const slot1 = toRotator(slotRotation(featured, 1));
   const slot2 = toRotator(slotRotation(featured, 2));
+  const slot3 = toRotator(slotRotation(featured, 3));
+  const slot4 = toRotator(slotRotation(featured, 4));
+  const featuredLeft = slot1.length > 0 || slot2.length > 0;
+  const featuredRight = slot3.length > 0 || slot4.length > 0;
   // Homepage promo banner (credit sales) — operator-set on /admin/settings;
   // empty text = no banner. Rendered above the ads for everyone.
   const { promoBannerText, promoBannerLink } = await getEngineSettings();
@@ -165,10 +172,14 @@ export default async function Home({
       {/* Featured sidebar (item 19) — operator-posted image spots; hides
           entirely when nothing is active. On narrow screens only slot 1
           shows (compact), above the ads. */}
-      {(slot1.length > 0 || slot2.length > 0) && (
+      {/* The left column renders even with nothing in it, unlike the other
+          sidebars: before the first spot is sold this IS the advertisement for
+          the product, and hiding it would leave /featured unreachable from the
+          front page. */}
+      {(
         <aside className="home-side home-featured" aria-labelledby="featured-h">
           <h2 id="featured-h" className="side-h">
-            Featured
+            Featured ad of the month!
           </h2>
           {slot1.length > 0 && <FeaturedRotator slot={1} spots={slot1} />}
           {slot2.length > 0 &&
@@ -181,6 +192,12 @@ export default async function Home({
             ) : (
               <FeaturedRotator slot={2} spots={slot2} />
             ))}
+          {!featuredLeft && !featuredRight && (
+            <p className="side-note">Four spots on the front page, 30 days each.</p>
+          )}
+          <p className="featured-reserve">
+            <Link href="/featured">Reserve your spot here</Link>
+          </p>
         </aside>
       )}
       <div className="home-center container">
@@ -318,6 +335,28 @@ export default async function Home({
           </nav>
         )}
       </div>
+
+      {/* Right column: the other two featured spots stack above the town hall
+          (user, session 019: "Two stacked on each side"). */}
+      {featuredRight && (
+        <aside className="home-side home-featured-right" aria-labelledby="featured-r-h">
+          <h2 id="featured-r-h" className="side-h">
+            Featured ad of the month!
+          </h2>
+          {slot3.length > 0 && <FeaturedRotator slot={3} spots={slot3} />}
+          {slot4.length > 0 &&
+            (slot3.length > 0 ? (
+              <div className="featured-secondary">
+                <FeaturedRotator slot={4} spots={slot4} />
+              </div>
+            ) : (
+              <FeaturedRotator slot={4} spots={slot4} />
+            ))}
+          <p className="featured-reserve">
+            <Link href="/featured">Reserve your spot here</Link>
+          </p>
+        </aside>
+      )}
 
       {/* Town hall sidebar (item 18) — hides until migration 9977 is pasted. */}
       {events !== null && (

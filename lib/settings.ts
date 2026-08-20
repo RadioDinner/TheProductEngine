@@ -29,6 +29,11 @@ export interface EngineSettings {
   starterCreditLimit: number;
   /** Website-listing add-on in CENTS. 0 = included free for every ad. */
   webAddonCents: number;
+  /** Town-hall event listing in CENTS (session 019). 0 = free, and the page
+   * says so instead of quoting a price. */
+  eventListingCents: number;
+  /** A featured ad / premium business listing in CENTS per 30-day run. */
+  featuredMonthlyCents: number;
   /** Starter credit in CENTS, granted once on a member's first real post. */
   starterCreditCents: number;
   digestCap: number;
@@ -109,6 +114,8 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   batchMaxWaitMinutes: "batch_max_wait_minutes",
   starterCreditLimit: "starter_credit_limit",
   webAddonCents: "web_addon_cents",
+  eventListingCents: "event_listing_cents",
+  featuredMonthlyCents: "featured_monthly_cents",
   starterCreditCents: "starter_credit_cents",
   digestCap: "digest_ad_cap",
   slots: "digest_slots_sms",
@@ -181,6 +188,8 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     batchMaxWaitMinutes: engineDefaults.batchMaxWaitMinutes,
     starterCreditLimit: engineDefaults.starterCreditLimit,
     webAddonCents: engineDefaults.webAddonCents,
+    eventListingCents: engineDefaults.eventListingCents,
+    featuredMonthlyCents: engineDefaults.featuredMonthlyCents,
     starterCreditCents: engineDefaults.starterCreditCents,
     digestCap: engineDefaults.digestCap,
     slots: [...engineDefaults.slots],

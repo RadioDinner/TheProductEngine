@@ -2,13 +2,24 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   adminAddFeaturedSpot,
+  adminDecideFeaturedRequest,
   adminDeleteFeaturedSpot,
   adminSetFeaturedActive,
 } from "@/lib/admin-actions";
 import { FEATURED_CAPTION_MAX, SPOTS_PER_SLOT, slotRotation } from "@/lib/featured";
 import { listFeaturedSpots, type FeaturedSpot } from "@/lib/featured-store";
 import { supabaseConfigured } from "@/lib/db";
-import { site } from "@/lib/config";
+import { formatPrice, site } from "@/lib/config";
+import { formatPhone } from "@/lib/phone";
+import { etParts } from "@/lib/et";
+import { getEngineSettings } from "@/lib/settings";
+import {
+  FEATURED_CAPACITY,
+  FEATURED_RUN_DAYS,
+  featuredSchedule,
+  formatRunDay,
+} from "@/lib/featured-schedule";
+import { listAllRequests, listBookedStartDays } from "@/lib/featured-requests";
 import { Tip } from "@/components/Tip";
 import { ImageUpload } from "@/components/ImageUpload";
 
@@ -23,6 +34,12 @@ export default async function AdminFeatured({
 }) {
   const params = await searchParams;
   const spots = await listFeaturedSpots();
+  const settings = await getEngineSettings();
+  const all = await listAllRequests();
+  const requests = all === null ? null : all.filter((r) => r.status === "pending").reverse();
+  const booked = await listBookedStartDays();
+  const today = etParts(new Date()).day;
+  const schedule = featuredSchedule({ approvedStarts: booked, today });
 
   return (
     <>
@@ -30,14 +47,120 @@ export default async function AdminFeatured({
         Featured spots <Tip k="featured.concept" />
       </h1>
       <p className="fine">
-        The homepage&rsquo;s left sidebar: TWO Featured slots stacked, each rotating every
-        8 seconds through up to {SPOTS_PER_SLOT} image ads — 6 sellable spots total.
-        You post them here by hand (there&rsquo;s no self-serve selling flow yet; pricing
-        isn&rsquo;t set). A spot&rsquo;s external link is the one sanctioned exception to
-        the no-links rule and is marked <span className="cmd">rel=&quot;sponsored&quot;</span>{" "}
-        for search engines <Tip k="featured.links" />. The sidebar hides itself whenever
-        nothing is active.
+        FOUR Featured slots — two stacked on each side of the homepage ads (slots 1&ndash;2
+        left, 3&ndash;4 right) — each rotating every 8 seconds through up to{" "}
+        {SPOTS_PER_SLOT} image ads. A spot is{" "}
+        <strong>{formatPrice(settings.featuredMonthlyCents)}</strong> for a{" "}
+        {FEATURED_RUN_DAYS}-day run. A spot&rsquo;s external link is the one sanctioned
+        exception to the no-links rule and is marked{" "}
+        <span className="cmd">rel=&quot;sponsored&quot;</span> for search engines{" "}
+        <Tip k="featured.links" />. The left column always shows the &ldquo;Reserve your
+        spot here&rdquo; link so the request page is reachable even with nothing running.
       </p>
+
+      {/* ---------- the request queue ---------- */}
+      <h2 className="section-h">
+        Requests waiting ({requests?.length ?? 0}) <Tip k="featured.queue" />
+      </h2>
+      <p className="fine">
+        From <Link href="/featured">the request page</Link>, oldest first — and that order
+        IS the promise made there: whoever asked first takes the next slot that frees.{" "}
+        {schedule.startsImmediately ? (
+          <>
+            <strong>{schedule.openNow} of {FEATURED_CAPACITY} spots are open now</strong>,
+            so the next approval starts showing today.
+          </>
+        ) : (
+          <>
+            <strong>All {FEATURED_CAPACITY} spots are running.</strong> The next approval
+            would start <strong>{formatRunDay(schedule.nextStartDay)}</strong>.
+          </>
+        )}
+      </p>
+      {requests === null && (
+        <p className="notice" role="status">
+          Requests aren&rsquo;t available yet — paste migration <strong>9956</strong> in
+          the Supabase SQL editor. Until then the request page still takes calls and
+          emails; it just can&rsquo;t queue anyone.
+        </p>
+      )}
+      {requests !== null && requests.length === 0 && (
+        <p className="status-muted">No requests waiting.</p>
+      )}
+      {requests !== null && requests.length > 0 && (
+        <ul className="sim-pending">
+          {requests.map((req, i) => {
+            // What THIS request would get if approved right now: everyone
+            // ahead of it in the queue takes a slot first.
+            const forThis = featuredSchedule({
+              approvedStarts: booked,
+              today,
+              queueAhead: i,
+            });
+            return (
+              <li key={req.id} className="myad-row">
+                <p className="myad-title">
+                  #{i + 1} · {req.businessName}
+                  <span className="status-muted">
+                    {" "}
+                    · {req.kind === "featured_ad" ? "featured ad" : "premium business"} ·
+                    asked {new Date(req.submittedAt).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      timeZone: "America/New_York",
+                    })}
+                  </span>
+                </p>
+                <p className="myad-dates">
+                  {req.contactName ? `${req.contactName} · ` : ""}
+                  {req.phone ? formatPhone(req.phone) : ""}
+                  {req.phone && req.email ? " · " : ""}
+                  {req.email ?? ""}
+                </p>
+                <p className="myad-dates">
+                  Links to:{" "}
+                  {req.linkUrl ? (
+                    <a href={req.linkUrl} target="_blank" rel="noreferrer nofollow">
+                      {req.linkUrl}
+                    </a>
+                  ) : req.adId ? (
+                    <Link href={`/ads/${req.adId}`}>ad #{req.adId}</Link>
+                  ) : (
+                    "not chosen yet — ask them"
+                  )}
+                </p>
+                {req.note && <p className="sim-body">{req.note}</p>}
+                <p className="fine">
+                  Approving now books{" "}
+                  <strong>
+                    {forThis.startsImmediately
+                      ? "today"
+                      : formatRunDay(forThis.nextStartDay)}
+                  </strong>{" "}
+                  through {formatRunDay(forThis.nextEndDay)}.
+                </p>
+                <form action={adminDecideFeaturedRequest} className="sim-actions">
+                  <input type="hidden" name="id" value={req.id} />
+                  <input type="hidden" name="queueAhead" value={i} />
+                  <button className="btn btn-sm" name="decision" value="approved" type="submit">
+                    Approve — book {forThis.startsImmediately ? "today" : formatRunDay(forThis.nextStartDay)}
+                  </button>
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    name="decision"
+                    value="declined"
+                    type="submit"
+                  >
+                    Decline
+                  </button>
+                </form>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <h2 className="section-h">The spots themselves</h2>
 
       {params.saved && (
         <p className="notice" role="status">

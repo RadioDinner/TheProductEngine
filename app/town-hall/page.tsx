@@ -13,6 +13,9 @@ import {
 } from "@/lib/town-hall";
 import { listUpcomingEvents } from "@/lib/town-hall-store";
 import { submitTownHallEvent } from "@/lib/town-hall-actions";
+import { getEngineSettings } from "@/lib/settings";
+import { formatPrice } from "@/lib/config";
+import { WaysToPay } from "@/components/WaysToPay";
 import { MaskedText, maskPhonesPlain } from "@/components/MaskedText";
 
 export const metadata: Metadata = {
@@ -27,6 +30,12 @@ export default async function TownHallPage({
 }) {
   const params = await searchParams;
   const session = await readSession();
+  // The price is a setting (session 019: "19.99 events"), so the copy follows
+  // the number rather than repeating it — and 0 puts listings back to free
+  // without leaving three pages saying otherwise.
+  const settings = await getEngineSettings();
+  const eventPrice =
+    settings.eventListingCents > 0 ? formatPrice(settings.eventListingCents) : "free";
   await recordVisit("/town-hall");
   const events = await listUpcomingEvents(etParts(new Date()).day);
 
@@ -59,8 +68,8 @@ export default async function TownHallPage({
       <h1>Town hall</h1>
       <p>
         Upcoming events around {site.region} — auctions, benefit suppers, school sales,
-        and the like. Listings are free and reviewed before they appear; an event drops
-        off the board by itself once its date has passed.
+        and the like. A listing is {eventPrice} and is reviewed before it appears; an
+        event drops off the board by itself once its date has passed.
       </p>
 
       {params.submitted && (
@@ -160,10 +169,16 @@ export default async function TownHallPage({
         {session ? (
           <>
             <p>
-              Listing an event is free. It goes through the same review as an ad, then
-              runs here and on the front page until the day of the event. No links,
-              please — emoji are removed automatically.
+              Listing an event is <strong>{eventPrice}</strong>. It goes through the same
+              review as an ad, then runs here and on the front page until the day of the
+              event. No links, please — emoji are removed automatically.{" "}
+              <strong>Nothing is charged for a listing we can&rsquo;t approve.</strong>
             </p>
+            <WaysToPay
+              priceCents={settings.eventListingCents}
+              what="an event listing"
+              signedIn
+            />
             <form action={submitTownHallEvent}>
               <div className="field">
                 <label htmlFor="event-title">Event title</label>
@@ -250,11 +265,18 @@ export default async function TownHallPage({
             </form>
           </>
         ) : (
-          <p>
-            Members list events free.{" "}
-            <Link href="/login?next=%2Ftown-hall">Sign in</Link> to add yours — it takes
-            a minute.
-          </p>
+          <>
+            <p>
+              An event listing is <strong>{eventPrice}</strong>.{" "}
+              <Link href="/login?next=%2Ftown-hall">Sign in</Link> to add yours — it takes
+              a minute — or call or email us and we&rsquo;ll put it up for you.
+            </p>
+            <WaysToPay
+              priceCents={settings.eventListingCents}
+              what="an event listing"
+              signedIn={false}
+            />
+          </>
         )}
       </section>
 

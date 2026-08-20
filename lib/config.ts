@@ -17,6 +17,16 @@ export const site = {
   /** The number people CALL for support or to arrange payment (phone/check/saved card). */
   supportPhone: "(234) 301-0048",
   supportPhonePlain: "2343010048",
+  /**
+   * The number and address for BUYING — an event listing, a featured spot, a
+   * premium business listing (user, session 019). Deliberately separate from
+   * supportPhone above, which is the general help line: the user gave this
+   * number specifically for people wanting to buy, and merging the two would
+   * quietly reroute every existing "call us for help" mention.
+   */
+  salesPhone: "(330) 275-1603",
+  salesPhonePlain: "3302751603",
+  salesEmail: "support@theplainexchange.com",
   /** The address people are told to visit — no scheme, it is spoken copy. */
   webHost: "ThePlainExchange.com",
   /**
@@ -46,6 +56,27 @@ export const TOP_UP_PRESETS_CENTS: number[] = [2000, 4000, 6000, 10000];
 
 export function isTopUpPreset(amountCents: number): boolean {
   return TOP_UP_PRESETS_CENTS.includes(amountCents);
+}
+
+/**
+ * Every amount a member may put through checkout: the add-money presets, plus
+ * the exact price of a town-hall event listing and of a featured spot (session
+ * 019 — those are bought by adding their price to the account and having the
+ * charge come off it at approval).
+ *
+ * The ONE rule, shared by the checkout page and both purchase actions, so a
+ * price that renders can always be paid and an amount that is merely in a URL
+ * never can. A price of 0 means that product is free right now and is
+ * deliberately NOT purchasable — a $0 checkout is a dead end, not a bargain.
+ */
+export function isPurchasableAmount(
+  amountCents: number,
+  prices: { eventListingCents: number; featuredMonthlyCents: number },
+): boolean {
+  if (isTopUpPreset(amountCents)) return true;
+  if (prices.eventListingCents > 0 && amountCents === prices.eventListingCents) return true;
+  if (prices.featuredMonthlyCents > 0 && amountCents === prices.featuredMonthlyCents) return true;
+  return false;
 }
 
 /** Operator-typed custom amount (dollars; a leading "$" and decimals are
@@ -135,6 +166,19 @@ export const engineDefaults = {
    * (the operator can toggle per ad on /admin/ads).
    */
   webAddonCents: 0,
+  /**
+   * Town-hall event listing, in CENTS (user decision, session 019: "19.99
+   * events"). Listings were free in v1; this is the price the town-hall page
+   * now quotes. 0 puts them back to free and the page says so.
+   */
+  eventListingCents: 1999,
+  /**
+   * A featured ad / premium business listing, in CENTS per 30-day run (user
+   * decision, session 019: "features on the website for 199 a month"). Four
+   * run at once — two stacked on each side of the homepage — each on its own
+   * rolling 30 days; see lib/featured-schedule.ts.
+   */
+  featuredMonthlyCents: 19900,
   /**
    * Starter credit in cents — granted ONCE, on a member's first real post
    * (never at account creation; the session-005 anti-abuse rule). $150

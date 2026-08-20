@@ -291,8 +291,15 @@ const ENTRIES = {
 
   "featured.concept": {
     title: "The Featured sidebar",
-    what: "Two homepage slots stacked on the left, each rotating every 8 seconds through up to 3 image ads — six sellable spots, posted only by you. When nothing is active the sidebar disappears.",
-    why: "The user's spec, nearly verbatim (session 009): \"two side bar ad spots that will rotate every 8 seconds … up to 3 ads on each … I will manually post these Featured advertisers … image ads, capable of linking to external websites.\" Selling the spots has no flow yet because pricing was never set — today you place them for whoever you've arranged it with.",
+    what: "Four homepage slots — two stacked on each side of the ads — each rotating every 8 seconds through up to 3 image ads. Slots 1-2 are the left column, 3-4 the right. A spot runs 30 days from the day it is approved.",
+    why: "The user's spec, nearly verbatim (session 009): \"two side bar ad spots that will rotate every 8 seconds … up to 3 ads on each … I will manually post these Featured advertisers … image ads, capable of linking to external websites.\" Session 019 priced them ($199 for a 30-day run), widened the board to four — \"two stacked on each side\" — and added the public request page and its queue, so a business can ask rather than having to know to phone you.",
+    gotchas: "The left column shows its heading and the \"Reserve your spot here\" link even when nothing is running, unlike the other sidebars, which hide when empty. That is deliberate: before the first spot is sold that column IS the advertisement for the product, and hiding it would leave the request page unreachable from the front page.",
+  },
+  "featured.queue": {
+    title: "The featured request queue",
+    what: "Businesses ask for a spot on the public request page; they land here oldest first. Approving one BOOKS it a start day — today if a spot is free, otherwise the day the earliest-running spot finishes. The button says which day before you press it.",
+    why: "The user's session-019 rules: four spots, two stacked on each side of the homepage, $199 for a 30-day run, and \"if I have 3 confirmed businesses for the month, and 2 more people apply, if both are valid/approvable, the first one submitted will get the 4th spot.\" The queue is stored order, so that promise is a fact about the data rather than something you have to remember on a busy morning.",
+    gotchas: "The four runs do NOT share a calendar month — each is its own 30 days from the day IT was approved, so they finish on different dates and a spot opens whenever the earliest-finishing one finishes. Approve out of order and you take the slot from whoever asked first: the position shown here is re-checked against submission time when you press the button, so a stale page cannot let a later request jump the line. Nothing is charged for a request you decline; the public page promises that.",
   },
   "featured.links": {
     title: "Why these links are allowed",

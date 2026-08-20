@@ -1435,6 +1435,7 @@ a.btn-sm:hover {
   grid-template-areas:
     "featured"
     "center"
+    "featuredright"
     "townhall";
 }
 
@@ -2268,4 +2269,42 @@ a.btn-sm:hover {
   .health-state {
     grid-column: 2;
   }
+}
+
+/* Featured columns (session 019): two spots stacked on each side of the ads.
+   The right-hand pair sits above the town hall in the same grid area. */
+.home-featured-right {
+  grid-area: featuredright;
+}
+
+@media (min-width: 64rem) {
+  /* Wide: three columns, and the right one holds the featured pair ABOVE the
+     town hall. Named areas can't express that (two elements in one area
+     overlap), so the right column is placed by line instead — auto row
+     placement then puts the town hall under whatever is there, and lifts it to
+     the top when no featured spot is running. */
+  .home-featured-right,
+  .home-townhall {
+    grid-area: auto;
+    grid-column: 3;
+  }
+
+  .home-featured {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .home-center {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .home-featured-right {
+    grid-row: 1;
+  }
+}
+
+.featured-reserve {
+  margin: var(--space-xs) 0 var(--space-md);
+  font-size: var(--text-sm);
 }

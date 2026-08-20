@@ -3,8 +3,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { simulatePurchase, startStripeCheckout } from "@/lib/account-actions";
 import { readSession } from "@/lib/session";
-import { formatPrice, isTopUpPreset, site } from "@/lib/config";
+import { formatPrice, isPurchasableAmount, site } from "@/lib/config";
 import { paymentsDevMode } from "@/lib/payments";
+import { getEngineSettings } from "@/lib/settings";
 
 export const metadata: Metadata = {
   title: `Checkout — ${site.name}`,
@@ -19,7 +20,12 @@ export default async function CheckoutPage({
   const session = await readSession();
   if (!session) redirect("/login?next=%2Faccount");
   const amountCents = Number((await searchParams).amount);
-  if (!isTopUpPreset(amountCents)) redirect("/account");
+  // The add-money presets, plus the two listing prices — a town-hall event and
+  // a featured spot are bought by putting exactly their price on the account
+  // (session 019). Everything else is refused, so the amount can never be
+  // whatever a URL says.
+  const settings = await getEngineSettings();
+  if (!isPurchasableAmount(amountCents, settings)) redirect("/account");
 
   return (
     <div className="container auth">

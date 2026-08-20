@@ -9,6 +9,30 @@ import { dispatchEmail } from "@/lib/outbound";
 import { site } from "@/lib/config";
 import { formatPhone } from "@/lib/phone";
 
+/**
+ * A plain operator alert — subject and text, nothing else. Used where the
+ * message is one-off enough that a bespoke formatter would be ceremony (a
+ * featured-listing request, session 019).
+ *
+ * Same posture as the rest of this file: "operator" class so a pause can never
+ * swallow it, and a send failure is logged and swallowed rather than breaking
+ * whatever the member was doing.
+ */
+export async function notifyOperator(subject: string, text: string): Promise<void> {
+  const to = process.env.ADMIN_EMAIL;
+  if (!to) {
+    // Still worth saying out loud: without ADMIN_EMAIL this is the only trace.
+    console.warn(`[notify] no ADMIN_EMAIL — operator alert not sent: ${subject}`);
+    return;
+  }
+  const html = `<div style="max-width:600px;font-family:'Segoe UI',Arial,sans-serif;color:#20262b;white-space:pre-wrap;">${text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!)}</div>`;
+  try {
+    await dispatchEmail({ to, subject, html, text }, { cls: "operator" });
+  } catch (e) {
+    console.error("[notify] operator alert failed:", e);
+  }
+}
+
 export async function notifyAdminNewAd(args: {
   id: number;
   from: string;
@@ -19,7 +43,7 @@ export async function notifyAdminNewAd(args: {
 }): Promise<void> {
   const to = process.env.ADMIN_EMAIL;
   if (!to) return;
-  const reviewUrl = `${siteUrl}/admin`;
+  const reviewUrl = `${siteUrl}/admin/review`;
   const kind = args.hasPhoto ? "picture ad" : "text ad";
   const photoUrl = args.photoSrc
     ? args.photoSrc.startsWith("http")

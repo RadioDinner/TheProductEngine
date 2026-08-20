@@ -31,6 +31,7 @@ const SUITES = [
   "user-table",
   "system-health",
   "money",
+  "featured-schedule",
   "myads",
   "reveal-quota",
   "business",

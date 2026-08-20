@@ -22,7 +22,8 @@ import {
   setSubscriberCategories,
 } from "@/lib/store";
 import { isCategoryKey } from "@/lib/categories";
-import { formatPrice, isTopUpPreset } from "@/lib/config";
+import { formatPrice, isPurchasableAmount } from "@/lib/config";
+import { getEngineSettings } from "@/lib/settings";
 import { createCheckoutSession, paymentsDevMode } from "@/lib/payments";
 import { devToolsEnabled } from "@/lib/env";
 import { getAd } from "@/lib/ads";
@@ -142,7 +143,7 @@ export async function startStripeCheckout(formData: FormData): Promise<void> {
   const phone = await requirePhone();
   if (paymentsDevMode) redirect("/account");
   const amountCents = Number(formData.get("amount"));
-  if (!isTopUpPreset(amountCents)) redirect("/account");
+  if (!isPurchasableAmount(amountCents, await getEngineSettings())) redirect("/account");
   const requestHeaders = await headers();
   const origin =
     process.env.SITE_URL || `https://${requestHeaders.get("host") ?? "localhost:3000"}`;
@@ -180,7 +181,7 @@ export async function simulatePurchase(formData: FormData): Promise<void> {
   // production deploy without Stripe keys can't be used to mint free money.
   if (!paymentsDevMode || !devToolsEnabled) redirect("/account");
   const amountCents = Number(formData.get("amount"));
-  if (!isTopUpPreset(amountCents)) redirect("/account");
+  if (!isPurchasableAmount(amountCents, await getEngineSettings())) redirect("/account");
   await addLedgerEntry(phone, {
     delta: amountCents,
     kind: "purchase",
