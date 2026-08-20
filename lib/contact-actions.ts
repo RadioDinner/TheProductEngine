@@ -13,6 +13,7 @@
  * Outcomes are signaled repo-style: redirect() with query params.
  */
 
+import "@/analytics/src/register-after";
 import { afterResponse } from "@/analytics/src/after";
 import * as analytics from "@/analytics/src/server-events";
 import { redirect } from "next/navigation";

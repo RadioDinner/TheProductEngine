@@ -7,6 +7,7 @@
  * a free repeat for an already-revealed ad. Owners and the admin never spend —
  * the ad page shows them the numbers without this action.
  */
+import "@/analytics/src/register-after";
 import { after } from "next/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
