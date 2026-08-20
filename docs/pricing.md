@@ -50,18 +50,25 @@ All money is stored in **cents** in the credit ledger (`credit_ledger.delta`).
 
 ## How sellers pay (user decision, session 016)
 
-1. **$150 starter credit** — granted on the first real AD NEW / web post
-   (NOT at account creation — the session-005 anti-abuse rule stands).
-   $150 covers 3 text ads, or 2 picture ads with $30 left. (If the promise
-   is "3 free ads of any kind," set starter credit to $180 on Settings —
-   3 picture ads = $180.)
+1. **$40 starter credit, for the first 200 members to post** — granted on the
+   first real AD NEW / web post (NOT at account creation — the session-005
+   anti-abuse rule stands), and only while `starter_credit_limit` has room.
+   $40 covers two text ads, or one one-picture ad with $10 left. It is a
+   GRANT, never the member's money: see "Granted credit is not refundable"
+   below. Maximum exposure is `starter_credit_cents × starter_credit_limit`
+   = **$8,000** at the launch values, and that is a marketing cost, not
+   revenue foregone.
 2. **Auto top-up** — a member with a saved card is topped up automatically
    at posting time: the shortfall is charged to the card, the confirmation
    text states the charge. Opt-out toggle on /account and /admin/users.
    Fail-closed: before migration 9973 (no `auto_topup` column) no card is
    ever auto-charged.
-3. **Add money on the website** — preset amounts ($45 / $60 / $150 / $300)
-   via Stripe Checkout; the card is saved for auto top-up.
+3. **Add money on the website** — preset amounts ($20 / $40 / $60 / $100)
+   via Stripe Checkout (`TOP_UP_PRESETS_CENTS` in lib/config.ts); the card is
+   saved for auto top-up. Sized to the sheet: one text ad, one two-picture
+   ad, one three-picture ad with change, and a small bundle. Keeping the
+   smallest preset AT the text-ad price is deliberate — it is what stops
+   prepaid balances piling up, which is the liability discussed below.
 4. **Check / phone** — the operator grants dollars from /admin/users after
    a phone conversation (Adjust balance), or bills the saved card, or texts
    a checkout link. BUYCREDIT/YES by text was REMOVED (auto top-up replaces
@@ -78,15 +85,27 @@ All money is stored in **cents** in the credit ledger (`credit_ledger.delta`).
 
 ## Why these numbers hold up (delivery-cost reality)
 
-From `docs/profitability.md` (SMS $0.008/segment, MMS $0.035/pull): a
-medium ad costs ~0.61 segments × subscribers × $0.008 to broadcast — about
-$0.73 at 150 subscribers, $4.88 at 1,000, $14.64 at 3,000. A $45 ad clears
-its own delivery cost at ANY plausible list size; the structural risk is
-the free subscriber list, which these prices fund. One paid picture ad per
-day (~$1,800/mo) covers the broadcast cost of a 1,000+ subscriber list.
-The real bet is conversion: will Holmes County sellers pay $45–60? The
-$150 starter credit is the test instrument — watch the paid-ad conversion
-rate after starter credit burns down.
+From `docs/profitability.md` (SMS $0.008/segment, MMS $0.035/pull): a medium
+ad costs ~0.61 segments × subscribers × $0.008 to broadcast — about **$0.73
+at 150 subscribers, $4.88 at 1,000, $14.64 at 3,000**. Pictures do not ride
+the broadcast, so a picture ad costs the same to send as a text one; the MMS
+spend is the PIC pulls, which only the interested few request.
+
+**The number to watch as the list grows: a $20 text ad stops covering its own
+broadcast at about 4,100 subscribers** ($20 ÷ (0.61 × $0.008)). A $30
+one-picture ad breaks even around 6,100, a $50 three-picture ad around
+10,200. None of those are near today's list, but they are the reason the
+sheet cannot simply stay put while the list triples — revisit the text price
+when subscribers pass ~3,000, not after it goes underwater.
+
+One paid one-picture ad per sending day (26 days) is about **$780/month**,
+which covers the broadcast cost of a 1,000-subscriber list many times over.
+The structural risk is the free subscriber list, which these prices fund.
+
+The real bet is conversion: will Holmes County sellers pay $20–50 when the
+direct substitute charges $15–30? The $40 starter credit is the test
+instrument — watch the paid-ad conversion rate after it burns down, and note
+that at 200 members it is capped at $8,000 of exposure.
 
 ## Sponsorship (reworked session 016)
 
@@ -109,6 +128,47 @@ example (four one-week buyers, then a two-week buyer taking the fifth slot).
 A "week" is **six sending days** — Sunday never sends, and a sponsor should
 not pay for a silent day. Days are the ride ledger: a day with no ads costs
 the sponsor nothing, so the run simply extends.
+
+## Refunds, unused balances, and what a refund actually costs
+
+**Stripe does not return the processing fee when you refund.** The 2.9% +
+$0.30 was paid at capture and stays paid; refunding returns the full amount
+to the member out of your balance. So a refund's real cost to you is the fee
+already spent on that top-up, not a new charge:
+
+| Top-up | Fee paid at capture | As a % of the top-up |
+|---|---|---|
+| $20 | $0.88 | 4.4% |
+| $40 | $1.46 | 3.7% |
+| $60 | $2.04 | 3.4% |
+| $100 | $3.20 | 3.2% |
+
+The flat $0.30 is why the percentage is worst on the smallest preset. Any
+flat "we keep X%" rule has to clear 4.4% to cover the $20 preset, which is
+what makes **5% a cost-recovery number rather than a penalty** — it
+over-recovers by 0.6 to 1.8 points depending on the top-up size.
+
+**Granted credit is not refundable as cash, ever.** A member who takes the
+$40 starter credit and adds $20 has a $60 balance, but only $20 of it is
+their money. Nothing in the code enforces this today — refunds are
+operator-manual — so the income report's cash-backed vs granted split is what
+the operator must read before sending money back. Spending grants BEFORE cash
+is the fair default ordering and keeps the refundable liability as small as
+it truly is.
+
+**What the published policy says today** (`/refund-policy` and the T&Cs):
+"Ad credit has no cash value, doesn't expire, and can't be transferred;
+refunds of money you added are at our discretion, except where the law says
+otherwise." Note that "at our discretion" is already weaker than a stated
+percentage — moving to a published "95% back, we keep the card fee" is a
+commitment to members, not a takeaway from them.
+
+⚠️ **Still the user's decision** (raised session 018, discussed session 019):
+whether to publish that percentage, and whether granted credit should expire.
+Prepaid balances touch Ohio gift-card and unclaimed-funds law; a forfeiture
+rule on money already taken wants an Ohio attorney or CPA first. A dormancy
+nudge ("you still have $50 on your account") needs neither, and turns a dead
+balance into either an ad or a clean refund.
 
 ## Coherence rules (keep these when repricing)
 

@@ -10,3 +10,6 @@ after you build/fix this, lets look at the open money questions from previous se
 
 --- 2026-08-20 ---
 youre good to commit as soon as you have work completed, commit directly to main
+
+--- 2026-08-20 ---
+commit this to main and then lets get started on the money questions
