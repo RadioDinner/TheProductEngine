@@ -109,3 +109,36 @@ give me the 00-todo.md here, I dont want to go to it
 
 --- 2026-08-20 ---
 well write all the outstanding code!
+
+--- 2026-08-20 ---
+Do a comprehensive review of our analytics, tell me my weak spots and then we can patch anything that arises. Put together a todo list to review at a later date.
+
+One question, my realtime pages doesn't show anything.
+
+--- 2026-08-20 ---
+[screenshot of Realtime pages: 2 active users, 12 views, / and /login and /account]
+Ok I see your point, however, I opened an incognito window and logged into the plain exchange with my dummy customer account and it shortly looked like this.
+
+However, I was the only user, so it should be one. And the views are WAY off. I went to the home page theplainexchange.com, then went to https://www.theplainexchange.com/login and then went to the password entry link and then went to https://www.theplainexchange.com/account. That was it. 4 pages, but I somehow got this number
+
+--- 2026-08-20 ---
+I dont know how to do this Confirm it in 60 seconds: set GA_DEBUG_MODE=1, open DebugView, navigate one page in the incognito window. Before the fix you'll see two page_view entries stacked at the same second; after, one.
+
+--- 2026-08-20 ---
+I turned off the page changes based on browser history events
+fix them but dont commit them to main just yet. Wait until I tell you
+
+--- 2026-08-20 ---
+merge to main
+
+--- 2026-08-20 ---
+Site search enhanced is turned off now. I dont know what you mean about traffic filter
+
+--- 2026-08-20 ---
+Debug mode is off too
+
+--- 2026-08-20 ---
+I'll just leave things as they are in terms of turning off my IP addresses
+
+--- 2026-08-20 ---
+ok, write the handoff, commit it to main and wrap this session
