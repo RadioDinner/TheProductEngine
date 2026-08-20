@@ -1,16 +1,20 @@
 -- ============================================================
 -- The Plain Exchange — first-party analytics upgrade
 --
--- STAGED, NOT APPLIED. This file is NOT in supabase/migrations/ yet, on
--- purpose. See analytics/04-wiring.md before moving it: migrations here are
--- numbered DESCENDING (lowest number = newest), so at move time rename it to
---   <lowest existing number − 1>_analytics_upgrade.sql
--- taken at that moment. Several sessions are working in parallel; picking the
--- number now would guarantee a collision with whoever lands first.
+-- ⚠️ USER MUST PASTE THIS into the Supabase SQL Editor. Never `supabase db
+-- push` — the CLI applies in ascending order, which under this repo's
+-- DESCENDING scheme (new_session_instructions.md §4) is newest-first.
 --
--- Re-runnable, per new_session_instructions.md §4: every statement is
--- create-if-not-exists or create-or-replace, so pasting it twice is harmless.
--- Paste into the Supabase SQL Editor. Never `supabase db push`.
+-- Numbered 9961 because 9962 was the lowest when it was moved. It was staged
+-- unnumbered on purpose: 9963-9966 were claimed by other sessions the same day
+-- this was written, so a number picked in advance would have collided.
+--
+-- Re-runnable: every statement is create-if-not-exists or create-or-replace,
+-- so pasting it twice is harmless.
+--
+-- Until it is pasted, lib/analytics.ts falls back to the original
+-- bump_page_view and nothing breaks — the extra columns simply are not
+-- collected.
 --
 -- ────────────────────────────────────────────────────────────
 -- WHY THIS EXISTS ALONGSIDE GOOGLE ANALYTICS

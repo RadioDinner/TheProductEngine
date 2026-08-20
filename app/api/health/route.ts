@@ -108,6 +108,19 @@ export async function GET(req: NextRequest) {
       // missing one breaks a whole surface (9989: every inbound SMS command;
       // 9988: digest composition + /admin/digests). Surface drift here instead
       // of leaving it to be inferred from 500s.
+      // Migration 9961: the first-party analytics upgrade. Until it is pasted,
+      // recordVisit falls back to bump_page_view and referrer/visitor counts
+      // are simply not collected — nothing breaks, so without this probe the
+      // gap would be invisible.
+      const visitDays = await db().from("visit_days").select("day", { count: "exact", head: true });
+      report.migration9961 = visitDays.error
+        ? {
+            applied: false,
+            code: visitDays.error.code,
+            error: visitDays.error.message,
+            fix: "run supabase/migrations/9961_analytics_upgrade.sql in the SQL editor",
+          }
+        : { applied: true };
       const quota = await db()
         .from("users")
         .select("pic_balance", { count: "exact", head: true });

@@ -61,11 +61,21 @@ export default async function Home({
     page?: string;
     category?: string;
     area?: string | string[];
+    utm_source?: string;
+    utm_medium?: string;
+    utm_campaign?: string;
   }>;
 }) {
   const params = await searchParams;
   const session = await readSession();
-  await recordVisit("/");
+  // Campaign tags land on the homepage in practice, so this is where they are
+  // worth capturing. A flyer with ?utm_source=flyer becomes an answerable
+  // question instead of a guess.
+  await recordVisit("/", {
+    utmSource: typeof params.utm_source === "string" ? params.utm_source : undefined,
+    utmMedium: typeof params.utm_medium === "string" ? params.utm_medium : undefined,
+    utmCampaign: typeof params.utm_campaign === "string" ? params.utm_campaign : undefined,
+  });
   const q = params.q?.trim() || undefined;
   // Category browse filter (item 25): server-rendered, works signed-out.
   // Hidden (and the param ignored) until migration 9976 — never a 500.

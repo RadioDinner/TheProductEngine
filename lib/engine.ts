@@ -202,9 +202,14 @@ async function coverShortfallWithCard(
   });
   if (!result.ok) {
     console.warn(`[engine] auto top-up failed for ${from}: ${result.reason}`);
+    afterResponse(() =>
+      analytics.autoTopUp({ phone: from, amountCents: shortfallCents, outcome: "declined" }),
+    );
     return { charged: 0, declineReason: result.reason };
   }
-  return { charged: result.chargedCents, last4: result.last4 };
+  const charged = result.chargedCents;
+  afterResponse(() => analytics.autoTopUp({ phone: from, amountCents: charged, outcome: "charged" }));
+  return { charged, last4: result.last4 };
 }
 
 /** The add-money instructions every cannot-pay reply carries. */
@@ -343,6 +348,13 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   const starter = (await mayUse(from, "starterCredit", policy))
     ? await grantStarterCreditIfFirst(from, settings.starterCreditCents, starterLabel, settings.starterCreditLimit)
     : { account, granted: false };
+  if (starter.granted) {
+    // The launch offer being consumed. Watched against starterCreditLimit it
+    // answers "how close are we to the 200th?" before it is discovered after.
+    afterResponse(() =>
+      analytics.starterCreditGranted({ phone: from, amountCents: settings.starterCreditCents }),
+    );
+  }
   let balance = await getCreditBalance(from);
   // Automatic top-up: a saved card (with the toggle on) covers the shortfall,
   // and the confirmation below states the charge. Runs BEFORE the ad record

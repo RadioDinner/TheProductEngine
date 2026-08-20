@@ -7,7 +7,9 @@
  * See lib/voice.ts for the flow, the TwiML, and the PCI rule (card digits
  * never reach this app — Twilio tokenizes them straight into Stripe).
  */
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
+import * as analytics from "@/analytics/src/server-events";
+import { setAfterImpl } from "@/analytics/src/after";
 import { startCall, updateCall } from "@/lib/call-log";
 import { site } from "@/lib/config";
 import { isProduction } from "@/lib/env";
@@ -35,6 +37,9 @@ import {
 
 // Attaching the card is three sequential Stripe calls on a live phone call —
 // well inside this, but the platform default is not worth the risk.
+// This route emits analytics; keep them alive past the response.
+setAfterImpl(after);
+
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
@@ -125,6 +130,15 @@ export async function POST(req: NextRequest) {
         outcome: answered ? "answered" : "attendant",
         ...(answered && { durationSeconds: Number(params.DialCallDuration) }),
       });
+      // How many people phone rather than text. This audience picks up the
+      // phone, and until now the only record of it was the call log.
+      after(() =>
+        analytics.callInbound({
+          phone: caller || undefined,
+          outcome: answered ? "answered" : "attendant",
+          durationSeconds: answered ? Number(params.DialCallDuration) || 0 : 0,
+        }),
+      );
       return answered
         ? xml(hangUpTwiml())
         : xml(menuTwiml({ actionUrl: stepUrl(req, "menu") }));
@@ -179,6 +193,9 @@ export async function POST(req: NextRequest) {
           ),
         );
       }
+      // Is the phone card line paying for itself? This is the event that
+      // answers it — the only conversion the voice channel produces.
+      after(() => analytics.cardSaved({ phone: caller, channel: "voice" }));
       const last4 = (params.PaymentCardNumber ?? "").replace(/\D/g, "").slice(-4);
       await updateCall(callSid, {
         outcome: "card_saved",
@@ -215,6 +232,13 @@ export async function POST(req: NextRequest) {
         recordingUrl: recording || null,
         ...(params.RecordingDuration && { durationSeconds: Number(params.RecordingDuration) }),
       });
+      after(() =>
+        analytics.callInbound({
+          phone: caller || undefined,
+          outcome: "voicemail",
+          durationSeconds: Number(params.RecordingDuration) || 0,
+        }),
+      );
       const from = caller ? await getAccount(caller) : null;
       const who = caller ? `+1${caller}${from ? "" : " (not a member yet)"}` : "an unknown number";
       for (const admin of admins) {

@@ -99,7 +99,12 @@ export function postSubmitted(args: {
         currency: "USD",
       },
     },
-  ]);
+  ],
+  // Anyone who posts is a seller from here on. Attached HERE, where we already
+  // know it, rather than looked up on every page render — a user property is
+  // not worth a database round trip in front of the layout.
+  { member_status: "seller" },
+  );
 }
 
 export function postBlocked(args: {
@@ -201,7 +206,9 @@ export function signedUp(args: {
   return emit(
     args,
     [{ name: "sign_up", params: { method: args.method, channel: args.method } }],
-    { signup_channel: args.method },
+    // Lets every later metric be cut by how the member arrived — the whole
+    // point of question 1 in the measurement plan.
+    { signup_channel: args.method, member_status: "subscriber" },
   );
 }
 
@@ -380,7 +387,10 @@ export function callInbound(args: {
 }
 
 export function cardSaved(args: { phone?: string; channel: "voice" | "web" }): Promise<void> {
-  return emit(args, [{ name: "card_saved", params: { channel: args.channel } }]);
+  return emit(args, [{ name: "card_saved", params: { channel: args.channel } }], {
+    // The strongest single predictor of a second purchase.
+    has_saved_card: "yes",
+  });
 }
 
 /**

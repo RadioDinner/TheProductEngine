@@ -143,6 +143,14 @@ export async function rejectAd(
         note: `Refund — ad #${id} not accepted`,
       });
       refundNote = formatPrice(owed);
+      afterResponse(() =>
+        analytics.refunded({
+          phone: ad.ownerPhone,
+          transactionId: `ad_${id}_reject`,
+          amountCents: owed,
+          reason: "rejected",
+        }),
+      );
     }
     await notify(
       ad.ownerPhone,
