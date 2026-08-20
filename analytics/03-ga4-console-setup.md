@@ -152,7 +152,7 @@ longer — but every cohort, funnel and retention analysis in
 "how did last spring compare" is unanswerable, and no setting change brings the
 deleted data back.
 
-Fourteen months is also why `sql/first-party-upgrade.sql` exists: anything you
+Fourteen months is also why  `supabase/migrations/9961_analytics_upgrade.sql` exists: anything you
 want to be able to ask in three years has to live in our own database.
 
 ---

@@ -144,7 +144,7 @@ that a browser extension can block. It should never be the answer to:
 - **Delivery.** Did the text send, was it delivered, what did it cost.
 - **Quotas and abuse.** `/admin/insights` already does this well, and it reads
   the real rows rather than a sampled report.
-- **Anything older than 14 months.** `sql/first-party-upgrade.sql` keeps the
+- **Anything older than 14 months.**  `supabase/migrations/9961_analytics_upgrade.sql` keeps the
   visit and source aggregates in our own database, forever, in a form that can
   be queried in three years.
 

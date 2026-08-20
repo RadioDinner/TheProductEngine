@@ -3,21 +3,41 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-20 (session 017).
+**Last updated:** 2026-08-20 (session 017 — analytics live, v1.1.6).
 
-## Session 017 (2026-08-20) — the `analytics/` folder: Google Analytics, staged but not wired
+## Session 017 (2026-08-20) — Google Analytics, end to end and LIVE
 
-**Nothing in this session changed the site's behaviour.** `analytics/` is a
-complete GA4 implementation that the app does not import — `tsc` and
-`next build` are clean with it present precisely because nothing references it.
-`analytics/04-wiring.md` is the thirteen steps that turn it on.
+**Version 1.0.6 → 1.1.6** (§6: four+ features and a major change — the second
+digit moves, the third stays, per the user's stated rule).
 
-Merged to `main` (`d1f0ba8`, then the setup-guide corrections). Developed on
-`claude/google-analytics-setup-tjm2p5`. The session ran alongside several
-others, so it was deliberately confined to one new folder until the user
-confirmed the others had closed — which is why every merge was conflict-free.
+The site now measures itself across every channel it actually uses: the
+website, SMS, the voice line, email editions and Stripe. `analytics/` holds the
+reasoning, the code and the worklist; `analytics/00-todo.md` is the live
+tracker.
 
-### ✅ The GA4 property EXISTS (user created it this session)
+Built in one folder first, deliberately: the session ran alongside several
+others, so everything stayed inside `analytics/` until the user confirmed the
+rest had closed. Every merge that day was conflict-free as a result. The wiring
+then went in as six verified waves, each committed separately.
+
+**What is measured now.** Web: page_view on every navigation, view_item and
+view_item_list, select_item and ui_click from ONE delegated click listener,
+search with results_count, listing_reveal, chat_start, post_start, login,
+begin_checkout, the contact/town-hall/email forms. SMS: every inbound tagged
+with its parsed command (the `unknown` bucket is the cheapest product research
+this business has), post_submit at ACCEPTANCE, post_blocked with eight reasons,
+sign_up, unsubscribe, pic_pull, suppressed replies. Lifecycle: approved with
+wait_minutes, rejected, broadcast with reach and segments, sold with
+days_to_sell. Money: purchase from the WEBHOOK inside the ledger-ref guard,
+refund, auto_topup, starter_credit_granted. Voice: call_inbound at every
+outcome, card_saved. Plus email_edition_sent per edition.
+
+**⚠️ ONE THING IS OWED: paste `supabase/migrations/9961_analytics_upgrade.sql`.**
+Until then `recordVisit` falls back to the old counter and warns once; nothing
+breaks, and referrer/campaign/unique-visitor data is simply not collected.
+`/api/health` → `migration9961`.
+
+### ✅ The GA4 property EXISTS and is COLLECTING
 
 - **Measurement ID `G-0P031ZCC9Z`**, Analytics account `derrickwengerd`.
 - ⚠️ That account also holds `permitpro-9db15`, a **Firebase-auto-created
@@ -27,19 +47,26 @@ confirmed the others had closed — which is why every merge was conflict-free.
 
 ### ⚠️ OPERATOR ACTION QUEUE
 
-1. **Data retention → 14 months.** Defaults to **2**. The only item where
-   waiting actively destroys data.
-2. **Google Signals OFF** (keeps the "we do not track you around the internet"
-   line on /privacy true), **reporting identity → Blended** (stitches a
-   member's texts to their web visits).
-3. **Unwanted referrals:** `stripe.com`, `checkout.stripe.com` — without them
-   every paying member appears to have been *acquired from Stripe*.
-4. **Create the Measurement Protocol API secret** → `GA_API_SECRET` in Vercel.
-5. **`ANALYTICS_SALT`** (`openssl rand -hex 32`) in Vercel. Treat as a
-   password: with it, every member hash is reversible by brute force.
-6. **Set all three variables on the Production environment ONLY** — an unset
-   measurement id is what keeps preview deploys out of the property.
-7. **Decide the privacy option** (see below) before the browser tag ships.
+DONE by the user this session: property created, retention 14 months, Google
+Signals off, reporting identity Blended, Stripe unwanted-referral, all three
+environment variables set in Vercel, privacy option chosen (browser tag +
+rewritten policy).
+
+STILL OPEN — the full list is `analytics/00-todo.md`:
+
+1. **Paste `supabase/migrations/9961_analytics_upgrade.sql`.**
+2. **Register the custom definitions** — 11 dimensions + 7 metrics. ⚠️ NOT
+   retroactive: they report from the day they are created, so every day of
+   delay is a day that cannot be broken down later.
+3. **Mark the six key events.**
+4. **Set the internal-traffic filter to Active** — it ships as *Testing*, which
+   collects nothing. The tag skips the operator only while signed in as admin,
+   so their signed-out browsing is counted like anyone else's until this is on.
+5. **Edit the Telnyx HELP auto-response** — the app stopped replying to HELP
+   this session (it was double-replying), so the carrier keyword response is
+   now the service's ONLY answer, and carriers require one. It still advertises
+   BUMP and CREDITS, both removed in session 016. Not in version control, no
+   test can reach it.
 
 ### Directional decisions
 
@@ -66,17 +93,26 @@ confirmed the others had closed — which is why every merge was conflict-free.
 
 ### Notes for whoever picks this up
 
-- **Nothing is wired.** Wave 1 of `04-wiring.md` (SMS + Stripe server events)
-  is the place to start: it covers every member and needs no consent decision.
+- **Everything is wired.** `analytics/04-wiring.md` is now a record of where
+  each event sits and why it sits exactly there — most of those notes mark a
+  place where the obvious seam produces a WRONG number rather than a missing
+  one (post_submit at arrival would count refused ads; purchase on the success
+  page would book revenue that never happened).
+- **`analytics/src/after.ts` is the piece to understand before moving any
+  event.** Serverless kills fire-and-forget work once the response is sent, so
+  server events go through Next's `after()`. lib/engine.ts cannot import
+  `next/server` (the test suites load it under plain node, where it does not
+  resolve), so the implementation is INJECTED by the route handlers. Move an
+  event into a file with no registration and it silently falls back to inline.
 - **`analytics/sql/first-party-upgrade.sql` is unnumbered on purpose.** Rename
   to `<lowest existing − 1>_analytics_upgrade.sql` at the moment you move it.
   Parallel sessions took 9965 and 9966 this same day — pinning a number in
   advance would have collided.
 - **Do not add `analytics/` to `.vercelignore`.** Once `app/layout.tsx` imports
   from it, it is part of the build.
-- **The version was NOT bumped** (still `1.0.6`). Per §6 the count is FEATURES,
-  and this session shipped none to members — the site is byte-for-byte
-  unchanged. Bump it when the wiring actually ships.
+- **Version 1.0.6 → 1.1.6.** Four features plus a major change: the analytics
+  system itself, the first-party upgrade, the privacy-policy rewrite, and the
+  HELP de-duplication. Per §6 the second digit moves and the third stays.
 - Environment note: the container's clone was **shallow**, which made `main`
   and the working branch look like unrelated histories (`git merge-base`
   failing, wildly wrong ahead/behind counts). `git fetch --unshallow` is the

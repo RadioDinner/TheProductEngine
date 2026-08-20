@@ -166,6 +166,6 @@ outcome needs carrier spend, which GA never sees), and 11 (GA has no idea what
 
 Which is why the plan in `02-measurement-plan.md` sends server-side events for
 the whole SMS, voice and payment side, and why the first-party counters in
-`sql/first-party-upgrade.sql` stay: **GA is the behavioural layer; our own
+ `supabase/migrations/9961_analytics_upgrade.sql` stay: **GA is the behavioural layer; our own
 tables remain the record.** Anything that has to be exactly right — money,
 delivery, quotas — is answered from Supabase, not from Google.

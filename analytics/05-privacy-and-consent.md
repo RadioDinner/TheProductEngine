@@ -197,7 +197,7 @@ only) and gains:
 3. **Google Signals stays off.** It is the switch that would make the "around
    the internet" sentence untrue.
 4. **Data retention 14 months** in GA. Anything that must be answerable in three
-   years lives in our own tables (`sql/first-party-upgrade.sql`), where the
+   years lives in our own tables (`supabase/migrations/9961_analytics_upgrade.sql`), where the
    visitor token hashes the calendar day into itself and so cannot follow anyone
    across days — not by us, not later, not deliberately.
 5. **Nothing on `/admin`.** Not for privacy — for accuracy. The operator's own

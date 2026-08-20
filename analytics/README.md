@@ -31,7 +31,7 @@ yet.
 | `src/measurement-protocol.ts` | Server-side sender: batching, timeouts, validation, never throws. |
 | `src/server-events.ts` | One named helper per business moment, so wiring is a single line. |
 | `src/GoogleAnalytics.tsx` | The tag, as one component for `app/layout.tsx`. |
-| `sql/first-party-upgrade.sql` | Our own counter, upgraded: referrer, campaign, and unique people. Cookieless. Not yet numbered — see `04-wiring.md` step 10. |
+|  `supabase/migrations/9961_analytics_upgrade.sql` | Our own counter, upgraded: referrer, campaign, and unique people. Cookieless. Not yet numbered — see `04-wiring.md` step 10. |
 | `test/analytics.test.mjs` | 75 checks over the rules GA4 breaks silently. |
 
 Run the tests:

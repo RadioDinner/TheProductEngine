@@ -195,7 +195,7 @@ stop.
 4. **The browser tag**, with `page_view` and the acquisition parameters. This is
    where question 1 finally gets answered.
 5. **Listing events** — `view_item`, `listing_reveal`, `chat_start`.
-6. **The first-party upgrade** (`sql/first-party-upgrade.sql`) — referrer and
+6. **The first-party upgrade** (`supabase/migrations/9961_analytics_upgrade.sql`) — referrer and
    campaign in our own tables, so the record survives GA's 14-month retention
    and the visitors GA cannot see.
 7. **The operating routine** (`06-operating-the-numbers.md`). Numbers nobody

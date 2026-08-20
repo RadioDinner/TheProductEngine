@@ -101,74 +101,41 @@ enough to distort every rate.
 
 ---
 
-## 🟡 Code still to write
+## ✅ Code — all waves written
 
-### Wave 1b — the SMS events that need the outcome, not the intent
+Every wave in the original plan is now wired, verified and on `main`.
 
-Deliberately not wired from the route, because from there they would be wrong.
-Each belongs where `route()` settles the outcome.
+- **1b** `post_submit` at acceptance (not arrival), `post_blocked` with eight
+  distinct reasons, `sign_up` for genuinely new members only, `unsubscribe`,
+  `pic_pull` with its real outcome
+- **2** `listing_approved` with wait_minutes, `listing_rejected`,
+  `listing_broadcast` with reach and segments, `listing_sold` with days_to_sell
+  on both lanes
+- **3** the ten uncounted pages, `search` with results_count, `post_start`,
+  `login`, `contact_submit`, `town_hall_submit`, `email_signup`,
+  `begin_checkout` — and the sign-out identity leak fixed
+- **4** `refund`, `auto_topup`, `starter_credit_granted`, `call_inbound`,
+  `card_saved`, `email_edition_sent`
+- **5** user properties: `member_status`, `signup_channel`, `has_saved_card`
+- **6** migration **9961** written and `recordVisit` rewritten for referrer,
+  campaign and unique visitors
 
-- [ ] `post_submit` (channel `sms`) — at the point the ad is actually accepted,
-      not when the text arrives. From the route it would count ads the word
-      filter, the balance check or the blocklist then refused. An inflated
-      supply number is worse than none: it is the figure the roadmap is argued
-      from.
-- [ ] `post_blocked` with the refusal reason — the other half of the same story
-- [ ] `sign_up` (method `sms`) — only for genuinely new members, not every
-      re-SUBSCRIBE
-- [ ] `unsubscribe` on STOP
-- [ ] `pic_pull` with its real outcome — served, out of pulls, throttled
+Not built, and deliberately: `line_type` as a user property. It would need a
+lookup on a path that does not already do one, and it answers a question nobody
+is asking yet.
 
-### Wave 2 — the ad lifecycle
+---
 
-- [ ] `listing_approved` with `wait_minutes` — review latency is entirely under
-      the operator's control and directly shapes the seller's experience
-- [ ] `listing_rejected` with a reason code
-- [ ] `listing_broadcast` with recipients and segments — reach per ad, and what
-      it cost to deliver
-- [ ] `listing_sold` with `days_to_sell` — **the number that proves the service
-      works**, and the one to put in front of a business advertiser
-- [ ] `listing_expired`
+## 🔴 One paste, and it is on you
 
-### Wave 3 — the rest of the web surface
+- [ ] **Paste `supabase/migrations/9961_analytics_upgrade.sql`** into the
+      Supabase SQL Editor. Never `supabase db push` — the CLI applies in
+      ascending order, which under this repo's descending scheme is
+      newest-first.
 
-- [ ] `recordVisit` on the ten uncounted pages (`/faq`, `/how-it-works`,
-      `/advertising`, `/email`, `/sms`, `/login`, and the policy pages)
-- [ ] `search` with `results_count` — then turn OFF Enhanced Measurement's Site
-      search, and not before
-- [ ] `post_start` on `/account/post` — how many people start an ad and never finish
-- [ ] `login`, and web `sign_up`
-- [ ] `contact_submit`, `town_hall_submit`, `email_signup`
-- [ ] `begin_checkout`
-- [ ] `forgetUser()` on sign-out — shared machines are common in this community,
-      and without it the next person inherits the last one's id
-
-### Wave 4 — money and the phone line
-
-- [ ] `refund`, `auto_topup`, `starter_credit_granted`
-- [ ] `call_inbound`, `card_saved` from `/api/voice`
-- [ ] `email_edition_sent` per edition
-
-### Wave 5 — user properties
-
-- [ ] `member_status`, `signup_channel`, `line_type`, `has_saved_card`
-
-These are what turn "sellers versus buyers" from a guess into a filter. One
-blended average describes neither group.
-
-### Wave 6 — the first-party upgrade
-
-- [ ] Move `sql/first-party-upgrade.sql` into `supabase/migrations/`, renamed
-      `<lowest existing − 1>_analytics_upgrade.sql` **taken at the moment you
-      move it** — parallel sessions have claimed numbers before
-- [ ] Paste it by hand in the Supabase SQL editor. Never `supabase db push`
-- [ ] Rewrite `recordVisit` to call `bump_visit` with referrer, campaign and the
-      daily visitor token
-- [ ] Degrade guard on `PGRST202`/`PGRST205` so a page never 500s pre-paste
-
-Why bother when GA does this: GA cannot see a visitor with JavaScript off — a
-real share of this audience — and its retention tops out at 14 months. Anything
-you want to ask in three years has to live in our own database.
+Until it is pasted, `recordVisit` falls back to the old counter and warns once;
+nothing breaks, and referrer/campaign/unique-visitor data is simply not
+collected. `/api/health` → `migration9961` tells you which state you are in.
 
 ---
 

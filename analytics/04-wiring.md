@@ -1,23 +1,17 @@
-# Wiring it in
+# Wiring it in — the record of what was done
 
-Nothing in `analytics/` touches the running app. This file is the complete list
-of changes outside the folder that turn it on — deliberately written down
-rather than applied, because several sessions were working in this repo the day
-it was built and a change to `app/layout.tsx` or `lib/post-actions.ts` would
-have collided with all of them.
+**All of this is now applied.** The file stays as the map: every place the app
+touches the measurement, why the event sits exactly there and not one line
+earlier, and what to re-check if any of it is ever moved.
 
-**Everything here is verified to compile as it stands.** `tsc --noEmit` is
-clean, `next build` is clean, and the repo suite passes at 846/846 with these
-modules present, because nothing imports them yet.
+It was written before the wiring, as instructions, because several sessions
+were working in this repo that day and a change to `app/layout.tsx` or
+`lib/engine.ts` would have collided with all of them. Reading it as a record
+now, the "why here" notes are the part that matters — most of them mark a place
+where the obvious seam produces a wrong number rather than a missing one.
 
-## How to use this
-
-Work down the steps in order and **stop after any one of them**. Each is
-independently useful and independently revertible. Do not do all thirteen in one
-sitting and then try to work out which one broke the build.
-
-After each step: `npx tsc --noEmit && npm test`, then `npm run build` before
-pushing.
+Verified at every step: `tsc --noEmit` clean, `next build` clean, unit suite
+1033/1033, abuse harness unchanged.
 
 ---
 
@@ -278,7 +272,7 @@ void analytics.cardSaved({ phone: caller, channel: "voice" });
 
 ## Step 10 — the first-party upgrade
 
-1. Move `analytics/sql/first-party-upgrade.sql` into `supabase/migrations/`,
+1. Move `analytics/supabase/migrations/9961_analytics_upgrade.sql` into `supabase/migrations/`,
    renamed to **`<lowest existing number − 1>_analytics_upgrade.sql`** — taken
    at the moment you move it, not from this document. Migrations here count
    DOWN (`new_session_instructions.md` §4); the lowest number was `9967` when
@@ -373,46 +367,31 @@ The conflict, the options, and drafted replacement copy are in
 ## Checklist
 
 ```
-[x] 1  .env.example                                          (values set in Vercel: user)
-[~] 2  SMS events            lib/engine.ts                   sms_inbound +
-                                                             sms_reply_suppressed done;
-                                                             the rest below
-[~] 3  purchase              app/api/stripe/webhook/route.ts top-ups + sponsorships
-                                                             done; refund + auto_topup
-                                                             still to do
+[x] 1  .env.example + Vercel production variables
+[x] 2  SMS events            lib/engine.ts + the Telnyx route
+[x] 3  purchase / refund     app/api/stripe/webhook/route.ts, lib/moderation.ts
 [x] 4  ga_client_id          lib/payments.ts + both callers
-[x] 5  browser tag           app/layout.tsx                  shipped WITH step 13,
-                                                             in one commit
-[ ] 6  page coverage         the ten uncounted pages, /ad/<id>
-[ ] 7  listing events        ad page, reveal-actions, account-actions
-[ ] 8  lifecycle             admin-actions, digest-engine, email-digest
-[ ] 9  voice                 app/api/voice/route.ts
-[ ] 10 first-party upgrade   migration + lib/analytics.ts
+[x] 5  browser tag           app/layout.tsx
+[x] 6  page coverage         the ten pages, /ad/<id>
+[x] 7  listing events        ad page, homepage, reveal-actions, account-actions
+[x] 8  lifecycle             moderation, digest-engine, email-digest, myads
+[x] 9  voice                 app/api/voice/route.ts
+[x] 10 first-party upgrade   migration 9961 + lib/analytics.ts   ← NEEDS PASTING
 [x] 11 health probe          app/api/health/route.ts
-[x] 12 test suite            test/analytics.test.mjs, registered in test/run.mjs
-[x] 13 privacy policy        app/privacy/page.tsx            same commit as step 5
+[x] 12 test suite            test/analytics.test.mjs in test/run.mjs
+[x] 13 privacy policy        app/privacy/page.tsx
 ```
 
-### What step 2 still owes, and why it was split
+The one thing still owed to a human: **paste
+`supabase/migrations/9961_analytics_upgrade.sql`**. Everything else is live.
 
-`sms_inbound` and `sms_reply_suppressed` went in at one seam in
-`lib/engine.ts` — straight after `parseCommand`, and at the point a send slot
-is refused. Both are pure reads of state already in hand, so they carry no risk
-to the message path.
+## What was deliberately NOT built
 
-The rest of the SMS events — `sign_up`, `unsubscribe`, `post_submit`,
-`pic_pull` — were deliberately **not** wired from the same place, because from
-there they would be wrong:
-
-- **`post_submit` at the route** would count ads that the word filter, the
-  balance check or the blocklist then refused. An inflated supply number is
-  worse than no supply number: it is the figure the whole roadmap is argued
-  from.
-- **`sign_up` on a `subscribe` command** would count every re-subscribe by an
-  existing member as a new one.
-- **`pic_pull`** has an outcome — served, out of pulls, throttled — that is
-  only known inside the handler.
-
-Each belongs at the point in `route()` where the outcome is settled. That is a
-second pass through `lib/engine.ts`'s command cases, and it should be done
-deliberately rather than bolted onto this one.
+- **`line_type` as a user property.** It would need a number lookup on a path
+  that does not already do one, to answer a question nobody is asking yet.
+- **`listing_expired`.** Expiry is a background sweep with no member action
+  behind it; the same fact is already derivable from `listing_sold` against ads
+  posted, without another event in the property.
+- **A generic catch-all on external link clicks.** GA4's Enhanced Measurement
+  already reports those. Two sources for one number is how you end up with two
+  numbers that disagree and no way to choose.
