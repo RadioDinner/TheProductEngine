@@ -1,7 +1,16 @@
-# Session 021 (2026-08-21) — /admin/ads becomes a list of cards
+# Session 022 (2026-08-21) — /admin/ads becomes a list of cards
 
-Second session on 2026-08-21 (session 020 ran the same day), hence the `b`
-suffix on the folder date per §1.
+Third folder dated 2026-08-21, hence the `c` suffix per §1.
+
+⚠️ **This started life as `021_2026-08-21b` and was renumbered before merging.**
+A parallel session — the voice line, branch `claude/twilio-error-18602-4f4tnj`
+— started the same morning and picked exactly the same folder name. Its first
+commit beat this one by two minutes (12:08 vs 12:10) and it pushed first, so it
+keeps 021 and this session moved to 022. Had both merged as-is, two unrelated
+conversations' verbatim `prompt_history.txt` would have been concatenated into
+one file, which is precisely what that log exists to prevent. **A future
+session picking its number should `git fetch` and read the other BRANCHES, not
+just `main`** — the collision is invisible from `main` alone.
 
 ## The ask
 

@@ -3,8 +3,10 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-21 (session 021 — /admin/ads becomes a list of cards
-and an ad is editable in every status, on a branch. v1.4.10).
+**Last updated:** 2026-08-21 (session 022 — /admin/ads becomes a list of cards
+and an ad is editable in every status. v1.4.10). ⚠️ A parallel session 021 (the
+call line) was in flight at the same time and lands its own section below when
+it merges — keep both.
 
 ## ⚠️ START HERE: two NEW migrations are waiting
 
@@ -47,15 +49,25 @@ description registered with the carrier still says 7am–9pm.** That lives at
 Telnyx. The published window and the registered description have to agree —
 this is the last piece of the session-020 change not yet done.
 
-## Session 021 (2026-08-21) — /admin/ads: CARDS, and editing in every status
+## Session 022 (2026-08-21) — /admin/ads: CARDS, and editing in every status
 
 **Version 1.4.9 → 1.4.10** (§6: two features this session, so the far-right
 digit moves ONCE and stays; 9 + 1 = 10, taken literally).
 
-⚠️ **NOT ON `main`.** It lives on `claude/admin-ads-card-layout-awt8zq` and was
-left unmerged on purpose — the user said **seven other sessions are committing
-to this repo right now** and asked for a branch so this wouldn't collide.
-Merging is their call. No migration, no data change: two files, all presentation.
+⚠️ **This session is numbered 022, not 021, and it is the SECOND of two
+sessions that both started on 2026-08-21 and both picked `021_2026-08-21b`.**
+The other one (the voice line — "nothing dials the operator's cell any more",
+branch `claude/twilio-error-18602-4f4tnj`) committed two minutes earlier and
+pushed first, so it keeps 021 and this one moved to `022_2026-08-21c`. Without
+the rename BOTH sessions' verbatim `prompt_history.txt` would have merged into
+one file, interleaving two unrelated conversations — which is the one thing
+that log exists to prevent. If you are a future session picking a folder
+number, `git fetch` and look at the other branches, not just `main`.
+
+Developed on `claude/admin-ads-card-layout-awt8zq` (the user asked for a branch
+because **seven other sessions were committing to this repo**), then merged to
+`main` on their word once the check above showed no code overlap with any live
+branch. No migration, no data change — presentation and one server action.
 
 The user's complaint about /admin/ads was that it is "visually very busy, and
 at a glance it's hard to see where one ad ends and where the next one begins."
@@ -132,7 +144,7 @@ a rejection reason and two photo submissions (no horizontal overflow at 1280px
 or 480px), and an 18-check editor walk including a real save on a **rejected**
 ad and a blank save refused without blanking the ad.
 
-Full detail: `Session log/021_2026-08-21b/session_log.md`.
+Full detail: `Session log/022_2026-08-21c/session_log.md`.
 
 ## Session 020 (2026-08-21) — THE SEND WINDOW MOVES, AND SATURDAY CLOSES EARLY
 

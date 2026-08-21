@@ -6,3 +6,9 @@ On the "Ads" page of the admin dashboard, it's visually very busy, and at a glan
 
 --- 2026-08-21 ---
 I also want to be able to edit ads, I'm sure there will be people that want to make edits to their ads.
+
+--- 2026-08-21 ---
+Go ahead and merge these changes if it doesn't interfere with other active sessions
+
+--- 2026-08-21 ---
+the /admin/digests page isn't working. I want that to be renamed batches and I want to be able to see the ad queue there. If there are 8 ads waiting, I want to see which ones will go out with which ads. And I want to see which pictures will go along with them
