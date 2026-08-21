@@ -302,7 +302,7 @@ export default async function AccountPage({
         ) : (
           <p>
             Ads you post will show up here. <Link href="/account/post">Post one on the
-            website</Link>, or text <strong>AD NEW</strong> and your ad to{" "}
+            website</Link>, or text <strong>AD</strong> and your ad to{" "}
             <strong>{site.smsNumber}</strong> — see{" "}
             <Link href="/how-it-works">how it works</Link>.
           </p>

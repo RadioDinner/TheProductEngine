@@ -6,7 +6,11 @@ import {
   callWasAnswered,
   escapeXml,
   hangUpTwiml,
+  MENU_MAX_ATTEMPTS,
+  accountSidFromRecordingUrl,
   menuTwiml,
+  recordingMp3Url,
+  voicemailEmail,
   payTwiml,
   ringTwiml,
   sayAndHangUpTwiml,
@@ -101,6 +105,60 @@ export function run(t) {
   const menu = menuTwiml({ actionUrl: "https://x.test/api/voice?step=menu" });
   t.eq("menu: one digit gathered", /numDigits="1"/.test(menu), true);
   t.eq("menu: offers the card option", /press 1/i.test(menu), true);
+  /* ---- the menu answers first now, and says the user's words (session 020) ---- */
+  t.eq("menu: greets rather than apologising for nobody picking up",
+    /thank you for calling/i.test(menu), true);
+  t.eq("menu: no longer claims nobody is free", /nobody is free/i.test(menu), false);
+  t.eq("menu: names the card option the user's way",
+    /add a card on file, press 1/i.test(menu), true);
+  t.eq("menu: names the voicemail option the user's way",
+    /leave a voicemail and receive a callback, press 2/i.test(menu), true);
+  // Silence must land somewhere useful, not on a dial tone.
+  const withVm = menuTwiml({ actionUrl: "https://x.test/api/voice?step=menu&attempt=1",
+    voicemailUrl: "https://x.test/api/voice?step=to-voicemail" });
+  t.eq("menu: silence redirects to voicemail", /<Redirect/.test(withVm), true);
+  t.eq("menu: and does not just hang up", /<Hangup/.test(withVm), false);
+  // A builder that throws takes a live call down, so a missing URL degrades.
+  t.eq("menu: without a voicemail URL it ends politely instead of throwing",
+    /<Hangup/.test(menuTwiml({ actionUrl: "u" })), true);
+  // NB say() XML-escapes, so the apostrophe is &apos; in the rendered TwiML.
+  t.eq("menu: a later attempt apologises",
+    /Sorry, I didn&apos;t get that/.test(menuTwiml({ actionUrl: "u", attempt: 3 })), true);
+  t.eq("menu: the first attempt does not apologise",
+    /Sorry, I didn&apos;t get that/.test(menuTwiml({ actionUrl: "u", attempt: 1 })), false);
+  t.eq("menu: there is a ceiling on re-asks", MENU_MAX_ATTEMPTS >= 2 && MENU_MAX_ATTEMPTS <= 5, true);
+
+  /* ---- voicemail by email (session 020) ---- */
+  t.eq("recording url becomes a playable mp3",
+    recordingMp3Url("https://api.twilio.com/2010-04-01/Accounts/AC1/Recordings/RE9"),
+    "https://api.twilio.com/2010-04-01/Accounts/AC1/Recordings/RE9.mp3");
+  t.eq("an already-.mp3 url is not doubled",
+    recordingMp3Url("https://x.test/RE9.mp3"), "https://x.test/RE9.mp3");
+  t.eq("a blank url stays blank", recordingMp3Url("  "), "");
+  // A synthetic SID, assembled from parts so no literal Twilio Account SID
+  // pattern ever sits in the repo — GitHub's push protection blocks those, and
+  // it is right to: a real one belongs in the environment, never in a test.
+  const sid = "AC" + "0123456789abcdef".repeat(2);
+  t.eq("account sid comes out of the recording url",
+    accountSidFromRecordingUrl(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Recordings/RE8`), sid);
+  t.eq("a url with no account sid yields null",
+    accountSidFromRecordingUrl("https://x.test/nope"), null);
+  const mail = voicemailEmail({
+    callerPhone: "2343010048", isMember: false,
+    recordingUrl: "https://api.twilio.com/2010-04-01/Accounts/AC1/Recordings/RE9",
+    seconds: 34, attached: true, receivedAt: "Aug 21, 2026, 9:14 AM",
+  });
+  t.eq("email subject names the caller", /\(234\) 301-0048/.test(mail.subject), true);
+  t.eq("email subject carries the length", /34 seconds/.test(mail.subject), true);
+  t.eq("email says the audio is attached", /attached to this email/i.test(mail.text), true);
+  t.eq("email still carries the link", /RE9\.mp3/.test(mail.text), true);
+  t.eq("email flags a non-member", /not a member yet/i.test(mail.text), true);
+  const noAudio = voicemailEmail({
+    callerPhone: null, isMember: false, recordingUrl: "https://x.test/RE1",
+    seconds: 0, attached: false, receivedAt: "Aug 21, 2026, 9:14 AM",
+  });
+  t.eq("without audio the email says so", /could not be attached/i.test(noAudio.text), true);
+  t.eq("an unknown caller is named as such", /unknown number/i.test(noAudio.subject), true);
   t.eq("menu: offers a message", /press 2/i.test(menu), true);
   t.eq("menu: hangs up when nothing is pressed", menu.includes("<Hangup/>"), true);
   t.eq("menu: reprompt differs", menuTwiml({ actionUrl: "u", reprompt: true }) !== menuTwiml({ actionUrl: "u" }), true);

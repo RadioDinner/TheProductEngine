@@ -1,6 +1,6 @@
 /**
  * Tolerant SMS command parser (spec Q13): case-insensitive, slash optional,
- * forgiving about the AD NEW keyword and stray whitespace.
+ * forgiving about the optional NEW keyword and stray whitespace.
  */
 import { menuChoice } from "@/lib/categories";
 
@@ -52,6 +52,44 @@ function adNumber(arg: string): number | null {
   return Number.isSafeInteger(id) ? id : null;
 }
 
+/**
+ * Drop the optional NEW keyword from the front of an ad body — and ONLY when
+ * it really is the keyword.
+ *
+ * Bare "AD <body>" is canonical since session 020, but members trained on
+ * "AD NEW <body>" must keep working. The hard part is that "new" is also an
+ * ordinary word in the ads themselves, and in this market it is the first word
+ * of two of the commonest farm brands there are:
+ *
+ *   "AD New Holland baler, $2800"   the seller means New Holland
+ *   "AD New Idea manure spreader"   the seller means New Idea
+ *   "AD new puppies ready Aug 1"    the seller means new puppies
+ *
+ * Three rules, in order. Anything else keeps the word:
+ *
+ *   1. A separator after it makes it unambiguously a keyword: "AD NEW: hay".
+ *   2. Nothing after it is the bare "AD NEW" that asks for the posting guide.
+ *   3. A SHOUTED "NEW" in an otherwise normally-typed message is the keyword
+ *      ("AD NEW Hay for sale"), because a seller writing about something new
+ *      writes "New" or "new". When the whole message is upper case the casing
+ *      says nothing, so the word stays — "AD NEW HOLLAND BALER" keeps its
+ *      brand.
+ *
+ * Erring toward keeping the word is deliberate: a stray "NEW " is visible to
+ * the operator in review and trimmed in a second, while an eaten "New" ships
+ * an ad that misnames what is for sale.
+ */
+export function stripKeywordNew(rest: string): string {
+  const match = rest.match(/^(new)\b([\s:,-]*)/i);
+  if (!match) return rest.trim();
+  const [, word, gap] = match;
+  const after = rest.slice(match[0].length);
+  const separated = /[:,-]/.test(gap);
+  const shouted = word === "NEW" && after !== after.toUpperCase();
+  if (separated || !after.trim() || shouted) return after.trim();
+  return rest.trim();
+}
+
 export function parseCommand(raw: string): Command {
   // Re-trim after stripping a leading slash so "/ help" (slash then space)
   // doesn't leave a leading space that swallows the keyword.
@@ -100,16 +138,51 @@ export function parseCommand(raw: string): Command {
     case "info":
       return { kind: "help" };
     case "ad": {
-      // "AD NEW <body>" is canonical; bare "AD <body>" works too.
-      const body = rest.replace(/^new\b[\s:,-]*/i, "").trim();
+      // Bare "AD <body>" is canonical (user decision, session 020: "instead of
+      // typing AD NEW, they can just type AD"). "AD NEW <body>" still works —
+      // members trained on the old wording must not be broken — but the NEW is
+      // only treated as a KEYWORD when it cannot plausibly be part of the ad.
+      //
+      // This is the whole reason the rule is narrow. Stripping any leading
+      // "new" silently ate a word out of the seller's own text, and in this
+      // market the words it ate were brand names:
+      //
+      //   "AD New Holland baler, $2800"    -> "Holland baler, $2800"
+      //   "AD New Idea manure spreader"    -> "Idea manure spreader"
+      //   "AD new puppies ready August 1"  -> "puppies ready August 1"
+      //
+      // Harmless while everyone was told to type "AD NEW" and the leading word
+      // really was the keyword; a live bug the moment "AD <body>" is what the
+      // service asks for. So NEW is dropped only when it is followed by an
+      // explicit separator ("AD NEW: hay", "AD NEW - hay") or when it is the
+      // entire remainder ("AD NEW" alone, which asks for the posting guide).
+      //
+      // The cost of being wrong the other way is a stray "NEW " at the front
+      // of an ad, which the operator sees in review and trims. That is the
+      // direction to err in: never delete a word the seller typed.
+      const body = stripKeywordNew(rest);
       // "AD SOLD 1325" / "AD STATUS 1042" / "AD PIC 900": the sender clearly
       // meant the owner command, not an ad whose entire text is a keyword plus
       // a number. Re-route ONLY that exact shape, so a real ad ("AD sold out,
       // taking spring orders...") is never intercepted. Prevents a mistyped
       // SOLD from silently posting a junk ad and burning the seller's money.
       // (BUMP left this set when the bump feature was removed, session 016.)
-      if (/^(sold|status|pic)\s+\d{3,}\s*$/i.test(body)) {
+      //
+      // Checked against the body BOTH as parsed and with any leading "new"
+      // removed, because the two rules collide on "AD NEW SOLD 1325": that is
+      // entirely upper case, so the shouted-NEW test above (rightly) declines
+      // to strip it and protects "AD NEW HOLLAND BALER" — but it means the
+      // owner command would otherwise arrive here as "NEW SOLD 1325" and post
+      // as an ad. The shape below is narrow enough to try twice safely: a
+      // keyword, whitespace, three-plus digits, end of message. No real ad
+      // matches it, in any casing.
+      const ownerCommand = /^(sold|status|pic)\s+\d{3,}\s*$/i;
+      if (ownerCommand.test(body)) {
         return parseCommand(body);
+      }
+      const withoutNew = body.replace(/^new\b[\s:,-]*/i, "");
+      if (withoutNew !== body && ownerCommand.test(withoutNew)) {
+        return parseCommand(withoutNew);
       }
       return { kind: "ad", body };
     }
@@ -145,8 +218,10 @@ export function parseCommand(raw: string): Command {
       // Bare word only (like CREDITS): "list my stuff" stays unknown.
       return rest ? { kind: "unknown", text } : { kind: "list" };
     case "newad":
-      // "NEWAD <body>" — the run-together reversed form. Same as AD NEW.
-      return parseCommand(`AD NEW ${rest}`);
+      // "NEWAD <body>" — the run-together reversed form. Same as a bare AD.
+      // Dispatching as "AD NEW …" would put the keyword back in front of the
+      // seller's text and stripKeywordNew would then have to guess about it.
+      return parseCommand(`AD ${rest}`);
     case "new": {
       // "NEW AD <body>" — the reversed word order flip-phone typers naturally
       // send. Assume they mean AD NEW (user decision, session 011: don't make
@@ -154,7 +229,7 @@ export function parseCommand(raw: string): Command {
       // the next word is AD, so a real message that merely starts with "new"
       // ("new puppies for sale, call…") stays unknown and never posts an ad.
       const m = rest.match(/^ad\b[\s:,-]*/i);
-      if (m) return parseCommand(`AD NEW ${rest.slice(m[0].length)}`);
+      if (m) return parseCommand(`AD ${rest.slice(m[0].length)}`);
       return { kind: "unknown", text };
     }
     default: {

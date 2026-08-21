@@ -83,7 +83,7 @@ export default async function PostAdPage({
       <TrackEvent name="post_start" />
       <h1>Post an ad</h1>
       <p>
-        Posting here costs <strong>exactly the same</strong> as texting AD NEW to{" "}
+        Posting here costs <strong>exactly the same</strong> as texting AD to{" "}
         {site.smsNumber} — it comes off your ad-credit balance — and every ad goes to the
         same review before it runs. Firearms are not allowed; see the{" "}
         <Link href="/terms-and-conditions">posting rules</Link>.

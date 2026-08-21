@@ -105,9 +105,9 @@ export function welcomeMessages(args: {
   ].join("\n");
 
   const posting = [
-    "To post, text AD NEW and your ad, like:",
+    "To post, text AD and your ad, like:",
     "",
-    "AD NEW Hay for sale, $5/bale. Call 330-555-0142",
+    "AD Hay for sale, $5/bale. Call 330-555-0142",
     "",
     `When posting an AD you can send up to ${MAX_AD_PHOTOS} pictures. The first one goes out with the batch, marked with your ad number.`,
     "",

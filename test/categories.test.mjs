@@ -52,7 +52,7 @@ export function run(t) {
   t.eq(
     "2 verbatim",
     welcome[1],
-    "To post, text AD NEW and your ad, like:\n\nAD NEW Hay for sale, $5/bale. Call 330-555-0142\n\nWhen posting an AD you can send up to 8 pictures. The first one goes out with the batch, marked with your ad number.\n\nSee more pictures by replying PIC and the ad number, like PIC 1022 - that sends up to 2 more. The rest are on ThePlainExchange.com!",
+    "To post, text AD and your ad, like:\n\nAD Hay for sale, $5/bale. Call 330-555-0142\n\nWhen posting an AD you can send up to 8 pictures. The first one goes out with the batch, marked with your ad number.\n\nSee more pictures by replying PIC and the ad number, like PIC 1022 - that sends up to 2 more. The rest are on ThePlainExchange.com!",
   );
   t.eq(
     "3 verbatim",

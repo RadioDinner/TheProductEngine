@@ -31,3 +31,14 @@ I reran the migration
 
 --- 2026-08-21 ---
 all migrations are run.
+
+--- 2026-08-21 ---
+Currently I don't have any kind of error handling for when people call the number, and I want to change the call forwarding order. I want it to ring directly to my twilio number where they can add a number, and I want the message to say "thank you for calling the plain exchange, to add a card on file, press 1, to leave a voicemail and receive a callback, press 2"
+
+Also, I changed my system. Now instead of typing AD NEW, they can just type AD.
+
+--- 2026-08-21 ---
+Currently I get a text message like this "The Plain Exchange: voicemail on the card line from +12343010048. Listen: https://api.twilio.com/2010-04-01/Accounts/AC.../Recordings/RE..." when someone sends me a voice message. Can I set it up to have the voice message land in my email inbox automatically?
+
+--- 2026-08-21 ---
+Also, I want my system to allow for up to $50 of "debt". When someone wants to post an ad, but they don't have money on their books, I want my number to call them to request them to add a card, or have a text sent to them to add a card to automatically settle the balance. Or call and leave a voicemail and we'll send them an invoice. Then I want you to wire all the tech to honor this

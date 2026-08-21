@@ -89,7 +89,7 @@ export default async function SmsSimulator({
             <input type="hidden" name="from" value={from} />
             <div className="field">
               <label htmlFor="text">Message</label>
-              <textarea id="text" name="text" rows={3} placeholder="AD NEW Hay wagon, $500…" />
+              <textarea id="text" name="text" rows={3} placeholder="AD Hay wagon, $500…" />
             </div>
             <label className="sim-photo-toggle">
               <input type="checkbox" name="photo" /> Attach a sample photo (simulated MMS)

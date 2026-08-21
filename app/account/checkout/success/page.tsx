@@ -59,7 +59,7 @@ export default async function CheckoutSuccessPage({
             : "Your payment is still processing. The money is added the moment it completes."}
       </p>
       <p>
-        Ready to post? Text <span className="cmd">AD NEW</span> and your ad to{" "}
+        Ready to post? Text <span className="cmd">AD</span> and your ad to{" "}
         <strong>{site.smsNumber}</strong>.
       </p>
       <p className="auth-alt">

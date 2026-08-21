@@ -13,23 +13,29 @@ import { setAfterImpl } from "@/analytics/src/after";
 import { startCall, updateCall } from "@/lib/call-log";
 import { site } from "@/lib/config";
 import { isProduction } from "@/lib/env";
+import { email } from "@/lib/email";
 import { savePhoneCapturedCard } from "@/lib/payments";
 import { normalizePhone } from "@/lib/phone";
 import { sms } from "@/lib/sms";
 import { ensureAccount, getAccount } from "@/lib/store";
 import {
+  MENU_MAX_ATTEMPTS,
   VOICE_PATH,
   acceptTwiml,
   callWasAnswered,
+  fetchRecordingMp3,
   hangUpTwiml,
   menuTwiml,
   payConnector,
   payTwiml,
+  ringFirst,
   ringSeconds,
   ringToPhones,
   ringTwiml,
   sayAndHangUpTwiml,
   spokenDigits,
+  twimlSayThenVoicemail,
+  voicemailEmail,
   voiceSignatureRejection,
   voicemailTwiml,
   whisperTwiml,
@@ -62,7 +68,52 @@ function stepUrl(req: NextRequest, step: string, extra?: Record<string, string>)
   return `${origin(req)}${VOICE_PATH}?${params}`;
 }
 
+/** The menu, with its attempt count carried in the action URL so the next
+ * post-back knows which ask it is answering. */
+function menu(req: NextRequest, attempt: number): string {
+  return menuTwiml({
+    actionUrl: stepUrl(req, "menu", { attempt: String(attempt) }),
+    voicemailUrl: stepUrl(req, "to-voicemail"),
+    attempt,
+  });
+}
+
+/**
+ * Every stage runs inside a catch. A thrown error would otherwise reach Twilio
+ * as an HTTP 500, and Twilio answers that with its own robot apology before
+ * dropping the call — the caller hears a machine fail and learns nothing, and
+ * the operator hears about it never.
+ *
+ * So a failure speaks in the service's own voice and, wherever the caller
+ * might still have something to say, hands them to voicemail instead of
+ * hanging up. Losing a card entry to a Stripe outage is a bad minute; losing
+ * the call itself is a lost customer.
+ */
 export async function POST(req: NextRequest) {
+  try {
+    return await handle(req);
+  } catch (e) {
+    const step = new URL(req.url).searchParams.get("step") ?? "entry";
+    console.error(`[voice] unhandled error at step "${step}":`, e);
+    // Mid-card-entry there is nothing safe to retry, so apologise and end.
+    // Anywhere else, a message still gets the caller what they rang for.
+    const recoverable = step !== "pay-result" && step !== "voicemail";
+    return recoverable
+      ? xml(
+          twimlSayThenVoicemail(
+            "Sorry, we hit a problem on our end. Please leave a message after the beep and we'll call you back.",
+            `${origin(req)}${VOICE_PATH}?step=voicemail`,
+          ),
+        )
+      : xml(
+          sayAndHangUpTwiml(
+            "Sorry, we hit a problem on our end. Please call again in a few minutes. Goodbye.",
+          ),
+        );
+  }
+}
+
+async function handle(req: NextRequest) {
   const url = new URL(req.url);
   const step = url.searchParams.get("step") ?? "";
 
@@ -90,16 +141,21 @@ export async function POST(req: NextRequest) {
   const callSid = params.CallSid ?? "";
 
   switch (step) {
-    /* The operator's phones ring first; whoever picks up hears who is
-     * calling, and the call is simply a conversation. */
+    /* The menu answers immediately (session 020). With VOICE_RING_FIRST set,
+     * the operator's phones ring first instead and whoever picks up hears who
+     * is calling. */
     case "": {
       await startCall({
         callSid,
         fromPhone: caller,
         toPhone: normalizePhone(params.To ?? ""),
       });
+      // The menu answers FIRST (session 020, user decision). Ringing the
+      // operator ahead of it is opt-in via VOICE_RING_FIRST — keyed to its own
+      // flag rather than to "is VOICE_RING_TO set", so the deployment that
+      // asked for this change gets it without also having to clear a variable.
       const phones = ringToPhones();
-      if (!phones.length) return xml(menuTwiml({ actionUrl: stepUrl(req, "menu") }));
+      if (!ringFirst() || !phones.length) return xml(menu(req, 1));
       return xml(
         ringTwiml({
           phones,
@@ -139,9 +195,7 @@ export async function POST(req: NextRequest) {
           durationSeconds: answered ? Number(params.DialCallDuration) || 0 : 0,
         }),
       );
-      return answered
-        ? xml(hangUpTwiml())
-        : xml(menuTwiml({ actionUrl: stepUrl(req, "menu") }));
+      return answered ? xml(hangUpTwiml()) : xml(menu(req, 1));
     }
 
     case "menu": {
@@ -152,8 +206,21 @@ export async function POST(req: NextRequest) {
       if (digit === "2") {
         return xml(voicemailTwiml({ actionUrl: stepUrl(req, "voicemail") }));
       }
-      return xml(menuTwiml({ actionUrl: stepUrl(req, "menu"), reprompt: true }));
+      // An unrecognised key. Ask again, but count the asks: without a ceiling
+      // the caller can loop here forever, and every lap is billed.
+      const attempt = Number(url.searchParams.get("attempt") ?? "1") + 1;
+      if (attempt > MENU_MAX_ATTEMPTS) {
+        await updateCall(callSid, { detail: "menu: no valid selection, sent to voicemail" });
+        return xml(voicemailTwiml({ actionUrl: stepUrl(req, "voicemail") }));
+      }
+      return xml(menu(req, attempt));
     }
+
+    /* Silence at the menu — Gather fell through rather than posting a digit.
+     * Someone who says nothing still called for a reason, so take a message
+     * rather than hang up on them. */
+    case "to-voicemail":
+      return xml(voicemailTwiml({ actionUrl: stepUrl(req, "voicemail") }));
 
     /* Twilio has tokenized the card into Stripe and handed us a pm_… id. */
     case "pay-result": {
@@ -248,6 +315,45 @@ export async function POST(req: NextRequest) {
             `${site.name}: voicemail on the card line from ${who}. Listen: ${recording}`,
           )
           .catch((e) => console.error("[voice] voicemail notice failed:", e));
+      }
+      // …and into the inbox (user request, session 020), with the audio
+      // ATTACHED where it can be fetched. A texted Twilio link needs account
+      // credentials to open and dies with the recording; an mp3 in the inbox
+      // plays on any device and is still there next year.
+      //
+      // Deliberately after the texts and individually caught: the SMS notice
+      // is the one that reaches a phone in a barn, and an email problem must
+      // never cost it. Twilio is also still holding the line waiting for TwiML.
+      const adminEmail = (process.env.ADMIN_EMAIL ?? "").trim();
+      if (adminEmail && recording) {
+        try {
+          const audio = await fetchRecordingMp3(recording);
+          const body = voicemailEmail({
+            callerPhone: caller || null,
+            isMember: Boolean(from),
+            recordingUrl: recording,
+            seconds: Number(params.RecordingDuration) || 0,
+            attached: Boolean(audio),
+            receivedAt: new Date().toLocaleString("en-US", {
+              dateStyle: "medium",
+              timeStyle: "short",
+              timeZone: "America/New_York",
+            }),
+          });
+          await email.send({
+            to: adminEmail,
+            subject: body.subject,
+            text: body.text,
+            html: body.html,
+            ...(audio && {
+              attachments: [
+                { filename: `voicemail-${caller || "unknown"}-${callSid || "call"}.mp3`, content: audio },
+              ],
+            }),
+          });
+        } catch (e) {
+          console.error("[voice] voicemail email failed:", e);
+        }
       }
       return xml(sayAndHangUpTwiml("Thank you. We'll call you back. Goodbye."));
     }

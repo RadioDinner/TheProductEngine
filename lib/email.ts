@@ -6,11 +6,20 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { isProduction } from "@/lib/env";
 
+export interface EmailAttachment {
+  filename: string;
+  /** Base64-encoded file content (Resend's `attachments[].content` shape). */
+  content: string;
+}
+
 export interface EmailMessage {
   to: string;
   subject: string;
   html: string;
   text: string;
+  /** Optional files to attach — used by the voicemail notice, which carries
+   * the recording itself so the operator can play it from their inbox. */
+  attachments?: EmailAttachment[];
 }
 
 export interface EmailTransport {
@@ -25,7 +34,10 @@ const FROM = process.env.EMAIL_FROM ?? "The Plain Exchange <ads@theplainexchange
 
 const devTransport: EmailTransport = {
   async send(msg) {
-    console.log(`[email:dev] to ${msg.to}: ${msg.subject}`);
+    const files = msg.attachments?.length
+      ? ` (+${msg.attachments.length} attachment${msg.attachments.length === 1 ? "" : "s"})`
+      : "";
+    console.log(`[email:dev] to ${msg.to}: ${msg.subject}${files}`);
   },
 };
 
@@ -43,6 +55,7 @@ const resendTransport: EmailTransport = {
         subject: msg.subject,
         html: msg.html,
         text: msg.text,
+        ...(msg.attachments?.length && { attachments: msg.attachments }),
       }),
     });
     if (!response.ok) {

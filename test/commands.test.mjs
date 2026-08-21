@@ -4,6 +4,31 @@ import { parseCommand } from "../lib/commands.ts";
 export const name = "commands";
 
 export function run(t) {
+  /* ---- bare AD is canonical (session 020), and NEW must not eat a word ----
+   * "New Holland" and "New Idea" are two of the commonest farm brands there
+   * are. Stripping any leading "new" shipped ads that misnamed the goods. */
+  const body = (text) => parseCommand(text).body;
+  t.eq("bare AD posts", parseCommand("AD Hay for sale, $5 a bale").kind, "ad");
+  t.eq("bare AD keeps the whole body", body("AD Hay for sale, $5 a bale"), "Hay for sale, $5 a bale");
+  t.eq("AD NEW still works for members trained on it",
+    body("AD NEW Hay for sale, $5 a bale"), "Hay for sale, $5 a bale");
+  t.eq("AD NEW: separator", body("AD NEW: hay for sale"), "hay for sale");
+  t.eq("AD NEW - separator", body("AD NEW - hay for sale"), "hay for sale");
+  t.eq("bare AD NEW asks for the guide", body("AD NEW"), "");
+  t.eq("New Holland keeps its brand", body("AD New Holland baler, $2800"), "New Holland baler, $2800");
+  t.eq("New Idea keeps its brand", body("AD New Idea manure spreader, $900"), "New Idea manure spreader, $900");
+  t.eq("a lower-case new is the seller's word",
+    body("AD new puppies ready August 1"), "new puppies ready August 1");
+  t.eq("an ALL-CAPS message keeps NEW (casing says nothing there)",
+    body("AD NEW HOLLAND BALER, $2800"), "NEW HOLLAND BALER, $2800");
+  t.eq("reversed NEW AD hands off the bare form", body("NEW AD Hay for sale"), "Hay for sale");
+  t.eq("run-together NEWAD hands off the bare form", body("NEWAD Hay for sale"), "Hay for sale");
+  // The owner-command re-route has to survive a NEW the strip declined to take.
+  t.eq("AD NEW SOLD 1325 still routes to sold", parseCommand("AD NEW SOLD 1325").kind, "sold");
+  t.eq("AD SOLD 1325 still routes to sold", parseCommand("AD SOLD 1325").kind, "sold");
+  t.eq("a real ad about being sold out is NOT intercepted",
+    parseCommand("AD sold out of hay, taking spring orders").kind, "ad");
+
   t.eq("SUBSCRIBE", parseCommand("SUBSCRIBE").kind, "subscribe");
   t.eq("lowercase stop", parseCommand("stop").kind, "stop");
   t.eq("cancel -> stop", parseCommand("cancel").kind, "stop");

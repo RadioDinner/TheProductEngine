@@ -293,7 +293,7 @@ export default async function MyAdsPage({
       {pendingAds.length === 0 && myAds.length === 0 ? (
         <p>
           No ads on this account yet. <Link href="/account/post">Post one on the website</Link>,
-          or text <strong>AD NEW</strong> and your ad to <strong>{site.smsNumber}</strong>.
+          or text <strong>AD</strong> and your ad to <strong>{site.smsNumber}</strong>.
         </p>
       ) : (
         <ul className="myads">

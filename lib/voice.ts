@@ -10,13 +10,23 @@
  * out over the REGISTERED Telnyx line instead of an unregistered Twilio one.
  * The standalone service stays in the repo as a reference/fallback.
  *
- * Call flow (one route, `?step=` picks the stage):
- *   ring     → the operator phones ring first (whisper announces the caller);
- *              answered = a normal human conversation, nothing else happens.
- *   menu     → nobody answered: 1 = save a card, 2 = leave a message.
+ * Call flow (one route, `?step=` picks the stage). Session 020, user
+ * decision — "I want it to ring directly to my twilio number where they can
+ * add a card": THE MENU ANSWERS FIRST. The operator's phones no longer ring
+ * ahead of it, so a caller reaches the card line immediately instead of
+ * waiting out eighteen seconds of ringing first.
+ *
+ *   menu     → answers immediately: 1 = save a card, 2 = voicemail + callback.
  *   pay      → consent script, then <Pay> keypad capture (tokenize only).
  *   result   → attach the token to the caller's Stripe customer + confirm.
- *   voicemail→ recording lands, the operator gets a text with the link.
+ *   voicemail→ recording lands; the operator gets a text AND an email with the
+ *              audio attached.
+ *
+ * Ringing the operator first is still available (`VOICE_RING_FIRST=true`) and
+ * its stages — ring / whisper / accept / after-ring — are unchanged. It is
+ * OPT-IN now rather than "on whenever VOICE_RING_TO happens to be set",
+ * because leaving it keyed to that variable would have silently kept the old
+ * order for the very deployment that asked to change it.
  *
  * PCI: card digits go carrier → Twilio → Stripe. They never reach this app,
  * its logs, or an SMS thread. Never add a <Gather> that collects card digits.
@@ -44,6 +54,15 @@ export function ringToPhones(): string[] {
     .split(",")
     .map((entry) => normalizePhone(entry.trim()))
     .filter((phone): phone is string => Boolean(phone));
+}
+
+/**
+ * Ring the operator's phones BEFORE the menu? Off by default since session
+ * 020 — the menu answers first. Set VOICE_RING_FIRST=true (with VOICE_RING_TO
+ * populated) to put the old order back.
+ */
+export function ringFirst(): boolean {
+  return /^(1|true|yes|on)$/i.test((process.env.VOICE_RING_FIRST ?? "").trim());
 }
 
 /** How long those phones ring before the attendant takes over. Keep it UNDER
@@ -182,20 +201,61 @@ export function callWasAnswered(status: string | undefined, duration: string | u
   return status === "completed" && Number(duration) > 0;
 }
 
-/** Stage 2 — the attendant menu (nobody answered). */
-export function menuTwiml(args: { actionUrl: string; reprompt?: boolean }): string {
-  const lead = args.reprompt
-    ? "Sorry, I didn't get that."
-    : `Thanks for calling ${site.name}. Nobody is free to pick up right now.`;
+/**
+ * How many times a caller may press something that isn't 1 or 2 before the
+ * call stops asking. Without a ceiling the menu re-prompts forever: an invalid
+ * digit posts back to the same step, which serves the same menu, which accepts
+ * another invalid digit. A caller with a sticky keypad, or a pocket-dial, sat
+ * in that loop until they hung up — and every lap is billed.
+ */
+export const MENU_MAX_ATTEMPTS = 3;
+
+/**
+ * The attendant menu — now the FIRST thing a caller hears (session 020).
+ *
+ * The wording is the user's, near enough verbatim: "thank you for calling the
+ * plain exchange, to add a card on file, press 1, to leave a voicemail and
+ * receive a callback, press 2". It no longer opens with "nobody is free to
+ * pick up right now", which was true when the operator's phones rang first and
+ * is simply confusing now that the menu answers on the first ring.
+ *
+ * `attempt` is 1 for the first ask and climbs with each unrecognised key. Past
+ * MENU_MAX_ATTEMPTS the caller is sent to voicemail rather than hung up on —
+ * someone pressing the wrong key three times still has something to say, and
+ * dropping the call loses it.
+ */
+export function menuTwiml(args: {
+  actionUrl: string;
+  /** Where silence goes. Passed explicitly rather than derived from
+   * actionUrl: rewriting one URL into another with a string replace breaks
+   * silently the day a query parameter moves. Optional, and its absence ends
+   * the call politely instead of throwing — a TwiML builder that can throw
+   * takes a live call down with it. */
+  voicemailUrl?: string;
+  /** 1 = first ask. Anything higher re-asks after an unrecognised key. */
+  attempt?: number;
+  /** Kept for callers that only need "ask again"; same as attempt: 2. */
+  reprompt?: boolean;
+}): string {
+  const attempt = args.attempt ?? (args.reprompt ? 2 : 1);
+  const lead =
+    attempt > 1
+      ? "Sorry, I didn't get that."
+      : `Thank you for calling ${site.name}.`;
   return twiml(
     `<Gather numDigits="1" timeout="8" action="${escapeXml(args.actionUrl)}" method="POST">` +
       say(
-        `${lead} To put a card on file for your ads, press 1. ` +
-          "To leave a message, press 2.",
+        `${lead} To add a card on file, press 1. ` +
+          "To leave a voicemail and receive a callback, press 2.",
       ) +
       `</Gather>` +
-      say("We didn't get a selection. Goodbye.") +
-      `<Hangup/>`,
+      // Gather falls through to here when the caller says nothing at all
+      // (rather than pressing a wrong key), so silence ends in a voicemail
+      // too instead of a dial tone.
+      (args.voicemailUrl
+        ? say("Let's take a message instead.") +
+          `<Redirect method="POST">${escapeXml(args.voicemailUrl)}</Redirect>`
+        : say("We didn't get a selection. Goodbye.") + `<Hangup/>`),
   );
 }
 
@@ -228,6 +288,148 @@ export function voicemailTwiml(args: { actionUrl: string }): string {
       say("We didn't get a message. Goodbye.") +
       `<Hangup/>`,
   );
+}
+
+/**
+ * Say something, then record — the graceful failure. Used when a stage throws:
+ * the caller hears a plain apology in the service's own voice and still gets
+ * to leave their message, rather than Twilio's generic error tone and a dead
+ * line.
+ */
+export function twimlSayThenVoicemail(text: string, recordActionUrl: string): string {
+  return twiml(
+    say(text) +
+      `<Record maxLength="120" playBeep="true" trim="trim-silence" ` +
+      `action="${escapeXml(recordActionUrl)}" method="POST"/>` +
+      say("We didn't get a message. Goodbye.") +
+      `<Hangup/>`,
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Voicemail by email                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The Twilio recording, as an .mp3 URL a browser can open.
+ *
+ * Twilio hands back a bare resource URL; appending .mp3 is what makes it play
+ * rather than return JSON. Kept pure so the email body can be built and tested
+ * without a network.
+ */
+export function recordingMp3Url(recordingUrl: string): string {
+  const clean = recordingUrl.trim().replace(/\.(mp3|wav)$/i, "");
+  return clean ? `${clean}.mp3` : "";
+}
+
+/** The Twilio account SID out of a recording URL, so the fetch can
+ * authenticate without a second environment variable to keep in sync. */
+export function accountSidFromRecordingUrl(recordingUrl: string): string | null {
+  return recordingUrl.match(/\/Accounts\/(AC[0-9a-f]{32})\//i)?.[1] ?? null;
+}
+
+/**
+ * Fetch the recording so it can be ATTACHED to the email rather than linked.
+ *
+ * Why attach at all: a Twilio media link is only playable by someone holding
+ * the account credentials, and even where it opens it is a bare URL in an
+ * inbox that expires with the recording. An attached mp3 plays in the mail
+ * client, survives the recording being deleted, and is searchable later.
+ *
+ * Returns null on any failure — a missing SID, an auth rejection, a recording
+ * Twilio has not finished writing yet (the action webhook can beat it by a
+ * second or two), or anything oversized. The caller then sends the link-only
+ * email, because a voicemail notice WITHOUT the audio still does its job and a
+ * notice that never arrives does not.
+ */
+export async function fetchRecordingMp3(
+  recordingUrl: string,
+  opts: { authToken?: string; maxBytes?: number; fetchImpl?: typeof fetch } = {},
+): Promise<string | null> {
+  const url = recordingMp3Url(recordingUrl);
+  const sid = accountSidFromRecordingUrl(recordingUrl);
+  const token = opts.authToken ?? process.env.TWILIO_AUTH_TOKEN;
+  if (!url || !sid || !token) return null;
+  const maxBytes = opts.maxBytes ?? 8 * 1024 * 1024;
+  const doFetch = opts.fetchImpl ?? fetch;
+  try {
+    const response = await doFetch(url, {
+      headers: { Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}` },
+    });
+    if (!response.ok) {
+      console.error(`[voice] recording fetch failed (${response.status})`);
+      return null;
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (!buffer.length || buffer.length > maxBytes) {
+      console.error(`[voice] recording is ${buffer.length} bytes — not attaching`);
+      return null;
+    }
+    return buffer.toString("base64");
+  } catch (e) {
+    console.error("[voice] recording fetch threw:", e);
+    return null;
+  }
+}
+
+/** A voicemail notice for the operator's inbox. Pure — the route supplies the
+ * facts and decides whether the audio could be fetched. */
+export function voicemailEmail(args: {
+  callerPhone: string | null;
+  isMember: boolean;
+  recordingUrl: string;
+  seconds: number;
+  attached: boolean;
+  receivedAt: string;
+}): { subject: string; text: string; html: string } {
+  const who = args.callerPhone ? formatSpoken(args.callerPhone) : "an unknown number";
+  const member = args.callerPhone ? (args.isMember ? "a member" : "not a member yet") : "";
+  const link = recordingMp3Url(args.recordingUrl);
+  const length = args.seconds > 0 ? `${args.seconds} second${args.seconds === 1 ? "" : "s"}` : "";
+  const facts = [
+    ["From", `${who}${member ? ` (${member})` : ""}`],
+    ["Received", args.receivedAt],
+    ...(length ? [["Length", length]] : []),
+  ] as [string, string][];
+  const subject = `Voicemail from ${who}${length ? ` (${length})` : ""}`;
+  const note = args.attached
+    ? "The recording is attached to this email."
+    : "The recording could not be attached this time — use the link below.";
+  const text = [
+    `${site.name} — voicemail on the card line.`,
+    "",
+    ...facts.map(([k, v]) => `${k}: ${v}`),
+    "",
+    note,
+    link ? `Listen: ${link}` : "",
+    "",
+    args.callerPhone ? `Call back: ${formatSpoken(args.callerPhone)}` : "",
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+  const rows = facts
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:2px 12px 2px 0;color:#5b6670;font-size:13px;">${escapeXml(k)}</td>` +
+        `<td style="padding:2px 0;font-size:15px;color:#20262b;"><strong>${escapeXml(v)}</strong></td></tr>`,
+    )
+    .join("");
+  const html =
+    `<div style="margin:0 auto;max-width:520px;padding:16px;font-family:'Segoe UI',Arial,sans-serif;">` +
+    `<p style="margin:0 0 4px;font-family:Georgia,serif;font-size:22px;color:#20262b;">Voicemail on the card line</p>` +
+    `<table style="border-collapse:collapse;margin:8px 0 12px;">${rows}</table>` +
+    `<p style="margin:0 0 8px;font-size:14px;color:#20262b;">${escapeXml(note)}</p>` +
+    (link
+      ? `<p style="margin:0;font-size:14px;"><a href="${escapeXml(link)}" style="color:#2d5570;">Play it in your browser</a></p>`
+      : "") +
+    `</div>`;
+  return { subject, text, html };
+}
+
+/** (330) 555-0142 — the readable form for an email, not the spoken one. */
+function formatSpoken(phone: string): string {
+  const d = phone.replace(/\D/g, "").slice(-10);
+  return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : phone;
 }
 
 /** A closing line — spoken, then the call ends. */

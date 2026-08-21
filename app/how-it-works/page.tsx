@@ -13,7 +13,7 @@ const COMMANDS: { cmd: string; what: string }[] = [
   { cmd: "SUBSCRIBE", what: "Start getting the ads by text. Free." },
   { cmd: "STOP", what: "Stop getting the ads. Reply START to come back." },
   { cmd: "HELP", what: "Get this list of commands by text." },
-  { cmd: "AD NEW your ad text", what: "Post an ad. Attach a picture if you have one." },
+  { cmd: "AD your ad text", what: "Post an ad. Attach a picture if you have one." },
   { cmd: "PIC 1234", what: "See more pictures of ad number 1234 (up to two)." },
   { cmd: "STATUS 1234", what: "Check if an ad is still available or sold." },
   { cmd: "SOLD 1234", what: "Mark your ad sold (your ads only)." },
@@ -59,7 +59,7 @@ export default async function HowItWorks() {
       <h2>Post an ad</h2>
       <p>
         Text your ad to <strong>{site.smsNumber}</strong> starting with the words{" "}
-        <span className="cmd">AD NEW</span>. Say what you’re selling, the price, and how to
+        <span className="cmd">AD</span>. Say what you’re selling, the price, and how to
         reach you. A plain ad is {formatPrice(s.costTextCents)}; attach pictures (up to
         four) and it’s a picture ad at {formatPrice(s.costPhotoCents)}. Keep it under{" "}
         {s.maxChars} characters.

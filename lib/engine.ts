@@ -147,8 +147,8 @@ function welcomeMessage(settings: EngineSettings): string {
   return (
     `Welcome to ${site.name}! Ads come in batches, several to a text, ` +
     `${hourLabel(settings.smsWindowStartHour)} to ${hourLabel(settings.smsWindowEndHour)} Mon-Sat. ` +
-    `To place your own ad, text AD NEW and your ad - for example: ` +
-    `AD NEW Hay for sale, $5/bale. Call 330-555-0142. Text HELP for all commands.`
+    `To place your own ad, text AD and your ad - for example: ` +
+    `AD Hay for sale, $5/bale. Call 330-555-0142. Text HELP for all commands.`
   );
 }
 
@@ -268,7 +268,7 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   if (!body) {
     blocked("empty");
     return {
-      body: `To post an ad, text AD NEW and your ad — for example: AD NEW Horse cart for sale, $1,000 OBO. Call 330-555-0142.`,
+      body: `To post an ad, text AD and your ad — for example: AD Horse cart for sale, $1,000 OBO. Call 330-555-0142.`,
     };
   }
   const settings = await getEngineSettings();
@@ -516,7 +516,7 @@ function photoGuidance(count: number, settings: EngineSettings): Reply | null {
   if (settings.underAttack) return null;
   const many = count > 1;
   return {
-    body: `To post an ad with ${many ? "these pictures" : "this picture"}, resend ${many ? "them" : "it"} with your ad text, like: AD NEW Horse cart for sale $1,000, call ${site.smsNumber}.`,
+    body: `To post an ad with ${many ? "these pictures" : "this picture"}, resend ${many ? "them" : "it"} with your ad text, like: AD Horse cart for sale $1,000, call ${site.smsNumber}.`,
   };
 }
 
@@ -771,7 +771,7 @@ async function handlePhotoFollowup(
     }
     if (e instanceof AdLeftReviewError) {
       return {
-        body: `Ad #${ad.id} already went through review, so this picture wasn't added.${upgradeCharged ? " Nothing extra was charged." : ""} Text AD NEW with your pictures to post a new ad, or call ${site.supportPhone}.`,
+        body: `Ad #${ad.id} already went through review, so this picture wasn't added.${upgradeCharged ? " Nothing extra was charged." : ""} Text AD with your pictures to post a new ad, or call ${site.supportPhone}.`,
       };
     }
     console.error(`[engine] photo follow-up failed for ad #${ad.id}:`, e);
@@ -1126,7 +1126,7 @@ async function route(
         ),
       ];
       if (!lines.length) {
-        return { body: `No ads on this number yet. Text AD NEW and your ad to post one.` };
+        return { body: `No ads on this number yet. Text AD and your ad to post one.` };
       }
       return { body: `Your ads: ${lines.join(" · ")}` };
     }
