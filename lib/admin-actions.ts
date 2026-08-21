@@ -35,10 +35,13 @@ import {
 import { devToolsEnabled } from "@/lib/env";
 import {
   getEngineSettings,
+  addWordRule,
+  getWordRules,
+  removeWordRule,
   replaceWordRules,
   saveEngineSettings,
 } from "@/lib/settings";
-import { buildWordRules } from "@/lib/word-filter";
+import { buildWordRules, parseWordList } from "@/lib/word-filter";
 import { blockNumber, unblockNumber } from "@/lib/blocklist";
 import {
   cancelQueuedOutboxFor,
@@ -651,6 +654,47 @@ export async function adminSaveWordFilter(formData: FormData): Promise<void> {
   }
   await replaceWordRules(desired);
   redirect(`/admin/words?saved=${desired.length}`);
+}
+
+/**
+ * Add words to one of the lists WITHOUT the page ever showing what is already
+ * there (session 019, user request).
+ *
+ * The reason is not squeamishness. The filter list is several hundred obscene
+ * words, and the operator opens this page from an ordinary workplace: a
+ * corporate web filter or DLP agent watching that browser sees the rendered
+ * page, and a screen full of slurs is exactly what those systems escalate on.
+ * The words live in the database and there is no reason a routine edit has to
+ * put all of them on screen.
+ *
+ * So this is append-only, and it never echoes the list back — only a count.
+ * The full editor is still there behind an explicit click.
+ */
+export async function adminAddWords(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const autoReject = String(formData.get("list")) !== "flag";
+  const words = parseWordList(String(formData.get("words") ?? ""));
+  if (!words.length) redirect("/admin/words?error=nowords");
+  for (const word of words) await addWordRule(word, autoReject);
+  redirect(`/admin/words?added=${words.length}&list=${autoReject ? "reject" : "flag"}`);
+}
+
+/** Remove words by name, same reasoning: you type what goes, and the page
+ * never has to show you the rest of the list to do it. */
+export async function adminRemoveWords(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const words = parseWordList(String(formData.get("words") ?? ""));
+  if (!words.length) redirect("/admin/words?error=nowords");
+  // Count what was actually there, so "removed 3" never means "removed 0 and
+  // you misspelled all three".
+  const before = new Set((await getWordRules()).map((r) => r.word));
+  let removed = 0;
+  for (const word of words) {
+    if (!before.has(word)) continue;
+    await removeWordRule(word);
+    removed += 1;
+  }
+  redirect(`/admin/words?removed=${removed}&asked=${words.length}`);
 }
 
 // Sane ceilings so one fat-fingered save can't create a runaway-cost digest

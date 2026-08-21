@@ -275,17 +275,16 @@ same phone — so both were collapsed onto one `site.supportPhone` /
 
 ## For the next session
 
-### ⚠️ Operator action queue
+### ✅ Operator action queue — CLEARED
 
-1. **Paste `9957_money_kinds.sql`.** Until then the Adjust-balance form's kind
-   selector falls back to the legacy `adjustment`, and money.ts reads those
-   conservatively — refunds stay safe, but "cash collected" on /admin/money
-   keeps understating and the unclassified figure keeps growing.
-2. **Paste `9956_featured_requests.sql`.** Until then /featured shows the board
-   and takes calls and emails, but cannot queue anyone — and says so plainly
-   rather than failing. It was AMENDED mid-session (it gained `image_src`) and
-   is re-runnable, so paste it again if an earlier copy already went in.
-3. **Decide the two carried-over money items** listed under "Still open" below.
+**Both this session's migrations are pasted** (user confirmed 2026-08-21),
+along with session 020's `9954` and `9955`. `9957_money_kinds.sql` means the
+Adjust-balance kind selector now writes real `payment`/`courtesy`/`payout`
+rows, so "cash collected" on /admin/money stops understating and the
+unclassified figure only shrinks from here. `9956_featured_requests.sql`
+means /featured can queue people rather than only taking calls.
+
+Still open: **the two carried-over money items** under "Still open" below.
 
 ### Still open (money)
 

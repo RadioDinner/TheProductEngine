@@ -3,43 +3,43 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-21 (session 020 — the send window moves to
-7am–6pm, Saturday secretly stops at 5pm, and the money books were reset.
-v1.3.9. All migrations run and confirmed by the user; queue is clear).
+**Last updated:** 2026-08-21 (session 019's word-filter follow-up merged over
+session 020's send-window and ledger-reset work; all four migrations confirmed
+pasted. v1.3.9).
 
-## ✅ START HERE: the migration queue is CLEAR
+## ✅ Migrations: ALL PASTED (user confirmed 2026-08-21)
 
-**As of 2026-08-21 (session 020) the user confirms every migration has been
-run**, including the two that had been outstanding since session 019. Nothing
-is pending. `9954` and `9955` are the newest; the next migration takes 9953.
+**`9954`, `9955`, `9956` and `9957` are applied.** Nothing is waiting. Every
+feature below is fully on rather than degrading, so if one of them misbehaves,
+a pending migration is NOT the explanation — look at the code. **The next
+migration takes 9953.**
 
-What that means is now live in production:
+Consequences worth carrying:
 
-- **`9955_saturday_close.sql`** — `sms_window_end_hour` is 18. The published
-  window (7am–6pm Mon–Sat) and what the engine actually does now agree on
-  weekdays. Saturday closes at 5pm, unpublished.
-- **`9954_reset_ledger.sql`** — the money books were wiped and re-granted:
-  every member holds exactly the welcome credit, nobody has paid anything in.
-  ⚠️ **It has disarmed itself** (`config.ledger_reset_at` carries
-  `{"shape": "wipe-and-grant-v2"}`). Re-pasting it does nothing. To reset the
-  books again, delete that config row FIRST — deliberately.
-- **`9957_money_kinds.sql`** — `payment` / `courtesy` / `payout` are split out
-  of the legacy `adjustment` catch-all, so new money rows say which they are.
-  The "unclassified" notice on /admin/money should read $0 now: 9954 deleted
-  every legacy row, so there is no guesswork left to report.
-- **`9956_featured_requests.sql`** — featured listings and the request queue
-  are fully on.
+- **`9954_reset_ledger.sql` has RUN.** It is destructive and runs exactly
+  once; it is spent, and it has disarmed itself — `config.ledger_reset_at`
+  carries `{"shape": "wipe-and-grant-v2"}`, so re-pasting does nothing.
+  Resetting the books again means deleting that config row FIRST,
+  deliberately. Do not write a "reset the books" migration by copying this one
+  without reading why it was shaped that way (money section below).
+- **`9955_saturday_close.sql` has RUN**, so the stored `sms_window_end_hour`
+  row now matches the 6pm the public pages promise. The Saturday trap still
+  stands as a rule to remember: **deleting `sms_saturday_end_hour` does not
+  disable the early close** — with no row, `getEngineSettings` falls back to
+  the CODE default and Saturday still stops at 5pm. Setting it equal to
+  `sms_window_end_hour` is what turns it off.
+- **`9957_money_kinds.sql` has RUN**, so `payment` / `courtesy` / `payout` are
+  split out of the legacy `adjustment` catch-all and new money rows say which
+  they are. The "unclassified" notice on /admin/money should read **$0** now —
+  9954 deleted every legacy row, so there is no guesswork left to report. If
+  it ever shows a figure again, that is a NEW unclassified row, not history.
+- **`9956_featured_requests.sql` has RUN** — featured listings and the request
+  queue are fully on.
 
-**Two gotchas that outlive the paste**, because they are the opposite of what
-you would guess:
-
-1. **Deleting `sms_saturday_end_hour` does NOT turn the shortening off.**
-   `getEngineSettings` falls back to the CODE default (17) for any key with no
-   row. To run Saturday full hours, set it EQUAL to `sms_window_end_hour`.
-2. **The 10DLC campaign description registered with the carrier still says
-   7am–9pm.** That lives at Telnyx, not in this repo, and no code change
-   reaches it. The published window and the registered description have to
-   agree — this is the last piece of the session-020 change still outstanding.
+⚠️ **Still outstanding, and no code change reaches it: the 10DLC campaign
+description registered with the carrier still says 7am–9pm.** That lives at
+Telnyx. The published window and the registered description have to agree —
+this is the last piece of the session-020 change not yet done.
 
 ## Session 020 (2026-08-21) — THE SEND WINDOW MOVES, AND SATURDAY CLOSES EARLY
 
@@ -276,10 +276,10 @@ temporary `GRID_DEMO=1` fixture branch that was removed before committing.)
 
 ### The money half of the same session
 
-⚠️ **TWO MIGRATIONS TO PASTE: `9957_money_kinds.sql` and
-`9956_featured_requests.sql`.** Both degrade safely. 9956 was AMENDED after
-first being written (it gained `image_src`) and is re-runnable — paste it
-again if an earlier copy went in.
+✅ **`9957_money_kinds.sql` and `9956_featured_requests.sql` are PASTED**
+(user confirmed 2026-08-21), so the ledger kinds and the featured request
+queue are fully on. The degrade paths below stay in the code as a safety net
+but are no longer load-bearing.
 
 **Free ad credit can never be refunded as cash, and now nothing relies on the
 operator remembering that.** `lib/money.ts` splits a balance into CASH
