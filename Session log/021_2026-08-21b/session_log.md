@@ -11,7 +11,7 @@ which is most of what this session ended up being about by the end.
 | `814d52e` | Test mode: send real ads to test numbers and nobody else |
 | `39f6c30` | Merge of `origin/main` (session 022) — one doc conflict, both sides kept |
 | `24a5a5e` | Standing protocol for parallel sessions, and a migration collision check |
-| `57d9273` | Split HANDOFF: live state stays, the narrative moves to an archive |
+| `ab7b8e4` | Split HANDOFF: live state stays, the narrative moves to an archive |
 
 Version **1.4.9 → 1.4.11** (§6). Session 022 moved it to 1.4.10 in parallel;
 this session took the far-right digit once more from where that landed. Unit
