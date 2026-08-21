@@ -66,7 +66,7 @@ dashboard health panel, /admin/digests and the /admin/settings pause notice,
 because an operator who doesn't know Saturday closes at five will file the
 quiet hour as a bug and go hunting for it.
 
-**Migration `9955_saturday_close.sql`** (NOT yet pasted): updates
+**Migration `9955_saturday_close.sql`** (pasted and confirmed at session end): updates
 `sms_window_end_hour` 21 → 18, guarded on the old value so a re-paste can't
 stomp a later operator choice, and inserts `sms_saturday_end_hour` = 17.
 
@@ -198,18 +198,21 @@ contradicts nothing. Only copy that pairs "your ad won't go until Monday" with
 
 ## Open questions / next step
 
-0. **`9954_reset_ledger.sql` is destructive and runs once.** Paste it when you
-   are ready for the books to start from today. It disarms itself afterwards.
-1. **Paste `9955_saturday_close.sql` first.** Until it goes in, production
-   still texts until **9pm** while every public page now says 6pm — the stored
-   `sms_window_end_hour` row (21, from migration 9971) overrides the code
-   default. The Saturday half degrades safely on its own; the end-hour half
-   does not. `9957_money_kinds.sql` and `9956_featured_requests.sql` are still
-   waiting from session 019.
-2. **The 10DLC campaign description still says 7am–9pm** wherever it was
-   registered with the carrier. That is external to this repo and no code
-   change can fix it — the published window and the registered description
-   have to agree. Update it at Telnyx.
+**All migrations are run** — the user confirmed at session end, including
+`9957` and `9956`, which had been outstanding since session 019. The queue is
+clear for the first time in two sessions; the next migration takes **9953**.
+`9954` has disarmed itself, so re-pasting it does nothing.
+
+1. **The 10DLC campaign description still says 7am–9pm** wherever it was
+   registered with the carrier — the LAST piece of this session's change still
+   outstanding. It is external to this repo and no code change can fix it; the
+   published window and the registered description have to agree. Update it at
+   Telnyx.
+2. **Confirm the dashboard reads right.** `/admin/money` should show $0
+   collected / $0 earned / $0 owed and $160 credit issued across 4 members,
+   with "Books opened 21 August 2026" underneath once Vercel has the deploy.
+   `/admin` should show the send window as **7am–6pm Mon–Fri · 7am–5pm Sat** —
+   that label is the quickest proof 9955 landed.
 3. **Watch the throughput.** The sending day lost three hours (14 → 11), and
    Saturday four. Batch capacity is unchanged (`digestCap` 10 per batch, a
    batch per cron tick), so nothing is stranded — the overflow rides the next

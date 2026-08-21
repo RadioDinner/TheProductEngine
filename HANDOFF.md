@@ -5,29 +5,41 @@ this every session. Per-session detail lives in `Session log/`.
 
 **Last updated:** 2026-08-21 (session 020 — the send window moves to
 7am–6pm, Saturday secretly stops at 5pm, and the money books were reset.
-v1.3.9).
+v1.3.9. All migrations run and confirmed by the user; queue is clear).
 
-## ⚠️ START HERE: four migrations are waiting
+## ✅ START HERE: the migration queue is CLEAR
 
-**`9957_money_kinds.sql`** and **`9956_featured_requests.sql`** have NOT been
-pasted. Both degrade safely, so nothing is broken — but two features are only
-half on until they are. `9956` was amended mid-session and is re-runnable;
-paste it again if an earlier copy went in. Detail in each section below.
+**As of 2026-08-21 (session 020) the user confirms every migration has been
+run**, including the two that had been outstanding since session 019. Nothing
+is pending. `9954` and `9955` are the newest; the next migration takes 9953.
 
-**`9955_saturday_close.sql`** is new and needs pasting too. Until it goes in,
-**production still texts until 9pm on weekdays** while every public page now
-says 6pm — the stored `sms_window_end_hour` row (`21`, seeded by 9971)
-overrides the code default, and a stored row always wins.
+What that means is now live in production:
 
-Saturday is the other way round and it catches people out: there has never
-been a `sms_saturday_end_hour` row, and `getEngineSettings` falls back to the
-CODE default for any key with no row — so Saturday's 5pm close goes live the
-moment this deploys, with or without the migration. **Deleting that row does
-not disable the shortening**; setting it equal to `sms_window_end_hour` does.
-Paste 9955 before anything else this session.
+- **`9955_saturday_close.sql`** — `sms_window_end_hour` is 18. The published
+  window (7am–6pm Mon–Sat) and what the engine actually does now agree on
+  weekdays. Saturday closes at 5pm, unpublished.
+- **`9954_reset_ledger.sql`** — the money books were wiped and re-granted:
+  every member holds exactly the welcome credit, nobody has paid anything in.
+  ⚠️ **It has disarmed itself** (`config.ledger_reset_at` carries
+  `{"shape": "wipe-and-grant-v2"}`). Re-pasting it does nothing. To reset the
+  books again, delete that config row FIRST — deliberately.
+- **`9957_money_kinds.sql`** — `payment` / `courtesy` / `payout` are split out
+  of the legacy `adjustment` catch-all, so new money rows say which they are.
+  The "unclassified" notice on /admin/money should read $0 now: 9954 deleted
+  every legacy row, so there is no guesswork left to report.
+- **`9956_featured_requests.sql`** — featured listings and the request queue
+  are fully on.
 
-**`9954_reset_ledger.sql`** — ⚠️ **DESTRUCTIVE, and it runs exactly once.**
-See the money section below before pasting.
+**Two gotchas that outlive the paste**, because they are the opposite of what
+you would guess:
+
+1. **Deleting `sms_saturday_end_hour` does NOT turn the shortening off.**
+   `getEngineSettings` falls back to the CODE default (17) for any key with no
+   row. To run Saturday full hours, set it EQUAL to `sms_window_end_hour`.
+2. **The 10DLC campaign description registered with the carrier still says
+   7am–9pm.** That lives at Telnyx, not in this repo, and no code change
+   reaches it. The published window and the registered description have to
+   agree — this is the last piece of the session-020 change still outstanding.
 
 ## Session 020 (2026-08-21) — THE SEND WINDOW MOVES, AND SATURDAY CLOSES EARLY
 

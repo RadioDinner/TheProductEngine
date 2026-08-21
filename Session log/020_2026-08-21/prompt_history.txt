@@ -28,3 +28,6 @@ users,total_credit_dollars
 4,160.0000000000000000
 
 I reran the migration
+
+--- 2026-08-21 ---
+all migrations are run.
