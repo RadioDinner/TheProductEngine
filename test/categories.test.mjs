@@ -39,7 +39,7 @@ export function run(t) {
     siteUrl: "ThePlainExchange.com",
     cardPhone: "(330) 960-7170",
     starterCreditLabel: "$40",
-    windowLabel: "7am to 9pm Mon - Sat",
+    windowLabel: "7am to 6pm Mon - Sat",
     priceLine: "Text ad $20; 1 pic $30, 2 pics $40, 3 pics $50.",
   };
   const welcome = welcomeMessages(WELCOME_ARGS);
@@ -47,7 +47,7 @@ export function run(t) {
   t.eq(
     "1 verbatim",
     welcome[0],
-    "Welcome to The Plain Exchange!\n\nAds come in batches - several in one text, each with its own ad number - 7am to 9pm Mon - Sat.\n\nText ad $20; 1 pic $30, 2 pics $40, 3 pics $50.\n\nYou have $40 of free ad credit!",
+    "Welcome to The Plain Exchange!\n\nAds come in batches - several in one text, each with its own ad number - 7am to 6pm Mon - Sat.\n\nText ad $20; 1 pic $30, 2 pics $40, 3 pics $50.\n\nYou have $40 of free ad credit!",
   );
   t.eq(
     "2 verbatim",

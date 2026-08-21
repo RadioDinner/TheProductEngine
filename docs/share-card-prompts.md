@@ -66,7 +66,7 @@ and a card nobody can forward is not a card.
 >    Text ad — $20 · 1 picture — $30 · 2 pictures — $40 · 3 pictures — $50
 > 6. A short highlighted line: **First 200 members get $40 in free ad credit**
 > 7. A section headed **HOW IT WORKS**, three short lines:
->    Text AD NEW and your ad · Ads send 7am–9pm, Monday–Saturday ·
+>    Text AD NEW and your ad · Ads send 7am–6pm, Monday–Saturday ·
 >    Reply PIC and the ad number to see the pictures
 > 8. At the bottom, largest element after the headline, the call to action:
 >    **TEXT START TO (330) 960-7170**
@@ -118,7 +118,7 @@ mangling them, use the Claude Design version instead.
 > - **What it costs** — Text ad $20 · 1 picture $30 · 2 pictures $40 ·
 >   3 pictures $50
 > - Callout: **The first 200 members get $40 in free ad credit**
-> - **How it works** — Text `AD NEW` and your ad · Ads send 7am–9pm, Monday
+> - **How it works** — Text `AD NEW` and your ad · Ads send 7am–6pm, Monday
 >   through Saturday · Reply `PIC` and the ad number to get the pictures ·
 >   Reply `BAL` for your balance, `SOLD` and the number when it sells
 > - **What you can get ads for** (set small, as one tidy run-on line or a
@@ -149,7 +149,7 @@ card and the welcome texts agree:
 | --- | --- |
 | $20 / $30 / $40 / $50 | `lib/config.ts` — `costTextCents`, `photoPricesCents` |
 | $40 credit, first 200 | `starterCreditCents`, `starterCreditLimit` |
-| 7am–9pm, Mon–Sat | `smsWindowStartHour`, `smsWindowEndHour`, `smsQuietDays` |
+| 7am–6pm, Mon–Sat | `smsWindowStartHour`, `smsWindowEndHour`, `smsQuietDays` |
 | AD NEW / PIC / BAL / SOLD | the welcome package, `lib/categories.ts` |
 | The nine categories | `CATEGORIES` in `lib/categories.ts` |
 | (330) 960-7170 | `site.smsNumber` |

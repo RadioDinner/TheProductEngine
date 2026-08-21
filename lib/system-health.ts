@@ -29,7 +29,7 @@ export interface HealthInput {
   underAttack: boolean;
   /** Whether the SMS send window is open at this moment. */
   windowOpen: boolean;
-  /** "7am–9pm, Mon–Sat" — how the window reads on Settings. */
+  /** "7am–6pm Mon–Fri · 7am–5pm Sat" — operatorWindowLabel, the real hours. */
   windowLabel: string;
   /** "at 7am" / "tomorrow at 7am" — from nextSendLabel. */
   nextSendLabel: string;

@@ -39,7 +39,7 @@ export default async function TermsAndConditions() {
         </li>
         <li>
           Message frequency varies: ads are texted in batches through the day, between 7am
-          and 9pm Monday through Saturday — a batch is one text plus one picture message for
+          and 6pm Monday through Saturday — a batch is one text plus one picture message for
           each ad in it that has a picture — along with replies to the commands you send.
         </li>
         <li>Message and data rates may apply, charged by your phone company.</li>

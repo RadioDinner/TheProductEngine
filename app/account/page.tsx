@@ -524,7 +524,7 @@ export default async function AccountPage({
           </>
         )}
         <p className="fine">
-          Message frequency varies — each ad is texted as it&rsquo;s approved, 7am&ndash;9pm Mon&ndash;Sat. Msg &amp; data rates may apply. Reply STOP to any text to
+          Message frequency varies — each ad is texted as it&rsquo;s approved, 7am&ndash;6pm Mon&ndash;Sat. Msg &amp; data rates may apply. Reply STOP to any text to
           stop, HELP for help.
         </p>
       </section>

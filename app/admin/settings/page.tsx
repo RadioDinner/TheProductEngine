@@ -11,7 +11,7 @@ import { getEngineSettings, getWordRules } from "@/lib/settings";
 import { listBlocked } from "@/lib/blocklist";
 import { formatPhone } from "@/lib/phone";
 import { formatPrice, site } from "@/lib/config";
-import { hourLabel, smsWindowOpen } from "@/lib/digest-engine";
+import { hourLabel, operatorWindowLabel, smsWindowOpen } from "@/lib/digest-engine";
 import { LookupTester } from "@/components/LookupTester";
 import type { HandbookKey } from "@/lib/admin-handbook";
 import { Tip } from "@/components/Tip";
@@ -70,6 +70,12 @@ const FIELDS: { key: string; label: string; hint?: string; tip: HandbookKey }[] 
     label: "…or once the oldest has waited this long (minutes)",
     hint: "the timer trigger, so a lone ad never waits all day for company. 0 turns it off",
     tip: "settings.batchTriggers",
+  },
+  {
+    key: "smsSaturdayEndHour",
+    label: "Saturday: stop sending at (hour, ET)",
+    hint: "17 = the last Saturday text leaves at 4:59pm. Every other day runs to the published close, and this can only make Saturday shorter — never longer. Set it EQUAL to the published close to run Saturday full hours; anything at or below the 7am open switches Saturday off entirely. Not published anywhere members can read it",
+    tip: "settings.saturdayClose",
   },
   { key: "maxChars", label: "Max ad length (characters)", tip: "settings.maxChars" },
   {
@@ -269,10 +275,9 @@ export default async function AdminSettings({
             ) : (
               <>
                 The send window is <strong>shut</strong> right now (ads run{" "}
-                {hourLabel(settings.smsWindowStartHour)}&ndash;
-                {hourLabel(settings.smsWindowEndHour)}, Mon&ndash;Sat). You can resume any
-                time — <strong>nothing goes out until the window opens</strong>, so
-                resuming at six in the morning is safe: the first text waits for{" "}
+                {operatorWindowLabel(settings)}). You can resume any time —{" "}
+                <strong>nothing goes out until the window opens</strong>, so resuming at
+                six in the morning is safe: the first text waits for{" "}
                 {hourLabel(settings.smsWindowStartHour)}.
               </>
             )}

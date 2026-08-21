@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getDashboardStats } from "@/lib/dashboard";
 import { getEngineSettings } from "@/lib/settings";
-import { hourLabel, nextSendLabel, smsWindowOpen } from "@/lib/digest-engine";
+import { nextSendLabel, operatorWindowLabel, smsWindowOpen } from "@/lib/digest-engine";
 import { systemHealth, type HealthLevel } from "@/lib/system-health";
 import { countOpenHelpReports } from "@/lib/help-report-store";
 import type { HandbookKey } from "@/lib/admin-handbook";
@@ -61,9 +61,10 @@ export default async function AdminDashboard() {
     outboundPaused: settings.outboundPaused,
     underAttack: settings.underAttack,
     windowOpen,
-    windowLabel: `${hourLabel(settings.smsWindowStartHour)}–${hourLabel(
-      settings.smsWindowEndHour,
-    )}, Mon–Sat`,
+    // The OPERATOR's label, not the published one: Saturday's earlier close
+    // is spelled out here so a quiet Saturday evening reads as the schedule
+    // working rather than as a fault to go hunting for.
+    windowLabel: operatorWindowLabel(settings),
     nextSendLabel: nextSendLabel(now, settings),
     queuedDeliveries: stats.queuedDeliveries,
     backlogThreshold: BACKLOG,

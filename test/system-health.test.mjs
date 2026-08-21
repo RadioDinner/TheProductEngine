@@ -15,7 +15,7 @@ function healthy(over = {}) {
     outboundPaused: false,
     underAttack: false,
     windowOpen: true,
-    windowLabel: "7am–9pm, Mon–Sat",
+    windowLabel: "7am–6pm Mon–Fri · 7am–5pm Sat",
     nextSendLabel: "in a few minutes",
     queuedDeliveries: 0,
     backlogThreshold: 40,

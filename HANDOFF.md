@@ -3,15 +3,172 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-20 (session 019 wrap — the admin dashboard, the
-members grid, and the money work. v1.2.8, all on `main`).
+**Last updated:** 2026-08-21 (session 020 — the send window moves to
+7am–6pm, Saturday secretly stops at 5pm, and the money books were reset.
+v1.3.9).
 
-## ⚠️ START HERE: two migrations are waiting
+## ⚠️ START HERE: four migrations are waiting
 
 **`9957_money_kinds.sql`** and **`9956_featured_requests.sql`** have NOT been
 pasted. Both degrade safely, so nothing is broken — but two features are only
 half on until they are. `9956` was amended mid-session and is re-runnable;
 paste it again if an earlier copy went in. Detail in each section below.
+
+**`9955_saturday_close.sql`** is new and needs pasting too. Until it goes in,
+**production still texts until 9pm on weekdays** while every public page now
+says 6pm — the stored `sms_window_end_hour` row (`21`, seeded by 9971)
+overrides the code default, and a stored row always wins.
+
+Saturday is the other way round and it catches people out: there has never
+been a `sms_saturday_end_hour` row, and `getEngineSettings` falls back to the
+CODE default for any key with no row — so Saturday's 5pm close goes live the
+moment this deploys, with or without the migration. **Deleting that row does
+not disable the shortening**; setting it equal to `sms_window_end_hour` does.
+Paste 9955 before anything else this session.
+
+**`9954_reset_ledger.sql`** — ⚠️ **DESTRUCTIVE, and it runs exactly once.**
+See the money section below before pasting.
+
+## Session 020 (2026-08-21) — THE SEND WINDOW MOVES, AND SATURDAY CLOSES EARLY
+
+**Version 1.2.8 → 1.3.9** (§6: the far-right digit moved mid-session when the
+work looked like three features; the send-window copy rule, the operator
+setting, the ledger reset and the books-opened line took it past four, so the
+SECOND digit moved as well — the same cumulative shape session 019 used).
+
+The user brought back community advice: *"9pm is way too late to send ads on
+Saturday nights, and 6 would work for the week days."* Then went one step
+further, and the two halves are deliberately DIFFERENT NUMBERS:
+
+> **Published:** "I'll publish that the ads run 7am to 6pm Monday to Saturday"
+> **Actual:** "but I want to secretly stop sending ads by 5pm on Saturdays"
+
+### The mechanism to remember: the end hour is PER-WEEKDAY now
+
+`smsWindowEndHour` (18) is the PUBLISHED close and the real one Mon–Fri.
+`smsSaturdayEndHour` (17) is Saturday's real close. `windowEndHourFor(weekday,
+settings)` in `lib/digest-engine.ts` picks between them, and `smsWindowOpen`
+calls it — so every enforcement point (compose in `runQueuedBroadcasts`, the
+drain in `drainDigestOutbox`, the approval reply, the admin panels) got
+Saturday for free. Both hours are END-EXCLUSIVE, so 18 = last weekday text at
+5:59pm and 17 = last Saturday text at 4:59pm.
+
+**The Saturday hour can only ever SHORTEN Saturday.** `windowEndHourFor` takes
+`Math.min(saturday, published)`. That is not tidiness: a fat-fingered 20 on
+/admin/settings would otherwise text people past the hours the compliance copy
+promises every subscriber. Under-delivering on the published window is safe;
+over-delivering is a broken promise. Pinned by tests.
+
+### Keeping it secret is a code path, not a wish
+
+`closedEarly(now, settings)` is true only in the gap between Saturday's real
+close and the published one. Two member-facing messages consult it and DROP
+their hours clause in that hour:
+
+- the approval text (`lib/moderation.ts`) — otherwise "It goes out Monday at
+  7am — texts only go out between 7am and 6pm, Monday through Saturday",
+  sent at 5:30pm on a Saturday, argues with itself;
+- the ad-received text (`lib/engine.ts`) — same sentence, same problem.
+
+Both still say WHEN the ad goes. The promise is kept, it just isn't recited.
+**If you add copy that quotes the window, check `closedEarly` first.**
+
+### Where the truth is told, and where it isn't
+
+- **Never**: any member-facing page, the welcome text, the compliance copy.
+  Nine public pages moved 9pm → 6pm this session (`/`, `/sms`, `/email`,
+  `/account`, `/faq`, `/how-it-works`, `/privacy`,
+  `/terms-and-conditions`, and the footer in `app/layout.tsx`).
+- **Always**: the admin surfaces, via `operatorWindowLabel(settings)` →
+  "7am–6pm Mon–Fri · 7am–5pm Sat". It reads on the dashboard health panel,
+  /admin/digests and the /admin/settings pause notice. An operator who does
+  not know Saturday closes at five will file the quiet hour as a bug.
+
+### The money books were reset (migration 9954)
+
+`/admin/money` reads EVERY `credit_ledger` row, all time, with no date filter
+— so pre-launch it was adding up the operator testing the service on himself
+and calling it income. The user's decision, asked and answered: *"I want to
+wipe to zero aside from the 40 dollar ad credit"*, and *"no real member money
+is in the system yet"*.
+
+**It WIPES AND RE-GRANTS — and the first draft, which kept the existing
+welcome-credit rows and deleted the rest, was wrong.** The user checked the
+result against the dashboard and it did not match: `$120 still unspent` is
+three members' worth of $40, not four. Some members' welcome credit had been
+partly spent, one never had a welcome row at all, so keeping-what-exists lands
+on $120 across 3 members rather than the intended $160 across 4.
+
+Reconstructing the intended state is the only way to hit it exactly. So 9954
+deletes EVERY ledger row, then writes one fresh welcome grant per row in
+`users` — amount from `config.starter_credit_cents` (default 4000), worded
+exactly as `starterCreditNote()` writes it — and stamps
+`users.starter_granted_at` so nobody is granted a second welcome credit and
+the 200-member launch count stays honest. The end state is a function of the
+users table, NOT of whatever the ledger happened to hold.
+
+**The total is (number of users) × $40, so the migration header carries a
+preview query and says to run it first.** If `users` holds more than the
+expected members, the total will not be $160.
+
+Verified against a throwaway Postgres 16 on a fixture matching the reported
+shape — 4 members, only 3 holding welcome credit, plus a purchase, a cheque, a
+payout and a legacy adjustment. Result: 4 members × $40 = $160, and the
+surviving rows through the real `moneyPosition`/`incomeSummary` read $0
+collected, $0 earned, $0 owed, $160 issued, $160 unspent.
+
+**⚠️ It disarms itself, and that is load-bearing.** `credit_ledger` is
+append-only by design (9966) and it is what every balance is MADE of. A wipe
+that simply re-ran on every paste would be a loaded gun in the migrations
+folder — a future session told to "paste the pending migrations" would destroy
+real money. The marker `config.ledger_reset_at` records WHICH reset ran, as
+`{"at": …, "shape": "wipe-and-grant-v2"}`; a run whose shape already matches
+does nothing. A superseded v1 marker (a bare timestamp string) does NOT block
+v2, so a database that got the wrong draft still reaches the right state.
+Both paths tested: real rows added after a reset survive a re-paste untouched,
+and a v1 marker lets v2 run exactly once. **To reset again you must delete
+that config row first — an explicit act, which is the point.**
+
+`getBooksOpenedAt` in `lib/income.ts` reads BOTH marker shapes for the same
+reason.
+
+`/admin/money` reads the same stamp (`getBooksOpenedAt`) and prints "Books
+opened <date>" under the figures, so the totals' starting point is never a
+mystery. Unreadable or absent = the line simply doesn't render.
+
+**Not touched, deliberately:** ads (their spend rows are gone, so old test ads
+stay live but unrecorded as paid — `/admin/purge` is the tool for removing a
+test member and their ads together), `business_packages`, `users.free_ads`,
+and Stripe itself.
+
+⚠️ Stamping `starter_granted_at` for EVERY member means anyone who never
+posted now counts as having had their welcome credit. That is what "everyone
+has $40 in credit" requires, but it departs from the standing rule that the
+grant lands on a member's FIRST post rather than at signup.
+
+### Things a future session must not get wrong here
+
+- **The email edition is NOT affected, on purpose** (user decision this
+  session, asked and answered). Email has never obeyed the send window — "an
+  inbox has no bedtime" — and still composes at 7am, noon and 5pm every day,
+  Saturday and Sunday included. The Saturday 5pm edition lands AT five, which
+  is what "end the digests by 5" means. Texting is the thing that stops early.
+- **The 10DLC campaign description still says 7am–9pm** wherever it was
+  registered with the carrier. That is EXTERNAL to this repo and the code
+  cannot fix it. The published window and the registered description have to
+  agree — update it at Telnyx.
+- `smsSaturdayEndHour` is optional in `WindowSettings` — but that fallback is
+  about the OBJECT, not the database. A caller that passes a settings object
+  without the key (a test, an old serialized blob) gets the published close on
+  Saturday; a config table with no `sms_saturday_end_hour` ROW still gets 17,
+  from `engineDefaults`. Two different fallbacks, opposite outcomes. Do not
+  make the field required, and do not read a missing row as "no shortening".
+- A Saturday hour at or below the open hour switches Saturday OFF entirely
+  (`hour >= 7 && hour < 0` is never true). That is a legitimate setting, and
+  `operatorWindowLabel` says "no Saturday sending" rather than printing
+  "7am–12am Sat", which reads like the opposite.
+- Setting the Saturday hour EQUAL to the published one is the documented way
+  to switch the shortening off — not deleting the setting.
 
 ## Session 019 (2026-08-20) — THE ADMIN DASHBOARD, THE MEMBERS GRID, AND THE MONEY
 

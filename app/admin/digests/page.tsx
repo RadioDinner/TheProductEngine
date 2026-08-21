@@ -8,7 +8,7 @@ import {
   adminRevertAd,
   adminSendDigest,
 } from "@/lib/admin-actions";
-import { hourLabel, selectDigestItems, nextSlotOccurrence } from "@/lib/digest-engine";
+import { operatorWindowLabel, selectDigestItems, nextSlotOccurrence } from "@/lib/digest-engine";
 import {
   listHeldNewAds,
   listRecentDigests,
@@ -152,8 +152,8 @@ export default async function AdminDigests({
             ? `, or ${settings.batchMaxWaitMinutes} minutes after the oldest was approved`
             : ""}
         </strong>{" "}
-        <Tip k="settings.batchTriggers" /> — inside the send window only ({hourLabel(settings.smsWindowStartHour)}–
-        {hourLabel(settings.smsWindowEndHour)}, Mon–Sat) · capacity {settings.digestCap} ads per
+        <Tip k="settings.batchTriggers" /> — inside the send window only (
+        {operatorWindowLabel(settings)}) · capacity {settings.digestCap} ads per
         batch, each picture ad adding its own picture message
         {queued > 0 && (
           <>

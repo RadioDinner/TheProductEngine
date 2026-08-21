@@ -22,6 +22,7 @@ import {
 import { getEngineSettings } from "@/lib/settings";
 import {
   batchWaitLabel,
+  closedEarly,
   drainDigestOutbox,
   hourLabel,
   nextSendLabel,
@@ -85,11 +86,19 @@ export async function approveAd(
     }),
   );
   const open = smsWindowOpen(now, settings);
+  // The hours are recited only when they EXPLAIN the wait. Inside Saturday's
+  // unpublished early close they would contradict it ("goes out Monday — we
+  // text until 6pm, Mon-Sat", sent at half five on a Saturday), so that hour
+  // gets the same message minus the clause: still true, still useful, and it
+  // doesn't announce the shortening. See closedEarly in lib/digest-engine.ts.
+  const hoursClause = closedEarly(now, settings)
+    ? ""
+    : ` — texts only go out between ${hourLabel(settings.smsWindowStartHour)} and ${hourLabel(settings.smsWindowEndHour)}, Monday through Saturday`;
   await notify(
     ad.ownerPhone,
     open
       ? `Your ad #${id} is approved. It goes out to subscribers ${batchWaitLabel(settings)}. Text STATUS ${id} any time to check it.`
-      : `Your ad #${id} is approved. It goes out ${nextSendLabel(now, settings)} — texts only go out between ${hourLabel(settings.smsWindowStartHour)} and ${hourLabel(settings.smsWindowEndHour)}, Monday through Saturday. Text STATUS ${id} any time to check it.`,
+      : `Your ad #${id} is approved. It goes out ${nextSendLabel(now, settings)}${hoursClause}. Text STATUS ${id} any time to check it.`,
   );
   if (!open) return;
   try {

@@ -52,7 +52,7 @@ export async function simRejectViolation(formData: FormData): Promise<void> {
 
 export async function simRunDigests(formData: FormData): Promise<void> {
   guard();
-  // force: the simulator sends regardless of the 7am-9pm window.
+  // force: the simulator sends regardless of the send window.
   const results = await runQueuedBroadcasts(new Date(), { force: true });
   // Composing only enqueues now — drain so the simulator shows delivery too.
   const drain = await drainDigestOutbox({ timeBudgetMs: 15_000 });

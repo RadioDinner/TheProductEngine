@@ -59,7 +59,7 @@ const ENTRIES = {
     title: "The system health verdict",
     what: "One line saying whether the service is working, with the checks it is built from underneath. \"All systems go\" means ads are on, messages are on, neither pause is set, texting is configured and nothing is backed up. Anything else names what is wrong and where to fix it.",
     why: "The user's session-019 ask, in their words: \"when ads and messages are on and not paused and running, put status 'All systems go'\". The point is a single glance that answers \"is my service actually running?\" without opening Settings, Digests and the Vercel dashboard in turn.",
-    gotchas: "Quiet hours are NOT a fault. Outside the send window ads queue by design — that window is a promise the compliance copy makes to every subscriber — so the panel stays green and the summary tells you when the next batch goes. Colouring a normal night red would teach you to ignore the panel, which is the only way a health panel can really fail. A pause, by contrast, is always red, because only you can clear it.",
+    gotchas: "Quiet hours are NOT a fault, and neither is Saturday going quiet an hour early (see Settings). Outside the send window ads queue by design — that window is a promise the compliance copy makes to every subscriber — so the panel stays green and the summary tells you when the next batch goes. Colouring a normal night red would teach you to ignore the panel, which is the only way a health panel can really fail. A pause, by contrast, is always red, because only you can clear it.",
   },
   "dashboard.smsSubscribers": {
     title: "Current SMS subscribers",
@@ -176,7 +176,7 @@ const ENTRIES = {
     title: "Slots, and what they cost",
     what: "EMAIL edition times (Eastern Time), set on Settings — 7am, noon and 5pm by default. SMS no longer uses these: since session 016 each ad is TEXTED the moment you approve it. An email edition carries the ads texted since the last one, so email stays a summary; an empty edition sends nothing.",
     why: "Email mirroring was a session-007 user decision (before that, email had its own schedule and union-of-digests content). A fact worth remembering from session 003 — the user spotted it: slot COUNT is nearly cost-neutral, because each ad broadcasts only once per day regardless of slots; the real cost driver is ads × subscribers. And from session 011: slots [7, 12, 16, 20] is a zero-code change that matches every registered 10DLC word (\"up to 4 digests/day … morning, noon, afternoon, evening\") if faster delivery is ever wanted.",
-    gotchas: "Session 011 kept digests over per-ad sending because of the registered \"up to 4 digests a day\" frequency promise; session 016 REVERSED that on the user's decision — the published copy now says frequency varies with a 7am-9pm Mon-Sat window, so the 10DLC campaign description has to say the same. Each email edition carries one sponsor banner, rotated by fewest-so-far.",
+    gotchas: "Session 011 kept digests over per-ad sending because of the registered \"up to 4 digests a day\" frequency promise; session 016 REVERSED that on the user's decision — the published copy now says frequency varies inside a published Mon-Sat send window, so the 10DLC campaign description has to say the same — session 020 moved that published window to 7am-6pm, which means the campaign description needs the new hours too. Each email edition carries one sponsor banner, rotated by fewest-so-far.",
   },
   "digests.queue": {
     title: "The queue is the truth",
@@ -465,6 +465,12 @@ const ENTRIES = {
     what: "Two triggers, whichever comes first: enough ads are waiting (the count), or the oldest has waited long enough (the timer). Defaults are 3 ads / 60 minutes. Setting one to 0 turns that trigger off; setting BOTH to 0 falls back to sending whatever is waiting, because a paid ad must never be stranded by a typo here.",
     why: "The user's session-018 words: \"I'll run the batch every hour, or as soon as I have 3 or 4 ads.\" The count is what makes a busy morning feel live; the timer is what stops a single ad sitting all day waiting for company it never gets.",
     gotchas: "Both triggers only ever fire inside the send window, so nothing goes out overnight — the overnight queue leaves as one batch when the window opens, because by then the oldest ad has long passed the timer. Approving an ad checks the count trigger immediately, so approving the third ad sends the batch there and then.",
+  },
+  "settings.saturdayClose": {
+    title: "Saturday's early close",
+    what: "The hour SMS really stops on a Saturday, end EXCLUSIVE like the published window — 5pm means the last Saturday text leaves at 4:59pm. Every other day runs to the published close. Set it to the same hour as the published close to drop the shortening and run Saturday like any weekday.",
+    why: "Session 020, on community advice the user brought back: \"9pm is way too late to send ads on Saturday nights, and 6 would work for the week days.\" A Plain household's Saturday evening runs into the rest day. The user went one step further than the advice — \"I'll publish that the ads run 7am to 6pm Monday to Saturday but I want to secretly stop sending ads by 5pm on Saturdays\" — so the shortening is REAL but UNPUBLISHED: no member-facing page, welcome text or compliance line quotes it, and the approval text drops its \"we text between…\" clause in that hour rather than contradict itself.",
+    gotchas: "It can only ever make Saturday SHORTER. A value later than the published close is pulled back to it, because sending past the published hours would break the promise the compliance copy makes to every subscriber — the one thing this setting must never do. It is an SMS rule only: the email edition has no send window (an inbox has no bedtime) and still composes at its usual times.",
   },
   "settings.maxChars": {
     title: "Max ad length",

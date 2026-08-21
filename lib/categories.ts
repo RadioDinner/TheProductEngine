@@ -81,7 +81,8 @@ export function welcomeMessages(args: {
   /** The number members call to key in a card — the SMS number, forwarded. */
   cardPhone: string;
   starterCreditLabel: string | null;
-  /** "7am to 9pm Mon - Sat", built from Settings by the caller. */
+  /** "7am to 6pm Mon - Sat" — the PUBLISHED window, built from Settings by the
+   * caller. Saturday's earlier close is deliberately not named here. */
   windowLabel: string;
   priceLine: string;
 }): string[] {
