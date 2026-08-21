@@ -12,8 +12,9 @@ which is most of what this session ended up being about by the end.
 | `39f6c30` | Merge of `origin/main` (session 022) — one doc conflict, both sides kept |
 | `24a5a5e` | Standing protocol for parallel sessions, and a migration collision check |
 | `ab7b8e4` | Split HANDOFF: live state stays, the narrative moves to an archive |
+| `f3e20c5` | Merge session 022's batches work; fold its narrative into the archive |
 
-Version **1.4.9 → 1.4.11** (§6). Session 022 moved it to 1.4.10 in parallel;
+Version **1.4.9 → 1.5.11** (§6), the last step from session 022's bump on top of this branch. Session 022 moved it to 1.4.10 in parallel;
 this session took the far-right digit once more from where that landed. Unit
 tests **1464 → 1533** (new suites `test-mode` 43, `category-delivery` 26).
 
@@ -101,7 +102,18 @@ Session 022 handled its side well — it left *"keep both"* in the conflict zone
 which made the resolution trivial hours later. That is now the documented
 practice.
 
-## 5. HANDOFF split
+## 5. HANDOFF split — and it was immediately load-tested
+
+**Merged with session 022 TWICE in one day**, and both times HANDOFF.md was the
+only conflict — which is the argument for the split, made by the file itself.
+The second merge was the interesting one: 022 appended a rewritten narrative to
+the OLD structure while this branch was splitting it. Their narrative went into
+the archive, superseding the shorter earlier account of the same session rather
+than sitting beside it (two accounts of one session is how a reader ends up
+believing the earlier one). Their `tableMissing()` rule was promoted OUT of
+history into the live document, because it is a "never do this again" rather
+than a story.
+
 
 `HANDOFF.md` was 2,548 lines and the hottest file in the repo — 8 of 12
 consecutive commits touched it, and it was the ONLY conflict in the 021/022
