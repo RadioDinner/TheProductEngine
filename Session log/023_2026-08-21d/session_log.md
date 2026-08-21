@@ -68,7 +68,7 @@ for a service that never happened.
 Now: **posting QUOTES a price and RESERVES it; the batch that carries the ad
 out to subscribers COLLECTS it.**
 
-- `ads.owed_cents` (migration **9951**) is the frozen quote. Not null means "not
+- `ads.owed_cents` (migration **9950**) is the frozen quote. Not null means "not
   paid for yet", whatever the status. An ad written on Monday costs Monday's
   price however long it waits.
 - `lib/ad-funding.ts` is the arithmetic, pure and unit-pinned:
@@ -181,7 +181,7 @@ grouped by when it happens, with its cost in texts.
   body, declared variables (name + what it holds + a realistic example), and
   `requires` phrases. Pure, so all of it is unit-pinned.
 - `lib/message-template-store.ts` — **only overrides are stored** (migration
-  **9950**). A message nobody has rewritten has no row, so a later improvement
+  **9949**). A message nobody has rewritten has no row, so a later improvement
   to a default still reaches production instead of being shadowed by a copy of
   the old text taken the day the table was created. "Reset" is a DELETE.
 - `lib/messages.ts` — `messageBook()`, cached 30s per process,
@@ -252,19 +252,22 @@ Every place that promised a charge at posting time:
 
 ## Migrations — TWO NEW, NEITHER PASTED
 
-**`9951_charge_on_run.sql`** and **`9950_message_templates.sql`**. `9950` is
-now the newest; the next migration takes **9949**.
+**`9950_charge_on_run.sql`** and **`9949_message_templates.sql`** (renumbered
+down one during the merge — main had taken 9951 for `test_ads`). `9949` is now
+the newest; the next migration takes **9948**.
 
-⚠️ **9951 is not optional the way most of them are.** Every other migration in
+⚠️ **9950 is not optional the way most of them are.** Every other migration in
 this repo degrades to "the feature is off". This one degrades to **no ad being
 charged for at all** — the code no longer charges at posting, and without
 `owed_cents` nothing is quoted, reserved or collected. `/api/health` probes it
 by name and says exactly that. The code will not lose an ad or fail a text
-without it; it will run every ad free.
+without it; it will run every ad free — which is why `collectForBatch` halts
+the whole batch instead of sending, and says so in the log.
 
-They join **9952** and **9953**, which HANDOFF says are still unpasted. 9951
-back-fills `owed_cents` from `unpaid_cents` where 9953 has run, guarded on the
-column existing at all.
+Everything from **9951** down is already applied (HANDOFF, user-confirmed
+2026-08-21), so these two are the only ones waiting. 9950 back-fills
+`owed_cents` from `unpaid_cents` — the column 9953 added — guarded on that
+column existing at all, so it is safe on a database where it never did.
 
 ## The adversarial review, and the six real bugs it found
 
@@ -338,13 +341,13 @@ Two confirmed findings are **noted rather than fixed**, both pre-existing:
 - `tsc --noEmit` clean, `npm run build` clean.
 - Unit suite **1470 → 1561** (new: `ad-funding` 50, `message-templates` 41;
   `post-ad` 11 → 15, rewritten around the three payment sentences and pinned
-  with "no note claims a past charge"). After merging main the suite runs
-  **1739**, main's own suites included.
+  with "no note claims a past charge"). On the merged tree the whole suite runs
+  **1641/1641**, main's own new suites included.
 - **A real end-to-end walk of the engine** (file store, frozen clock, real
-  subscribers) through six scenarios: plenty of credit, no credit and no card,
-  approve-then-pay, card on file, turned down before it ran, two ads against one
-  balance, and BAL. Every message printed and read. This is what caught the
-  charge-before-delivery bug.
+  subscribers): plenty of credit, no credit and no card, approve-then-pay, card
+  on file, turned down before it ran, two ads against one balance, and BAL.
+  Every message printed and read. This is what caught the charge-before-
+  delivery bug.
 - **A real Chromium walk of /admin/replies**, 23/23: sign in, list, open, insert
   a variable at the cursor, preview, live invalid-variable warning, refused
   save, good save, "reworded" badge, reset, and the three new Settings fields.
@@ -360,7 +363,7 @@ Two confirmed findings are **noted rather than fixed**, both pre-existing:
    question, and `getAdsOwed` / `listOwedAds` are how you ask it (it is NOT in
    the shared `AD_SELECT`, like `broadcast_at` and `category`).
 2. **Rejecting an ad refunds nothing now, because nothing was taken.** The
-   refund code stays for ads posted before 9951 and still fires for them. The
+   refund code stays for ads posted before 9950 and still fires for them. The
    member-facing wording is "Nothing was charged."
 3. **The picture upgrade raises `owed_cents`, it does not charge.** The old
    ref-guarded ledger debit and its failed-attach refund are gone; the undo is
@@ -394,3 +397,29 @@ Two confirmed findings are **noted rather than fixed**, both pre-existing:
   half-wired entry cannot ship quietly.
 - **No per-attempt idempotency reference on the run-time card charge.** See the
   residual risk above.
+
+## How this landed on main
+
+The user gave the word at the end: *"merge it to main and wrap this session."*
+Done per §8d — **never `git checkout main`**. `origin/main` was merged INTO the
+branch (twice, as main moved during the session), the merged tree was verified,
+and only then was the branch pushed to `main` as a **fast-forward**, confirmed
+with `git merge-base --is-ancestor origin/main HEAD` immediately before the
+push. Nothing of 021's or 022's was replayed, rebased or dropped.
+
+Commits, oldest first:
+
+| Hash | What |
+|---|---|
+| `c8c31fd` | An ad is paid for when it RUNS, and the auto-reply copy is editable |
+| `24d63aa` | Merge main: charge-on-run alongside sessions 021 and 022 (the six-file conflict resolution and all four counter renumbers) |
+| `1dea63a` | Merge main again — picked up `8715048`, the admin error boundary |
+| *(wrap)* | This log, the prompt history and the migration-number corrections |
+
+Final check before the push: `tsc --noEmit` clean, `npm run build` clean,
+**1641/1641** unit checks, `npm run check:migrations` clean (50 local files, no
+duplicates, next number 9948), working tree clean.
+
+**The one thing standing between this and production is `9950_charge_on_run.sql`
+in the Supabase SQL Editor.** It is merged, it is deployed, and until it is
+pasted no ad is charged for at all. That is at the top of `HANDOFF.md` too.

@@ -19,3 +19,9 @@ Dont commit anything until I tell you to
 
 --- 2026-08-21 (session 023, follow-up 3) ---
 Take a look at main and see if you can commit. You took almost 3 hours to run, so my main branch is ahead
+
+--- 2026-08-21 (session 023, follow-up 4) ---
+Is everything merged to main?
+
+--- 2026-08-21 (session 023, follow-up 5) ---
+merge it to main and wrap this session
