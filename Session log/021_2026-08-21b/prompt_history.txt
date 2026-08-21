@@ -1,0 +1,11 @@
+--- 2026-08-21 (session start) ---
+Dont commit anything for this session unless I tell you to. Ask before committing. I got an error 18602 on my twilio verification. I want to fix that, but before I fix that, I want to find where I automatically send the call to my cell phone, per the discussions in sessions last night. Currently, Telnyx is set to forward to my twilio number, so I would think the settings to change that are in Twilio?
+
+--- 2026-08-21 (stop-hook prompt: commit untracked session log?) ---
+[AskUserQuestion answer] No, leave it uncommitted
+
+--- 2026-08-21 ---
+Ok, well change the code. I don't want it to ring to my cell phone first
+
+--- 2026-08-21 ---
+go ahead and commit

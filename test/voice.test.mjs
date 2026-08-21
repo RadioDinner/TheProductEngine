@@ -1,9 +1,8 @@
 // The call-in card line: request authenticity and the TwiML each stage
 // returns. A forged webhook could attach cards to arbitrary phone numbers,
 // so the signature check gets the same scrutiny as money code.
+import * as voice from "../lib/voice.ts";
 import {
-  acceptTwiml,
-  callWasAnswered,
   escapeXml,
   hangUpTwiml,
   MENU_MAX_ATTEMPTS,
@@ -12,13 +11,12 @@ import {
   recordingMp3Url,
   voicemailEmail,
   payTwiml,
-  ringTwiml,
   sayAndHangUpTwiml,
   spokenDigits,
   twilioSignature,
+  twimlSayThenVoicemail,
   voiceSignatureRejection,
   voicemailTwiml,
-  whisperTwiml,
 } from "../lib/voice.ts";
 
 export const name = "voice";
@@ -88,19 +86,22 @@ export function run(t) {
   t.eq("no token in production -> rejected", gate({ authToken: undefined }) !== null, true);
   t.eq("no token in dev -> allowed", gate({ authToken: undefined, production: false }), null);
 
-  /* ---- TwiML shape ---- */
-  const ring = ringTwiml({
-    phones: ["3306001834", "3305551212"],
-    seconds: 18,
-    actionUrl: "https://x.test/api/voice?step=after-ring",
-    whisperUrl: "https://x.test/api/voice?step=whisper&caller=3305559999",
-  });
-  t.eq("ring: both phones dialed", /\+13306001834/.test(ring) && /\+13305551212/.test(ring), true);
-  t.eq("ring: timeout applied", /timeout="18"/.test(ring), true);
-  t.eq("ring: whisper attached to each leg", (ring.match(/<Number url=/g) ?? []).length, 2);
-  // Action URLs carry & — unescaped, that is invalid XML and Twilio drops the call.
-  t.eq("ring: ampersands escaped", ring.includes("&amp;caller="), true);
-  t.eq("ring: no raw ampersand", /&(?!amp;|apos;|quot;|lt;|gt;)/.test(ring), false);
+  /* ---- nothing may dial a phone (session 021, user decision) ---- */
+  // The operator's cells used to ring for 18 seconds before the menu got its
+  // turn, behind VOICE_RING_FIRST. The switch and its stages are deleted, and
+  // these checks are what stop them growing back: an env var that silently
+  // resurrects a <Dial> is the exact failure mode the removal was for.
+  for (const gone of [
+    "ringTwiml",
+    "whisperTwiml",
+    "acceptTwiml",
+    "callWasAnswered",
+    "ringToPhones",
+    "ringFirst",
+    "ringSeconds",
+  ]) {
+    t.eq(`${gone} is gone from lib/voice`, gone in voice, false);
+  }
 
   const menu = menuTwiml({ actionUrl: "https://x.test/api/voice?step=menu" });
   t.eq("menu: one digit gathered", /numDigits="1"/.test(menu), true);
@@ -179,29 +180,6 @@ export function run(t) {
   t.eq("voicemail: records with a beep", /<Record /.test(vm) && /playBeep="true"/.test(vm), true);
   t.eq("voicemail: bounded length", /maxLength="120"/.test(vm), true);
 
-  const whisper = whisperTwiml({ callerPhone: "3305551212", acceptUrl: "https://x.test/api/voice?step=accept" });
-  t.eq("whisper names the caller", /3 3 0/.test(whisper), true);
-  t.eq("whisper survives an unknown caller", whisperTwiml({ callerPhone: null, acceptUrl: "u" }).includes("<Say>"), true);
-  // Answer confirmation: a cell's VOICEMAIL answers the call (phone off, or
-  // the caller is dialing from a number that is itself on the ring list), and
-  // a bridged mailbox would swallow the call — the attendant would never run.
-  // A mailbox cannot press a key, so it gets hung up instead.
-  t.eq("whisper demands a keypress", /<Gather numDigits="1"/.test(whisper), true);
-  t.eq("whisper says how to accept", /press any key/i.test(whisper), true);
-  t.eq("unconfirmed leg is dropped", whisper.trimEnd().endsWith("<Hangup/></Response>"), true);
-  t.eq("keypress bridges the call", acceptTwiml(true), '<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
-  t.eq("silence drops the leg", acceptTwiml(false).includes("<Hangup/>"), true);
-
-  /* ---- who actually took the call ---- */
-  t.eq("a real conversation counts as answered", callWasAnswered("completed", "42"), true);
-  // Twilio reports a voicemail pickup (and a whisper-dropped leg) as
-  // "completed" too — only a bridged conversation has duration.
-  t.eq("voicemail pickup does NOT count", callWasAnswered("completed", "0"), false);
-  t.eq("dropped leg does NOT count", callWasAnswered("completed", undefined), false);
-  t.eq("no answer does not count", callWasAnswered("no-answer", undefined), false);
-  t.eq("busy does not count", callWasAnswered("busy", "0"), false);
-  t.eq("failed does not count", callWasAnswered("failed", undefined), false);
-
   t.eq("hang-up is a bare Response", hangUpTwiml().includes("<Hangup/>"), true);
   t.eq("closing line speaks then hangs up", /<Say>.*<\/Say><Hangup\/>/.test(sayAndHangUpTwiml("Bye")), true);
 
@@ -211,15 +189,21 @@ export function run(t) {
   t.eq("xml escaping", escapeXml(`a&b<c>"d"'e'`), "a&amp;b&lt;c&gt;&quot;d&quot;&apos;e&apos;");
 
   /* ---- every stage is well-formed XML with exactly one Response ---- */
-  for (const [label, doc] of [
-    ["ring", ring],
+  const stages = [
     ["menu", menu],
+    ["menu (reprompt)", menuTwiml({ actionUrl: "u", attempt: 2 })],
     ["pay", pay],
     ["voicemail", vm],
-    ["whisper", whisper],
     ["hangup", hangUpTwiml()],
-  ]) {
+    ["closing line", sayAndHangUpTwiml("Bye")],
+    ["error -> voicemail", twimlSayThenVoicemail("Sorry", "https://x.test/api/voice?step=voicemail")],
+  ];
+  for (const [label, doc] of stages) {
     t.eq(`${label}: declares XML`, doc.startsWith('<?xml version="1.0" encoding="UTF-8"?><Response>'), true);
     t.eq(`${label}: one closing Response`, (doc.match(/<\/Response>/g) ?? []).length, 1);
+    // The regression that matters: no stage may place an outbound call. A
+    // <Dial> anywhere in this list means a caller is listening to someone's
+    // cell ring again instead of reaching the menu.
+    t.eq(`${label}: does not dial a phone`, /<Dial\b/.test(doc), false);
   }
 }

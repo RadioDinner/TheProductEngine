@@ -3,9 +3,10 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-21 (session 020 wrap — the send window, the ledger
-reset, the call flow, AD replacing AD NEW, held-unpaid ads, and scheduled
-admin broadcasts. v1.4.9).
+**Last updated:** 2026-08-21 (session 021 — the call line no longer dials the
+operator's cell at all. Session 020's wrap follows below: the send window, the
+ledger reset, the call flow, AD replacing AD NEW, held-unpaid ads, and
+scheduled admin broadcasts. v1.4.9).
 
 ## ⚠️ START HERE: two NEW migrations are waiting
 
@@ -47,6 +48,51 @@ Consequences worth carrying:
 description registered with the carrier still says 7am–9pm.** That lives at
 Telnyx. The published window and the registered description have to agree —
 this is the last piece of the session-020 change not yet done.
+
+## Session 021 (2026-08-21) — NOTHING DIALS THE OPERATOR'S CELL ANY MORE
+
+User decision, in their words: *"I don't want it to ring to my cell phone
+first."* Session 020 had already made the attendant menu answer first, but it
+kept the old ring-first path alive behind `VOICE_RING_FIRST`. That was the gap:
+the behaviour was one Vercel setting away from coming back, and the user's cell
+was still ringing — which means the variable was in fact set in production.
+
+**Deleted, not defaulted off** (the distinction is the whole point):
+
+- `lib/voice.ts` — `ringTwiml`, `whisperTwiml`, `acceptTwiml`,
+  `callWasAnswered`, `ringToPhones`, `ringFirst`, `ringSeconds`.
+- `app/api/voice/route.ts` — the `whisper`, `accept` and `after-ring` stages,
+  and the branch at the entry step. `case ""` now unconditionally answers with
+  the menu.
+- `app/api/health/route.ts` — the `VOICE_RING_TO` count (nothing to report).
+- Env: **`VOICE_RING_FIRST`, `VOICE_RING_TO` and `VOICE_RING_SECONDS` are dead.
+  ⚠️ USER: delete them from Vercel** — harmless if left, but they read as live
+  configuration and are not.
+
+`test/voice.test.mjs` asserts all seven names are absent from the module AND
+that no TwiML stage emits `<Dial` — the guard was verified to fail when an
+exported name was added to its list, so it is not a vacuous check. Voice suite
+49 → **80**; whole suite **1464/1464**, tsc clean, build clean.
+
+**One analytics change rode along, and it is worth knowing about.** The only
+`analytics.callInbound` emit for a non-voicemail call lived in `after-ring`,
+which is gone — and which had already been dead since session 020 turned
+ring-first off, so `call_inbound` in GA has silently been counting *voicemails
+only*. It now fires once at the entry step (`outcome: "attendant"`,
+`duration 0`), and the voicemail-stage emit was REMOVED so a voicemail is not
+counted twice. Net: one `call_inbound` per call, which is what "how many people
+phone rather than text" actually asked. The cost is that GA no longer breaks
+calls down by outcome — `/admin/calls` still does, exactly, per row.
+
+**Still true and unchanged:** Telnyx forwards the public number's voice calls
+to the Twilio number (Telnyx portal → Call Forwarding → Always); Twilio holds
+only the "A call comes in" webhook pointing at `/api/voice`. Neither console
+has a ring/forward setting for the cell — that only ever lived in this code.
+
+**Not touched:** the Twilio Trust Hub rejection (error 18602, "Business ID
+could not be verified"). Same rejection as session 016; the fix on record there
+is legal name + EIN exactly per IRS CP-575, a street address rather than the PO
+Box, and sole-prop classification. Still open.
 
 ## Session 020 (2026-08-21) — THE SEND WINDOW MOVES, AND SATURDAY CLOSES EARLY
 

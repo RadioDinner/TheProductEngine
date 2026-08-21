@@ -9,7 +9,6 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { db, supabaseConfigured } from "@/lib/db";
 import { isProduction } from "@/lib/env";
-import { ringToPhones } from "@/lib/voice";
 import { site } from "@/lib/config";
 
 function keyKind(key: string | undefined): string {
@@ -71,11 +70,12 @@ export async function GET(req: NextRequest) {
       // to move — checkout, auto top-up, business packages, phone orders.
       STRIPE_SECRET_KEY: Boolean(process.env.STRIPE_SECRET_KEY),
       STRIPE_WEBHOOK_SECRET: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
-      // The call-in card line: the token gates /api/voice entirely, and the
-      // ring list is what makes the phones ring before the attendant.
+      // The call-in card line: the token gates /api/voice entirely. There is no
+      // ring list to report any more — as of session 021 the attendant answers
+      // every call and nothing dials out (VOICE_RING_TO / VOICE_RING_FIRST /
+      // VOICE_RING_SECONDS are gone from the code; delete them from Vercel).
       TWILIO_ACCOUNT_SID: Boolean(process.env.TWILIO_ACCOUNT_SID),
       TWILIO_AUTH_TOKEN: Boolean(process.env.TWILIO_AUTH_TOKEN),
-      VOICE_RING_TO: ringToPhones().length,
       // Google Analytics (analytics/). Booleans only — the api secret and the
       // salt are secrets and must never appear in a response.
       // All three must be true before ANY server-side event is sent; missing
