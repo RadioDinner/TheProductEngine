@@ -129,7 +129,45 @@ survived untouched. Resetting again requires deleting that config row by hand.
 `/admin/money` now prints "Books opened <date>" from the same stamp, so the
 figures' starting point is visible rather than folklore.
 
-## Part three — what the review pass caught
+### The first draft of the reset was wrong, and the user caught it
+
+Shipped 9954 as "keep the welcome-credit rows, delete the rest". The user came
+back with the live dashboard — $130 collected, $250 paid out, $256 issued, $16
+earned, **$120 still unspent** — and the target: *"Everyone, all 4 users should
+have paid nothing in, and have 40 in credit. My total credits given out should
+be 160 total."*
+
+$120 unspent is **three** members' worth of $40, not four. Keeping what exists
+would have landed on $120 across 3 members: some members' welcome credit had
+been partly spent, and at least one never had a welcome row at all. A reset
+defined by what survives is only as good as what is there.
+
+Rewritten to **wipe everything and re-grant**: delete every ledger row, then
+write one fresh welcome grant per row in `users` (amount from
+`config.starter_credit_cents`, worded exactly as `starterCreditNote()` does),
+and stamp `starter_granted_at` so nobody gets a second one. The end state is
+now a function of the users table rather than of the ledger's history, which
+is the only way to hit an exact target.
+
+Because the total is (users × $40), the migration header carries a preview
+query and says to run it FIRST — if `users` holds more than 4 rows the total
+will not be $160, and that is worth knowing before the wipe, not after.
+
+The marker gained a shape (`{"at": …, "shape": "wipe-and-grant-v2"}`) so a
+database that got the superseded draft is not blocked from reaching the right
+state; `getBooksOpenedAt` reads both shapes.
+
+Verified on a throwaway Postgres 16 against a fixture matching the reported
+shape (4 members, only 3 with welcome credit, plus a purchase, a cheque, a
+payout, a legacy adjustment): 4 × $40 = $160, dashboard $0/$0/$0/$160/$160,
+re-paste disarmed with a later real payment untouched, v1 marker superseded
+exactly once.
+
+**The lesson worth keeping:** the user gave the end state in plain numbers.
+A reset should be written to PRODUCE a stated end state, not to preserve a
+subset of an unknown one — "delete all but X" silently inherits every gap in X.
+
+## Part four — what the review pass caught
 
 An adversarial review of the send-window diff (four lenses, refute-first
 verification) surfaced three real defects, all fixed here:

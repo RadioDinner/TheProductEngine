@@ -61,8 +61,17 @@ export async function getBooksOpenedAt(): Promise<string | null> {
       .eq("key", "ledger_reset_at")
       .maybeSingle();
     if (error) throw error;
+    // Two shapes on purpose. Migration 9954 writes
+    // {"at": <timestamp>, "shape": "..."} so a later corrected reset can tell
+    // which one already ran; a superseded draft wrote a bare timestamp string.
+    // Read both — a database that got the draft must still show its date.
     const value = (data as { value?: unknown } | null)?.value;
-    return typeof value === "string" && value.trim() ? value : null;
+    if (typeof value === "string") return value.trim() ? value : null;
+    if (value && typeof value === "object") {
+      const at = (value as { at?: unknown }).at;
+      if (typeof at === "string" && at.trim()) return at;
+    }
+    return null;
   } catch (e) {
     // Never let a missing note take the money page down — the figures are the
     // point, the provenance line is a courtesy.

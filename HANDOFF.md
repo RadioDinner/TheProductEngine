@@ -92,24 +92,45 @@ and calling it income. The user's decision, asked and answered: *"I want to
 wipe to zero aside from the 40 dollar ad credit"*, and *"no real member money
 is in the system yet"*.
 
-`9954_reset_ledger.sql` deletes every ledger row EXCEPT
-`kind = 'grant' AND note LIKE 'Welcome %'` — the welcome credit, which is what
-`starterCreditNote()` writes and what migration 9990 already uses to recognise
-a starter grant. Everyone who has had their welcome credit ends at exactly $40
-of GRANTED balance and $0 cash. Verified against a throwaway Postgres 16 with
-a realistic fixture, then the surviving rows were run through the real
-`moneyPosition`/`incomeSummary`: $0 collected, $0 earned, $0 owed, credit
-issued = $40 × those members.
+**It WIPES AND RE-GRANTS — and the first draft, which kept the existing
+welcome-credit rows and deleted the rest, was wrong.** The user checked the
+result against the dashboard and it did not match: `$120 still unspent` is
+three members' worth of $40, not four. Some members' welcome credit had been
+partly spent, one never had a welcome row at all, so keeping-what-exists lands
+on $120 across 3 members rather than the intended $160 across 4.
+
+Reconstructing the intended state is the only way to hit it exactly. So 9954
+deletes EVERY ledger row, then writes one fresh welcome grant per row in
+`users` — amount from `config.starter_credit_cents` (default 4000), worded
+exactly as `starterCreditNote()` writes it — and stamps
+`users.starter_granted_at` so nobody is granted a second welcome credit and
+the 200-member launch count stays honest. The end state is a function of the
+users table, NOT of whatever the ledger happened to hold.
+
+**The total is (number of users) × $40, so the migration header carries a
+preview query and says to run it first.** If `users` holds more than the
+expected members, the total will not be $160.
+
+Verified against a throwaway Postgres 16 on a fixture matching the reported
+shape — 4 members, only 3 holding welcome credit, plus a purchase, a cheque, a
+payout and a legacy adjustment. Result: 4 members × $40 = $160, and the
+surviving rows through the real `moneyPosition`/`incomeSummary` read $0
+collected, $0 earned, $0 owed, $160 issued, $160 unspent.
 
 **⚠️ It disarms itself, and that is load-bearing.** `credit_ledger` is
 append-only by design (9966) and it is what every balance is MADE of. A wipe
 that simply re-ran on every paste would be a loaded gun in the migrations
 folder — a future session told to "paste the pending migrations" would destroy
-real money. The first run writes `config.ledger_reset_at`; every run after
-checks for it and does nothing. Pasting it twice is safe; pasting it in six
-months is safe. Tested: real rows added after the reset survive a re-paste
-untouched. **To reset the books again you must delete that config row first —
-an explicit act, which is the point.**
+real money. The marker `config.ledger_reset_at` records WHICH reset ran, as
+`{"at": …, "shape": "wipe-and-grant-v2"}`; a run whose shape already matches
+does nothing. A superseded v1 marker (a bare timestamp string) does NOT block
+v2, so a database that got the wrong draft still reaches the right state.
+Both paths tested: real rows added after a reset survive a re-paste untouched,
+and a v1 marker lets v2 run exactly once. **To reset again you must delete
+that config row first — an explicit act, which is the point.**
+
+`getBooksOpenedAt` in `lib/income.ts` reads BOTH marker shapes for the same
+reason.
 
 `/admin/money` reads the same stamp (`getBooksOpenedAt`) and prints "Books
 opened <date>" under the figures, so the totals' starting point is never a
@@ -118,8 +139,12 @@ mystery. Unreadable or absent = the line simply doesn't render.
 **Not touched, deliberately:** ads (their spend rows are gone, so old test ads
 stay live but unrecorded as paid — `/admin/purge` is the tool for removing a
 test member and their ads together), `business_packages`, `users.free_ads`,
-`users.starter_granted_at` (kept, so nobody is granted the welcome credit
-twice and the 200-member launch-offer count stays honest), and Stripe itself.
+and Stripe itself.
+
+⚠️ Stamping `starter_granted_at` for EVERY member means anyone who never
+posted now counts as having had their welcome credit. That is what "everyone
+has $40 in credit" requires, but it departs from the standing rule that the
+grant lands on a member's FIRST post rather than at signup.
 
 ### Things a future session must not get wrong here
 

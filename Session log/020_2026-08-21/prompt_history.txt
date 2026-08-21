@@ -14,3 +14,11 @@ Also the money dashboard has some problems. I want it "reset" since all the day 
 
 --- 2026-08-21 ---
 merge to main
+
+--- 2026-08-21 ---
+[user pasted the live /admin/money figures: Revenue earned $16, of that cash $0,
+of that grants $16; Cash collected $130, Still owed $0, Paid back out $250;
+Credit issued $256, still unspent $120]
+
+these are still all wrong. Everyone, all 4 users should have paid nothing in,
+and have 40 in credit. My total credits given out should be 160 total.
