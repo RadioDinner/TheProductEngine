@@ -15,6 +15,7 @@ import { site } from "@/lib/config";
 import { isProduction } from "@/lib/env";
 import { email } from "@/lib/email";
 import { savePhoneCapturedCard } from "@/lib/payments";
+import { releaseUnpaidAds } from "@/lib/engine";
 import { normalizePhone } from "@/lib/phone";
 import { sms } from "@/lib/sms";
 import { ensureAccount, getAccount, setAutoTopUp } from "@/lib/store";
@@ -287,20 +288,35 @@ async function handle(req: NextRequest) {
         outcome: "card_saved",
         detail: last4 ? `card ending ${last4} saved` : "card saved",
       });
+      // Anything this member wrote while they had no money is waiting in
+      // 'unpaid'. Charging and posting it HERE is what makes the promise in
+      // the held-ad reply ("call and press 1 — we'll charge it and send your
+      // ad") true at the moment the caller is still on the line. Never throws:
+      // the card is already saved and a live call must not fail over this.
+      const release = await releaseUnpaidAds(caller);
       // The confirmation goes out on the REGISTERED Telnyx line (the same
       // number members already text), not the Twilio voice number.
-      if (last4) {
-        await sms
-          .send(
-            caller,
-            `${site.name}: your card ending ${last4} is saved. When you post an ad and your ad credit runs short, we'll charge the difference to this card. Call this number any time to change or remove it. Reply STOP to opt out of texts.`,
-          )
-          .catch((e) => console.error("[voice] card confirmation text failed:", e));
-      }
+      // What the member is told depends on what actually happened, because
+      // "you can post ads automatically now" is a claim and it has to be true.
+      const heldNote = release.released.length
+        ? ` Your waiting ad${release.released.length === 1 ? "" : "s"} (${release.released
+            .map((id) => `#${id}`)
+            .join(", ")}) ${release.released.length === 1 ? "is" : "are"} paid for and on the way.`
+        : "";
+      await sms
+        .send(
+          caller,
+          `${site.name}: your card ending ${last4 || "on file"} is saved, so you can post ads any time — we charge this card automatically when your ad credit runs short.${heldNote} Call this number any time to change or remove it. Reply STOP to opt out of texts.`,
+        )
+        .catch((e) => console.error("[voice] card confirmation text failed:", e));
+      const spokenHeld = release.released.length
+        ? ` Your waiting ad${release.released.length === 1 ? " is" : "s are"} paid for and on the way.`
+        : "";
       return xml(
         sayAndHangUpTwiml(
           `Thank you. Your card${last4 ? ` ending in ${spokenDigits(last4)}` : ""} is saved, ` +
-            "and we've sent you a text to confirm. Goodbye.",
+            `so you can post ads any time.${spokenHeld} ` +
+            "We've sent you a text to confirm. Goodbye.",
         ),
       );
     }

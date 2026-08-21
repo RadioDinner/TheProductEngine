@@ -16,11 +16,14 @@ import {
   getAdRecord,
   getPendingAds,
   latestPendingAdFor,
+  listUnpaidAds,
   logMessage,
+  markAdPaid,
   recordInboundOnce,
   rejectAdRecord,
   reserveSms,
   markAdSold,
+  setAdUnpaid,
   type StoredAd,
 } from "@/lib/engine-store";
 import { listAdsByOwner } from "@/lib/ads";
@@ -252,6 +255,79 @@ function payInstructions(): string {
   return `Call ${site.supportPhone} and press 1 to put a card on file — we'll charge it and your ad goes out. Or add money at ThePlainExchange.com`;
 }
 
+/**
+ * Charge and release every ad this member has waiting on money (migration
+ * 9953). Called the moment their funding changes — a card saved on the phone,
+ * a web top-up — so "add a card and your ad goes out" is true rather than a
+ * thing we say.
+ *
+ * Ordering is oldest-first and it stops at the first ad it cannot cover: a
+ * member with $20 and three $20 ads gets the one they wrote first, not an
+ * arbitrary one, and the rest stay held rather than being half-charged.
+ *
+ * markAdPaid is the concurrency guard, not this function. It flips the status
+ * only from 'unpaid' and reports whether THIS caller won, so two releases
+ * landing together (the IVR and a web purchase in the same second) cannot both
+ * charge for the same ad. Charge only after it returns true.
+ *
+ * Best-effort by contract: it never throws at its callers, because every one
+ * of them is doing something else that must not fail — answering a live phone
+ * call, completing a checkout.
+ */
+export async function releaseUnpaidAds(
+  phone: string,
+): Promise<{ released: number[]; stillHeld: number }> {
+  const released: number[] = [];
+  let stillHeld = 0;
+  try {
+    const settings = await getEngineSettings();
+    const held = await listUnpaidAds(phone);
+    if (!held.length) return { released, stillHeld: 0 };
+    const account = await ensureAccount(phone);
+    for (const ad of held) {
+      // A held ad with no recorded price predates its own price list somehow;
+      // fall back to the text price rather than releasing it for nothing.
+      const cost = ad.costCents > 0 ? ad.costCents : settings.costTextCents;
+      let balance = await getCreditBalance(phone);
+      if (balance < cost) {
+        const topUp = await coverShortfallWithCard(phone, account, cost - balance);
+        if (topUp.charged > 0) balance += topUp.charged;
+      }
+      if (balance < cost) {
+        stillHeld = held.length - released.length;
+        break;
+      }
+      // Flip the status FIRST. If the charge then fails we put it back, which
+      // is recoverable; charging first and failing to flip would take the
+      // member's money and leave the ad sitting unpaid, which is not.
+      if (!(await markAdPaid(ad.id))) continue;
+      let charged = false;
+      try {
+        charged = await spendCredits(phone, cost, `Ad #${ad.id} (held)`);
+      } catch (e) {
+        console.error(`[engine] charge threw releasing ad #${ad.id}:`, e);
+      }
+      if (!charged) {
+        await setAdUnpaid(ad.id, cost).catch(() => {});
+        stillHeld = held.length - released.length;
+        break;
+      }
+      released.push(ad.id);
+      afterResponse(() =>
+        analytics.postSubmitted({
+          phone,
+          channel: "sms",
+          photoCount: 0,
+          priceCents: cost,
+        }),
+      );
+    }
+  } catch (e) {
+    console.error(`[engine] releasing held ads for ${phone} failed:`, e);
+  }
+  return { released, stillHeld };
+}
+
 async function handleAdSubmission(from: string, rawBody: string, media?: string[]): Promise<Reply> {
   // Every way a post can be refused, counted with its reason. "Posting is
   // down" is not actionable; "posting is down because the word filter is
@@ -397,11 +473,54 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   }
   // Fast reject for the clearly-unfunded; the atomic charge below is the
   // authority under concurrency.
+  // NOT ENOUGH MONEY — the ad is WRITTEN DOWN, not lost (user decision,
+  // session 020: "reply to the user that their ad is saved, but they need to
+  // call in and add a card to their account before it gets sent out").
+  //
+  // It used to be refused outright: the seller's text was gone and they had to
+  // thumb the whole thing in again on a flip phone, which is the most likely
+  // moment for them to give up on the service entirely. Now it is parked in
+  // 'unpaid' — out of the review queue, off the website, nothing broadcast —
+  // with the quoted price stored on it, and adding a card releases it.
+  //
+  // Held on a DECLINE as well as on an empty account, though the user only
+  // asked about the no-card case: keeping the text costs nothing and losing it
+  // helps no one. The reply says which happened.
   if (balance < cost) {
     blocked(declineReason ? "card_declined" : "no_balance");
-    const cardNote = declineReason ? ` We tried your saved card but it didn't go through (${declineReason}).` : "";
+    const heldId = await createAd(
+      {
+        ownerPhone: from,
+        body,
+        flagged: rules.flagged || (!mayPostLinks() && hasLink(body)),
+        ...(hasPhoto && {
+          photo: { src: photoSrc!, alt: deriveTitle(body), ...photoDims },
+          ...(galleryParts.length && {
+            morePhotos: galleryParts.map((src, i) => ({
+              src,
+              alt: `${deriveTitle(body)} — picture ${combined ? i + 1 : i + 2}`,
+              width: 800,
+              height: 600,
+            })),
+          }),
+        }),
+      },
+      { status: "unpaid", unpaidCents: cost },
+    );
+    // Deliberately NOT postSubmitted. A held ad has not entered the supply —
+    // the comment at the real submit site is explicit that counting ads before
+    // they clear the balance check inflates the one number the roadmap gets
+    // argued from. blocked() above is the honest signal; the post_submit event
+    // fires if and when the ad is released into review.
+    const cardNote = declineReason
+      ? ` We tried your saved card but it didn't go through (${declineReason}).`
+      : "";
     return {
-      body: `That ad costs ${formatPrice(cost)} and you have ${formatPrice(balance)} of ad credit.${cardNote} ${payInstructions()}. Text BAL to check your balance.`,
+      body:
+        `Got it — your ad is saved as #${heldId} and nothing has been charged.` +
+        `${cardNote} It costs ${formatPrice(cost)} and you have ${formatPrice(balance)}, ` +
+        `so it won't go out until that's covered. Call ${site.supportPhone} and press 1 ` +
+        `to put a card on file — we'll charge it and send your ad. Text BAL any time.`,
     };
   }
 

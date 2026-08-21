@@ -27,7 +27,17 @@ export const metadata: Metadata = {
   title: `All ads — ${site.name} admin`,
 };
 
-const STATUSES: StoredAdStatus[] = ["pending", "approved", "rejected", "sold", "expired", "deleted"];
+// "unpaid" first after pending: a held ad is money waiting to be collected,
+// and the operator should be able to see who is one phone call from posting.
+const STATUSES: StoredAdStatus[] = [
+  "pending",
+  "unpaid",
+  "approved",
+  "rejected",
+  "sold",
+  "expired",
+  "deleted",
+];
 
 export default async function AdminAds({
   searchParams,

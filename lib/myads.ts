@@ -21,7 +21,9 @@ export type MemberAdStatus =
   | "rejected"
   | "sold"
   | "expired"
-  | "deleted";
+  | "deleted"
+  /** Written down but not paid for — waiting on a card (migration 9953). */
+  | "unpaid";
 
 export type DeleteRefundReason =
   /** Waiting for review — nothing was ever delivered. */
@@ -50,6 +52,10 @@ export function deleteRefundDecision(
   if (status === "deleted") return { refund: false, reason: "gone" };
   if (status === "rejected") return { refund: false, reason: "rejected" };
   if (everBroadcast) return { refund: false, reason: "ran" };
+  // An unpaid ad was never charged, so deleting it refunds nothing — there is
+  // nothing to give back. It is grouped with "pending" because that is what it
+  // is to the member: written down, not yet gone anywhere.
+  if (status === "unpaid") return { refund: false, reason: "pending" };
   if (status === "pending") return { refund: true, reason: "pending" };
   if (status === "approved") return { refund: true, reason: "never-ran" };
   return { refund: false, reason: "closed" }; // sold / expired

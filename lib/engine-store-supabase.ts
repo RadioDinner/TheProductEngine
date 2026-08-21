@@ -112,6 +112,10 @@ export async function createAd(input: NewAdInput, options: CreateAdOptions = {})
     original_body: input.body,
     body: input.body,
     status: options.status ?? "pending",
+    // The quoted price rides the insert only for a HELD ad, so a database
+    // without migration 9953 is never sent a column it does not have on the
+    // ordinary posting path.
+    ...(options.status === "unpaid" && { unpaid_cents: options.unpaidCents ?? 0 }),
     flagged: input.flagged,
     ...(options.status === "rejected" && {
       rejected_reason: options.rejectedReason,
@@ -443,6 +447,77 @@ export async function getAdCategories(ids: number[]): Promise<Map<number, string
     }
   }
   return out;
+}
+
+/**
+ * A member's HELD-UNPAID ads, oldest first, with the price they were quoted
+ * (migration 9953).
+ *
+ * `unpaid_cents` is selected here rather than added to AD_SELECT, on the same
+ * principle as every other post-init column in this file: a core ad read must
+ * not start failing because a migration has not been pasted yet. Missing
+ * column or missing enum value both read as "nobody has any held ads", which
+ * is exactly the pre-9953 truth.
+ */
+export async function listUnpaidAds(
+  phone: string,
+): Promise<{ id: number; costCents: number; createdAt: string }[]> {
+  const userId = await userIdByPhone(phone);
+  if (!userId) return [];
+  const { data, error } = await db()
+    .from("ads")
+    .select("id, unpaid_cents, created_at")
+    .eq("user_id", userId)
+    .eq("status", "unpaid")
+    .order("created_at", { ascending: true });
+  if (error) {
+    // 42703 = no such column, 22P02 = no such enum value. Either means 9953
+    // is not in yet; there can be no held ads, so say so and move on.
+    if (error.code === "42703" || error.code === "22P02") return [];
+    throw error;
+  }
+  return (data ?? []).map((row) => ({
+    id: row.id as number,
+    costCents: Number((row as { unpaid_cents: number | null }).unpaid_cents) || 0,
+    createdAt: String((row as { created_at: string }).created_at),
+  }));
+}
+
+/**
+ * Release a held ad into the review queue once it is paid for.
+ *
+ * Guarded on `status = 'unpaid'` so it is idempotent and one-way: two
+ * concurrent releases (the IVR and a web top-up landing together) cannot both
+ * charge, because only the first update matches a row — the caller charges
+ * ONLY when this returns true. Nor can it resurrect a rejected or deleted ad.
+ */
+export async function markAdPaid(id: number): Promise<boolean> {
+  const { data, error } = await db()
+    .from("ads")
+    .update({ status: "pending", unpaid_cents: null })
+    .eq("id", id)
+    .eq("status", "unpaid")
+    .select("id");
+  if (error) {
+    if (error.code === "42703" || error.code === "22P02") return false;
+    throw error;
+  }
+  return Boolean(data?.length);
+}
+
+/**
+ * Put a released ad back on hold — the undo for a charge that failed after the
+ * status flipped. Guarded on 'pending' so it can only ever reverse THAT
+ * window: it must never be able to pull an approved or broadcast ad back out
+ * of circulation.
+ */
+export async function setAdUnpaid(id: number, costCents: number): Promise<void> {
+  const { error } = await db()
+    .from("ads")
+    .update({ status: "unpaid", unpaid_cents: costCents })
+    .eq("id", id)
+    .eq("status", "pending");
+  if (error && error.code !== "42703" && error.code !== "22P02") throw error;
 }
 
 export async function markAdSold(id: number): Promise<void> {

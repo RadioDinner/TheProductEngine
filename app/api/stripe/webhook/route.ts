@@ -13,8 +13,10 @@ import {
   hasLedgerRef,
   setStripeCustomerId,
 } from "@/lib/store";
-import { formatPrice } from "@/lib/config";
+import { formatPrice, site } from "@/lib/config";
+import { releaseUnpaidAds } from "@/lib/engine";
 import { normalizePhone } from "@/lib/phone";
+import { sms } from "@/lib/sms";
 import { createBusinessPackage } from "@/lib/business";
 import { getBusinessTier } from "@/lib/business-packages";
 import * as analytics from "@/analytics/src/server-events";
@@ -220,6 +222,22 @@ export async function POST(req: NextRequest) {
         }
         if (session.customer) {
           await setStripeCustomerId(phone, session.customer);
+        }
+        // Money just landed, so anything this member had waiting on it goes
+        // now (migration 9953). Outside the ref guard on purpose: a Stripe
+        // retry re-runs a harmless no-op here, whereas a release skipped
+        // because the FIRST delivery raced the ledger write would strand a
+        // paid-for ad until the member happened to post again.
+        const release = await releaseUnpaidAds(phone);
+        if (release.released.length) {
+          await sms
+            .send(
+              phone,
+              `${site.name}: thanks — your ad${release.released.length === 1 ? "" : "s"} ${release.released
+                .map((id) => `#${id}`)
+                .join(", ")} ${release.released.length === 1 ? "is" : "are"} paid for and on the way.`,
+            )
+            .catch((e) => console.error("[payments] held-ad release text failed:", e));
         }
       }
     }

@@ -17,6 +17,15 @@ import {
 export const name = "myads";
 
 export function run(t) {
+  /* ---- a HELD (unpaid) ad refunds nothing, because nothing was charged ----
+   * Migration 9953: an unfunded ad is written down rather than refused. It has
+   * never taken the member's money, so deleting it gives none back — and it
+   * must never be mistaken for a paid "pending" ad, which does refund. */
+  const held = deleteRefundDecision("unpaid", false);
+  t.eq("deleting a held ad refunds nothing", held.refund, false);
+  t.eq("...and reads as still-waiting, not as closed business", held.reason, "pending");
+  t.eq("a PAID pending ad still refunds", deleteRefundDecision("pending", false).refund, true);
+
   // ---- the refund matrix, exactly as the user decided it ----
   t.eq(
     "pending → refund",

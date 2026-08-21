@@ -19,7 +19,16 @@ import { websiteAdPhotos } from "@/lib/photo-collage";
 
 // ---------- types ----------
 
-export type StoredAdStatus = "pending" | "approved" | "rejected" | "sold" | "expired" | "deleted";
+export type StoredAdStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "sold"
+  | "expired"
+  | "deleted"
+  /** Written down and parked: the seller had no money and no card, so the ad
+   * waits out of the review queue until it is paid for (migration 9953). */
+  | "unpaid";
 
 export interface StoredAd {
   id: number;
@@ -43,6 +52,10 @@ export interface StoredAd {
   holdUntil?: string | null;
   /** Admin deletion (soft — migration 9987): when the ad was removed. */
   deletedAt?: string;
+  /** While status is "unpaid": the price the seller was QUOTED, in cents. The
+   * release charges this, not a recomputed price — an ad held on Monday must
+   * not cost more on Wednesday because the price list changed (9953). */
+  unpaidCents?: number | null;
   /** Category key (items 22/25, migration 9976); null/undefined =
    * uncategorized — rides EVERY digest, shows under All on the site. NOT part
    * of the shared Supabase AD_SELECT (so nothing hard-depends on 9976); the
@@ -187,8 +200,10 @@ export interface InsightAd {
 const OUTBOX_RECLAIM_MS = 10 * 60 * 1000;
 
 export interface CreateAdOptions {
-  status?: "pending" | "rejected";
+  status?: "pending" | "rejected" | "unpaid";
   rejectedReason?: string;
+  /** With status "unpaid": the price the seller was quoted, in cents. */
+  unpaidCents?: number;
 }
 
 // ---------- file implementation ----------
@@ -393,6 +408,7 @@ const file = {
       originalBody: input.body,
       body: input.body,
       status: options.status ?? "pending",
+      ...(options.status === "unpaid" && { unpaidCents: options.unpaidCents ?? 0 }),
       createdAt: new Date().toISOString(),
       flagged: input.flagged,
       ...(options.status === "rejected" && {
@@ -505,6 +521,35 @@ const file = {
     ad.rejectionKind = kind;
     save(store);
     return true;
+  },
+
+  listUnpaidAds(phone: string): { id: number; costCents: number; createdAt: string }[] {
+    return load()
+      .ads.filter((a) => a.ownerPhone === phone && a.status === "unpaid")
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((a) => ({ id: a.id, costCents: a.unpaidCents ?? 0, createdAt: a.createdAt }));
+  },
+
+  markAdPaid(id: number): boolean {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === id);
+    // One-way and idempotent, mirroring the Supabase guard: only an unpaid ad
+    // can be released, so a second caller charges nothing.
+    if (!ad || ad.status !== "unpaid") return false;
+    ad.status = "pending";
+    ad.unpaidCents = null;
+    save(store);
+    return true;
+  },
+
+  setAdUnpaid(id: number, costCents: number): void {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === id);
+    // Only reverses the flip that just happened — never pulls a live ad back.
+    if (!ad || ad.status !== "pending") return;
+    ad.status = "unpaid";
+    ad.unpaidCents = costCents;
+    save(store);
   },
 
   markSold(id: number): void {
@@ -1215,6 +1260,26 @@ export async function rejectAdRecord(
   kind: "benign" | "violation",
 ): Promise<boolean> {
   return supabaseConfigured ? remote.rejectAdRecord(id, reason, kind) : file.rejectAd(id, reason, kind);
+}
+
+/** A member's held-unpaid ads, oldest first, with the price they were quoted. */
+export async function listUnpaidAds(
+  phone: string,
+): Promise<{ id: number; costCents: number; createdAt: string }[]> {
+  return supabaseConfigured ? remote.listUnpaidAds(phone) : file.listUnpaidAds(phone);
+}
+
+/** Release a held ad into the review queue. True = THIS caller released it and
+ * is the one that must charge; false = it was already released, or 9953 is not
+ * in yet. Never charge without a true from here. */
+export async function markAdPaid(id: number): Promise<boolean> {
+  return supabaseConfigured ? remote.markAdPaid(id) : file.markAdPaid(id);
+}
+
+/** Put a released ad back on hold: the undo when the charge fails after the
+ * status flipped. Only ever reverses 'pending' back to 'unpaid'. */
+export async function setAdUnpaid(id: number, costCents: number): Promise<void> {
+  return supabaseConfigured ? remote.setAdUnpaid(id, costCents) : file.setAdUnpaid(id, costCents);
 }
 
 export async function markAdSold(id: number): Promise<void> {

@@ -184,6 +184,48 @@ promise true and closes the loop the new reply sends people into. It is
 best-effort — a pre-9973 column or a thrown error must not fail a call in
 which the card WAS saved.
 
+### An unfunded ad is HELD, not lost (migration 9953)
+
+Second half of the same user decision that killed the debt system: *"if
+someone has no card saved, and no balance for credit, reply to the user that
+their ad is saved, but they need to call in and add a card to their account
+before it gets sent out."*
+
+An unfunded post used to be refused outright — the seller's text was gone and
+they had to thumb the whole thing in again on a flip phone, which is the most
+likely moment for someone to give up on the service. It is now written down in
+a new `unpaid` status: out of the review queue, off the website, nothing
+broadcast, nothing charged, with the **quoted price stored on the row**
+(`ads.unpaid_cents`). The release charges THAT, not a recomputed price — an ad
+held on Monday must not cost more on Wednesday because the price list moved.
+
+`releaseUnpaidAds(phone)` in `lib/engine.ts` charges and posts everything
+waiting. It is called from the two moments funding changes: **a card saved on
+the IVR** (so the caller is told, on the line, that their ad is on its way) and
+**a Stripe top-up** (in the webhook, deliberately OUTSIDE the `hasLedgerRef`
+guard — a retry re-runs a harmless no-op, whereas a release skipped because the
+first delivery raced the ledger write would strand a paid-for ad).
+
+**Three things here are load-bearing:**
+
+- **`markAdPaid` is the concurrency guard, not the caller.** It flips the
+  status only from `unpaid` and reports whether THIS caller won, so the IVR and
+  a web purchase landing in the same second cannot both charge for one ad.
+  Never charge without a `true` from it.
+- **Status flips BEFORE the charge**, with `setAdUnpaid` as the undo. A failed
+  charge after the flip is recoverable; charging first and failing to flip
+  takes the member's money and leaves the ad sitting unpaid, which is not.
+- **A held ad does NOT emit `postSubmitted`.** The comment at the real submit
+  site is explicit that counting ads before they clear the balance check
+  inflates the one supply number the roadmap gets argued from. The event fires
+  on release.
+
+Ads are also held on a card DECLINE, though the user only asked about the
+no-card case: keeping the seller's text costs nothing and losing it helps
+nobody. The reply says which happened. Held ads are visible on /admin/ads
+under the `unpaid` filter, and deleting one refunds nothing (it was never
+charged) — pinned in `test/myads.test.mjs`.
+
 ### Things a future session must not get wrong here
 
 - **The email edition is NOT affected, on purpose** (user decision this
