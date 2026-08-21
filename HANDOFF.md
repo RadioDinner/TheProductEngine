@@ -4,17 +4,19 @@ Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
 **Last updated:** 2026-08-21 (session 021 — the call line no longer dials the
-operator's cell at all. Session 020's wrap follows below: the send window, the
-ledger reset, the call flow, AD replacing AD NEW, held-unpaid ads, and
-scheduled admin broadcasts. v1.4.9).
+operator's cell, admin TEST MODE, the first end-to-end category delivery tests,
+and Twilio Trust Hub verified at last. Session 020's wrap follows below: the
+send window, the ledger reset, the call flow, AD replacing AD NEW, held-unpaid
+ads, and scheduled admin broadcasts. v1.4.9).
 
-## ⚠️ START HERE: two NEW migrations are waiting
+## ⚠️ START HERE: three NEW migrations are waiting
 
-**`9953_unpaid_ads.sql`** and **`9952_admin_messages.sql`** were written AFTER
-the user confirmed the queue clear, and have NOT been pasted. Both degrade
-safely — held ads simply are not held, and the broadcast form says the table is
-missing — so nothing is broken, but two features are off until they go in.
-**`9952` is the newest; the next migration takes 9951.**
+**`9953_unpaid_ads.sql`**, **`9952_admin_messages.sql`** and
+**`9951_test_ads.sql`** have NOT been pasted. All three degrade safely — held
+ads simply are not held, the broadcast form says the table is missing, and test
+ads are stored unlabelled (but still hidden from the website) — so nothing is
+broken, but the features are off or partial until they go in.
+**`9951` is the newest; the next migration takes 9950.**
 
 ### Everything before them IS applied (user confirmed 2026-08-21)
 
@@ -48,6 +50,91 @@ Consequences worth carrying:
 description registered with the carrier still says 7am–9pm.** That lives at
 Telnyx. The published window and the registered description have to agree —
 this is the last piece of the session-020 change not yet done.
+
+## Session 021, part two — TEST MODE, and the first end-to-end category tests
+
+User request: *"a test mode in the admin side… send ads as though they were
+valid ads to my two test numbers."*
+
+**The design rule: test mode narrows the AUDIENCE and changes nothing else.**
+An ad posted while it is on is a real ad — real number, real price, real review
+queue, real batching, real category partitioning, real segment accounting. Only
+the recipient list is cut down. A faked pipeline proves nothing about the real
+one, which is the entire reason to have a bench.
+
+- **`lib/test-mode.ts`** — dependency-free decisions (like `lib/categories.ts`):
+  `parseTestNumbers`, `testModeActive`, `testModeState`, `testModeMinutesLeft`,
+  `narrowToTestNumbers`, `unsubscribedTestNumbers`. 43 unit checks.
+- **Enforced in the STORE layer** (`lib/store.ts`
+  `listSubscribersWithCategories`), not at the four call sites that ask who
+  receives a digest. The fifth call site somebody adds later is exactly the one
+  that would leak a test send to the whole list — same lesson as the ring-first
+  removal in part one.
+- **The narrowing FILTERS the real list; it never invents a recipient.** A test
+  number receives ads only if it is a genuine subscriber, with its own category
+  prefs, opt-out state and block status. That is what makes a category test
+  real. Settings names any test number that is not subscribed.
+- **`createAd` marks test ads** (`lib/engine-store.ts`), again in the dispatcher
+  rather than at its six callers. TWO flags on purpose: `webListing:false` is
+  what HIDES the ad (an existing, already-migrated filter, so hiding works with
+  no migration pasted), and `is_test` is the LABEL for finding and deleting them
+  afterwards (migration **9951**, degrades to unlabelled-but-hidden).
+- **The email edition is suppressed entirely** while test mode is on. The test
+  list is phone numbers and the email list has no phone to match against, so any
+  narrowing there would be a guess — and a wrong guess emails the real list.
+- **It expires itself after 4 hours.** This is the load-bearing safety
+  property, not a convenience: test mode left on is worse than an outage,
+  because ads keep flowing, every screen reads healthy, and the whole list
+  silently receives nothing. The deadline is STAMPED when the switch is flipped
+  (`adminSetTestMode`), so nothing has to remember to compute it. An absent or
+  corrupted timestamp reads as EXPIRED, never as forever. On-with-no-valid-test-
+  numbers reads as INERT rather than as a service-wide blackout.
+- Surfaced loudly: a `stopped`-level **TEST MODE** item first on the dashboard
+  health panel, the Settings panel with a live countdown, and `/api/health`.
+
+**No config migration was needed** for the settings themselves — `config` is a
+generic key/value table, so `test_mode` / `test_numbers` /
+`test_mode_expires_at` are just `EngineSettings` + `CONFIG_KEYS` entries.
+
+### Category testing — the gap was end-to-end, not unit
+
+The user said *"we've never done any category testing"*. Half true, and the
+half that matters: `test/categories.test.mjs` (91 checks) already covered the
+pure decisions well — `menuChoice` numbering, the toggle state machine,
+`adMatchesCategories` including the empty-set case, `partitionKey`, and a
+cross-check that `commands.ts`'s hardcoded word list cannot drift from
+`CATEGORY_KEYS`. What did NOT exist was **who actually receives which ad**.
+
+**`test/category-delivery.test.mjs`** (26 checks) covers it against the real
+composer, `buildCategorizedSmsRows` — which is pure, so no database is needed:
+a horses-only member gets the horse AND NOT the dog; two picks get both and not
+the third; the warned-dark empty set gets no row at all, not even a sponsor
+line; an uncategorized ad rides every non-empty set; identical preference sets
+share one composition (composing twice would bill twice); a member matching
+nothing gets no batch unless a sponsor line is riding; and `deliveredAdIds`
+only marks what actually went out. Verified non-vacuous by breaking
+`adMatchesCategories` — 11 checks failed, then restored.
+
+**The user's reported review-vs-welcome category mismatch was not real** (they
+confirmed: *"I was wrong, looks like the categories are right"*). Both surfaces
+read the same `CATEGORIES` constant. The only difference is the top row, and it
+is correct: ALL is a subscriber choice, Uncategorized is an ad state.
+
+### Twilio 18602 — CLOSED, AND THE PROFILE IS NOW VERIFIED
+
+The user sorted the EIN question themselves, resubmitted the Trust Hub profile,
+and **Twilio accepted and verified it**. The rejection that named this session's
+branch is resolved; no code was involved at any point.
+
+Kept for the future, because this took two sessions to get through: 18602 is
+"Business ID could not be verified", and it is an EXACT-MATCH failure against
+IRS records — legal name + EIN precisely as they appear on the CP-575 (or a
+147c letter if the CP-575 is lost), and a STREET address, since Twilio and TCR
+both reject PO Boxes. A newly issued EIN can also take 30–90 days to propagate
+to the validation databases, so a correct submission can still fail on timing
+alone.
+
+Verified across part two: tsc clean, build clean, unit **1464 → 1533**.
 
 ## Session 021 (2026-08-21) — NOTHING DIALS THE OPERATOR'S CELL ANY MORE
 

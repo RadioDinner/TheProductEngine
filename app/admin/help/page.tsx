@@ -470,6 +470,36 @@ export default async function AdminHelp() {
         reports the missing migration.
       </p>
 
+      <h2 className="section-h">Test mode</h2>
+      <p>
+        <span className="cmd">Settings &rarr; Test mode</span> sends <strong>real ads</strong> to
+        your test numbers and nobody else. Everything else runs exactly as it does in
+        production &mdash; real ad number, real price, real review queue, real batching, real
+        category filtering &mdash; so what lands on the test phone is what a subscriber would
+        have seen. Nothing is simulated; only the audience is narrowed.
+      </p>
+      <p>
+        Your test numbers must be <strong>real subscribers</strong> (text SUBSCRIBE from them
+        first). Test mode filters the subscriber list down to them &mdash; it never invents a
+        recipient &mdash; which is what makes their category picks, their STOP state and the
+        blocklist behave the way they really do. The Settings panel names any test number that
+        is not subscribed, because otherwise the phone just stays quiet with no explanation.
+      </p>
+      <p>
+        Ads posted while it is on are kept <strong>off the public website</strong> and labelled
+        so you can find and delete them afterwards
+        (<span className="cmd">delete from ads where is_test;</span>). The email edition is
+        suppressed entirely while it is on.
+      </p>
+      <p>
+        <strong>It turns itself off after four hours.</strong> That is not a convenience: test
+        mode left on is worse than an outage, because every ad still flows, every screen still
+        reads healthy, and the whole subscriber list silently receives nothing. While it is on
+        the dashboard carries a red TEST MODE banner and{" "}
+        <span className="cmd">/api/health</span> reports it. If it is ticked but no valid test
+        number is saved, it stays inert rather than switching ads off for everybody.
+      </p>
+
       <h2 className="section-h">Categories (the digest picker)</h2>
       <p>
         The SUBSCRIBE/START welcome is a menu: ALL plus nine categories (buggies, dogs,

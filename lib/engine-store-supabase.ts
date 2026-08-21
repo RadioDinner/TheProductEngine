@@ -108,11 +108,15 @@ async function userIdByPhone(phone: string): Promise<string | null> {
 export async function createAd(input: NewAdInput, options: CreateAdOptions = {}): Promise<number> {
   const userId = await userIdByPhone(input.ownerPhone);
   if (!userId) throw new Error(`no user for phone ${input.ownerPhone}`);
-  const row = (withWebListing: boolean) => ({
+  const row = (withWebListing: boolean, withIsTest = input.isTest === true) => ({
     user_id: userId,
     original_body: input.body,
     body: input.body,
     status: options.status ?? "pending",
+    // Test-mode label (migration 9951). Rides the insert ONLY for a test ad, so
+    // a database without 9951 never sees a column it does not have on the
+    // ordinary posting path — same rule as unpaid_cents and web_listing below.
+    ...(withIsTest && { is_test: true }),
     // The quoted price rides the insert only for a HELD ad, so a database
     // without migration 9953 is never sent a column it does not have on the
     // ordinary posting path.
@@ -132,6 +136,20 @@ export async function createAd(input: NewAdInput, options: CreateAdOptions = {})
     .insert(row(input.webListing === false))
     .select("id")
     .single();
+  // A test ad whose is_test column does not exist yet (9951 pending). Retry
+  // WITHOUT the label but KEEPING web_listing:false, so the ad is still hidden
+  // from the public site — the hiding is the part that matters, the label is
+  // only for finding them again later.
+  if (error && input.isTest === true && (error.code === "PGRST204" || error.code === "42703")) {
+    console.error(
+      "[engine-store] ads.is_test missing (migration 9951) — test ad stored UNLABELLED (still hidden from the site)",
+    );
+    ({ data, error } = await db()
+      .from("ads")
+      .insert(row(input.webListing === false, false))
+      .select("id")
+      .single());
+  }
   if (error && input.webListing === false && (error.code === "PGRST204" || error.code === "42703")) {
     // Column missing (9973 pending) but the caller wanted the ad OFF the
     // website — store it anyway (listed) and shout: the operator set a web
@@ -139,7 +157,7 @@ export async function createAd(input: NewAdInput, options: CreateAdOptions = {})
     console.error(
       "[engine-store] ads.web_listing missing (migration 9973) — ad stored WITHOUT the off-website flag",
     );
-    ({ data, error } = await db().from("ads").insert(row(false)).select("id").single());
+    ({ data, error } = await db().from("ads").insert(row(false, false)).select("id").single());
   }
   if (error || !data) throw error ?? new Error("ad insert returned no row");
   const id = data.id as number;

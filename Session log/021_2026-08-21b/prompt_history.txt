@@ -9,3 +9,34 @@ Ok, well change the code. I don't want it to ring to my cell phone first
 
 --- 2026-08-21 ---
 go ahead and commit
+
+--- 2026-08-21 ---
+I want a "test" mode in the admin side that I can turn on. When the test mode is on, I want to be able to send ads as though they were valid ads to my two test numbers. What would be a good way of implementing this? 
+
+Also, we've never done any category testing. And the review process doesn't match the categories on my welcome message
+
+--- 2026-08-21 ---
+I want a "test" mode in the admin side that I can turn on. When the test mode is on, I want to be able to send ads as though they were valid ads to my two test numbers. What would be a good way of implementing this?
+
+Also, we've never done any category testing. And the review process doesn't match the categories on my welcome message
+
+[AskUserQuestion answers]
+  Category gap = "I was wrong, looks like the categories are right"
+  Test mode    = "Build it, hide test ads (Recommended)"
+
+--- 2026-08-21 (mid-turn) ---
+So, for the twilio error, can I use my umbrella llc holding ein?
+
+the address is 
+
+Elevare Holdings LLC
+Derrick Wengerd SOLE MBR
+% Derrick Wengerd SOLE MBR 
+PO Box 216 
+Beach City, OH 4460
+
+--- 2026-08-21 (mid-turn) ---
+I figured out the EIN thing and resubmitted it. Close the twilio issue for now
+
+--- 2026-08-21 (mid-turn) ---
+verification was accepted and verified with twilio. That issue is closed

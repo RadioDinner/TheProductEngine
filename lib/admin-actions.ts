@@ -100,6 +100,7 @@ import {
   type Filter,
 } from "@/lib/user-table";
 import { deleteView, saveView } from "@/lib/user-table-store";
+import { parseTestNumbers, testModeExpiry } from "@/lib/test-mode";
 import { readSession } from "@/lib/session";
 
 /** Whitelisted return targets for shared ad actions — never trust a form string. */
@@ -1170,6 +1171,45 @@ export async function adminSetUnderAttack(formData: FormData): Promise<void> {
   await requireAdmin();
   await saveEngineSettings({ underAttack: String(formData.get("on")) === "yes" });
   redirect("/admin/settings?saved=attack");
+}
+
+/**
+ * Turn TEST MODE on or off (session 021).
+ *
+ * The EXPIRY IS STAMPED HERE, at the moment the switch goes on, rather than
+ * being a duration checked against some later "when did this start" guess.
+ * That is what makes the auto-off real: the deadline is a fact written down
+ * beside the flag, so nothing has to remember to compute it, and a switch left
+ * on simply stops being in force. Every flip-on re-stamps it, so a genuinely
+ * long bench session is a second click rather than an indefinite blackout.
+ *
+ * Turning it OFF clears the deadline too — leaving a stale future timestamp
+ * behind would make the next flip-on look like it had hours left when it does
+ * not.
+ */
+export async function adminSetTestMode(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const on = String(formData.get("on")) === "yes";
+  await saveEngineSettings({
+    testMode: on,
+    testModeExpiresAt: on ? testModeExpiry(Date.now()) : "",
+  });
+  redirect(`/admin/settings?saved=${on ? "test-on" : "test-off"}`);
+}
+
+/**
+ * Save the test-number list. Stored as the operator typed it; parseTestNumbers
+ * is what decides which entries are usable, and the Settings page shows that
+ * verdict back so a typo is visible immediately rather than at send time.
+ */
+export async function adminSaveTestNumbers(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const raw = String(formData.get("numbers") ?? "").trim();
+  // Re-serialize from the parse so what is stored is what will actually be
+  // used — an entry that did not survive parsing must not sit in the box
+  // looking like it is configured.
+  await saveEngineSettings({ testNumbers: parseTestNumbers(raw).join(",") });
+  redirect("/admin/settings?saved=test-numbers");
 }
 
 /** Block a number (one-click from Insights, or by hand on Settings). */

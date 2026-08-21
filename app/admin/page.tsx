@@ -8,6 +8,11 @@ import { countOpenHelpReports } from "@/lib/help-report-store";
 import type { HandbookKey } from "@/lib/admin-handbook";
 import { supabaseConfigured } from "@/lib/db";
 import { site } from "@/lib/config";
+import {
+  parseTestNumbers,
+  testModeActive,
+  testModeMinutesLeft,
+} from "@/lib/test-mode";
 import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
@@ -60,6 +65,13 @@ export default async function AdminDashboard() {
     adsPaused: settings.adsPaused,
     outboundPaused: settings.outboundPaused,
     underAttack: settings.underAttack,
+    // Test mode reads through testModeActive rather than the raw flag, so an
+    // expired switch (or one with no test numbers set) shows as OFF here —
+    // the panel must say what the SEND PATH is actually doing, and the send
+    // path applies exactly this test.
+    testMode: testModeActive(settings, now.getTime()),
+    testNumberCount: parseTestNumbers(settings.testNumbers).length,
+    testMinutesLeft: testModeMinutesLeft(settings, now.getTime()),
     windowOpen,
     // The OPERATOR's label, not the published one: Saturday's earlier close
     // is spelled out here so a quiet Saturday evening reads as the schedule

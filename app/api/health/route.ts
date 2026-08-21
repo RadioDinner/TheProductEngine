@@ -9,6 +9,8 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { db, supabaseConfigured } from "@/lib/db";
 import { isProduction } from "@/lib/env";
+import { getEngineSettings } from "@/lib/settings";
+import { parseTestNumbers, testModeMinutesLeft, testModeState } from "@/lib/test-mode";
 import { site } from "@/lib/config";
 
 function keyKind(key: string | undefined): string {
@@ -93,6 +95,27 @@ export async function GET(req: NextRequest) {
       GA_DEBUG_MODE: process.env.GA_DEBUG_MODE === "1",
     },
   };
+
+  // TEST MODE (session 021) is reported FIRST and unconditionally, because it
+  // is the one state where every other line in this report reads healthy while
+  // the subscriber list receives nothing at all. Anything that can produce a
+  // silent outage has to be visible from outside the admin screens.
+  try {
+    const settings = await getEngineSettings();
+    const nowMs = Date.now();
+    const state = testModeState(settings, nowMs);
+    report.testMode =
+      state === "active"
+        ? {
+            ON: true,
+            warning: "ADS ARE GOING ONLY TO THE TEST NUMBERS — the subscriber list receives nothing",
+            testNumbers: parseTestNumbers(settings.testNumbers).length,
+            minutesUntilAutoOff: testModeMinutesLeft(settings, nowMs),
+          }
+        : { ON: false, state };
+  } catch (e) {
+    report.testMode = { ON: "unknown", error: (e as Error).message };
+  }
 
   if (supabaseConfigured) {
     try {
