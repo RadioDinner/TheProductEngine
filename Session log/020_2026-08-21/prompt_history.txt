@@ -45,3 +45,6 @@ Also, I want my system to allow for up to $50 of "debt". When someone wants to p
 
 --- 2026-08-21 ---
 Well when someone posts an ad by texting "AD New holland tractor", I want it to keep the "New"
+
+--- 2026-08-21 ---
+actully, cancel the debt system entirely. IF they don't have enough money to post an ad, reply to them to call the number to add a card to charge

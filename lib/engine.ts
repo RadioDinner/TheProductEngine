@@ -233,8 +233,23 @@ function priceSheetLine(settings: EngineSettings): string {
   return `Text ad ${formatPrice(settings.costTextCents)}; ${pics}.`;
 }
 
+/**
+ * What to do about an empty balance. Every refusal-for-money reply ends with
+ * this one sentence, so there is a single place to change the answer.
+ *
+ * Leads with the CALL (user decision, session 020, replacing a proposed $50
+ * debt allowance: "if they don't have enough money to post an ad, reply to
+ * them to call the number to add a card to charge"). The line it names is the
+ * same one the card IVR answers, and pressing 1 is literally the first thing
+ * that menu offers — so the instruction and what the caller hears agree word
+ * for word.
+ *
+ * The website stays as the second option because it already works and is the
+ * faster route for anyone holding a phone that can browse; it is not the one a
+ * flip-phone seller can use, which is why it is no longer first.
+ */
 function payInstructions(): string {
-  return `Add money at ThePlainExchange.com, or call ${site.supportPhone} to pay by card or check`;
+  return `Call ${site.supportPhone} and press 1 to put a card on file — we'll charge it and your ad goes out. Or add money at ThePlainExchange.com`;
 }
 
 async function handleAdSubmission(from: string, rawBody: string, media?: string[]): Promise<Reply> {

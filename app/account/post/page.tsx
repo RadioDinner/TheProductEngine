@@ -158,7 +158,9 @@ export default async function PostAdPage({
           That ad costs {formatPrice(Number(params.cost) || settings.costTextCents)} and you
           have {formatPrice(Number(params.balance) || 0)} of ad credit. Nothing was posted
           or charged — <Link href="/account#credits">add money</Link> and try again, or call{" "}
-          {site.supportPhone}.
+          <strong>{site.supportPhone}</strong> and press <strong>1</strong> to put a card on
+          file. Once a card is on file we charge the difference automatically, so posting
+          just works from then on.
         </p>
       )}
 

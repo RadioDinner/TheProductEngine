@@ -17,7 +17,7 @@ import { email } from "@/lib/email";
 import { savePhoneCapturedCard } from "@/lib/payments";
 import { normalizePhone } from "@/lib/phone";
 import { sms } from "@/lib/sms";
-import { ensureAccount, getAccount } from "@/lib/store";
+import { ensureAccount, getAccount, setAutoTopUp } from "@/lib/store";
 import {
   MENU_MAX_ATTEMPTS,
   VOICE_PATH,
@@ -259,6 +259,25 @@ async function handle(req: NextRequest) {
             "Sorry, something went wrong on our end and the card was not saved. Please call again later. Goodbye.",
           ),
         );
+      }
+      // Turn ON automatic top-up, because the caller just consented to it out
+      // loud. payTwiml's script is the stored-credential authorization the card
+      // networks require, word for word: "you authorize … to keep this card on
+      // file and to charge it for the ads you place, when your ad credit runs
+      // short." The confirmation text below repeats the promise.
+      //
+      // Without this the promise was empty. coverShortfallWithCard returns
+      // early unless getAutoTopUp is true, and saving a card never set it — so
+      // a member could call, press 1, add a card, re-text their ad and be told
+      // again that they have no credit. That dead end is exactly the loop the
+      // "call and add a card" reply now sends people into, so it has to close.
+      //
+      // Best-effort: "unsupported" (pre-9973 column) or a thrown error must not
+      // fail a call in which the card WAS saved.
+      try {
+        await setAutoTopUp(caller, true);
+      } catch (e) {
+        console.error("[voice] could not enable auto top-up after a card save:", e);
       }
       // Is the phone card line paying for itself? This is the event that
       // answers it — the only conversion the voice channel produces.

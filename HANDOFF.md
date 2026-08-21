@@ -158,6 +158,32 @@ posted now counts as having had their welcome credit. That is what "everyone
 has $40 in credit" requires, but it departs from the standing rule that the
 grant lands on a member's FIRST post rather than at signup.
 
+### No debt system — an empty balance sends you to the phone
+
+A $50 "debt" allowance was proposed and **cancelled by the user before any of
+it was built** (session 020): *"cancel the debt system entirely. If they don't
+have enough money to post an ad, reply to them to call the number to add a
+card to charge."* There is no debt code to find; do not go looking for it, and
+do not reintroduce one without asking — the starter-credit rules exist because
+a per-number float is the obvious abuse target (session 005).
+
+`payInstructions()` in `lib/engine.ts` is the single sentence every
+refusal-for-money reply ends with, on both the SMS and picture-upgrade paths.
+It now leads with **call, press 1** — the same line the card IVR answers, and
+pressing 1 is literally its first option, so the instruction and what the
+caller hears agree word for word.
+
+⚠️ **Saving a card by phone now switches automatic top-up ON, and that is
+load-bearing.** `coverShortfallWithCard` returns early unless `getAutoTopUp` is
+true, and saving a card never set it — so a member could call, press 1, add a
+card, re-text their ad and be told AGAIN that they have no credit. The IVR's
+own consent script had been promising the opposite the whole time ("you
+authorize … to charge it for the ads you place, when your ad credit runs
+short"), as does the confirmation text. Enabling it on save is what makes the
+promise true and closes the loop the new reply sends people into. It is
+best-effort — a pre-9973 column or a thrown error must not fail a call in
+which the card WAS saved.
+
 ### Things a future session must not get wrong here
 
 - **The email edition is NOT affected, on purpose** (user decision this
