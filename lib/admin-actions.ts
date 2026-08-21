@@ -62,6 +62,9 @@ import {
   updateAdBody,
 } from "@/lib/engine-store";
 import { isCategoryKey } from "@/lib/categories";
+import { textedAdPhotos } from "@/lib/photo-collage";
+import { deriveTitle } from "@/lib/ad-display";
+import { siteUrl } from "@/lib/email";
 import { nextSlotOccurrence, selectDigestItems, sendDigestNow } from "@/lib/digest-engine";
 import {
   approveBusinessPackage,
@@ -116,7 +119,7 @@ import { readSession } from "@/lib/session";
  * they end up in a URL, and a form field is not a size the page controls.
  */
 function backTarget(formData: FormData, extra?: Record<string, string>): string {
-  const path = String(formData.get("back")) === "/admin/digests" ? "/admin/digests" : "/admin/ads";
+  const path = String(formData.get("back")) === "/admin/batches" ? "/admin/batches" : "/admin/ads";
   const params = new URLSearchParams();
   if (path === "/admin/ads") {
     const q = String(formData.get("q") ?? "").slice(0, 200);
@@ -319,7 +322,7 @@ export async function adminDelayAd(formData: FormData): Promise<void> {
       await setAdHold(id, new Date(next.at.getTime() + 3600_000).toISOString());
     }
   }
-  redirect("/admin/digests");
+  redirect("/admin/batches");
 }
 
 /** Release a held ad back into the digest queue immediately. */
@@ -327,7 +330,7 @@ export async function adminReleaseAd(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = Number(formData.get("id"));
   if (Number.isInteger(id)) await setAdHold(id, null);
-  redirect("/admin/digests");
+  redirect("/admin/batches");
 }
 
 /** Move an ad up/down in the digest queue by swapping approval order with its
@@ -343,7 +346,7 @@ export async function adminMoveAd(formData: FormData): Promise<void> {
     const neighbor = dir === "up" ? newAds[index - 1] : newAds[index + 1];
     if (index >= 0 && neighbor) await swapAdApprovalOrder(id, neighbor.id);
   }
-  redirect("/admin/digests");
+  redirect("/admin/batches");
 }
 
 /** Pull a queued ad out of the digest queue, back into the review list. */
@@ -351,7 +354,7 @@ export async function adminRevertAd(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = Number(formData.get("id"));
   if (Number.isInteger(id)) await revertAdToPending(id);
-  redirect("/admin/digests");
+  redirect("/admin/batches");
 }
 
 /** Send the digest now: "early" (the upcoming slot, ahead of schedule) or
@@ -362,10 +365,10 @@ export async function adminSendDigest(formData: FormData): Promise<void> {
   const result = await sendDigestNow(edition);
   if (result.ok) {
     redirect(
-      `/admin/digests?sent=${edition}&items=${result.items}&to=${result.recipients}&emails=${result.emailRecipients}`,
+      `/admin/batches?sent=${edition}&items=${result.items}&to=${result.recipients}&emails=${result.emailRecipients}`,
     );
   }
-  redirect(`/admin/digests?senderror=${encodeURIComponent(result.reason)}`);
+  redirect(`/admin/batches?senderror=${encodeURIComponent(result.reason)}`);
 }
 
 /**
@@ -988,14 +991,14 @@ export async function adminPurgeMember(
 export async function adminScheduleMessage(formData: FormData): Promise<void> {
   await requireAdmin();
   const body = normalizeAdminMessage(String(formData.get("body") ?? ""));
-  if (!body) redirect("/admin/digests?msgerror=empty");
+  if (!body) redirect("/admin/batches?msgerror=empty");
   // datetime-local gives "2026-08-21T14:30" with no zone. Read it as ET, which
   // is what the operator meant and what every other hour in this service is.
   const typed = String(formData.get("sendAfter") ?? "").trim();
   const sendAfter = typed ? etLocalToIso(typed) : new Date().toISOString();
-  if (!sendAfter) redirect("/admin/digests?msgerror=when");
+  if (!sendAfter) redirect("/admin/batches?msgerror=when");
   const id = await createAdminMessage(body, sendAfter);
-  redirect(id ? `/admin/digests?msgqueued=${id}` : "/admin/digests?msgerror=unsupported");
+  redirect(id ? `/admin/batches?msgqueued=${id}` : "/admin/batches?msgerror=unsupported");
 }
 
 /** Cancel a scheduled broadcast that has not gone out yet. */
@@ -1003,7 +1006,7 @@ export async function adminCancelMessage(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = Number(formData.get("id"));
   if (Number.isInteger(id)) await cancelAdminMessage(id);
-  redirect("/admin/digests?msgcanceled=1");
+  redirect("/admin/batches?msgcanceled=1");
 }
 
 /**
@@ -1339,4 +1342,104 @@ export async function adminDeleteFeaturedSpot(formData: FormData): Promise<void>
     if (src) await removeHostedPhotos([src]);
   }
   redirect("/admin/featured?deleted=1");
+}
+
+/**
+ * Promote an existing ad into a Featured spot (user request, session 022:
+ * "the ability to promote ads in the admin ad page to the featured section").
+ *
+ * Featured spots are IMAGE slots — a picture, a caption and a link — so this
+ * builds one out of the ad rather than asking the operator to re-upload
+ * artwork they already have. The picture is the same one the ad broadcasts
+ * (`textedAdPhotos(...)[0]`), the caption is the ad's derived title, and the
+ * link goes to the ad's own public page. An ad with no picture cannot be
+ * promoted, and the button is not offered for one.
+ *
+ * ⚠️ **The money is asked for every time, and that was the user's decision.**
+ * Promoting is sometimes a sale ($199 of featured placement) and sometimes a
+ * favour ("on the house"), and the two are not the same entry in the books —
+ * a free promotion silently billed, or a paid one silently not, both end up
+ * wrong in /admin/money. So the form carries an explicit charge choice and
+ * this action refuses to guess: `charge` must be present, and a charge that
+ * the seller's balance cannot cover fails WITHOUT creating the spot, rather
+ * than handing out placement nobody paid for.
+ */
+export async function adminPromoteAdToFeatured(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  const back = backTarget(formData);
+  if (!Number.isInteger(id)) redirect(back);
+
+  const ad = await getAdRecord(id);
+  if (!ad) redirect(backTarget(formData, { error: "promotemissing", id: String(id) }));
+
+  const photo = textedAdPhotos(ad.photo, ad.morePhotos)[0];
+  if (!photo) redirect(backTarget(formData, { error: "promotenopic", id: String(id) }));
+
+  const rawSlot = Number(formData.get("slot"));
+  const slot = rawSlot >= 1 && rawSlot <= 4 ? Math.trunc(rawSlot) : 1;
+  const rawPosition = Number(formData.get("position"));
+  const position = rawPosition === 2 || rawPosition === 3 ? rawPosition : 1;
+
+  // Charge or gift — never inferred. An unrecognised value is treated as
+  // "unanswered" and bounces, because defaulting either way puts a wrong
+  // number in the income report that nobody will ever notice.
+  const choice = String(formData.get("charge") ?? "");
+  if (choice !== "bill" && choice !== "free") {
+    redirect(backTarget(formData, { error: "promotecharge", id: String(id) }));
+  }
+
+  const settings = await getEngineSettings();
+  const price = settings.featuredMonthlyCents;
+  if (choice === "bill") {
+    if (price <= 0) redirect(backTarget(formData, { error: "promoteprice", id: String(id) }));
+    const balance = await getCreditBalance(ad.ownerPhone);
+    if (balance < price) {
+      redirect(
+        backTarget(formData, {
+          error: "promotefunds",
+          id: String(id),
+          short: String(price - balance),
+          // Carried so the notice can link straight to the account that needs
+          // topping up, which is the next thing the operator does.
+          phone: ad.ownerPhone,
+        }),
+      );
+    }
+  }
+
+  // The picture must be an ABSOLUTE url for the same reason a broadcast one
+  // is: fixtures and pre-re-hosting ads carry a site-relative src, and the
+  // homepage renders the spot from whatever is stored here.
+  const src = photo.src.startsWith("http") ? photo.src : `${siteUrl}${photo.src}`;
+  const outcome = await addFeaturedSpot({
+    slot,
+    position,
+    src,
+    caption: stripEmoji(deriveTitle(ad.body)).slice(0, FEATURED_CAPTION_MAX) || null,
+    linkUrl: `${siteUrl}/ad/${ad.id}`,
+    active: true,
+  });
+  if (outcome !== "added") {
+    redirect(backTarget(formData, { error: "promotemigration", id: String(id) }));
+  }
+
+  // Charged only AFTER the spot exists. The other order can take $199 and then
+  // fail to place the advert, which is the one failure the seller notices and
+  // the operator does not.
+  if (choice === "bill") {
+    await addLedgerEntry(ad.ownerPhone, {
+      delta: -price,
+      kind: "spend",
+      note: `Featured spot for ad #${ad.id} (${formatPrice(price)})`,
+      ref: `featured-ad-${ad.id}-slot-${slot}-${position}`,
+    });
+  }
+  redirect(
+    backTarget(formData, {
+      promoted: String(id),
+      slot: String(slot),
+      ...(choice === "bill" ? { billed: String(price) } : {}),
+    }),
+  );
 }

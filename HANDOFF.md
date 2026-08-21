@@ -3,10 +3,11 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-21 (session 022 — /admin/ads becomes a list of cards
-and an ad is editable in every status. v1.4.10). ⚠️ A parallel session 021 (the
-call line) was in flight at the same time and lands its own section below when
-it merges — keep both.
+**Last updated:** 2026-08-21 (session 022 — ad cards, editing in every status,
+Digests becomes Batches with a real queue preview, promote-to-Featured, and the
+/admin/digests crash. v1.5.10). ⚠️ A parallel session 021 (the call line) was in
+flight at the same time and lands its own section below when it merges — keep
+both.
 
 ## ⚠️ START HERE: two NEW migrations are waiting
 
@@ -49,10 +50,81 @@ description registered with the carrier still says 7am–9pm.** That lives at
 Telnyx. The published window and the registered description have to agree —
 this is the last piece of the session-020 change not yet done.
 
-## Session 022 (2026-08-21) — /admin/ads: CARDS, and editing in every status
+## Session 022 (2026-08-21) — CARDS, editing everywhere, BATCHES, and a page-down bug
 
-**Version 1.4.9 → 1.4.10** (§6: two features this session, so the far-right
-digit moves ONCE and stays; 9 + 1 = 10, taken literally).
+**Version 1.4.9 → 1.4.10 → 1.5.10** (§6: the far-right digit moved mid-session
+at two features; the Batches queue view, promote-to-Featured and
+pictures-on-ads took it to five, so the SECOND digit moved as well and the
+third stayed — the cumulative shape sessions 019 and 020 both used. The
+/admin/digests crash is a FIX and is not counted).
+
+⚠️ **THE SECOND HALF OF THIS SESSION IS NOT COMMITTED.** Cards + editing are
+merged to `main` (`58f10d3`). Everything from "Digests becomes Batches"
+onward is verified but sitting in the working tree, because the user said
+**"dont commit until I tell you"** and has not lifted it. A stop hook nags
+about the dirty tree every turn — that is the hook, not the user.
+
+### ⚠️ A PAGE-DOWN BUG, and the trap that caused it
+
+`/admin/digests` was returning an error page in production. **Root cause:
+PostgREST's schema-cache error codes.**
+
+Supabase requests go through PostgREST, which answers from its own cache. This
+file already handled that for missing COLUMNS — every column guard checks
+`42703` (Postgres) **and** `PGRST204` (PostgREST), with a comment saying why.
+Every missing-TABLE guard checked only `42P01` and never **`PGRST205`**, the
+table-level twin.
+
+`admin_messages` genuinely does not exist (9952 unpasted). The page calls
+`listAdminMessages` on every render, its "return [] when not pasted" fallback
+never fired, and the throw took the queue, the send buttons and the history
+down with it. Fixed with one `tableMissing()` helper covering both codes, used
+by all eight table guards.
+
+**Never write a bare `42P01` guard again — use `tableMissing`.** A table guard
+that knows only the Postgres code is a page-down bug waiting for the next
+unpasted migration.
+
+The page also now loads every panel INDEPENDENTLY: one that fails renders its
+error in place, naming it, and the rest still works. This page has gone dark
+twice now (session 018's slot-key bug, and this).
+
+### Digests → Batches, and the queue is planned into real batches
+
+`/admin/batches` is the page; `/admin/digests` **permanently redirects** with
+its query params. Nav, `backTarget`'s allowlist and every `redirect()` moved.
+The name had been wrong since session 018.
+
+`planBatches` (pure, unit-pinned) splits the WHOLE queue into the batches it
+will actually go out in, mirroring the composer forward: one batch per run,
+new ads first by approval order, bumps only filling capacity left over. Each
+batch says what every subscriber receives from it.
+
+**One picture message per picture AD, not per picture** —
+`resolveBroadcastPictures` sends `textedAdPhotos(...)[0]` only. Counting
+pictures would overstate every batch's cost, which is the phone bill.
+`selectQueuePreview` stops at 200 waiting ads and SAYS so.
+
+### Promote an ad to Featured
+
+On the ad card, for a live ad with a picture. Builds the spot from the ad
+(broadcast picture, derived title, link to `/ad/####`).
+
+**The money is asked every time — the user's explicit decision.** Two buttons,
+charge or on-the-house; an unanswered value bounces rather than defaulting,
+because either one silently misfiled puts a number in /admin/money nobody
+would catch. Two orderings are load-bearing: a short balance refuses BEFORE
+the spot exists, and the charge lands AFTER `addFeaturedSpot` succeeds —
+charging first can take $199 and place nothing, which the seller notices and
+the operator does not.
+
+### Pictures finally visible on /admin/ads
+
+The card said "📷 PICTURE" and showed nothing. Thumbnails now render, each
+marked with what it DOES: `texts` (rides the batch), `PIC` (only on request),
+unmarked (website only) — the distinction the seller actually paid for. Only
+picture 1 broadcasts; a first pass marking all three texted photos as "texts"
+was wrong.
 
 ⚠️ **This session is numbered 022, not 021, and it is the SECOND of two
 sessions that both started on 2026-08-21 and both picked `021_2026-08-21b`.**

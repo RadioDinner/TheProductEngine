@@ -193,15 +193,146 @@ approved, or expired", which was a contradiction even before this change.
   post-action URL update, while the rendered content was already correct.
   Fixed with `waitForURL`.
 
+---
+
+# Third ask: the Batches page, promoting to Featured, and the missing pictures
+
+Four more requests arrived in quick succession, plus **"dont commit until I
+tell you"** — so everything from here sits in the working tree, verified but
+unpushed, until the user says otherwise.
+
+## The /admin/digests crash — a real bug, and a nasty one
+
+The user said the page "isn't working". Asked which way, they chose **error
+page / won't load**, which ruled out the empty-queue theory dev reproduced.
+
+**Root cause: PostgREST's schema-cache error codes.** Requests go through
+PostgREST, which answers from its own cache. This codebase already knew that
+for missing COLUMNS — every column guard checks `42703` (Postgres) *and*
+`PGRST204` (PostgREST), with a comment saying why. Every missing-TABLE guard
+checked only `42P01` and never **`PGRST205`**, the table-level twin.
+
+`admin_messages` genuinely does not exist in production (migration 9952 is
+unpasted, per HANDOFF). `/admin/digests` calls `listAdminMessages` on every
+render. Its "not pasted yet → return []" fallback never fired, so the throw
+took the queue, the send buttons and the history down with it. The feature was
+supposed to lie dormant and the page was supposed to say the table was
+missing; neither happened.
+
+Fixed with one `tableMissing()` helper covering both codes, used by all eight
+table guards (`admin_messages` ×7, `ad_photo_submissions`).
+
+⚠️ **The same trap is still live for any NEW table guard written from
+memory.** Use `tableMissing`, never a bare `42P01`.
+
+### Second line of defence
+
+This page has now gone dark in production twice (session 018's slot-key bug,
+and this). Every read is now independent: a panel that fails renders an error
+**in place**, naming the failure, and the rest of the page still works. An
+admin-gated page showing the real message is worth far more than a blank
+error screen — it is something the operator can act on.
+
+## Digests → Batches (user request)
+
+`/admin/batches` is the page; `/admin/digests` **permanently redirects**,
+carrying query params so an action redirecting with `?saved=…` still lands on
+its notice. Nav, `backTarget`'s allowlist and every `redirect()` repointed.
+The name had been wrong since session 018 — SMS stopped being a scheduled
+digest and became count/age-triggered batches, and every heading already said
+"batch" while the tab and URL still said "digest".
+
+### The queue is planned into REAL batches
+
+The user's words: *"If there are 8 ads waiting, I want to see which ones will
+go out with which ads. And I want to see which pictures will go along with
+them."*
+
+`planBatches` (pure, in `lib/digest-engine.ts`, 13 new unit tests) splits the
+whole queue into the batches it will actually go out in. It mirrors the
+composer's rules forward:
+
+- `digestCap` bounds ONE batch and one batch goes per run, so a backlog leaves
+  as successive batches — which is exactly what the page now lists.
+- New ads first by approval order; bumps only fill capacity left over once new
+  ads run out. Pinned: with 8 new ads at a cap of 3, a bump cannot ride before
+  the third batch.
+- **One picture message per picture AD**, not per picture —
+  `resolveBroadcastPictures` sends `textedAdPhotos(...)[0]` only. Counting
+  pictures would overstate every batch's cost.
+
+`selectQueuePreview` feeds it the whole queue rather than one cap's worth,
+stopping at **200** and SAYING so — a silently truncated queue would
+under-report the backlog, which is the number the operator is on that page to
+learn.
+
+Each batch's head line states what every subscriber receives from it
+("10 ads · 6 messages each (1 list + 5 pictures)") — the number that decides
+the phone bill.
+
+## Promote an ad to Featured (user request)
+
+On the ad card's foot, for a live ad **that has a picture** — a featured spot
+IS a picture, and pointing homepage traffic at a rejected or held ad's missing
+page would be worse than not offering it. Builds the spot from the ad:
+broadcast picture, derived title as caption, link to `/ad/####`.
+
+**Money: asked every time — the user's explicit choice** ("Ask me each time").
+Two submit buttons, `charge=bill` or `charge=free`, and an unanswered value
+bounces rather than defaulting. Promoting is sometimes a $199 sale and
+sometimes a favour; either one silently misfiled puts a wrong number in
+/admin/money that nobody would ever catch.
+
+Two orderings that are load-bearing:
+
+- **A short balance refuses BEFORE the spot exists** — no placement anyone
+  didn't pay for, and the notice links to the seller's account to take payment.
+- **The charge happens AFTER `addFeaturedSpot` succeeds.** The other order can
+  take $199 and then fail to place the advert, which is the one failure the
+  seller notices and the operator does not.
+
+## Pictures on /admin/ads (user: "I still can't see the pictures")
+
+True — the card said "📷 PICTURE" and showed nothing, so reviewing what a
+seller sent meant opening the public listing. Every picture now renders as a
+thumbnail marked with **what it actually does**: `texts` (rides the batch),
+`PIC` (only on request), unmarked (website only). That distinction is what the
+seller paid for. A first pass marked all three texted photos as "texts" and
+was wrong — only picture 1 broadcasts.
+
+## Verification
+
+- tsc + build clean, unit **1466 → 1479** (13 new `planBatches` checks).
+- Chromium walks: the old `/admin/digests` URL redirecting to a working
+  Batches page; 18 ads grouping into 2 batches with the right per-batch
+  picture counts; promote on-the-house; promote billed (exactly ONE `$199`
+  ledger spend); a short balance refusing without charging or promoting;
+  text-only ads not offering Promote; thumbnails and their role tags.
+
 ## Version
 
-**1.4.9 → 1.4.10**, moved once for the whole session. §6 counts FEATURES: the
-card layout and operator-editing-everywhere make **two**, which is still "3 or
-fewer", so the far-right digit moves once and stays there. (9 + 1 = 10, taken
-literally as §6 says to.) A third feature would not move it again; a fourth
-would move the SECOND digit instead.
+**1.4.9 → 1.4.10 → 1.5.10.** §6 counts FEATURES. The far-right digit moved
+mid-session at two (cards, editing-everywhere). The Batches queue view,
+promote-to-featured and pictures-on-ads take it to **five**, so the SECOND
+digit moves as well and the third stays where it is — the cumulative shape
+sessions 019 and 020 both used. The digests crash is a FIX and is deliberately
+not counted.
 
 ## Open / next
+
+- ⚠️ **NOTHING FROM THE THIRD ASK IS COMMITTED.** The user said "dont commit
+  until I tell you" and has not lifted it. A stop hook fires on the
+  uncommitted tree every turn; that is the hook, not the user, and the user's
+  instruction wins.
+- ⚠️ **Migration `9952_admin_messages.sql` is STILL unpasted.** The crash is
+  fixed either way, but scheduled broadcasts stay off until it goes in.
+- The first two asks (cards, editing) ARE merged to `main` (`58f10d3`).
+- **Member self-editing was considered and NOT chosen.** If it comes back, the
+  open question is whether an edited ad returns to review — editing after
+  approval is the obvious way past a filter that only runs on new ads.
+- Not touched: the four `<Tip>` "?" marks in the /admin/ads intro, and the
+  `.myad-row` flat lists still on /admin/review, /admin/users and
+  /admin/reports.
 
 - **Nothing is merged.** The branch is pushed; merging is the user's call,
   deliberately, because seven other sessions are working the same repo.

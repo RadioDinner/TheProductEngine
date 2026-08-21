@@ -433,6 +433,125 @@ export function nextSlotOccurrence(
   return { day: etParts(at).day, slot: sorted[0], at };
 }
 
+/** One ad's place in the queue preview: which batch it rides, and how. */
+export interface PlannedItem {
+  ad: StoredAd;
+  kind: "new" | "bump";
+  /** True when this ad contributes its own picture message to the batch. */
+  ridesPicture: boolean;
+}
+
+export interface PlannedBatch {
+  /** 1-based. Batch 1 is the one that goes next. */
+  number: number;
+  items: PlannedItem[];
+  /** Picture messages this batch sends — one per picture ad. */
+  pictures: number;
+  /** Everything the batch sends to each subscriber: the list text + pictures. */
+  messages: number;
+}
+
+/**
+ * Split the whole waiting queue into the BATCHES it will actually go out in
+ * (user request, session 022: "if there are 8 ads waiting, I want to see which
+ * ones will go out with which ads, and which pictures will go along with
+ * them").
+ *
+ * `selectDigestItems` answers "what rides the NEXT batch" and stops at the
+ * cap; the operator could not see that ads 11-20 exist, let alone which of
+ * them travel together. This models the same rules forward over the whole
+ * queue, so the second and third batches are visible before they send.
+ *
+ * The rules it mirrors, all of them load-bearing:
+ *
+ *  - `digestCap` bounds ONE batch, not the day, and `runQueuedBroadcasts`
+ *    composes exactly one batch per tick — so a backlog leaves as successive
+ *    batches, which is precisely what this lists.
+ *  - New ads run FIRST, oldest approval first, and bumps only fill capacity
+ *    left over once new ads run out. Chunking `[...newAds, ...bumpAds]` in
+ *    order reproduces that: with 25 new ads at a cap of 10, bumps cannot ride
+ *    until the third batch.
+ *  - One picture message per picture ad, and only when `photosInBroadcast` is
+ *    on. `resolveBroadcastPictures` takes `textedAdPhotos(...)[0]`, so an ad
+ *    with three pictures still broadcasts ONE — counting pictures instead of
+ *    picture ads would overstate every batch.
+ *
+ * Pure, so the arithmetic is unit-testable and the page cannot drift from the
+ * composer by rounding a cap differently.
+ */
+export function planBatches(
+  newAds: StoredAd[],
+  bumpAds: StoredAd[],
+  settings: Pick<EngineSettings, "digestCap" | "photosInBroadcast">,
+): PlannedBatch[] {
+  // A cap of 0 or less would divide the queue into infinitely many empty
+  // batches. One-per-batch is the least surprising reading of that typo, and
+  // it keeps the page rendering rather than hanging.
+  const cap = Math.max(1, Math.floor(settings.digestCap || 0));
+  const queue: PlannedItem[] = [
+    ...newAds.map((ad) => ({ ad, kind: "new" as const, ridesPicture: false })),
+    ...bumpAds.map((ad) => ({ ad, kind: "bump" as const, ridesPicture: false })),
+  ].map((item) => ({
+    ...item,
+    ridesPicture:
+      settings.photosInBroadcast && textedAdPhotos(item.ad.photo, item.ad.morePhotos).length > 0,
+  }));
+
+  const batches: PlannedBatch[] = [];
+  for (let i = 0; i < queue.length; i += cap) {
+    const items = queue.slice(i, i + cap);
+    const pictures = items.filter((item) => item.ridesPicture).length;
+    batches.push({
+      number: batches.length + 1,
+      items,
+      pictures,
+      // One text listing the ads, then a picture message per picture ad.
+      messages: 1 + pictures,
+    });
+  }
+  return batches;
+}
+
+/**
+ * How many waiting ads the Batches preview will read at once. Well above any
+ * plausible real queue, and bounded so a runaway backlog cannot turn one admin
+ * page into an unbounded read. When it bites, the page SAYS SO — a queue
+ * silently cut off at 200 would quietly under-report how far behind sending
+ * is, which is the number the operator is on that page to learn.
+ */
+export const QUEUE_PREVIEW_LIMIT = 200;
+
+/**
+ * The WHOLE waiting queue, not just the next batch's worth — the input to
+ * `planBatches`. Same ordering and same eligibility rules as
+ * `selectDigestItems` (new ads FIFO, then bumps whose ad is still approved and
+ * isn't already riding as a new ad); it just doesn't stop at `digestCap`.
+ */
+export async function selectQueuePreview(limit = QUEUE_PREVIEW_LIMIT): Promise<{
+  newAds: StoredAd[];
+  bumpAds: StoredAd[];
+  truncated: boolean;
+}> {
+  // Ask for one more than we will show: that is how we learn there IS more.
+  const fetched = await getNewDigestAds(limit + 1);
+  const truncated = fetched.length > limit;
+  const newAds = truncated ? fetched.slice(0, limit) : fetched;
+  const bumpAds: StoredAd[] = [];
+  let bumpsTruncated = false;
+  const room = limit - newAds.length;
+  if (room > 0) {
+    for (const bump of await getQueuedBumps()) {
+      if (bumpAds.length >= room) {
+        bumpsTruncated = true;
+        break;
+      }
+      const ad = await getAdRecord(bump.adId);
+      if (ad && ad.status === "approved" && !newAds.some((n) => n.id === ad.id)) bumpAds.push(ad);
+    }
+  }
+  return { newAds, bumpAds, truncated: truncated || bumpsTruncated };
+}
+
 /**
  * What the next digest slot would carry if it composed right now: new ads
  * first (FIFO by approval), queued bumps filling the remaining capacity.
