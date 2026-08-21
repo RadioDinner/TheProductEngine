@@ -65,3 +65,6 @@ wait to commit, I have a commit running in another session
 
 --- 2026-08-21 ---
 ok, go ahead and commit
+
+--- 2026-08-21 ---
+ok if nothing else to commit, wrap the session
