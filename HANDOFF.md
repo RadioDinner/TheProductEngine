@@ -3,31 +3,28 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-21 (session 020 — the send window moves to
-7am–6pm, Saturday secretly stops at 5pm, and the money books were reset.
-v1.3.9).
+**Last updated:** 2026-08-21 (session 019's word-filter follow-up merged over
+session 020's send-window and ledger-reset work; all four migrations confirmed
+pasted. v1.3.9).
 
-## ⚠️ START HERE: four migrations are waiting
+## ✅ Migrations: ALL PASTED (user confirmed 2026-08-21)
 
-**`9957_money_kinds.sql`** and **`9956_featured_requests.sql`** have NOT been
-pasted. Both degrade safely, so nothing is broken — but two features are only
-half on until they are. `9956` was amended mid-session and is re-runnable;
-paste it again if an earlier copy went in. Detail in each section below.
+**`9954`, `9955`, `9956` and `9957` are applied.** Nothing is waiting. Every
+feature below is fully on rather than degrading, so if one of them misbehaves,
+a pending migration is NOT the explanation — look at the code.
 
-**`9955_saturday_close.sql`** is new and needs pasting too. Until it goes in,
-**production still texts until 9pm on weekdays** while every public page now
-says 6pm — the stored `sms_window_end_hour` row (`21`, seeded by 9971)
-overrides the code default, and a stored row always wins.
+Two consequences of that worth carrying:
 
-Saturday is the other way round and it catches people out: there has never
-been a `sms_saturday_end_hour` row, and `getEngineSettings` falls back to the
-CODE default for any key with no row — so Saturday's 5pm close goes live the
-moment this deploys, with or without the migration. **Deleting that row does
-not disable the shortening**; setting it equal to `sms_window_end_hour` does.
-Paste 9955 before anything else this session.
-
-**`9954_reset_ledger.sql`** — ⚠️ **DESTRUCTIVE, and it runs exactly once.**
-See the money section below before pasting.
+- **`9954_reset_ledger.sql` has RUN.** It is destructive and runs exactly
+  once; it is spent. Do not paste it again, and do not write a "reset the
+  books" migration by copying it without reading why it was shaped that way
+  (money section below).
+- **`9955_saturday_close.sql` has RUN**, so the stored `sms_window_end_hour`
+  row now matches the 6pm the public pages promise. The Saturday trap still
+  stands as a rule to remember: **deleting `sms_saturday_end_hour` does not
+  disable the early close** — with no row, `getEngineSettings` falls back to
+  the CODE default and Saturday still stops at 5pm. Setting it equal to
+  `sms_window_end_hour` is what turns it off.
 
 ## Session 020 (2026-08-21) — THE SEND WINDOW MOVES, AND SATURDAY CLOSES EARLY
 
@@ -264,10 +261,10 @@ temporary `GRID_DEMO=1` fixture branch that was removed before committing.)
 
 ### The money half of the same session
 
-⚠️ **TWO MIGRATIONS TO PASTE: `9957_money_kinds.sql` and
-`9956_featured_requests.sql`.** Both degrade safely. 9956 was AMENDED after
-first being written (it gained `image_src`) and is re-runnable — paste it
-again if an earlier copy went in.
+✅ **`9957_money_kinds.sql` and `9956_featured_requests.sql` are PASTED**
+(user confirmed 2026-08-21), so the ledger kinds and the featured request
+queue are fully on. The degrade paths below stay in the code as a safety net
+but are no longer load-bearing.
 
 **Free ad credit can never be refunded as cash, and now nothing relies on the
 operator remembering that.** `lib/money.ts` splits a balance into CASH
