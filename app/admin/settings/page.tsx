@@ -541,12 +541,15 @@ export default async function AdminSettings({
 
       <h2 className="section-h">Test a number check</h2>
       <p className="fine">
-        <strong>Do this before you rely on the VoIP policy.</strong> The policy fails
-        open on purpose &mdash; if the credentials are wrong, every lookup quietly
-        answers &ldquo;allow&rdquo;, which looks exactly like nobody having used an app
-        number yet. Testing a number you know (your own cell) is the only way to tell a
-        working check from one that has been failing since the day you set it up. This
-        costs about half a cent and is <em>not</em> saved to anyone&rsquo;s account.
+        {/* The spaces after </strong> and </em> are explicit: JSX was eating
+            them, so the page read "VoIP policy.The policy" and "notsaved". */}
+        <strong>Do this before you rely on the VoIP policy.</strong>{" "}
+        The policy fails open on purpose &mdash; if the credentials are wrong, every
+        lookup quietly answers &ldquo;allow&rdquo;, which looks exactly like nobody
+        having used an app number yet. Testing a number you know (your own cell) is the
+        only way to tell a working check from one that has been failing since the day you
+        set it up. This costs about half a cent and is <em>not</em>{" "}
+        saved to anyone&rsquo;s account.
       </p>
       <LookupTester />
 

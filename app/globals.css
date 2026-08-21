@@ -538,7 +538,15 @@ input:focus-visible {
   margin-bottom: var(--space-2xs);
 }
 
-.field input {
+/* TEXT inputs only.
+ *
+ * Unqualified, this rule also caught checkboxes and radios: `width: 100%`
+ * stretched each box across the whole row, so the tick floated somewhere in
+ * the middle of an empty line with its words orphaned underneath by
+ * `.field label { display: block }`. On /admin/settings that made the VoIP
+ * policy genuinely unreadable — four toggles, and no telling which sentence
+ * any of them belonged to. */
+.field input:not([type="checkbox"]):not([type="radio"]) {
   width: 100%;
   font: inherit;
   color: var(--ink);
@@ -551,6 +559,39 @@ input:focus-visible {
 .field input:focus-visible {
   border-color: var(--blue);
   outline-offset: 0;
+}
+
+/* A checkbox and the words it governs are ONE thing: one line, one click
+ * target, the box aligned to the first line of a sentence that wraps.
+ *
+ * `.field label.sim-photo-toggle` rather than the bare class because
+ * `.field label` would otherwise out-specify it and force the block-and-bold
+ * treatment back. The words stay regular weight — these are sentences you
+ * read, not names of fields you fill in. */
+.sim-photo-toggle,
+.field label.sim-photo-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+  margin-bottom: 0;
+  font-size: var(--text-sm);
+  font-weight: 400;
+  cursor: pointer;
+}
+
+/* Big enough to hit on a phone and to see at a glance which way it is set —
+ * the browser default is about 13px. accent-color puts the tick in the
+ * second ink rather than the browser's own blue. */
+.sim-photo-toggle input[type="checkbox"],
+.sim-photo-toggle input[type="radio"] {
+  flex: none;
+  width: 1.15rem;
+  height: 1.15rem;
+  /* Optically centres the box on the first line of 15px/1.55 text. */
+  margin-top: 0.15rem;
+  accent-color: var(--blue);
+  cursor: pointer;
 }
 
 /* Web ad posting (FEATURES item 9): the ad-text box + live character count. */
@@ -1213,11 +1254,10 @@ a.btn-sm:hover {
   overflow-wrap: break-word;
 }
 
-.sim-photo-toggle {
-  display: block;
-  margin-top: var(--space-sm);
-  font-size: var(--text-sm);
-}
+/* .sim-photo-toggle lives up with the form fields now, where it can carry the
+   `.field label.sim-photo-toggle` variant that out-specifies `.field label`.
+   Defining it here as well would have re-broken it: same specificity, later in
+   the file, so the old `display: block` would have won again. */
 
 /* A row of buttons, some wrapped in their own <form>. align-items: center
  * keeps every button on one line whatever its variant — the default stretch

@@ -41,3 +41,9 @@ commit and merge
 --- 2026-08-21 ---
 [image: /admin/settings "Number checks (VoIP policy)" — checkboxes floating above their labels]
 This page doesn't look great. I can't clearly see what I toggling on and off, fix this
+
+--- 2026-08-21 ---
+Opt in on telynx is fixed. It says "The Plain Exchange: you're opted in to receive marketing texts - our local classified-ad digests. Msg freq varies. Msg & data rates may apply. Reply STOP to cancel, HELP for help. We won't sell or share your mobile info with third parties for marketing."
+
+--- 2026-08-21 ---
+on the refund policy page, fix it to match our actual policy. Unused credits get refunded minus the 5% credit card processing fee

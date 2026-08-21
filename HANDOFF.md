@@ -57,6 +57,42 @@ description registered with the carrier still says 7am–9pm.** That lives at
 Telnyx. The published window and the registered description have to agree —
 this is the last piece of the session-020 change not yet done.
 
+### ✅ The Telnyx opt-in reply is FIXED (user confirmed 2026-08-21)
+
+It now reads, live: *"The Plain Exchange: you're opted in to receive marketing
+texts - our local classified-ad digests. Msg freq varies. Msg & data rates may
+apply. Reply STOP to cancel, HELP for help. We won't sell or share your mobile
+info with third parties for marketing."*
+
+⚠️ **Two words of it disagree with the published program terms.** `/sms` quotes
+the confirmation text as "our local **classified ads**"; Telnyx says "our local
+**classified-ad digests**". Carrier compliance wants the registered copy and the
+published terms to match, and "digests" is the word this service RETIRED in
+session 018 when SMS became batches — session 016 addendum 4 deliberately swept
+it out of member-facing copy. The published page is the correct wording; the
+Telnyx string is the one to change. Left alone here rather than editing `/sms`
+to match, which would reintroduce the retired word.
+
+### Refund policy: unused balances are refundable ON REQUEST (user, session 022)
+
+*"Unused credits get refunded minus the 5% credit card processing fee."*
+
+Both `/refund-policy` and the T&Cs said **"refunds of money you added are at our
+discretion"** — which is the opposite of the actual policy. Both now say the
+money comes back whenever you ask, to the card it came from, minus the ~5%
+processing fee, with no fee when the fault is ours.
+
+⚠️ **The grants-first carve-out is untouched and must stay.** Free credit
+(welcome, invitation, courtesy) is not money and is never refundable — only the
+cash-backed part comes back, which is what `refundableCents` in `lib/money.ts`
+computes and what /admin/users refuses to over-refund. "Unused credits get
+refunded" must never be read as promising the $40 welcome credit back in cash.
+
+⚠️ **A "Refundable" figure exists only on /admin/users, NOT on the member's
+/account page.** A draft of the policy page claimed otherwise and was corrected
+before it shipped. If that figure is ever added to /account, the policy page can
+say so — until then it tells members to ask.
+
 ## Session 022 (2026-08-21) — CARDS, editing everywhere, BATCHES, and a page-down bug
 
 **Version 1.4.9 → 1.4.10 → 1.5.10** (§6: the far-right digit moved mid-session

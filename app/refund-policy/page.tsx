@@ -13,7 +13,7 @@ export default async function RefundPolicy() {
   return (
     <div className="container prose">
       <h1>Refund policy</h1>
-      <p className="fine">Effective July 17, 2026 · updated August 18, 2026 (dollar pricing)</p>
+      <p className="fine">Effective July 17, 2026 · updated August 21, 2026 (unused balances are refundable on request)</p>
       <p>
         {site.name} keeps money simple: subscribing and browsing are free, and posting
         ads comes off your prepaid ad-credit balance, in dollars. This page says exactly
@@ -24,8 +24,13 @@ export default async function RefundPolicy() {
       <h2>The short version</h2>
       <ul>
         <li>Your ad never ran? You get your money back.</li>
-        <li>Your ad went out in a digest? The money is spent — that was the product.</li>
+        <li>Your ad went out? The money is spent — that was the product.</li>
         <li>Ads declined for breaking the rules are not refunded.</li>
+        <li>
+          Money still sitting on your account, unspent? Ask and we send it back, minus
+          the card processing fee of about 5%.
+        </li>
+        <li>Free credit we gave you isn&rsquo;t money, so it can&rsquo;t come back as money.</li>
       </ul>
 
       <h2>When your money is returned</h2>
@@ -41,14 +46,14 @@ export default async function RefundPolicy() {
         </li>
         <li>
           <strong>Approved but never broadcast.</strong> If your ad was approved but is
-          deleted before it has ever gone out in a digest, the charge is returned.
+          deleted before it has ever gone out to the list, the charge is returned.
         </li>
       </ul>
 
       <h2>When the money is spent for good</h2>
       <ul>
         <li>
-          <strong>The ad ran.</strong> Once your ad has been sent out in any digest, the
+          <strong>The ad ran.</strong> Once your ad has been sent out to the list, the
           money is used — the broadcast to the list is what it buys. Deleting the ad
           afterward does not return it.
         </li>
@@ -65,19 +70,28 @@ export default async function RefundPolicy() {
         You add money to your account on this website; with a saved card, your balance
         can also top up automatically at posting time (the confirmation text always
         states the charge, and the toggle is under your account). Payments are processed
-        by Stripe; when a refund is granted on a payment, it goes back to the card it was
-        paid with. Ad credit has no cash value, doesn&rsquo;t expire, and can&rsquo;t be
-        transferred; refunds of money you added are at our discretion, except where the
-        law says otherwise.
+        by Stripe; a refund goes back to the card it was paid with. Ad credit
+        doesn&rsquo;t expire and can&rsquo;t be transferred to someone else.
+      </p>
+
+      <h2 id="unused">Getting your unused balance back</h2>
+      <p>
+        <strong>
+          Money you have added and not yet spent is yours, and you can ask for it back at
+          any time.
+        </strong>{" "}
+        Call or text <strong>{site.supportPhone}</strong> and we return what is left of
+        the money you paid to the card you paid with,{" "}
+        <strong>minus the card processing fee of about 5%</strong>. There is no deadline
+        to ask and no charge for asking beyond that fee.
       </p>
       <p>
-        If we send unused money back to your card, we return it{" "}
-        <strong>minus the card processing fee (about 5%)</strong>. That fee was charged
-        when your payment came in and our card processor keeps it whether or not the
-        payment is later refunded, so it is a cost we have already paid rather than a
-        charge for asking. <strong>There is no fee when the fault is ours</strong> — a
-        double charge, an ad we pulled, an outage, or anything else we got wrong is
-        returned in full.
+        The fee is not a penalty — it is a cost we have already paid. Our card processor
+        takes its fee when your payment comes in and keeps it whether or not the payment
+        is later refunded, so returning $100 costs us the fee twice over unless we hold
+        it back. <strong>There is no fee at all when the fault is ours</strong> — a
+        double charge, an ad we pulled, an outage, or anything else we got wrong comes
+        back in full.
       </p>
       <p>
         <strong>Free ad credit is not money and is never refundable.</strong> Welcome
@@ -85,12 +99,13 @@ export default async function RefundPolicy() {
         something right are ours to give, not cash you paid us. If your balance is part
         money and part free credit, only the part you actually paid can come back — and
         when you post an ad we spend your free credit first, so your own money stays
-        yours for as long as it honestly can.
+        yours for as long as it honestly can. Ask us any time and we will tell you
+        exactly how much of your balance is money you paid.
       </p>
 
       <h2>What has no charge to refund</h2>
       <p>
-        Subscribing to the digests (text or email), browsing the website, and pulling ad
+        Subscribing (by text or email), browsing the website, and pulling ad
         pictures with <strong>PIC</strong> are free, so there is nothing to refund.
         Message and data rates from your phone company are between you and them.
       </p>
