@@ -40,3 +40,23 @@ I figured out the EIN thing and resubmitted it. Close the twilio issue for now
 
 --- 2026-08-21 (mid-turn) ---
 verification was accepted and verified with twilio. That issue is closed
+
+--- 2026-08-21 ---
+can you make work trees on the repo?
+
+--- 2026-08-21 ---
+I ran the migration. I'm trying to figure out how to run several claude sessions at a time and commit to the same repo so I can move faster
+
+--- 2026-08-21 ---
+[AskUserQuestion answers]
+  Migrations = "All three (9951, 9952, 9953)"
+  Guardrails = "Migration collision check (Recommended)"
+
+--- 2026-08-21 (mid-turn) ---
+can you add the "multi session collision" instructions to the standing new session instructions? I don't know what all it includes, but if there are certain ways a session shoud "start" or function each time, I want that to be remembered beyond this session"
+
+--- 2026-08-21 ---
+did you get my message?
+
+--- 2026-08-21 ---
+[AskUserQuestion answer] Commit = "Commit + push to main now"

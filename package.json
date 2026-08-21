@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "check:migrations": "node scripts/check-migrations.mjs",
     "start": "next start",
     "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --disable-warning=ExperimentalWarning --loader ./test/abuse/alias-loader.mjs test/run.mjs",
     "test:abuse": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --disable-warning=ExperimentalWarning --loader ./test/abuse/alias-loader.mjs test/abuse/brute.mjs"

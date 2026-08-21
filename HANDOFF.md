@@ -9,16 +9,20 @@ status. Session 021, in flight at the same time — the call line no longer dial
 the operator's cell, admin TEST MODE, the first end-to-end category delivery
 tests, and Twilio Trust Hub verified at last. v1.4.11.)
 
-## ⚠️ START HERE: three NEW migrations are waiting
+## ✅ START HERE: the migration queue is CLEAR (user confirmed 2026-08-21)
 
-**`9953_unpaid_ads.sql`**, **`9952_admin_messages.sql`** and
-**`9951_test_ads.sql`** have NOT been pasted. All three degrade safely — held
-ads simply are not held, the broadcast form says the table is missing, and test
-ads are stored unlabelled (but still hidden from the website) — so nothing is
-broken, but the features are off or partial until they go in.
-**`9951` is the newest; the next migration takes 9950.**
+**`9951`, `9952` and `9953` are all applied**, along with everything before
+them. Nothing is waiting. Every feature below is fully on rather than
+degrading, so if one misbehaves, a pending migration is NOT the explanation —
+look at the code. **`9951` is the newest; the next migration takes 9950 —
+confirm with `npm run check:migrations`, which reads `origin/main` too.**
 
-### Everything before them IS applied (user confirmed 2026-08-21)
+Consequences now live: held-unpaid ads are really held and released by a card
+(9953), scheduled admin broadcasts work (9952), and test ads carry the
+`is_test` label so they can be found and deleted (9951 —
+`delete from ads where is_test;`).
+
+### Everything before them was already applied (user confirmed 2026-08-21)
 
 **`9954`, `9955`, `9956` and `9957` are applied.** Nothing else is waiting. Every
 feature below is fully on rather than degrading, so if one of them misbehaves,
@@ -149,6 +153,45 @@ ad and a blank save refused without blanking the ad.
 Full detail: `Session log/022_2026-08-21c/session_log.md`.
 
 ## Session 021, part two — TEST MODE, and the first end-to-end category tests
+
+### Part three — the parallel-session protocol (new_session_instructions §8)
+
+Sessions 021 and 022 collided on this date. Both claimed
+`Session log/021_2026-08-21b`, both rewrote the top of this file, and a stale
+local `main` (80 commits of unrelated history, from before a force-push) meant
+`git checkout main` silently restored a months-old working tree. The user's
+ask: *"I'm trying to figure out how to run several claude sessions at a time
+and commit to the same repo so I can move faster."*
+
+**The insight worth carrying: git does not protect you here.** Merge conflicts
+are the SAFE failure — they are loud and they get fixed. The dangerous
+collisions are the ones that merge cleanly: two sessions taking the same
+descending migration number produce two differently-named files, git merges
+both without a word, and because migrations are pasted BY HAND a human reading
+"9950 is applied" cannot tell there were two. The second never runs and its
+feature degrades quietly for weeks.
+
+- **`new_session_instructions.md` §8** is the standing protocol: fetch before
+  reading anything, claim the session folder against `origin/main` rather than
+  local disk, keep BOTH sides of a HANDOFF conflict, never `git checkout main`
+  to merge (merge into the branch, verify, push `HEAD:main` as a verified
+  fast-forward), merge small and often, and give each parallel session a
+  disjoint lane of files.
+- **`CLAUDE.md` gained a rule 0** so the fetch-first order is picked up at load
+  rather than only when §8 is read.
+- **`npm run check:migrations`** (`scripts/check-migrations.mjs`) is the one
+  piece of tooling, because it is the one collision that is a data bug rather
+  than a merge conflict. It fetches `origin/main` and fails on a duplicate
+  number locally OR a number already claimed remotely by a different filename,
+  and prints the next free number. Degrades to a local-only check with a loud
+  warning when offline. Verified by simulating the collision: both detectors
+  fire and it exits 1.
+
+Deliberately NOT done (offered, user declined for now): slug-based session
+folders instead of the `NNN_` counter, and shrinking `HANDOFF.md` — the hottest
+file in the repo, touched by 8 of 12 consecutive commits and the only thing
+that actually conflicted in the 021/022 merge.
+
 
 **Version 1.4.10 → 1.4.11** (§6: session 022 had already moved 1.4.9 → 1.4.10
 in parallel; this session shipped the call-line change and test mode, so the
