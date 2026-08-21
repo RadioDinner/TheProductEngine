@@ -667,6 +667,10 @@ const SETTING_MAX: Record<string, number> = {
   digestCap: 15,
   batchMinAds: 15,
   batchMaxWaitMinutes: 720,
+  // An hour of the day, nothing more. Saturday can only ever close EARLIER
+  // than the published window (digest-engine clamps it), so the ceiling here
+  // just keeps the stored value a real hour.
+  smsSaturdayEndHour: 23,
   maxChars: 300,
   expiryDays: 365,
   smsRepliesPerHour: 200,
@@ -732,6 +736,7 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
     "digestCap",
     "batchMinAds",
     "batchMaxWaitMinutes",
+    "smsSaturdayEndHour",
     "maxChars",
     "expiryDays",
     "smsRepliesPerHour",

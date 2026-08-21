@@ -123,7 +123,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </p>
             <p>
               Text <strong>SUBSCRIBE</strong> to <strong>{site.smsNumber}</strong> for the ads —
-              ads arrive in batches, 7am&ndash;9pm Mon&ndash;Sat; msg &amp; data rates may apply. Text <strong>HELP</strong>{" "}
+              ads arrive in batches, 7am&ndash;6pm Mon&ndash;Sat; msg &amp; data rates may apply. Text <strong>HELP</strong>{" "}
               for help, <strong>STOP</strong> to cancel ·{" "}
               <Link href="/email">Get the ads by email</Link> ·{" "}
               <Link href="/how-it-works">How it works</Link> ·{" "}

@@ -3,15 +3,91 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-20 (session 019 wrap — the admin dashboard, the
-members grid, and the money work. v1.2.8, all on `main`).
+**Last updated:** 2026-08-21 (session 020 — the send window moves to
+7am–6pm, and Saturday secretly stops at 5pm. v1.2.9).
 
-## ⚠️ START HERE: two migrations are waiting
+## ⚠️ START HERE: three migrations are waiting
 
 **`9957_money_kinds.sql`** and **`9956_featured_requests.sql`** have NOT been
 pasted. Both degrade safely, so nothing is broken — but two features are only
 half on until they are. `9956` was amended mid-session and is re-runnable;
 paste it again if an earlier copy went in. Detail in each section below.
+
+**`9955_saturday_close.sql`** is new and needs pasting too. Until it goes in,
+**production still texts until 9pm** while every public page now says 6pm —
+the stored `sms_window_end_hour` row (`21`, seeded by 9971) overrides the code
+default. The Saturday shortening degrades safely on its own (a missing
+`sms_saturday_end_hour` row just means no shortening), but the end-hour update
+does not. Paste 9955 before anything else this session.
+
+## Session 020 (2026-08-21) — THE SEND WINDOW MOVES, AND SATURDAY CLOSES EARLY
+
+**Version 1.2.8 → 1.2.9** (§6: three features, so the far-right digit moved).
+
+The user brought back community advice: *"9pm is way too late to send ads on
+Saturday nights, and 6 would work for the week days."* Then went one step
+further, and the two halves are deliberately DIFFERENT NUMBERS:
+
+> **Published:** "I'll publish that the ads run 7am to 6pm Monday to Saturday"
+> **Actual:** "but I want to secretly stop sending ads by 5pm on Saturdays"
+
+### The mechanism to remember: the end hour is PER-WEEKDAY now
+
+`smsWindowEndHour` (18) is the PUBLISHED close and the real one Mon–Fri.
+`smsSaturdayEndHour` (17) is Saturday's real close. `windowEndHourFor(weekday,
+settings)` in `lib/digest-engine.ts` picks between them, and `smsWindowOpen`
+calls it — so every enforcement point (compose in `runQueuedBroadcasts`, the
+drain in `drainDigestOutbox`, the approval reply, the admin panels) got
+Saturday for free. Both hours are END-EXCLUSIVE, so 18 = last weekday text at
+5:59pm and 17 = last Saturday text at 4:59pm.
+
+**The Saturday hour can only ever SHORTEN Saturday.** `windowEndHourFor` takes
+`Math.min(saturday, published)`. That is not tidiness: a fat-fingered 20 on
+/admin/settings would otherwise text people past the hours the compliance copy
+promises every subscriber. Under-delivering on the published window is safe;
+over-delivering is a broken promise. Pinned by tests.
+
+### Keeping it secret is a code path, not a wish
+
+`closedEarly(now, settings)` is true only in the gap between Saturday's real
+close and the published one. Two member-facing messages consult it and DROP
+their hours clause in that hour:
+
+- the approval text (`lib/moderation.ts`) — otherwise "It goes out Monday at
+  7am — texts only go out between 7am and 6pm, Monday through Saturday",
+  sent at 5:30pm on a Saturday, argues with itself;
+- the ad-received text (`lib/engine.ts`) — same sentence, same problem.
+
+Both still say WHEN the ad goes. The promise is kept, it just isn't recited.
+**If you add copy that quotes the window, check `closedEarly` first.**
+
+### Where the truth is told, and where it isn't
+
+- **Never**: any member-facing page, the welcome text, the compliance copy.
+  Nine public pages moved 9pm → 6pm this session (`/`, `/sms`, `/email`,
+  `/account`, `/faq`, `/how-it-works`, `/privacy`,
+  `/terms-and-conditions`, and the footer in `app/layout.tsx`).
+- **Always**: the admin surfaces, via `operatorWindowLabel(settings)` →
+  "7am–6pm Mon–Fri · 7am–5pm Sat". It reads on the dashboard health panel,
+  /admin/digests and the /admin/settings pause notice. An operator who does
+  not know Saturday closes at five will file the quiet hour as a bug.
+
+### Things a future session must not get wrong here
+
+- **The email edition is NOT affected, on purpose** (user decision this
+  session, asked and answered). Email has never obeyed the send window — "an
+  inbox has no bedtime" — and still composes at 7am, noon and 5pm every day,
+  Saturday and Sunday included. The Saturday 5pm edition lands AT five, which
+  is what "end the digests by 5" means. Texting is the thing that stops early.
+- **The 10DLC campaign description still says 7am–9pm** wherever it was
+  registered with the carrier. That is EXTERNAL to this repo and the code
+  cannot fix it. The published window and the registered description have to
+  agree — update it at Telnyx.
+- `smsSaturdayEndHour` is optional in `WindowSettings`. A caller holding
+  pre-020 settings gets the published close on Saturday too, rather than a
+  Saturday that never opens. Do not make it required.
+- Setting the Saturday hour EQUAL to the published one is the documented way
+  to switch the shortening off — not deleting the setting.
 
 ## Session 019 (2026-08-20) — THE ADMIN DASHBOARD, THE MEMBERS GRID, AND THE MONEY
 

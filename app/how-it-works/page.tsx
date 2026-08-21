@@ -37,7 +37,7 @@ export default async function HowItWorks() {
       <p>
         Text <span className="cmd">SUBSCRIBE</span> to <strong>{site.smsNumber}</strong>.
         You’ll get the ads in batches through the day — several in one text, each with its
-        own ad number — between 7am and 9pm, Monday through Saturday. It’s free, though
+        own ad number — between 7am and 6pm, Monday through Saturday. It’s free, though
         message and data rates may apply from your phone company. Reply <span className="cmd">STOP</span> any time to quit, or{" "}
         <span className="cmd">HELP</span> for help. See the{" "}
         <Link href="/sms">text message program terms</Link> and{" "}

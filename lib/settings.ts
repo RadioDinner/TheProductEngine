@@ -40,9 +40,14 @@ export interface EngineSettings {
   /** Digest slots, hours in America/New_York. EMAIL ONLY since session 016 —
    * SMS sends each ad the moment it is approved (see the window below). */
   slots: number[];
-  /** SMS send window, hours America/New_York: start inclusive, end EXCLUSIVE. */
+  /** SMS send window, hours America/New_York: start inclusive, end EXCLUSIVE.
+   * This pair is the PUBLISHED window — member-facing copy reads it. */
   smsWindowStartHour: number;
   smsWindowEndHour: number;
+  /** Saturday's real, unpublished close (session 020). End EXCLUSIVE, and only
+   * ever EARLIER than smsWindowEndHour — a later value is clamped back to it.
+   * Equal to smsWindowEndHour = Saturday runs like any other day. */
+  smsSaturdayEndHour: number;
   /** Weekdays that never send SMS (0 = Sunday). */
   smsQuietDays: number[];
   maxChars: number;
@@ -121,6 +126,7 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   slots: "digest_slots_sms",
   smsWindowStartHour: "sms_window_start_hour",
   smsWindowEndHour: "sms_window_end_hour",
+  smsSaturdayEndHour: "sms_saturday_end_hour",
   smsQuietDays: "sms_quiet_days",
   maxChars: "ad_max_chars",
   expiryDays: "ad_expiry_days",
@@ -195,6 +201,7 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     slots: [...engineDefaults.slots],
     smsWindowStartHour: engineDefaults.smsWindowStartHour,
     smsWindowEndHour: engineDefaults.smsWindowEndHour,
+    smsSaturdayEndHour: engineDefaults.smsSaturdayEndHour,
     smsQuietDays: [...engineDefaults.smsQuietDays],
     maxChars: engineDefaults.maxChars,
     expiryDays: engineDefaults.expiryDays,

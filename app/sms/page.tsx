@@ -59,7 +59,7 @@ export default async function SmsProgram() {
         neighbors post; a slow day may be none at all.
       </p>
       <p>
-        Ads are only ever sent between <strong>7am and 9pm, Monday through Saturday</strong>.
+        Ads are only ever sent between <strong>7am and 6pm, Monday through Saturday</strong>.
         Nothing is sent overnight or on Sunday — an ad approved outside those hours waits for
         the next morning.
       </p>

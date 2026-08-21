@@ -38,7 +38,7 @@ export const site = {
    * This constant is the only place it is written down; the footer and the
    * health probe both read it, so they can never disagree.
    */
-  version: "1.2.8",
+  version: "1.2.9",
   tagline: "Buy and sell by text message",
   adsPerPage: 15,
 } as const;
@@ -199,12 +199,34 @@ export const engineDefaults = {
   /**
    * SMS send window (session 016, user decision): an approved ad is texted
    * IMMEDIATELY, one text per ad — but only between these hours, America/
-   * New_York, start inclusive and end EXCLUSIVE (7..21 = the last text can
-   * leave at 8:59pm). Ads approved outside the window wait for the next open
+   * New_York, start inclusive and end EXCLUSIVE (7..18 = the last text can
+   * leave at 5:59pm). Ads approved outside the window wait for the next open
    * morning; nothing is ever sent in the middle of the night.
+   *
+   * 9pm moved to 6pm in session 020 on community advice — "9pm is way too
+   * late" for a Plain audience, and 6 works for the week. This pair IS the
+   * PUBLISHED window: every member-facing page, the welcome text and the
+   * compliance copy read these two numbers, so 7..18 is what the service
+   * promises — 7am to 6pm, Monday to Saturday.
    */
   smsWindowStartHour: 7,
-  smsWindowEndHour: 21,
+  smsWindowEndHour: 18,
+  /**
+   * SATURDAY closes EARLIER than the published window (user decision, session
+   * 020): "I'll publish that the ads run 7am to 6pm Monday to Saturday but I
+   * want to secretly stop sending ads by 5pm on Saturdays." End EXCLUSIVE like
+   * the hour above, so 17 = the last Saturday text leaves at 4:59pm — the
+   * Saturday evening before the rest day stays quiet.
+   *
+   * DELIBERATELY UNPUBLISHED: no member-facing page quotes it, and nothing
+   * ever quotes hours that would contradict it (see closedEarly in
+   * lib/digest-engine.ts). It can only ever SHORTEN Saturday — a value later
+   * than smsWindowEndHour is clamped back to it, so this setting can never
+   * push sending past what the compliance copy promises. Set it equal to
+   * smsWindowEndHour to drop the shortening and run Saturday like any other
+   * day.
+   */
+  smsSaturdayEndHour: 17,
   /** Days that never send, 0 = Sunday. Monday–Saturday is the user's rule. */
   smsQuietDays: [0],
   maxChars: 250,

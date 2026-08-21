@@ -1,0 +1,10 @@
+--- 2026-08-21 ---
+Ok, I was speaking with a local amish man and he suggested some changes I need to take in. This will require changes to the sending engine.
+
+He said that 9pm is way too late to send ads on saturday nights and that 6 would work for the week days. BUT I want to end the digests by 5 on saturday nights. I think I'll publish that the ads run 7am to 6pm Monday to Saturday but I want to secretly stop sending ads by 5pm on Saturdays.
+
+--- 2026-08-21 (AskUserQuestion answer) ---
+Q: Since you said "end the digests by 5 on Saturday nights", does the Saturday
+   5pm EMAIL edition still go out?
+A: Leave email alone — the Saturday 5pm email edition still composes at 5pm.
+   Texting is what stops early.

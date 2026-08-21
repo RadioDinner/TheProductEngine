@@ -58,7 +58,7 @@ export default async function Faq() {
       <p>
         Text <span className="cmd">SUBSCRIBE</span> to <strong>{site.smsNumber}</strong>.
         That&rsquo;s it. Each ad arrives as a text the moment it&rsquo;s approved, between
-        7am and 9pm Monday through Saturday — nothing overnight or on Sunday. Reply{" "}
+        7am and 6pm Monday through Saturday — nothing overnight or on Sunday. Reply{" "}
         <span className="cmd">STOP</span> any time to quit.
       </p>
 

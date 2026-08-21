@@ -654,19 +654,97 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
 }
 
 /**
- * The SMS send window (session 016, user decision): "any ads will send any
- * time after they're approved, and they'll send anytime after 7am until 9pm,
- * Monday through Saturday." Start hour inclusive, end hour EXCLUSIVE, and
- * quiet days (Sunday by default) never send. All hours America/New_York.
- * Pure so the boundaries are unit-testable without a clock.
+ * Everything the window rules need. `smsSaturdayEndHour` is OPTIONAL on
+ * purpose: a caller holding settings saved before session 020 (or a test
+ * pinning the plain window) simply gets the published end hour on Saturday
+ * too, rather than a Saturday that never opens.
  */
-export function smsWindowOpen(
-  now: Date,
-  settings: Pick<EngineSettings, "smsWindowStartHour" | "smsWindowEndHour" | "smsQuietDays">,
-): boolean {
+export type WindowSettings = Pick<
+  EngineSettings,
+  "smsWindowStartHour" | "smsWindowEndHour" | "smsQuietDays"
+> &
+  Partial<Pick<EngineSettings, "smsSaturdayEndHour">>;
+
+/** ET weekday index for Saturday — the day that closes early. */
+export const SATURDAY = 6;
+
+/**
+ * The hour sending really stops on a given ET weekday, end EXCLUSIVE.
+ *
+ * Every day but Saturday closes at the published `smsWindowEndHour`. Saturday
+ * closes at `smsSaturdayEndHour` — the unpublished shortening (session 020,
+ * user decision: "publish 7am to 6pm Monday to Saturday but secretly stop
+ * sending ads by 5pm on Saturdays"), because a Plain audience's Saturday
+ * evening runs into the rest day.
+ *
+ * `Math.min` is the safety rail, not a nicety: the Saturday hour may only ever
+ * pull the close EARLIER. A fat-fingered 20 on /admin/settings would otherwise
+ * text people past the hours the compliance copy promises every subscriber —
+ * a shortening is a courtesy, an extension is a broken promise.
+ */
+export function windowEndHourFor(weekday: number, settings: WindowSettings): number {
+  const published = settings.smsWindowEndHour;
+  if (weekday !== SATURDAY) return published;
+  const saturday = settings.smsSaturdayEndHour;
+  if (typeof saturday !== "number" || !Number.isFinite(saturday)) return published;
+  return Math.min(saturday, published);
+}
+
+/** Whether Saturday's real close is earlier than the published one at all. */
+export function saturdayClosesEarly(settings: WindowSettings): boolean {
+  return windowEndHourFor(SATURDAY, settings) < settings.smsWindowEndHour;
+}
+
+/**
+ * The SMS send window. Session 016 set the shape, in the user's words: "any
+ * ads will send any time after they're approved, and they'll send anytime
+ * after 7am until [the close], Monday through Saturday." Start hour
+ * inclusive, end hour EXCLUSIVE, and quiet days (Sunday by default) never
+ * send. All hours America/New_York. Pure so the boundaries are unit-testable
+ * without a clock.
+ *
+ * Session 020 moved the published close from 9pm to 6pm and gave Saturday its
+ * own, earlier one — so the end hour is per-weekday now (windowEndHourFor).
+ */
+export function smsWindowOpen(now: Date, settings: WindowSettings): boolean {
   const { day, hour } = etParts(now);
-  if (settings.smsQuietDays.includes(etWeekday(day))) return false;
-  return hour >= settings.smsWindowStartHour && hour < settings.smsWindowEndHour;
+  const weekday = etWeekday(day);
+  if (settings.smsQuietDays.includes(weekday)) return false;
+  return hour >= settings.smsWindowStartHour && hour < windowEndHourFor(weekday, settings);
+}
+
+/**
+ * True in the hour(s) when the engine has ALREADY shut for the day but the
+ * published window still says it is open — i.e. Saturday between the real
+ * close and `smsWindowEndHour`.
+ *
+ * Member-facing copy uses this to stay quiet about the hours. "It goes out
+ * Monday at 7am — texts only go out between 7am and 6pm, Monday through
+ * Saturday" is a sentence that argues with itself at 5:30pm on a Saturday,
+ * and a seller who notices has been handed the very thing the shortening is
+ * meant to keep to ourselves. When this is true, say WHEN the ad goes and
+ * skip the hours; the promise is still kept, it just isn't recited.
+ */
+export function closedEarly(now: Date, settings: WindowSettings): boolean {
+  const { day, hour } = etParts(now);
+  const weekday = etWeekday(day);
+  if (settings.smsQuietDays.includes(weekday)) return false;
+  if (hour < settings.smsWindowStartHour) return false;
+  return hour >= windowEndHourFor(weekday, settings) && hour < settings.smsWindowEndHour;
+}
+
+/**
+ * The window as the OPERATOR needs to read it — the truth, Saturday included.
+ * Admin surfaces only: this is the one place the shortening is spelled out,
+ * because an operator who doesn't know Saturday closes at five will file the
+ * quiet hour as a bug and go looking for it.
+ */
+export function operatorWindowLabel(settings: WindowSettings): string {
+  const open = hourLabel(settings.smsWindowStartHour);
+  const published = hourLabel(settings.smsWindowEndHour);
+  if (!saturdayClosesEarly(settings)) return `${open}–${published}, Mon–Sat`;
+  const saturday = hourLabel(windowEndHourFor(SATURDAY, settings));
+  return `${open}–${published} Mon–Fri · ${open}–${saturday} Sat`;
 }
 
 /**
@@ -675,10 +753,7 @@ export function smsWindowOpen(
  * "tomorrow at 7am", "Monday at 7am"). Answers the question every seller who
  * texts an ad at 5am will have. Pure — the caller supplies the clock.
  */
-export function nextSendLabel(
-  now: Date,
-  settings: Pick<EngineSettings, "smsWindowStartHour" | "smsWindowEndHour" | "smsQuietDays">,
-): string {
+export function nextSendLabel(now: Date, settings: WindowSettings): string {
   if (smsWindowOpen(now, settings)) return "in a few minutes";
   const { day, hour } = etParts(now);
   const openLabel = hourLabel(settings.smsWindowStartHour);
@@ -969,8 +1044,9 @@ export async function drainDigestOutbox(
   // drained minutes apart — but a queue that has been HELD (an ads pause, a
   // tripped budget, an outage) empties the instant the hold lifts, whatever
   // the hour. Resume a pause at 6am and every stored-up ad would have gone
-  // out at 6am, breaking the 7am-9pm promise the compliance copy makes to
-  // every subscriber. SMS rows wait for the window; EMAIL rows are exempt,
+  // out at 6am, breaking the published send window the compliance copy makes
+  // to every subscriber. SMS rows wait for the window (Saturday's earlier
+  // close included); EMAIL rows are exempt,
   // since the window is an SMS courtesy and an inbox has no bedtime.
   const paused = pauseBlocks("bulk", settings);
   const windowShut = !smsWindowOpen(new Date(startedAt), settings);

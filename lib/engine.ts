@@ -24,7 +24,13 @@ import {
   type StoredAd,
 } from "@/lib/engine-store";
 import { listAdsByOwner } from "@/lib/ads";
-import { hourLabel, nextSendLabel, sendRecentDigestTo, smsWindowOpen } from "@/lib/digest-engine";
+import {
+  closedEarly,
+  hourLabel,
+  nextSendLabel,
+  sendRecentDigestTo,
+  smsWindowOpen,
+} from "@/lib/digest-engine";
 import {
   addLedgerEntry,
   addRating,
@@ -479,9 +485,16 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
   // honest promise is "when it's approved and it goes out" — with the window
   // spelled out only when it actually delays them (a 5am sender needs to know;
   // a 2pm sender does not, and every extra sentence is a billed segment).
-  const windowNote = smsWindowOpen(new Date(), settings)
+  //
+  // Inside Saturday's unpublished early close the hours are dropped and only
+  // the timing is given: quoting "7am-6pm, Mon-Sat" at 5:30pm on a Saturday
+  // would contradict the very sentence it sits in. See closedEarly.
+  const nowForWindow = new Date();
+  const windowNote = smsWindowOpen(nowForWindow, settings)
     ? ""
-    : ` Ads go out ${hourLabel(settings.smsWindowStartHour)}-${hourLabel(settings.smsWindowEndHour)}, Mon-Sat, so yours will send ${nextSendLabel(new Date(), settings)} at the earliest.`;
+    : closedEarly(nowForWindow, settings)
+      ? ` Yours will send ${nextSendLabel(nowForWindow, settings)} at the earliest.`
+      : ` Ads go out ${hourLabel(settings.smsWindowStartHour)}-${hourLabel(settings.smsWindowEndHour)}, Mon-Sat, so yours will send ${nextSendLabel(nowForWindow, settings)} at the earliest.`;
   return {
     body: hasPhoto
       ? `Got your ad! It's #${id} and is waiting for review - you'll get a text when it's approved and it goes out. (${chargeNote})${photoNote}${windowNote}`
