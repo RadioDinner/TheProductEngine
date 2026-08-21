@@ -60,3 +60,9 @@ did you get my message?
 
 --- 2026-08-21 ---
 [AskUserQuestion answer] Commit = "Commit + push to main now"
+
+--- 2026-08-21 ---
+write the handoff, and wait to commit it to main until I give the go ahead
+
+--- 2026-08-21 ---
+merge to main and warp

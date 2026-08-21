@@ -47,3 +47,12 @@ Opt in on telynx is fixed. It says "The Plain Exchange: you're opted in to recei
 
 --- 2026-08-21 ---
 on the refund policy page, fix it to match our actual policy. Unused credits get refunded minus the 5% credit card processing fee
+
+--- 2026-08-21 ---
+when ads are paused, don't post them to the website or to the email newsletter. Maybe I need to overhaul this system yet again... 
+
+When someone posts an ad, and it gets approved, it automatically gets queued for the next opportunity to send to the SMS list. After it is sent to the SMS list, it gets added to the list for the next email (also, if the email has no new ads to go on it, don't send it. Never send an email without ads without flagging my attention first). After it goes out on the SMS batch, post it to the website
+
+On the "ADS" page of the admin dashboard, I want to see if and when it was sent out to the SMS subscribers, the Digest number of the email it went out on, and when it got posted to the website. 
+
+I had posted an ad today and, even though ads were paused, it posted to the website. When ADS are paused, they're paused everywhere (SMS, email and web posting)
