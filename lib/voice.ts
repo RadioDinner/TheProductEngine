@@ -120,7 +120,7 @@ export function spokenDigits(value: string): string {
 }
 
 /**
- * NOTHING IN THIS FILE MAY DIAL A PHONE (session 021, user decision).
+ * NOTHING IN THIS FILE MAY DIAL A PHONE (session 023, user decision).
  *
  * There used to be a `<Dial>` here that rang the operator's cells before the
  * menu, with a whisper leg and an answer-confirmation keypress to stop a
@@ -195,14 +195,22 @@ export function menuTwiml(args: {
  *
  * The spoken sentence IS the stored-credential authorization the card
  * networks require before a card may be kept for later off-session charges;
- * the Stripe customer gets a `card_consent_at` stamp as the record. */
+ * the Stripe customer gets a `card_consent_at` stamp as the record.
+ *
+ * ⚠️ It says WHEN the charge happens, and since session 023 that is when the
+ * ad runs rather than when it is written. This is not editable from
+ * /admin/replies with the rest of the copy, deliberately: it is the legal
+ * record of what the caller agreed to, it is pinned by test/voice.test.mjs,
+ * and it has to keep agreeing with what the service actually does. If the
+ * charging moment ever moves again, this sentence moves with it in the same
+ * commit. */
 export function payTwiml(args: { connector: string; actionUrl: string }): string {
   return twiml(
     say(
       "You will enter your card number, expiration date, security code, and billing zip code " +
         "using your phone keypad. Nobody here will hear or see the numbers. " +
         `By continuing, you authorize ${site.name} to keep this card on file and to charge it ` +
-        "for the ads you place, when your ad credit runs short. " +
+        "for the ads you place, when each ad goes out and your ad credit doesn't cover it. " +
         "To change or remove the card, call this number back any time. Let's begin.",
     ) +
       `<Pay paymentConnector="${escapeXml(args.connector)}" chargeAmount="0" ` +

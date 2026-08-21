@@ -82,6 +82,18 @@ const FIELDS: { key: string; label: string; hint?: string; tip: HandbookKey }[] 
     tip: "settings.batchTriggers",
   },
   {
+    key: "maxAdsAwaitingPayment",
+    label: "Ads one number may have waiting on payment",
+    hint: "an ad is charged when it RUNS, so somebody with no money still gets read and answered — this caps how many of theirs can be in the review queue unpaid at once before further ads are held out of it. 0 = no cap",
+    tip: "settings.awaitingPayment",
+  },
+  {
+    key: "chargeRetryHours",
+    label: "Wait this long after a payment fails (hours)",
+    hint: "how long an ad stays out of the batch after we couldn't collect for it, so a declined card isn't tried every few minutes. Any payment releases it straight away regardless",
+    tip: "settings.awaitingPayment",
+  },
+  {
     key: "smsSaturdayEndHour",
     label: "Saturday: stop sending at (hour, ET)",
     hint: "17 = the last Saturday text leaves at 4:59pm. Every other day runs to the published close, and this can only make Saturday shorter — never longer. Set it EQUAL to the published close to run Saturday full hours; anything at or below the 7am open switches Saturday off entirely. Not published anywhere members can read it",
@@ -198,7 +210,7 @@ export default async function AdminSettings({
   // not have to work that out from the clock.
   const windowOpen = smsWindowOpen(new Date(), settings);
   const blocked = await listBlocked();
-  // Test mode (session 021). The state is computed the same way the SEND PATH
+  // Test mode (session 023). The state is computed the same way the SEND PATH
   // computes it, so this panel can never claim a mode the engine is not in.
   const nowMs = Date.now();
   const testState = testModeState(settings, nowMs);
@@ -532,6 +544,27 @@ export default async function AdminSettings({
           trade like anyone else, they just can&rsquo;t farm the launch offer or harvest
           the seller list. Business VoIP lines are treated as real numbers — only
           app-style numbers are affected.
+        </p>
+
+        <h2 className="section-h">
+          Receipts <Tip k="settings.awaitingPayment" />
+        </h2>
+        <input type="hidden" name="receiptForm" value="1" />
+        <div className="field">
+          <label className="sim-photo-toggle">
+            <input
+              type="checkbox"
+              name="adRanReceipt"
+              defaultChecked={settings.adRanReceipt}
+            />{" "}
+            Text the seller when their ad goes out and the money comes off
+          </label>
+        </div>
+        <p className="fine">
+          An ad is charged when it <strong>runs</strong>, not when it is written, so this is
+          the message that tells a seller the charge has happened. It is what makes
+          &ldquo;nothing is charged until your ad goes out&rdquo; something they can check
+          rather than something we say. It costs one text per ad that runs.
         </p>
 
         <button className="btn" type="submit">

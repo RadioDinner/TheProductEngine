@@ -51,6 +51,7 @@ import {
   listEmailRecipientsWithCategories,
   listSubscribersWithCategories,
 } from "@/lib/store";
+import { collectForBatch } from "@/lib/ad-billing";
 import { adMatchesCategories, partitionKey } from "@/lib/categories";
 import { unsubscribeUrl, siteUrl } from "@/lib/email";
 import { composeEmailHtml, composeEmailText } from "@/lib/email-digest";
@@ -605,11 +606,15 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   if (pauseBlocks("bulk", settings)) {
     return { ok: false, reason: "Digest sending is paused (see Settings → System controls)." };
   }
-  const { newAds, bumpAds, bumpRecords } = await selectDigestItems(settings.digestCap);
-  const items = [...newAds, ...bumpAds];
-  if (!items.length) return { ok: false, reason: "Nothing is queued for a digest right now." };
-
-  // Identify the digest rows.
+  const selected = await selectDigestItems(settings.digestCap);
+  const queuedItems = [...selected.newAds, ...selected.bumpAds];
+  if (!queuedItems.length) {
+    return { ok: false, reason: "Nothing is queued for a digest right now." };
+  }
+  // Identify the digest rows FIRST — before any money moves. Both of the
+  // early returns below are reachable, and collecting ahead of them would take
+  // the money (and text every seller "your ad just went out") for an edition
+  // that never gets composed.
   let smsDigestId: number;
   let emailDigestId: number;
   let slotHour: number;
@@ -631,7 +636,6 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
 
   // Compose + enqueue the SMS edition.
   const { day } = etParts(now);
-  const digestNo = await allocateDigestNumber(smsDigestId);
   // Sponsor lines (item 17) ride the first digest of the day — an early/extra
   // edition counts (and a later scheduled slot then skips them for the day).
   // They ride EVERY recipient's edition regardless of category prefs.
@@ -640,8 +644,60 @@ export async function sendDigestNow(edition: DigestEdition): Promise<SendNowResu
   const subscribers = (await listSubscribersWithCategories()).filter(
     (s) => !blocked.has(s.phone),
   );
-  // Per-category-set composition — same machinery as the scheduled run.
-  const categoriesByAd = await getAdCategories(items.map((a) => a.id));
+  const categoriesByAd = await getAdCategories(queuedItems.map((a) => a.id));
+  const emailForReach = await listEmailRecipientsWithCategories();
+
+  // WHO WOULD ACTUALLY GET EACH AD, then COLLECT for exactly those — the same
+  // two steps the scheduled batch takes, and for the same reason: an ad every
+  // subscriber's categories exclude has not run, so it must not be charged for
+  // and its seller must not be texted "your ad just went out to subscribers".
+  const wouldReach = new Set(
+    buildCategorizedSmsRows({
+      digestId: 0,
+      now,
+      items: queuedItems,
+      categoriesByAd,
+      edition,
+      digestNo: 0,
+      sponsorLines: sponsors.map((s) => sponsorLine(s)),
+      pictures: new Map<number, string>(),
+      recipients: subscribers,
+    }).deliveredAdIds,
+  );
+  for (const ad of queuedItems) {
+    if (wouldReach.has(ad.id)) continue;
+    const adCategory = categoriesByAd.get(ad.id) ?? null;
+    if (emailForReach.some((r) => adMatchesCategories(adCategory, r.categories))) {
+      wouldReach.add(ad.id);
+    }
+  }
+  const { payable, unpaid, contended } = await collectForBatch(
+    queuedItems.filter((a) => wouldReach.has(a.id)),
+    now,
+  );
+  if (contended) {
+    return {
+      ok: false,
+      reason: "A batch is going out right now — give it a moment and try again.",
+    };
+  }
+  if (!payable.length) {
+    return {
+      ok: false,
+      reason:
+        unpaid.length === 1
+          ? `The one ad waiting couldn't be paid for (#${unpaid[0].ad.id}). Its seller has been told; it will go out once they pay.`
+          : unpaid.length
+            ? `None of the ${unpaid.length} ads waiting could be paid for. Their sellers have been told; they go out once they pay.`
+            : "Nothing here would reach any subscriber — check the categories on the waiting ads.",
+    };
+  }
+  const carried = new Set(payable.map((a) => a.id));
+  const newAds = selected.newAds.filter((a) => carried.has(a.id));
+  const bumpAds = selected.bumpAds.filter((a) => carried.has(a.id));
+  const bumpRecords = selected.bumpRecords.filter((b) => carried.has(b.adId));
+  const items = [...newAds, ...bumpAds];
+  const digestNo = await allocateDigestNumber(smsDigestId);
   const pictures = settings.photosInBroadcast
     ? await resolveBroadcastPictures(items)
     : new Map<number, string>();
@@ -953,24 +1009,17 @@ export function etWeekday(day: string): number {
 async function composeSmsEdition(args: {
   items: StoredAd[];
   bumpRecords?: { id: number; adId: number }[];
-  slotKey: string;
+  /** The batch's idempotency key, computed from what is ACTUALLY going out —
+   * see the comment at the call site inside this function. */
+  slotKeyFor: (carried: StoredAd[], bumps: { id: number; adId: number }[]) => string;
   slotHour: number;
   now: Date;
   settings: EngineSettings;
 }): Promise<SlotResult> {
-  const { items, slotKey, slotHour, now } = args;
+  const { items, slotHour, now } = args;
   const { day } = etParts(now);
-  const { id: digestId, finalized } = await createDigestIfAbsent(slotKey, slotHour);
-  // finalized = this batch was fully composed+enqueued already. A row that
-  // exists but never finalized means a previous run died mid-enqueue — fall
-  // through and redo it (the outbox unique key dedups the rows).
-  if (finalized) return { slotKey, items: 0, recipients: 0, skipped: true };
-  if (!items.length) {
-    await finalizeDigest(digestId, [], [], 0);
-    return { slotKey, items: 0, recipients: 0, skipped: true };
-  }
+  if (!items.length) return { slotKey: args.slotKeyFor([], []), items: 0, recipients: 0, skipped: true };
 
-  const digestNo = await allocateDigestNumber(digestId);
   // Business sponsor lines (item 17, reworked session 016): each scheduled
   // sponsor rides ONE ad text a day — "a ride once a day, throughout the
   // day" — so a batch carries at most ONE sponsor and the day's sponsors
@@ -985,15 +1034,88 @@ async function composeSmsEdition(args: {
     (s) => !blocked.has(s.phone),
   );
   const categoriesByAd = await getAdCategories(items.map((a) => a.id));
+  const emailRecipients = await listEmailRecipientsWithCategories();
+
+  // WHO WOULD ACTUALLY GET EACH AD — worked out BEFORE any money moves and
+  // before a single picture is badged (session 023).
+  //
+  // buildCategorizedSmsRows is pure, so running it twice costs nothing but a
+  // little string packing, and it is the only honest answer to "will this ad
+  // reach anybody in this batch?". Category filtering means some ads reach
+  // nobody, and an ad that reaches nobody has not RUN — charging for it would
+  // be taking money for a service that did not happen, which is the exact
+  // thing this session exists to stop. The digest id and number are 0 here and
+  // the pictures are left out: both change what a message CARRIES, never which
+  // ads are in it.
+  const wouldReach = new Set(
+    buildCategorizedSmsRows({
+      digestId: 0,
+      now,
+      items,
+      categoriesByAd,
+      digestNo: 0,
+      sponsorLines: sponsors.map((s) => sponsorLine(s)),
+      pictures: new Map<number, string>(),
+      recipients: subscribers,
+    }).deliveredAdIds,
+  );
+  for (const ad of items) {
+    if (wouldReach.has(ad.id)) continue;
+    // An ad no SMS group carries but an email recipient matches still runs —
+    // the email edition carries texted-but-unemailed ads.
+    const adCategory = categoriesByAd.get(ad.id) ?? null;
+    if (emailRecipients.some((r) => adMatchesCategories(adCategory, r.categories))) {
+      wouldReach.add(ad.id);
+    }
+  }
+
+  // THE MONEY MOVES HERE, for exactly the ads about to go out. An ad we cannot
+  // collect for is dropped from the batch: it keeps broadcast_at null, holds
+  // its place, and rides a later batch once the seller pays.
+  const { payable, contended } = await collectForBatch(
+    items.filter((a) => wouldReach.has(a.id)),
+    now,
+  );
+  if (contended) {
+    // Another pass is already collecting for one of these ads and composing a
+    // batch around it. Bow out entirely rather than composing a second batch
+    // from the leftovers — every ad with nothing owing would be in both, and
+    // subscribers would get it twice.
+    return { slotKey: "contended", items: 0, recipients: 0, skipped: true };
+  }
+  const carried = payable;
+  const carriedBumps = (args.bumpRecords ?? []).filter((b) =>
+    carried.some((a) => a.id === b.adId),
+  );
+  if (!carried.length) return { slotKey: "unpayable", items: 0, recipients: 0, skipped: true };
+
+  // ⚠️ THE KEY NAMES THE HEAD OF WHAT IS GOING OUT, not of what was selected,
+  // and that distinction is a bug fix rather than a detail.
+  //
+  // Keyed on the selected head, an ad that could never be paid for poisoned
+  // the queue permanently: the first batch composed the ads BEHIND it under
+  // key `batch#<unpayable>#0` and finalized, and from then on every pass whose
+  // head was that same stuck ad computed the same finalized key and skipped —
+  // so nothing ever sent again. Keying on what actually goes out means a
+  // different batch always gets a different key.
+  const slotKey = args.slotKeyFor(carried, carriedBumps);
+  const { id: digestId, finalized } = await createDigestIfAbsent(slotKey, slotHour);
+  // finalized = this batch was fully composed+enqueued already. A row that
+  // exists but never finalized means a previous run died mid-enqueue — fall
+  // through and redo it (the outbox unique key dedups the rows).
+  if (finalized) return { slotKey, items: 0, recipients: 0, skipped: true };
+  const digestNo = await allocateDigestNumber(digestId);
+
   // Badge and stage the pictures ONCE for the whole batch, before any row is
-  // built — see resolveBroadcastPictures.
+  // built — see resolveBroadcastPictures. Only for the ads actually going out,
+  // so an unpaid ad never costs an image render either.
   const pictures = args.settings.photosInBroadcast
-    ? await resolveBroadcastPictures(items)
+    ? await resolveBroadcastPictures(carried)
     : new Map<number, string>();
   const { rows, recipients, deliveredAdIds } = buildCategorizedSmsRows({
     digestId,
     now,
-    items,
+    items: carried,
     categoriesByAd,
     digestNo,
     sponsorLines: sponsors.map((s) => sponsorLine(s)),
@@ -1003,12 +1125,8 @@ async function composeSmsEdition(args: {
   const queued = await enqueueDigestOutbox(rows);
   // Consume ONLY delivered ads: an ad every SMS group filtered out keeps
   // broadcast_at null and is retried, rather than being silently marked sent.
-  // An ad that reaches no SMS group but DOES match an email recipient still
-  // counts — the email edition carries texted-but-unemailed ads, so leaving
-  // it unconsumed would retry it forever.
-  const emailRecipients = await listEmailRecipientsWithCategories();
   const consumed = new Set(deliveredAdIds);
-  for (const ad of items) {
+  for (const ad of carried) {
     if (consumed.has(ad.id)) continue;
     const adCategory = categoriesByAd.get(ad.id) ?? null;
     if (emailRecipients.some((r) => adMatchesCategories(adCategory, r.categories))) {
@@ -1017,10 +1135,10 @@ async function composeSmsEdition(args: {
   }
   await finalizeDigest(
     digestId,
-    items.filter((a) => consumed.has(a.id)).map((a) => a.id),
-    (args.bumpRecords ?? []).filter((b) => consumed.has(b.adId)).map((b) => b.id),
+    carried.filter((a) => consumed.has(a.id)).map((a) => a.id),
+    carriedBumps.filter((b) => consumed.has(b.adId)).map((b) => b.id),
     consumed.size,
-    items.filter((a) => consumed.has(a.id)).map((a) => a.id),
+    carried.filter((a) => consumed.has(a.id)).map((a) => a.id),
   );
   // Consume each sponsor's paid day only after the batch is enqueued and
   // finalized: a crash mid-compose leaves the day uncounted and the redo
@@ -1116,11 +1234,19 @@ export async function runQueuedBroadcasts(
   const items = [...newAds, ...bumpAds];
   if (!items.length) return [];
   if (!opts.force && !batchReady(newAds.length ? newAds : items, now, settings)) return [];
+  // Collecting for the ads happens inside composeSmsEdition, at the point
+  // where it is known which ads actually reach somebody (session 023). It is
+  // NOT done here: an ad that every subscriber's category filter excludes has
+  // not run, and must not be charged for.
   const results: SlotResult[] = [
     await composeSmsEdition({
       items,
       bumpRecords,
-      slotKey: batchSlotKey(newAds[0]?.id ?? null, bumpRecords[0]?.id ?? null),
+      slotKeyFor: (carried, bumps) =>
+        batchSlotKey(
+          newAds.find((a) => carried.some((c) => c.id === a.id))?.id ?? null,
+          bumps[0]?.id ?? null,
+        ),
       slotHour: hour,
       now,
       settings,

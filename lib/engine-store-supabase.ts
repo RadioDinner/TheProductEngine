@@ -22,6 +22,7 @@ import type {
   NewAdInput,
   OutboxInsert,
   OutboxRow,
+  OwedAd,
   PhotoSubmission,
   StoredAd,
   StoredAdStatus,
@@ -109,7 +110,8 @@ async function userIdByPhone(phone: string): Promise<string | null> {
 export async function createAd(input: NewAdInput, options: CreateAdOptions = {}): Promise<number> {
   const userId = await userIdByPhone(input.ownerPhone);
   if (!userId) throw new Error(`no user for phone ${input.ownerPhone}`);
-  const row = (withWebListing: boolean, withIsTest = input.isTest === true) => ({
+  const owed = Math.max(0, Math.round(options.owedCents ?? 0));
+  const row = (opts: { web: boolean; owed: boolean; test: boolean }) => ({
     user_id: userId,
     original_body: input.body,
     body: input.body,
@@ -117,11 +119,15 @@ export async function createAd(input: NewAdInput, options: CreateAdOptions = {})
     // Test-mode label (migration 9951). Rides the insert ONLY for a test ad, so
     // a database without 9951 never sees a column it does not have on the
     // ordinary posting path — same rule as unpaid_cents and web_listing below.
-    ...(withIsTest && { is_test: true }),
+    ...(opts.test && { is_test: true }),
     // The quoted price rides the insert only for a HELD ad, so a database
     // without migration 9953 is never sent a column it does not have on the
     // ordinary posting path.
     ...(options.status === "unpaid" && { unpaid_cents: options.unpaidCents ?? 0 }),
+    // What the ad owes until it runs (session 023, migration 9950). Same
+    // pattern as web_listing above: it rides only when there is something to
+    // say, so a deploy that lands before the migration still posts ads.
+    ...(opts.owed && owed > 0 && { owed_cents: owed }),
     flagged: input.flagged,
     ...(options.status === "rejected" && {
       rejected_reason: options.rejectedReason,
@@ -130,35 +136,61 @@ export async function createAd(input: NewAdInput, options: CreateAdOptions = {})
     // web_listing rides the insert ONLY when explicitly false (session 016):
     // true is the column default, and omitting it keeps this insert working
     // before migration 9973 lands.
-    ...(withWebListing && { web_listing: false }),
+    ...(opts.web && { web_listing: false }),
   });
-  let { data, error } = await db()
-    .from("ads")
-    .insert(row(input.webListing === false))
-    .select("id")
-    .single();
-  // A test ad whose is_test column does not exist yet (9951 pending). Retry
-  // WITHOUT the label but KEEPING web_listing:false, so the ad is still hidden
-  // from the public site — the hiding is the part that matters, the label is
-  // only for finding them again later.
-  if (error && input.isTest === true && (error.code === "PGRST204" || error.code === "42703")) {
-    console.error(
-      "[engine-store] ads.is_test missing (migration 9951) — test ad stored UNLABELLED (still hidden from the site)",
-    );
+  // THREE optional columns ride this insert — `owed_cents` (9950), `is_test`
+  // (9951) and `web_listing` (9973) — and any of them may be missing on a
+  // deploy that landed before its migration. So the insert is a LADDER: try
+  // everything the caller asked for, then progressively fewer of the optional
+  // columns, ending with none of them.
+  //
+  // It is a ladder because the retry-per-column version had a hole. Each retry
+  // re-added a column another had just proved missing, so a database short of
+  // two of them exhausted the retries still failing — and the ad, which is a
+  // seller's text and the one thing here that cannot be reconstructed, was
+  // thrown away. Losing a flag is a degradation. Losing the ad is not.
+  //
+  // The error does not say WHICH column is missing, so the ladder walks the
+  // subsets rather than guessing. At most eight attempts, only ever on a
+  // badly-behind deploy, and it ends with the ad saved.
+  const want = { web: input.webListing === false, owed: owed > 0, test: input.isTest === true };
+  const LOST: Record<keyof typeof want, string> = {
+    owed: "ads.owed_cents missing (migration 9950) — ad stored WITHOUT its quoted price, so nothing will be collected for it",
+    test: "ads.is_test missing (migration 9951) — test ad stored UNLABELLED (still hidden from the site)",
+    web: "ads.web_listing missing (migration 9973) — ad stored WITHOUT the off-website flag",
+  };
+  const flags = (Object.keys(want) as (keyof typeof want)[]).filter((k) => want[k]);
+  // Subsets of the wanted flags, largest first: everything, then each one
+  // dropped, then each pair dropped, … ending at none.
+  const attempts: (keyof typeof want)[][] = [];
+  for (let dropped = 0; dropped <= flags.length; dropped++) {
+    for (let mask = 0; mask < 1 << flags.length; mask++) {
+      const keep = flags.filter((_, i) => (mask >> i) & 1);
+      if (flags.length - keep.length === dropped) attempts.push(keep);
+    }
+  }
+  let data: { id: number } | null = null;
+  let error: { code?: string; message?: string } | null = null;
+  for (const keep of attempts) {
+    for (const flag of flags) {
+      if (!keep.includes(flag)) console.error(`[engine-store] ${LOST[flag]}`);
+    }
     ({ data, error } = await db()
       .from("ads")
-      .insert(row(input.webListing === false, false))
+      .insert(
+        row({
+          web: keep.includes("web"),
+          owed: keep.includes("owed"),
+          test: keep.includes("test"),
+        }),
+      )
       .select("id")
       .single());
-  }
-  if (error && input.webListing === false && (error.code === "PGRST204" || error.code === "42703")) {
-    // Column missing (9973 pending) but the caller wanted the ad OFF the
-    // website — store it anyway (listed) and shout: the operator set a web
-    // add-on price without pasting the migration.
-    console.error(
-      "[engine-store] ads.web_listing missing (migration 9973) — ad stored WITHOUT the off-website flag",
-    );
-    ({ data, error } = await db().from("ads").insert(row(false, false)).select("id").single());
+    if (!error) break;
+    // Only a MISSING COLUMN is worth retrying without it. Anything else (a
+    // constraint, a dead connection) fails the same way next time, and looping
+    // would just make the seller wait longer for it.
+    if (error.code !== "PGRST204" && error.code !== "42703") break;
   }
   if (error || !data) throw error ?? new Error("ad insert returned no row");
   const id = data.id as number;
@@ -562,6 +594,282 @@ export function tableMissing(error: { code?: string } | null): boolean {
   return error?.code === "42P01" || error?.code === "PGRST205";
 }
 
+/* ---------- owed prices (session 023, migration 9950) ----------
+ *
+ * `owed_cents` is the quoted price an ad still has to be collected for; it is
+ * written when the ad is accepted and cleared by the batch that carries it.
+ * Every read here treats a missing column (42703) as "nothing is owed", which
+ * is precisely the pre-9950 truth — ads were collected for at posting time, so
+ * none of them carried a price into their run. That is what lets this code
+ * deploy ahead of the migration instead of taking posting down with it.
+ */
+
+/** Postgres codes that mean "9950 (or 9953) isn't pasted yet". */
+function missingOwedColumn(error: { code?: string } | null): boolean {
+  return error?.code === "42703" || error?.code === "22P02" || error?.code === "PGRST204";
+}
+
+export async function listOwedAds(phone: string): Promise<OwedAd[]> {
+  const userId = await userIdByPhone(phone);
+  if (!userId) return [];
+  // ⚠️ 'unpaid' is an enum value from migration 9953, which may not be pasted.
+  // Naming it in the filter makes Postgres reject the WHOLE query with 22P02 —
+  // and swallowing that as "no owed ads" would empty every RESERVATION on the
+  // service, letting one member commit the same money to any number of ads.
+  // So a 22P02 retries without the held status rather than reading as zero.
+  const query = (statuses: string[]) =>
+    db()
+      .from("ads")
+      .select("id, owed_cents, status, created_at, charge_hold_until")
+      .eq("user_id", userId)
+      .in("status", statuses)
+      .is("broadcast_at", null)
+      .not("owed_cents", "is", null)
+      .order("created_at", { ascending: true });
+  let { data, error } = await query(["pending", "approved", "unpaid"]);
+  if (error?.code === "22P02") {
+    ({ data, error } = await query(["pending", "approved"]));
+  }
+  if (error) {
+    if (missingOwedColumn(error)) return [];
+    throw error;
+  }
+  return (data ?? [])
+    .map((raw) => {
+      const row = raw as {
+        id: number;
+        owed_cents: number | null;
+        status: string;
+        created_at: string;
+        charge_hold_until: string | null;
+      };
+      return {
+        id: row.id,
+        owedCents: Number(row.owed_cents) || 0,
+        status: row.status as OwedAd["status"],
+        createdAt: String(row.created_at),
+        heldUntil: row.charge_hold_until ?? null,
+      };
+    })
+    .filter((a) => a.owedCents > 0);
+}
+
+export async function getAdsOwed(ids: number[]): Promise<Map<number, number>> {
+  const out = new Map<number, number>();
+  if (!ids.length) return out;
+  const { data, error } = await db()
+    .from("ads")
+    .select("id, owed_cents")
+    .in("id", ids)
+    .not("owed_cents", "is", null);
+  if (error) {
+    if (missingOwedColumn(error)) return out;
+    throw error;
+  }
+  for (const raw of data ?? []) {
+    const row = raw as { id: number; owed_cents: number | null };
+    const cents = Number(row.owed_cents) || 0;
+    if (cents > 0) out.set(row.id, cents);
+  }
+  return out;
+}
+
+/**
+ * Move an unrun ad's quoted price up or down.
+ *
+ * Read-then-compare-and-swap: the update only lands if `owed_cents` is still
+ * what we read, so two picture messages arriving together cannot both add the
+ * upgrade. The status guard keeps it to ads still in review, and the
+ * `broadcast_at` guard keeps it off ads that have already run and been
+ * collected for.
+ */
+export async function bumpAdOwed(
+  id: number,
+  deltaCents: number,
+  /**
+   * Allow the change even though the ad has left the review queue.
+   *
+   * The undo path needs this and the ordinary path must not have it. A picture
+   * upgrade raises the price, then uploads the picture; if the operator
+   * approves the ad during that upload the attach is refused and the upgrade
+   * has to come back off — but by then the ad is `approved`, and a
+   * pending-only guard made that undo silently do nothing. The seller was told
+   * "its price is unchanged" and then charged the picture price for a text ad.
+   *
+   * Still refused once the ad has RUN: at that point it has been collected for
+   * and the price is settled.
+   */
+  opts: { anyStatus?: boolean } = {},
+): Promise<boolean> {
+  const { data, error } = await db()
+    .from("ads")
+    .select("owed_cents, status, broadcast_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    if (missingOwedColumn(error)) return false;
+    throw error;
+  }
+  const row = data as { owed_cents: number | null; status: string; broadcast_at: string | null } | null;
+  if (!row || row.broadcast_at) return false;
+  if (!opts.anyStatus && row.status !== "pending" && row.status !== "unpaid") return false;
+  const current = Number(row.owed_cents) || 0;
+  const next = Math.max(0, current + Math.round(deltaCents));
+  let update = db()
+    .from("ads")
+    .update({ owed_cents: next > 0 ? next : null })
+    .eq("id", id);
+  update = row.owed_cents === null ? update.is("owed_cents", null) : update.eq("owed_cents", current);
+  const { data: hit, error: writeError } = await update.select("id");
+  if (writeError) {
+    if (missingOwedColumn(writeError)) return false;
+    throw writeError;
+  }
+  return Boolean(hit?.length);
+}
+
+/**
+ * Take ownership of an ad's collection, and report whether THIS caller got it.
+ *
+ * ⚠️ THE PRICE STAYS ON THE AD while the claim is held, and that is the whole
+ * point. An earlier version cleared `owed_cents` here, which left only two
+ * states — and "nothing owing" then meant BOTH "already paid for, run it free"
+ * and "somebody is charging for it this second". A second batch reading during
+ * the first one's Stripe round trip saw a freebie and broadcast the ad to the
+ * whole list for nothing. With the price left in place, the second batch sees
+ * an ad that owes money, loses this compare-and-swap, and leaves it alone.
+ *
+ * The staleness window is what stops a pass that died mid-collection from
+ * stranding an ad forever. It is deliberately long — a claim is only ever held
+ * across one card charge — so re-claiming is a recovery path, not a routine.
+ */
+export const CHARGE_CLAIM_STALE_MS = 60 * 60 * 1000;
+
+export async function claimAdCharge(id: number, cents: number): Promise<boolean> {
+  const stale = new Date(Date.now() - CHARGE_CLAIM_STALE_MS).toISOString();
+  const { data, error } = await db()
+    .from("ads")
+    .update({ charge_claimed_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("owed_cents", cents)
+    .is("broadcast_at", null)
+    .or(`charge_claimed_at.is.null,charge_claimed_at.lte.${stale}`)
+    .select("id");
+  if (error) {
+    if (missingOwedColumn(error)) return false;
+    throw error;
+  }
+  return Boolean(data?.length);
+}
+
+/**
+ * The collection succeeded: clear the debt and the claim together.
+ *
+ * This runs AFTER the money has moved, which is the opposite of what the first
+ * draft did, and the ordering is a deliberate trade. Clearing first meant a
+ * charge that failed at the far end of a network call left an ad nobody had
+ * paid for — recoverable, but only by re-charging, and it opened the free-ad
+ * hole above. Clearing after means a crash in the millisecond between the
+ * debit and this update leaves the debt standing, and an hour later another
+ * pass may charge again. That window is a local database write immediately
+ * after another local database write; the window it replaces was a live card
+ * charge over the internet.
+ */
+export async function settleAdCharge(id: number): Promise<void> {
+  const { error } = await db()
+    .from("ads")
+    .update({ owed_cents: null, charge_claimed_at: null })
+    .eq("id", id);
+  if (error && !missingOwedColumn(error)) throw error;
+}
+
+/** Hand the claim back after a failed collection. The price was never cleared,
+ * so this only lifts the claim. */
+export async function releaseAdCharge(id: number): Promise<void> {
+  const { error } = await db()
+    .from("ads")
+    .update({ charge_claimed_at: null })
+    .eq("id", id);
+  if (error && !missingOwedColumn(error)) throw error;
+}
+
+/** Keep an ad out of batch selection for a while after a collection failed.
+ * Its OWN column, never the operator's hold_until — see the migration. */
+export async function holdAdCharge(id: number, untilIso: string): Promise<void> {
+  const { error } = await db().from("ads").update({ charge_hold_until: untilIso }).eq("id", id);
+  if (error && !missingOwedColumn(error)) throw error;
+}
+
+/** Money arrived: lift the failed-collection back-offs. Touches only the
+ * charge column, so an operator's "skip the next digest" survives. */
+export async function clearChargeHolds(ids: number[]): Promise<void> {
+  if (!ids.length) return;
+  const { error } = await db().from("ads").update({ charge_hold_until: null }).in("id", ids);
+  if (error && !missingOwedColumn(error)) throw error;
+}
+
+/**
+ * Is the quoted-price column actually there?
+ *
+ * Cached for the life of the process — a migration does not un-apply. It is
+ * the one capability worth probing, because without it NOTHING IS COLLECTED
+ * FOR: the code stopped charging at posting time, so an unnoticed missing
+ * column means every ad runs free and silently. collectForBatch halts on a
+ * false rather than sending, because an ad that waits is recoverable with one
+ * paste and an ad that has already gone out for nothing is not.
+ */
+let owedSupportedCache: boolean | null = null;
+
+export async function owedPricesSupported(): Promise<boolean> {
+  if (owedSupportedCache !== null) return owedSupportedCache;
+  const { error } = await db().from("ads").select("owed_cents").limit(1);
+  if (error && missingOwedColumn(error)) {
+    owedSupportedCache = false;
+    return false;
+  }
+  // A transient error is NOT an answer — leave it uncached and assume the
+  // column is there, so one bad moment cannot latch the service into "send
+  // everything free" for the rest of the process's life.
+  if (error) return true;
+  owedSupportedCache = true;
+  return true;
+}
+
+/**
+ * Move a held ad into the review queue, keeping what it owes.
+ *
+ * The CAS on `status = 'unpaid'` is unchanged from markAdPaid, which this
+ * replaces: it is still one-way, still idempotent, and still the thing that
+ * decides which of two concurrent callers gets to tell the seller. What is
+ * gone is the charge — since session 023 an ad is collected for when it runs,
+ * so admitting one moves it into review and leaves the debt standing.
+ */
+export async function admitHeldAd(id: number, owedCents: number): Promise<boolean> {
+  const update: Record<string, unknown> = { status: "pending", unpaid_cents: null };
+  if (owedCents > 0) update.owed_cents = owedCents;
+  let { data, error } = await db()
+    .from("ads")
+    .update(update)
+    .eq("id", id)
+    .eq("status", "unpaid")
+    .select("id");
+  if (error && missingOwedColumn(error) && owedCents > 0) {
+    // No owed_cents column (9950 pending): admit the ad anyway rather than
+    // stranding it. It simply carries no price, exactly as before 9951.
+    ({ data, error } = await db()
+      .from("ads")
+      .update({ status: "pending", unpaid_cents: null })
+      .eq("id", id)
+      .eq("status", "unpaid")
+      .select("id"));
+  }
+  if (error) {
+    if (missingOwedColumn(error)) return false;
+    throw error;
+  }
+  return Boolean(data?.length);
+}
+
 /* ---------- admin broadcasts (migration 9952) ---------- */
 
 /** Every broadcast, newest first, for the admin page. Empty when 9952 is not
@@ -736,9 +1044,28 @@ export async function getNewDigestAds(cap: number): Promise<StoredAd[]> {
     .eq("status", "approved")
     .is("broadcast_at", null)
     .or(`hold_until.is.null,hold_until.lte.${new Date().toISOString()}`)
+    // The failed-collection back-off (session 023) is its own column, so
+    // money arriving can lift it without touching the operator's hold above.
+    .or(`charge_hold_until.is.null,charge_hold_until.lte.${new Date().toISOString()}`)
     .order("approved_at", { ascending: true })
     .limit(cap);
-  if (error) throw error;
+  if (error) {
+    // charge_hold_until missing (9950 pending): fall back to the pre-9950
+    // query rather than stranding every ad in the queue.
+    if (error.code === "42703" || error.code === "PGRST204") {
+      const retry = await db()
+        .from("ads")
+        .select(AD_SELECT)
+        .eq("status", "approved")
+        .is("broadcast_at", null)
+        .or(`hold_until.is.null,hold_until.lte.${new Date().toISOString()}`)
+        .order("approved_at", { ascending: true })
+        .limit(cap);
+      if (retry.error) throw retry.error;
+      return ((retry.data ?? []) as unknown as AdRow[]).map(toStored);
+    }
+    throw error;
+  }
   return ((data ?? []) as unknown as AdRow[]).map(toStored);
 }
 

@@ -14,7 +14,12 @@
  *   gets nothing at all, so the "not getting any ads now" warning stays true.
  * - Texting a category word TOGGLES it; the first specific pick switches the
  *   member from ALL to selective; replying ALL returns to everything.
+ *
+ * Session 023 added one import — lib/message-templates, which is pure too — so
+ * the welcome sequence can be worded from the catalogue the operator edits.
+ * The shape of the sequence still lives here.
  */
+import { renderTemplate, templateSpec } from "@/lib/message-templates";
 
 export interface CategoryDef {
   /** Lowercase storage key — also the SMS command word (uppercased in menus). */
@@ -75,72 +80,68 @@ export function categoryLabel(key: string): string {
  * The menu goes LAST so the question is the final thing on screen. Every
  * number comes from Settings; nothing here hardcodes a price or an hour.
  */
-export function welcomeMessages(args: {
-  siteName: string;
-  siteUrl: string;
-  /** The number members call to key in a card — the SMS number, forwarded. */
-  cardPhone: string;
-  starterCreditLabel: string | null;
-  /** "7am to 6pm Mon - Sat" — the PUBLISHED window, built from Settings by the
-   * caller. Saturday's earlier close is deliberately not named here. */
-  windowLabel: string;
-  priceLine: string;
-}): string[] {
+export function welcomeMessages(
+  args: {
+    siteName: string;
+    siteUrl: string;
+    /** The number members call to key in a card — the SMS number, forwarded. */
+    cardPhone: string;
+    starterCreditLabel: string | null;
+    /** "7am to 6pm Mon - Sat" — the PUBLISHED window, built from Settings by the
+     * caller. Saturday's earlier close is deliberately not named here. */
+    windowLabel: string;
+    priceLine: string;
+  },
+  /**
+   * Where the wording comes from (session 023). The engine passes the message
+   * book, so an operator's edits on /admin/replies reach the welcome; leave it
+   * out and the five defaults in lib/message-templates.ts are used, which is
+   * what the unit suite walks. Either way this function still owns the SHAPE —
+   * five texts, in this order, with the menu last so the question is the final
+   * thing on screen — and the category menu itself, which is built from the
+   * categories rather than typed.
+   */
+  render: (key: string, values: Record<string, unknown>) => string = defaultRender,
+): string[] {
   // Blank lines between the facts (the user's own layout): a newline is one
   // septet, so the breathing room costs nothing and a flip-phone screen shows
   // short lines instead of a paragraph to squint at.
-  const welcome = [
-    `Welcome to ${args.siteName}!`,
-    "",
+  const welcome = render("welcome.1", {
+    siteName: args.siteName,
     // What a subscriber actually receives, in the shape they receive it
     // (session 018): a batch of ads in ONE text, each numbered, with the
     // pictures following. Saying this up front is what makes the first batch
     // read as the service working rather than four texts going wrong.
-    `Ads come in batches - several in one text, each with its own ad number - ${args.windowLabel}.`,
-    "",
-    args.priceLine,
-    ...(args.starterCreditLabel
-      ? ["", `You have ${args.starterCreditLabel} of free ad credit!`]
-      : []),
-  ].join("\n");
+    windowLabel: args.windowLabel,
+    priceLine: args.priceLine,
+    starterLine: args.starterCreditLabel
+      ? `\n\nYou have ${args.starterCreditLabel} of free ad credit!`
+      : "",
+  });
 
-  const posting = [
-    "To post, text AD and your ad, like:",
-    "",
-    "AD Hay for sale, $5/bale. Call 330-555-0142",
-    "",
-    `When posting an AD you can send up to ${MAX_AD_PHOTOS} pictures. The first one goes out with the batch, marked with your ad number.`,
-    "",
-    `See more pictures by replying PIC and the ad number, like PIC 1022 - that sends up to ${MAX_TEXTED_PHOTOS - 1} more. The rest are on ${args.siteUrl}!`,
-  ].join("\n");
+  const posting = render("welcome.2", {
+    siteUrl: args.siteUrl,
+    maxPhotos: MAX_AD_PHOTOS,
+    extraPhotos: MAX_TEXTED_PHOTOS - 1,
+  });
 
-  // Every command named here is honoured by the parser — see the unit suite,
-  // which walks this text and asserts each one answers.
-  const commands = [
-    "To check your balance, reply BAL",
-    "",
-    "To mark your ad item as sold, reply SOLD followed by your ad number.",
-    "",
-    "To view your ads, reply MY ADS.",
-  ].join("\n");
+  // Every command named in welcome.3 is honoured by the parser — see the unit
+  // suite, which walks this text and asserts each one answers.
+  const commands = render("welcome.3", {});
 
-  const website = [
-    `Every ad is also on ${args.siteUrl}.`,
-    "",
-    "Along with all the remaining pictures and other special features too.",
-    "",
-    "You can sign up for the ads by email too, free.",
-    "",
-    `To pay by card, call ${args.cardPhone} and enter it on your phone keypad`,
-  ].join("\n");
+  const website = render("welcome.4", {
+    siteUrl: args.siteUrl,
+    cardPhone: args.cardPhone,
+  });
 
-  const menu = [
-    "Last thing, pick what you want ads for. Reply with a number (or the word):",
-    ...menuLines(),
-    "Text HELP for help. Text STOP to end.",
-  ].join("\n");
+  const menu = render("welcome.5", { menu: menuLines().join("\n") });
 
   return [welcome, posting, commands, website, menu];
+}
+
+/** The shipped wording, with nothing read from the database. */
+function defaultRender(key: string, values: Record<string, unknown>): string {
+  return renderTemplate(templateSpec(key)?.body ?? "", values);
 }
 
 /** The numbered menu lines: 1 is ALL, then the categories in order. */

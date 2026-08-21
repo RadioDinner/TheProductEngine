@@ -23,6 +23,9 @@ export default async function PostAdPage({
   searchParams: Promise<{
     posted?: string;
     charge?: string;
+    card?: string;
+    short?: string;
+    waiting?: string;
     cost?: string;
     left?: string;
     topup?: string;
@@ -63,12 +66,16 @@ export default async function PostAdPage({
   // is PENDING — it is deliberately not promised as "live on the website".
   const postedId = Number(params.posted);
   const posted = Number.isInteger(postedId) && postedId > 0;
+  // Since session 023 nothing is charged at posting time — the ad is QUOTED a
+  // price and the batch that carries it collects. The note says which of the
+  // three situations the poster is in, in the same words the SMS lane uses.
   const chargeNote = !posted
     ? null
     : chargeNoteLine({
         costCents: Number(params.cost) || 0,
         leftCents: Number(params.left) || 0,
-        toppedUpCents: Number(params.topup) || 0,
+        shortCents: Number(params.short) || 0,
+        hasCard: params.card === "1",
         ...(Number(params.welcome) > 0 && {
           welcomeLabel: formatPrice(Number(params.welcome)),
         }),
@@ -93,8 +100,8 @@ export default async function PostAdPage({
         <div className="notice" role="status">
           <p>
             <strong>Got it! Your ad is #{postedId} and is waiting for review.</strong>{" "}
-            You&rsquo;ll get a text when it&rsquo;s approved to run in an upcoming digest.
-            ({chargeNote})
+            You&rsquo;ll get a text when it&rsquo;s approved to run in an upcoming digest.{" "}
+            {chargeNote}
           </p>
           {params.nopic && (
             <p>
@@ -155,12 +162,13 @@ export default async function PostAdPage({
       )}
       {params.error === "funds" && (
         <p className="form-error" role="alert">
-          That ad costs {formatPrice(Number(params.cost) || settings.costTextCents)} and you
-          have {formatPrice(Number(params.balance) || 0)} of ad credit. Nothing was posted
-          or charged — <Link href="/account#credits">add money</Link> and try again, or call{" "}
-          <strong>{site.supportPhone}</strong> and press <strong>1</strong> to put a card on
-          file. Once a card is on file we charge the difference automatically, so posting
-          just works from then on.
+          You already have {Number(params.waiting) || 0} ad
+          {Number(params.waiting) === 1 ? "" : "s"} waiting on payment, so this one
+          wasn&rsquo;t posted. Nothing has been charged for any of them —{" "}
+          <Link href="/account#credits">add money</Link> and they go out with the next batch,
+          or call <strong>{site.supportPhone}</strong> and press <strong>1</strong> to put a
+          card on file. With a card on file we charge as each ad runs, so posting just works
+          from then on.
         </p>
       )}
 
@@ -206,14 +214,14 @@ export default async function PostAdPage({
               </p>
             ) : preview.canAffordPicture ? (
               <p>
-                <strong>This ad comes off your balance:</strong>{" "}
+                <strong>This ad comes off your balance when it goes out:</strong>{" "}
                 {formatPrice(settings.costTextCents)} as a text ad, or{" "}
                 {formatPrice(settings.costPhotoCents)} with a listing picture. You have{" "}
-                {formatPrice(balance)}.
+                {formatPrice(balance)}, and nothing is taken until the ad actually runs.
               </p>
             ) : preview.canAffordText ? (
               <p>
-                <strong>This ad comes off your balance:</strong> your{" "}
+                <strong>This ad comes off your balance when it goes out:</strong> your{" "}
                 {formatPrice(balance)} covers a text ad (
                 {formatPrice(settings.costTextCents)}) but not a picture ad (
                 {formatPrice(settings.costPhotoCents)}) —{" "}
@@ -223,14 +231,16 @@ export default async function PostAdPage({
               <p className="form-error">
                 Your balance of {formatPrice(balance)} doesn&rsquo;t cover a text ad (
                 {formatPrice(settings.costTextCents)}).{" "}
-                <Link href="/account#credits">Add money</Link> first — nothing is charged
-                until an ad actually posts.
+                You can still post it — it just won&rsquo;t go out until the money is
+                there. <Link href="/account#credits">Add money</Link> or put a card on
+                file, and it goes with the next batch. Nothing is charged until it runs.
               </p>
             )}
             {autoTopUp && !preview.starterGrantApplies && !preview.canAffordPicture && (
               <p className="fine">
                 Automatic top-up is on: if your balance comes up short, the difference is
-                charged to your saved card and the confirmation says so. Turn it off under{" "}
+                charged to your saved card <strong>when the ad goes out</strong> — never
+                when you post it — and you get a text saying so. Turn it off under{" "}
                 <Link href="/account#credits">your account</Link>.
               </p>
             )}

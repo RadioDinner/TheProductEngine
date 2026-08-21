@@ -21,15 +21,9 @@ import { afterResponse } from "@/analytics/src/after";
 import "@/analytics/src/register-after";
 import { redirect } from "next/navigation";
 import { readSession } from "@/lib/session";
-import {
-  addLedgerEntry,
-  ensureAccount,
-  getAutoTopUp,
-  getCreditBalance,
-  grantStarterCreditIfFirst,
-  spendCredits,
-} from "@/lib/store";
-import { autoTopUpShortfall, resolveStripeCustomer } from "@/lib/payments";
+import { ensureAccount, grantStarterCreditIfFirst } from "@/lib/store";
+import { memberFunding } from "@/lib/ad-billing";
+import { postDecision } from "@/lib/ad-funding";
 import { adPriceCents, formatPrice } from "@/lib/config";
 import {
   addPhotoSubmission,
@@ -176,90 +170,56 @@ async function postAdInner(formData: FormData): Promise<void> {
         settings.starterCreditLimit,
       )
     : { account, granted: false };
-  let balance = await getCreditBalance(phone);
-  // Automatic top-up: the saved card (toggle on) covers the shortfall before
-  // any ad record exists — a declined card is a clean refusal. A card saved
-  // by PHONE (pay-by-phone IVR) is adopted here too, via resolveStripeCustomer.
-  let toppedUp = 0;
-  if (balance < cost && (await getAutoTopUp(phone))) {
-    const customerId = await resolveStripeCustomer(phone, starter.account.stripeCustomerId);
-    if (customerId) {
-      const topUp = await autoTopUpShortfall({
-        phone,
-        customerId,
-        shortfallCents: cost - balance,
-      });
-      if (topUp.ok) {
-        toppedUp = topUp.chargedCents;
-        balance += toppedUp;
-      } else {
-        console.warn(`[post] auto top-up failed for ${phone}: ${topUp.reason}`);
-      }
-    }
-  }
-  // Fast reject for the clearly-unfunded; the atomic charge below is the
-  // authority under concurrency.
-  if (balance < cost) {
-    blocked("no_balance");
-    redirect(`/account/post?error=funds&cost=${cost}&balance=${balance}`);
+  // NOTHING IS CHARGED HERE ANY MORE (session 023) — the ad is quoted a price,
+  // the price is reserved against the member's balance, and the batch that
+  // carries the ad collects. The SMS lane does exactly the same thing and for
+  // the same reasons; see lib/ad-funding.ts.
+  const funding = await memberFunding(phone, starter.account);
+  const decision = postDecision({
+    costCents: cost,
+    balanceCents: funding.balanceCents,
+    reservedCents: funding.reservedCents,
+    hasCard: funding.hasCard,
+    awaitingPayment: funding.awaitingPayment,
+    maxAwaitingPayment: settings.maxAdsAwaitingPayment,
+  });
+  // The web form has no held-ad path (a member at a keyboard can add money in
+  // the same session), so the guard here refuses rather than holds — the same
+  // refusal this lane has always given, now reached only when several ads are
+  // already waiting on money.
+  if (!decision.accept) {
+    blocked("awaiting_payment_cap");
+    redirect(
+      `/account/post?error=funds&cost=${cost}&balance=${funding.availableCents}&waiting=${funding.awaitingPayment}`,
+    );
   }
 
   // Links FLAG for human review (walled garden), never auto-reject or strip.
   const containsLink = !mayPostLinks() && hasLink(body);
 
-  const kind = hasPhoto ? "picture" : "text";
-  const id = await createAd({
-    ownerPhone: phone,
-    body,
-    flagged: rules.flagged || containsLink,
-    ...(hasPhoto && {
-      photo: { src: photoSrc!, alt: deriveTitle(body), width: 800, height: 600 },
-    }),
-    // Only meaningful once the add-on is priced: an unchecked box keeps the
-    // ad off the public site.
-    webListing: wantsWebListing,
-  });
-
-  // Charge atomically — the base ad price as the atomic debit, the website
-  // add-on as its own ledger line. The ledger note strings are an API
-  // (refunds and the admin delete view match on them): they MUST stay
-  // byte-identical to the SMS lane's. A THROWN charge (store hiccup —
-  // spendCredits throws on any RPC error in prod) must not strand an unpaid
-  // `pending` ad in the review queue for the admin to approve and broadcast
-  // free: undo via benign rejection, then rethrow. The redirect()s stay
-  // OUTSIDE the try — NEXT_REDIRECT throws by design.
-  const baseCost = cost - addonCost;
-  let charge = "";
-  try {
-    if (await spendCredits(phone, baseCost, `Ad #${id} (${kind})`)) {
-      if (addonCost > 0) {
-        // Non-atomic follow-on debit, mirroring the picture-upgrade pattern:
-        // the fast check above covered base + add-on, so the worst concurrent
-        // case is a small visible negative balance — never a lost charge (the
-        // ref makes a retried submit idempotent).
-        await addLedgerEntry(phone, {
-          delta: -addonCost,
-          kind: "spend",
-          note: `Ad #${id} (website listing)`,
-          ref: `ad-${id}-web-addon`,
-        });
-      }
-      charge =
-        `charge=paid&cost=${cost}&left=${Math.max(0, balance - cost)}` +
-        (toppedUp > 0 ? `&topup=${toppedUp}` : "") +
-        (starter.granted ? `&welcome=${settings.starterCreditCents}` : "");
-    }
-  } catch (e) {
-    await rejectAdRecord(id, "Charge failed at submission.", "benign").catch(() => {});
-    throw e;
-  }
-  if (!charge) {
-    // The balance was spent between the check and here — undo the ad instead
-    // of leaving an unpaid pending record in the review queue.
-    blocked("charge_race");
-    await rejectAdRecord(id, "Not enough money at submission.", "benign");
-    redirect(`/account/post?error=funds&cost=${cost}&balance=${await getCreditBalance(phone)}`);
-  }
+  const id = await createAd(
+    {
+      ownerPhone: phone,
+      body,
+      flagged: rules.flagged || containsLink,
+      ...(hasPhoto && {
+        photo: { src: photoSrc!, alt: deriveTitle(body), width: 800, height: 600 },
+      }),
+      // Only meaningful once the add-on is priced: an unchecked box keeps the
+      // ad off the public site.
+      webListing: wantsWebListing,
+    },
+    // ONE quote covering the ad and its website add-on. The add-on used to be
+    // its own ledger line so the refund matchers would return it too; with
+    // nothing charged before the run there is one collection at the end, and
+    // the single `Ad #<id> (<kind>)` note it writes carries the whole price.
+    { owedCents: cost },
+  );
+  const charge =
+    `charge=owed&cost=${cost}&left=${Math.max(0, funding.availableCents - cost)}` +
+    (decision.state === "card" ? `&card=1` : "") +
+    (decision.state === "owing" ? `&short=${decision.shortfallCents}` : "") +
+    (starter.granted ? `&welcome=${settings.starterCreditCents}` : "");
 
   // Seller's category suggestion (item 22 — web posting only; SMS sellers
   // don't pick). Best-effort: it pre-fills the review dropdown and the

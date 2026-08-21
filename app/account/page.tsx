@@ -197,7 +197,8 @@ export default async function AccountPage({
               <>
                 <p>
                   <strong>On.</strong> If an ad costs more than your balance, the difference
-                  is charged to your saved card and the confirmation text says so.
+                  is charged to your saved card <strong>when that ad goes out</strong> — never
+                  when you post it — and you get a text saying so.
                 </p>
                 <form action={saveAutoTopUp}>
                   <input type="hidden" name="on" value="no" />
@@ -209,8 +210,8 @@ export default async function AccountPage({
             ) : (
               <>
                 <p>
-                  <strong>Off.</strong> Ads only post when your balance covers them — add
-                  money above first.
+                  <strong>Off.</strong> An ad only goes out when your balance covers it — add
+                  money above, or turn this on and we&rsquo;ll charge your card as each ad runs.
                 </p>
                 <form action={saveAutoTopUp}>
                   <input type="hidden" name="on" value="yes" />

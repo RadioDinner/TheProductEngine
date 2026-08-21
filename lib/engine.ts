@@ -10,20 +10,19 @@ import { afterResponse } from "@/analytics/src/after";
 import { deriveTitle, adExpiresAt, type Ad } from "@/lib/ads";
 import {
   attachAdPhotos,
+  bumpAdOwed,
   cancelQueuedOutboxFor,
   countRecentOutboundContaining,
   createAd,
   getAdRecord,
+  getAdsOwed,
   getPendingAds,
+  listOwedAds,
   latestPendingAdFor,
-  listUnpaidAds,
   logMessage,
-  markAdPaid,
   recordInboundOnce,
-  rejectAdRecord,
   reserveSms,
   markAdSold,
-  setAdUnpaid,
   type StoredAd,
 } from "@/lib/engine-store";
 import { listAdsByOwner } from "@/lib/ads";
@@ -35,14 +34,10 @@ import {
   smsWindowOpen,
 } from "@/lib/digest-engine";
 import {
-  addLedgerEntry,
   addRating,
   clearSmsContext,
   ensureAccount,
   getAccount,
-  getAutoTopUp,
-  getCreditBalance,
-  getLedger,
   getSmsContext,
   getSubscriberCategories,
   grantStarterCreditIfFirst,
@@ -53,9 +48,10 @@ import {
   setSmsContext,
   setSubscriberCategories,
   setSubscribed,
-  spendCredits,
-  type Account,
 } from "@/lib/store";
+import { memberFunding } from "@/lib/ad-billing";
+import { postDecision } from "@/lib/ad-funding";
+import { messageBook } from "@/lib/messages";
 import {
   ALL_CATEGORIES_SMS,
   EMPTY_CATEGORIES_SMS,
@@ -91,7 +87,6 @@ import {
 import { sniffImage } from "@/lib/image-sniff";
 import { siteUrl } from "@/lib/email";
 import { supabaseConfigured } from "@/lib/db";
-import { autoTopUpShortfall, resolveStripeCustomer } from "@/lib/payments";
 import { dispatchSms } from "@/lib/outbound";
 import { isBlockedNumber } from "@/lib/blocklist";
 import { notifyAdminNewAd } from "@/lib/notify";
@@ -141,18 +136,17 @@ function slotTimeShort(hour: number): string {
   return `${h} ${hour < 12 ? "AM" : "PM"}`;
 }
 
-function welcomeMessage(settings: EngineSettings): string {
+async function welcomeMessage(settings: EngineSettings): Promise<string> {
   // The fallback welcome, used only where the category menu can't be offered.
   // It describes the SEND WINDOW, not settings.slots: since session 016 slots
   // are the EMAIL edition times, and an SMS member's ads arrive in BATCHES
   // through the day (session 018). Telling them "digests at 7, 12, 4 and 8"
   // would name hours nothing texts them at.
-  return (
-    `Welcome to ${site.name}! Ads come in batches, several to a text, ` +
-    `${hourLabel(settings.smsWindowStartHour)} to ${hourLabel(settings.smsWindowEndHour)} Mon-Sat. ` +
-    `To place your own ad, text AD and your ad - for example: ` +
-    `AD Hay for sale, $5/bale. Call 330-555-0142. Text HELP for all commands.`
-  );
+  const book = await messageBook();
+  return book.render("welcome.fallback", {
+    siteName: site.name,
+    windowLabel: `${hourLabel(settings.smsWindowStartHour)} to ${hourLabel(settings.smsWindowEndHour)} Mon-Sat`,
+  });
 }
 
 /**
@@ -162,19 +156,23 @@ function welcomeMessage(settings: EngineSettings): string {
  */
 async function welcomeFor(from: string, settings: EngineSettings): Promise<Reply> {
   const categories = await getSubscriberCategories(from);
-  if (categories === "unsupported") return { body: welcomeMessage(settings) };
+  if (categories === "unsupported") return { body: await welcomeMessage(settings) };
   // Whether the launch offer is still open decides whether the welcome
   // advertises it — promising free credit past the 200th member would be a
   // lie the very next message corrects.
   const offerOpen = await starterCreditAvailable(settings.starterCreditLimit);
-  const messages = welcomeMessages({
-    siteName: site.name,
-    siteUrl: site.webHost,
-    cardPhone: site.smsNumber,
-    starterCreditLabel: offerOpen ? formatPrice(settings.starterCreditCents) : null,
-    windowLabel: `${hourLabel(settings.smsWindowStartHour)} to ${hourLabel(settings.smsWindowEndHour)} Mon - Sat`,
-    priceLine: priceSheetLine(settings),
-  }).map((m) => gsmSanitize(m));
+  const book = await messageBook();
+  const messages = welcomeMessages(
+    {
+      siteName: site.name,
+      siteUrl: site.webHost,
+      cardPhone: site.smsNumber,
+      starterCreditLabel: offerOpen ? formatPrice(settings.starterCreditCents) : null,
+      windowLabel: `${hourLabel(settings.smsWindowStartHour)} to ${hourLabel(settings.smsWindowEndHour)} Mon - Sat`,
+      priceLine: await priceSheetLine(settings),
+    },
+    book.render,
+  ).map((m) => gsmSanitize(m));
   return { body: messages[0], ...(messages.length > 1 && { extra: messages.slice(1) }) };
 }
 
@@ -192,53 +190,25 @@ function statusWord(ad: Ad): string {
   return "Available";
 }
 
-/**
- * Automatic top-up (dollar pricing, session 016): when a posting charge comes
- * up short, cover exactly the shortfall from the member's saved card — with
- * their standing consent (getAutoTopUp, fail-closed before migration 9973).
- * charged 0 with no declineReason = no card / top-up off; a declineReason is
- * worth telling the seller (their card was tried and refused).
- */
-async function coverShortfallWithCard(
-  from: string,
-  account: Account,
-  shortfallCents: number,
-): Promise<{ charged: number; last4?: string; declineReason?: string }> {
-  if (!(await getAutoTopUp(from))) return { charged: 0 };
-  // A member with no stored customer may still have a card saved by PHONE
-  // (the pay-by-phone IVR) — resolveStripeCustomer adopts it on first use.
-  const customerId = await resolveStripeCustomer(from, account.stripeCustomerId);
-  if (!customerId) return { charged: 0 };
-  const result = await autoTopUpShortfall({
-    phone: from,
-    customerId,
-    shortfallCents,
-  });
-  if (!result.ok) {
-    console.warn(`[engine] auto top-up failed for ${from}: ${result.reason}`);
-    afterResponse(() =>
-      analytics.autoTopUp({ phone: from, amountCents: shortfallCents, outcome: "declined" }),
-    );
-    return { charged: 0, declineReason: result.reason };
-  }
-  const charged = result.chargedCents;
-  afterResponse(() => analytics.autoTopUp({ phone: from, amountCents: charged, outcome: "charged" }));
-  return { charged, last4: result.last4 };
-}
-
-/** The add-money instructions every cannot-pay reply carries. */
 /** The price sheet in one line, straight from Settings — never hardcoded, so
- * a repricing is a settings edit and not a code change. */
-function priceSheetLine(settings: EngineSettings): string {
+ * a repricing is a settings edit and not a code change. The WORDING around the
+ * numbers is editable at /admin/replies (money.price-sheet). */
+async function priceSheetLine(settings: EngineSettings): Promise<string> {
   const pics = settings.photoPricesCents
     .map((cents, i) => `${i + 1} pic${i ? "s" : ""} ${formatPrice(cents)}`)
     .join(", ");
-  return `Text ad ${formatPrice(settings.costTextCents)}; ${pics}.`;
+  const book = await messageBook();
+  return book.render("money.price-sheet", {
+    textPrice: formatPrice(settings.costTextCents),
+    picturePrices: pics,
+  });
 }
 
 /**
- * What to do about an empty balance. Every refusal-for-money reply ends with
- * this one sentence, so there is a single place to change the answer.
+ * What to do about an empty balance. Every reply that has to ask a member for
+ * money ends with this one sentence, so there is a single place to change the
+ * answer — and since session 023 it is editable at /admin/replies too
+ * (money.pay-instructions).
  *
  * Leads with the CALL (user decision, session 020, replacing a proposed $50
  * debt allowance: "if they don't have enough money to post an ad, reply to
@@ -247,85 +217,18 @@ function priceSheetLine(settings: EngineSettings): string {
  * that menu offers — so the instruction and what the caller hears agree word
  * for word.
  *
- * The website stays as the second option because it already works and is the
- * faster route for anyone holding a phone that can browse; it is not the one a
- * flip-phone seller can use, which is why it is no longer first.
+ * ⚠️ It now says "we'll charge it WHEN YOUR AD RUNS", not "we'll charge it and
+ * your ad goes out". That is not a tidy-up: since session 023 the card really
+ * is not touched until the batch carrying the ad goes out, and a sentence
+ * promising an immediate charge would be the one place the service still said
+ * otherwise.
  */
-function payInstructions(): string {
-  return `Call ${site.supportPhone} and press 1 to put a card on file — we'll charge it and your ad goes out. Or add money at ThePlainExchange.com`;
-}
-
-/**
- * Charge and release every ad this member has waiting on money (migration
- * 9953). Called the moment their funding changes — a card saved on the phone,
- * a web top-up — so "add a card and your ad goes out" is true rather than a
- * thing we say.
- *
- * Ordering is oldest-first and it stops at the first ad it cannot cover: a
- * member with $20 and three $20 ads gets the one they wrote first, not an
- * arbitrary one, and the rest stay held rather than being half-charged.
- *
- * markAdPaid is the concurrency guard, not this function. It flips the status
- * only from 'unpaid' and reports whether THIS caller won, so two releases
- * landing together (the IVR and a web purchase in the same second) cannot both
- * charge for the same ad. Charge only after it returns true.
- *
- * Best-effort by contract: it never throws at its callers, because every one
- * of them is doing something else that must not fail — answering a live phone
- * call, completing a checkout.
- */
-export async function releaseUnpaidAds(
-  phone: string,
-): Promise<{ released: number[]; stillHeld: number }> {
-  const released: number[] = [];
-  let stillHeld = 0;
-  try {
-    const settings = await getEngineSettings();
-    const held = await listUnpaidAds(phone);
-    if (!held.length) return { released, stillHeld: 0 };
-    const account = await ensureAccount(phone);
-    for (const ad of held) {
-      // A held ad with no recorded price predates its own price list somehow;
-      // fall back to the text price rather than releasing it for nothing.
-      const cost = ad.costCents > 0 ? ad.costCents : settings.costTextCents;
-      let balance = await getCreditBalance(phone);
-      if (balance < cost) {
-        const topUp = await coverShortfallWithCard(phone, account, cost - balance);
-        if (topUp.charged > 0) balance += topUp.charged;
-      }
-      if (balance < cost) {
-        stillHeld = held.length - released.length;
-        break;
-      }
-      // Flip the status FIRST. If the charge then fails we put it back, which
-      // is recoverable; charging first and failing to flip would take the
-      // member's money and leave the ad sitting unpaid, which is not.
-      if (!(await markAdPaid(ad.id))) continue;
-      let charged = false;
-      try {
-        charged = await spendCredits(phone, cost, `Ad #${ad.id} (held)`);
-      } catch (e) {
-        console.error(`[engine] charge threw releasing ad #${ad.id}:`, e);
-      }
-      if (!charged) {
-        await setAdUnpaid(ad.id, cost).catch(() => {});
-        stillHeld = held.length - released.length;
-        break;
-      }
-      released.push(ad.id);
-      afterResponse(() =>
-        analytics.postSubmitted({
-          phone,
-          channel: "sms",
-          photoCount: 0,
-          priceCents: cost,
-        }),
-      );
-    }
-  } catch (e) {
-    console.error(`[engine] releasing held ads for ${phone} failed:`, e);
-  }
-  return { released, stillHeld };
+async function payInstructions(): Promise<string> {
+  const book = await messageBook();
+  return book.render("money.pay-instructions", {
+    supportPhone: site.supportPhone,
+    siteUrl: site.webHost,
+  });
 }
 
 async function handleAdSubmission(from: string, rawBody: string, media?: string[]): Promise<Reply> {
@@ -457,80 +360,31 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
       analytics.starterCreditGranted({ phone: from, amountCents: settings.starterCreditCents }),
     );
   }
-  let balance = await getCreditBalance(from);
-  // Automatic top-up: a saved card (with the toggle on) covers the shortfall,
-  // and the confirmation below states the charge. Runs BEFORE the ad record
-  // exists, so a declined card is a clean refusal, not a rejected ad.
-  let topUpNote = "";
-  let declineReason: string | undefined;
-  if (balance < cost) {
-    const topUp = await coverShortfallWithCard(from, starter.account, cost - balance);
-    declineReason = topUp.declineReason;
-    if (topUp.charged > 0) {
-      balance += topUp.charged;
-      topUpNote = ` ${formatPrice(topUp.charged)} was charged to your card${topUp.last4 ? ` ending ${topUp.last4}` : ""} to cover it.`;
-    }
-  }
-  // Fast reject for the clearly-unfunded; the atomic charge below is the
-  // authority under concurrency.
-  // NOT ENOUGH MONEY — the ad is WRITTEN DOWN, not lost (user decision,
-  // session 020: "reply to the user that their ad is saved, but they need to
-  // call in and add a card to their account before it gets sent out").
+  // NOTHING IS CHARGED HERE ANY MORE (session 023, user decision: "when people
+  // create an ad, and have a card on file, I want the confirmation message to
+  // include that the card won't be charged until the ad is run. Make the system
+  // honor the truth of this message.")
   //
-  // It used to be refused outright: the seller's text was gone and they had to
-  // thumb the whole thing in again on a flip phone, which is the most likely
-  // moment for them to give up on the service entirely. Now it is parked in
-  // 'unpaid' — out of the review queue, off the website, nothing broadcast —
-  // with the quoted price stored on it, and adding a card releases it.
-  //
-  // Held on a DECLINE as well as on an empty account, though the user only
-  // asked about the no-card case: keeping the text costs nothing and losing it
-  // helps no one. The reply says which happened.
-  if (balance < cost) {
-    blocked(declineReason ? "card_declined" : "no_balance");
-    const heldId = await createAd(
-      {
-        ownerPhone: from,
-        body,
-        flagged: rules.flagged || (!mayPostLinks() && hasLink(body)),
-        ...(hasPhoto && {
-          photo: { src: photoSrc!, alt: deriveTitle(body), ...photoDims },
-          ...(galleryParts.length && {
-            morePhotos: galleryParts.map((src, i) => ({
-              src,
-              alt: `${deriveTitle(body)} — picture ${combined ? i + 1 : i + 2}`,
-              width: 800,
-              height: 600,
-            })),
-          }),
-        }),
-      },
-      { status: "unpaid", unpaidCents: cost },
-    );
-    // Deliberately NOT postSubmitted. A held ad has not entered the supply —
-    // the comment at the real submit site is explicit that counting ads before
-    // they clear the balance check inflates the one number the roadmap gets
-    // argued from. blocked() above is the honest signal; the post_submit event
-    // fires if and when the ad is released into review.
-    const cardNote = declineReason
-      ? ` We tried your saved card but it didn't go through (${declineReason}).`
-      : "";
-    return {
-      body:
-        `Got it — your ad is saved as #${heldId} and nothing has been charged.` +
-        `${cardNote} It costs ${formatPrice(cost)} and you have ${formatPrice(balance)}, ` +
-        `so it won't go out until that's covered. Call ${site.supportPhone} and press 1 ` +
-        `to put a card on file — we'll charge it and send your ad. Text BAL any time.`,
-    };
-  }
+  // The ad is QUOTED a price and that price is RESERVED against the member's
+  // balance; the batch that carries the ad is what collects. See
+  // lib/ad-funding.ts for why reserving still has to happen even though the
+  // money doesn't move, and lib/ad-billing.ts for the collection itself.
+  const funding = await memberFunding(from, starter.account);
+  const decision = postDecision({
+    costCents: cost,
+    balanceCents: funding.balanceCents,
+    reservedCents: funding.reservedCents,
+    hasCard: funding.hasCard,
+    awaitingPayment: funding.awaitingPayment,
+    maxAwaitingPayment: settings.maxAdsAwaitingPayment,
+  });
+  const book = await messageBook();
 
   // Links are walled-garden-blocked for now: don't strip or auto-reject, just
   // FLAG so a human reviews (edits the link out, or rejects). A future
   // verified-advertiser tier flips mayPostLinks() without touching this path.
   const containsLink = !mayPostLinks() && hasLink(body);
-
-  const kind = hasPhoto ? "picture" : "text";
-  const id = await createAd({
+  const adInput = {
     ownerPhone: from,
     body,
     flagged: rules.flagged || containsLink,
@@ -547,39 +401,41 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
         })),
       }),
     }),
-  });
+  };
 
-  // Charge atomically. If the debit fails — the balance was spent by a
-  // concurrent AD NEW between the check and here — undo the ad instead of
-  // posting unpaid. A THROWN charge (store hiccup) gets the same undo, then
-  // rethrows: an unpaid `pending` ad must never sit in the review queue
-  // looking payable. (The ledger note `Ad #<id> (<kind>)` is an API — the
-  // refund matchers key on it — only the delta's unit changed to cents.)
-  let chargeNote = "";
-  try {
-    if (await spendCredits(from, cost, `Ad #${id} (${kind})`)) {
-      const left = formatPrice(Math.max(0, balance - cost));
-      chargeNote = starter.granted
-        ? `${formatPrice(cost)} of your ${starterLabel} welcome credit — ${left} left.`
-        : `${formatPrice(cost)} — ${left} of ad credit left.`;
-      chargeNote += topUpNote;
-    }
-  } catch (e) {
-    await rejectAdRecord(id, "Charge failed at submission.", "benign").catch(() => {});
-    throw e;
-  }
-  if (!chargeNote) {
-    blocked("charge_race");
-    await rejectAdRecord(id, "Not enough money at submission.", "benign");
+  // TOO MANY ALREADY WAITING ON MONEY — the ad is written down but stays out
+  // of the review queue (the session-020 'unpaid' hold, unchanged). This is the
+  // only thing that still refuses an ad for money, and it refuses volume rather
+  // than poverty: one unfunded ad is reviewed like any other, the fourth is
+  // held. The seller's text is never lost either way.
+  if (!decision.accept) {
+    blocked("awaiting_payment_cap");
+    const heldId = await createAd(adInput, {
+      status: "unpaid",
+      unpaidCents: cost,
+      owedCents: cost,
+    });
+    // Deliberately NOT postSubmitted. A held ad has not entered the supply —
+    // counting ads before they reach the queue inflates the one number the
+    // roadmap gets argued from. The event fires if and when it is admitted.
     return {
-      body: `That ad costs ${formatPrice(cost)} and your balance couldn't cover it just now — nothing was posted, and your money is still on your account. Text BAL to check it, then try again. ${payInstructions()}.`,
+      body: book.render("ad.held", {
+        adId: heldId,
+        price: formatPrice(cost),
+        balance: formatPrice(funding.balanceCents),
+        supportPhone: site.supportPhone,
+        siteUrl: site.webHost,
+        waiting: funding.awaitingPayment,
+      }),
     };
   }
 
-  // ACCEPTED — created, paid for, and in the review queue. Emitted here and
+  const id = await createAd(adInput, { owedCents: cost });
+
+  // ACCEPTED — created, quoted, and in the review queue. Emitted here and
   // nowhere earlier: counting an ad when the text arrives would include every
-  // one the word filter, the balance check or the ban list then refused, and an
-  // inflated supply number is the figure the whole roadmap gets argued from.
+  // one the word filter or the ban list then refused, and an inflated supply
+  // number is the figure the whole roadmap gets argued from.
   // No category yet — the operator assigns that at review.
   afterResponse(() =>
     analytics.postSubmitted({
@@ -589,6 +445,36 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
       priceCents: cost,
     }),
   );
+
+  // The payment sentence, in the seller's own circumstances. All three are
+  // editable at /admin/replies; the middle one is the promise this session
+  // exists to make true.
+  const moneyNote =
+    decision.state === "covered"
+      ? book.render("ad.money.covered", {
+          price: formatPrice(cost),
+          balance: formatPrice(funding.balanceCents),
+          left: formatPrice(Math.max(0, decision.availableCents - cost)),
+        })
+      : decision.state === "card"
+        ? book.render("ad.money.card", {
+            price: formatPrice(cost),
+            balance: formatPrice(funding.balanceCents),
+            short: formatPrice(decision.shortfallCents),
+          })
+        : book.render("ad.money.owing", {
+            price: formatPrice(cost),
+            // {spare} and {short} are on the SAME scale — credit not already
+            // promised to another ad. Quoting the raw balance beside a
+            // shortfall worked out from spare credit produced sentences that
+            // contradicted themselves ("you have $40, we need the other $20"
+            // on a $20 ad).
+            spare: formatPrice(decision.availableCents),
+            balance: formatPrice(funding.balanceCents),
+            short: formatPrice(decision.shortfallCents),
+            supportPhone: site.supportPhone,
+            siteUrl: site.webHost,
+          });
 
   await notifyAdminNewAd({ id, from, hasPhoto, body, ...(hasPhoto && { photoSrc: photoSrc! }) });
 
@@ -630,9 +516,14 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
       ? ` Yours will send ${nextSendLabel(nowForWindow, settings)} at the earliest.`
       : ` Ads go out ${hourLabel(settings.smsWindowStartHour)}-${hourLabel(settings.smsWindowEndHour)}, Mon-Sat, so yours will send ${nextSendLabel(nowForWindow, settings)} at the earliest.`;
   return {
-    body: hasPhoto
-      ? `Got your ad! It's #${id} and is waiting for review - you'll get a text when it's approved and it goes out. (${chargeNote})${photoNote}${windowNote}`
-      : `Got it! Your ad is #${id} and is waiting for review. You'll get a text when it's approved and it goes out. (${chargeNote})${photoNote}${windowNote}`,
+    body: book.render(hasPhoto ? "ad.received.picture" : "ad.received.text", {
+      adId: id,
+      price: formatPrice(cost),
+      balance: formatPrice(funding.balanceCents),
+      moneyNote,
+      photoNote,
+      windowNote,
+    }),
   };
 }
 
@@ -724,70 +615,43 @@ async function handlePhotoFollowup(
     };
   }
 
-  // Adding the FIRST picture upgrades a text ad to a picture ad, so the price
-  // difference is owed — unless a free ad pass paid for the ad (a pass covers
-  // either kind) or the upgrade was already charged (picture trickles).
-  // Ads that already have a picture paid the picture price; more pictures for
-  // the one collage photo cost nothing extra.
+  // Adding the FIRST picture upgrades a text ad to a picture ad, so the ad's
+  // price goes UP. Ads that already have a picture were quoted the picture
+  // price; more pictures for the one collage photo cost nothing extra.
   //
-  // The charge note carries the delimited `Ad #<id> (` token, so the benign-
-  // reject and member-delete refund paths (adRefundableTotal) return the
-  // upgrade along with the base charge. Charged-ness is counted as charges
-  // minus failed-attach refunds, so a retry after a refund pays again; the
-  // debit itself is a ref-guarded ledger insert keyed on that refund count —
-  // two concurrent photo messages race to ONE ref, so a double-charge is
-  // impossible (the duplicate insert no-ops). The balance check isn't atomic
-  // with the insert (unlike spendCredits), but the worst concurrent case is
-  // a small visible negative balance — traded for double-charge immunity.
+  // NOTHING IS CHARGED HERE EITHER (session 023). The upgrade raises what the
+  // ad OWES — one quote, collected once, by the batch that carries it. That
+  // replaces a ref-guarded ledger debit whose whole complexity existed to make
+  // a mid-flight charge safe against retries and refunds: with no charge until
+  // the run there is no debit to guard, no `(picture upgrade)` ledger token to
+  // match, and no upgrade to hand back when the attach fails — the price simply
+  // goes back down. Legacy `(picture upgrade)` rows on existing ads still match
+  // the refund matchers in lib/myads.ts, which look for `Ad #<id> (`.
+  //
+  // A seller who cannot cover the higher price is REFUSED the upgrade rather
+  // than having their ad quietly stalled at a price they can't pay: the ad is
+  // in review at the text price and should stay runnable. With a card on file
+  // there is nothing to refuse.
   let chargeNote = "";
-  let upgradeCharged = 0;
-  let upgradeAttempt = 0;
+  let upgradeAdded = 0;
   if (!ad.photo) {
-    const upgradeToken = `Ad #${ad.id} (picture upgrade)`;
-    // The ad had no picture, so it was charged the text price; upgrading
-    // charges the difference up to the rung its picture count lands on.
     const delta = Math.max(0, adPriceCents(newCount, settings) - settings.costTextCents);
     if (delta > 0) {
-      const ledger = await getLedger(from);
-      const charges = ledger.filter(
-        (e) => e.kind === "spend" && e.note?.includes(upgradeToken),
-      ).length;
-      const refunds = ledger.filter(
-        (e) => e.kind === "refund" && e.note?.includes(`ad #${ad.id} (picture upgrade)`),
-      ).length;
-      // Legacy free-ad-pass ads (pre-session-016): a pass covered either kind,
-      // so the upgrade stays free for an ad it paid for.
-      const paidByPass = ledger.some((e) => e.note?.includes(`Free ad used — ad #${ad.id} (`));
-      if (charges <= refunds && !paidByPass) {
-        let balance = await getCreditBalance(from);
-        let topUpNote = "";
-        let declineReason: string | undefined;
-        if (balance < delta) {
-          const account = await ensureAccount(from);
-          const topUp = await coverShortfallWithCard(from, account, delta - balance);
-          declineReason = topUp.declineReason;
-          if (topUp.charged > 0) {
-            balance += topUp.charged;
-            topUpNote = ` ${formatPrice(topUp.charged)} was charged to your card${topUp.last4 ? ` ending ${topUp.last4}` : ""} to cover it.`;
-          }
-        }
-        if (balance < delta) {
-          const cardNote = declineReason
-            ? ` We tried your saved card but it didn't go through (${declineReason}).`
-            : "";
-          return {
-            body: `Adding a picture to ad #${ad.id} costs ${formatPrice(delta)} more and you have ${formatPrice(balance)}.${cardNote} ${payInstructions()}, then send the picture again.`,
-          };
-        }
-        upgradeAttempt = refunds;
-        await addLedgerEntry(from, {
-          delta: -delta,
-          kind: "spend",
-          note: upgradeToken,
-          ref: `ad-${ad.id}-pic-upgrade-r${upgradeAttempt}`,
-        });
-        upgradeCharged = delta;
-        chargeNote = ` (${formatPrice(delta)} — ${formatPrice(Math.max(0, balance - delta))} of ad credit left.${topUpNote})`;
+      const funding = await memberFunding(from, await ensureAccount(from));
+      if (!funding.hasCard && funding.availableCents < delta) {
+        return {
+          body:
+            `Adding a picture to ad #${ad.id} takes it to ${formatPrice(adPriceCents(newCount, settings))} ` +
+            `and you have ${formatPrice(funding.availableCents)} to spend. ${await payInstructions()}, ` +
+            `then send the picture again.`,
+        };
+      }
+      // Raise the quote. Idempotent by amount is impossible here (a second
+      // picture message legitimately adds nothing), so bumpAdOwed is guarded on
+      // the ad still being unrun and unattached — see the store.
+      if (await bumpAdOwed(ad.id, delta)) {
+        upgradeAdded = delta;
+        chargeNote = ` Your ad is now ${formatPrice(adPriceCents(newCount, settings))}, charged when it goes out.`;
       }
     }
   }
@@ -890,22 +754,19 @@ async function handlePhotoFollowup(
     const body = `Got it! ${newCount === 1 ? "Your picture was" : `${newCount} pictures were`} added to ad #${ad.id} (${title}) - it now has ${shownCount}. It's waiting for review.${chargeNote}${note}${roomNote}`;
     return { body };
   } catch (e) {
-    // Undo the upgrade charge — the pictures didn't make it onto the ad. The
-    // note carries the `ad #<id> (picture upgrade)` token so the charged-ness
-    // count above sees it (a later retry charges again) and adRefundableTotal
-    // nets it out of a subsequent reject/delete refund; the ref makes a
-    // doubled failure path refund exactly once.
-    if (upgradeCharged > 0) {
-      await addLedgerEntry(from, {
-        delta: upgradeCharged,
-        kind: "refund",
-        note: `Refund — ad #${ad.id} (picture upgrade) didn't attach`,
-        ref: `ad-${ad.id}-pic-upgrade-refund-r${upgradeAttempt}`,
-      }).catch(() => {});
+    // Put the price back — the pictures didn't make it onto the ad, so it is a
+    // text ad again and must not be collected for at the picture price. There
+    // is no money to return because none was ever taken.
+    if (upgradeAdded > 0) {
+      // anyStatus, and it is load-bearing: the commonest way this path is
+      // reached is the operator approving the ad DURING the picture upload,
+      // which is exactly what made attachAdPhotos refuse. A pending-only undo
+      // would quietly do nothing and leave a text ad owing the picture price.
+      await bumpAdOwed(ad.id, -upgradeAdded, { anyStatus: true }).catch(() => {});
     }
     if (e instanceof AdLeftReviewError) {
       return {
-        body: `Ad #${ad.id} already went through review, so this picture wasn't added.${upgradeCharged ? " Nothing extra was charged." : ""} Text AD with your pictures to post a new ad, or call ${site.supportPhone}.`,
+        body: `Ad #${ad.id} already went through review, so this picture wasn't added.${upgradeAdded ? " Its price is unchanged." : ""} Text AD with your pictures to post a new ad, or call ${site.supportPhone}.`,
       };
     }
     console.error(`[engine] photo follow-up failed for ad #${ad.id}:`, e);
@@ -937,6 +798,7 @@ async function handleSold(from: string, id: number | null): Promise<Reply> {
     return { body: `Ad #${id} is still waiting for review — you can mark it sold once it's approved.` };
   }
   await markAdSold(id);
+  const book = await messageBook();
   // The outcome the whole service exists to produce. days_to_sell is the
   // number that proves it works — and the one to put in front of a business
   // advertiser. Measured from approval (when buyers could first see it), not
@@ -958,10 +820,10 @@ async function handleSold(from: string, id: number | null): Promise<Reply> {
   });
   if (opened === "set") {
     return {
-      body: `Ad #${id} marked SOLD. Congratulations! What was the phone number of the buyer? Reply with their number and you can rate each other — or reply SKIP.`,
+      body: book.render("sold.confirmed", { adId: id, title: deriveTitle(ad.body) }),
     };
   }
-  return { body: `Ad #${id} marked SOLD. Congratulations!` };
+  return { body: book.render("sold.confirmed.plain", { adId: id, title: deriveTitle(ad.body) }) };
 }
 
 /**
@@ -1052,10 +914,9 @@ async function route(
       const account = await ensureAccount(from);
       if (account.subscribedAt) {
         return {
-          body:
-            `You're already subscribed. Ads come in batches, several to a text, ` +
-            `${hourLabel(settings.smsWindowStartHour)} to ${hourLabel(settings.smsWindowEndHour)} Mon-Sat. ` +
-            `Reply STOP to cancel, HELP for help.`,
+          body: (await messageBook()).render("subscribe.already", {
+            windowLabel: `${hourLabel(settings.smsWindowStartHour)} to ${hourLabel(settings.smsWindowEndHour)} Mon-Sat`,
+          }),
         };
       }
       // A NEW member — the already-subscribed branch above returned, so this
@@ -1086,7 +947,7 @@ async function route(
       // this number so a broadcast composed before the STOP can't still send.
       await cancelQueuedOutboxFor(from);
       return {
-        body: `${site.name}: you're unsubscribed and won't get more ads. Reply START any time to come back.`,
+        body: (await messageBook()).render("stop.confirmation", { siteName: site.name }),
       };
     }
     case "start": {
@@ -1216,10 +1077,21 @@ async function route(
       };
     }
     case "credits": {
-      await ensureAccount(from);
-      const balance = await getCreditBalance(from);
+      const account = await ensureAccount(from);
+      // Since session 023 an ad is collected for when it RUNS, so a balance on
+      // its own can mislead: $40 with two $20 ads waiting is not $40 to spend.
+      // The reply says what is committed, when anything is.
+      const funding = await memberFunding(from, account);
+      const book = await messageBook();
       return {
-        body: `You have ${formatPrice(balance)} of ad credit. ${priceSheetLine(settings)} ${payInstructions()}.`,
+        body: book.render("money.balance", {
+          balance: formatPrice(funding.balanceCents),
+          owedNote: funding.reservedCents
+            ? ` Your ads waiting to go out will use ${formatPrice(funding.reservedCents)} of it.`
+            : "",
+          priceSheet: await priceSheetLine(settings),
+          payInstructions: await payInstructions(),
+        }),
       };
     }
     case "sold":
@@ -1235,8 +1107,21 @@ async function route(
       ) {
         return { body: `No ad found with number ${command.id}.` };
       }
-      if (ad.status === "pending") {
-        return { body: `Ad #${command.id} is waiting for review.` };
+      // What the ad still owes (session 023). An ad is collected for when it
+      // RUNS, so an approved ad can be sitting there because the money isn't
+      // in yet — and "Available" would be the least useful thing to tell the
+      // one person who can fix that.
+      const stillOwed = (await getAdsOwed([ad.id]).catch(() => new Map<number, number>())).get(
+        ad.id,
+      );
+      const owedNote =
+        stillOwed && ad.ownerPhone === from
+          ? ` ${formatPrice(stillOwed)} is due when it goes out.`
+          : "";
+      if (ad.status === "pending" || ad.status === "unpaid") {
+        return {
+          body: `Ad #${command.id} is waiting for review.${owedNote}`,
+        };
       }
       const site_ad: Ad = {
         id: ad.id,
@@ -1245,17 +1130,37 @@ async function route(
         approvedAt: new Date(ad.approvedAt ?? ad.createdAt),
         ownerPhone: ad.ownerPhone,
       };
+      // An approved ad that hasn't run yet isn't on the website either, so
+      // "Available" overstates it — say what is actually true.
+      if (ad.status === "approved" && stillOwed) {
+        return {
+          body: `Ad #${ad.id} (${deriveTitle(ad.body)}): approved, waiting to go out.${owedNote}`,
+        };
+      }
       return { body: `Ad #${ad.id} (${deriveTitle(ad.body)}): ${statusWord(site_ad)}.` };
     }
     case "myads": {
       await ensureAccount(from);
       const ads = await listAdsByOwner(from);
       const pending = (await getPendingAds()).filter((a) => a.ownerPhone === from);
+      // Every ad of theirs still waiting on money, including the held ones
+      // MY ADS never used to show at all (they are neither approved nor in
+      // the review queue) — the whole point is that the seller can see what
+      // is stuck and why.
+      const waiting = await listOwedAds(from).catch(() => []);
+      const owedById = new Map(waiting.map((a) => [a.id, a.owedCents]));
+      const held = waiting.filter((a) => a.status === "unpaid");
       const lines = [
-        ...pending.map((a) => `#${a.id} waiting for review`),
+        ...pending.map(
+          (a) =>
+            `#${a.id} waiting for review${owedById.get(a.id) ? ` (${formatPrice(owedById.get(a.id)!)} due)` : ""}`,
+        ),
+        ...held.map((a) => `#${a.id} on hold - ${formatPrice(a.owedCents)} to pay`),
         ...ads.map((a) =>
           a.status === "available"
-            ? `#${a.id} Available (runs through ${fmtDate(adExpiresAt(a))})`
+            ? owedById.get(a.id)
+              ? `#${a.id} approved, ${formatPrice(owedById.get(a.id)!)} due before it goes out`
+              : `#${a.id} Available (runs through ${fmtDate(adExpiresAt(a))})`
             : `#${a.id} ${statusWord(a)}`,
         ),
       ];
@@ -1380,7 +1285,10 @@ async function unknownReply(from: string, settings: EngineSettings): Promise<Rep
   const recent = await countRecentOutboundContaining(from, REDIRECT_MARKER, 24 * 60 * 60 * 1000);
   if (recent > 0) return null; // logged, no reply — one redirect per day
   return {
-    body: `This is ${site.name}'s automated system. To reach a seller, use the contact info in their ad. Text HELP for a list of commands.`,
+    body: (await messageBook()).render("unknown.redirect", {
+      siteName: site.name,
+      supportPhone: site.supportPhone,
+    }),
   };
 }
 

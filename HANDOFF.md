@@ -11,13 +11,15 @@ doing. Kept deliberately short.
   `new_session_instructions.md` — several sessions run against this repo at
   once, and the collisions that hurt are the ones that merge cleanly.
 
-**Last updated:** 2026-08-21, **v1.5.11** — sessions 021 and 022 ran in
-parallel and both landed. 022: ad cards, editing in every status, Digests
-becomes Batches with a real queue preview, promote-to-Featured, pictures on
-/admin/ads, and a page-down bug. 021: the call line no longer dials the
-operator's cell, admin TEST MODE, the first end-to-end category delivery
-tests, Twilio Trust Hub verified, and this file split. Both narratives are in
-`HANDOFF-ARCHIVE.md`.
+**Last updated:** 2026-08-21, **v1.6.11** — session 023 landed on top of 021
+and 022. **023 moved when an ad is paid for: it is charged when it RUNS, not
+when it is posted.** It also made an unfunded ad reviewable and approvable,
+and put the auto-reply copy behind an admin tab. 021 and 022 ran in parallel
+before it: 022 gave /admin/ads its cards, editing in every status, Batches
+with a queue preview and promote-to-Featured; 021 stopped the call line
+dialling the operator's cell, added TEST MODE and the first end-to-end
+category delivery tests. Every narrative is in `HANDOFF-ARCHIVE.md` and the
+session logs.
 
 *Why this file is short: it was the hottest file in the repo — 8 of 12
 consecutive commits touched it, and it was the only conflict when 021 and 022
@@ -27,20 +29,34 @@ know on day one.*
 
 ---
 
-## ✅ START HERE: the migration queue is CLEAR (user confirmed 2026-08-21)
+## ⚠️ START HERE: TWO migrations are waiting, and one of them is not optional
+
+Session 023 added **`9950_charge_on_run.sql`** and
+**`9949_message_templates.sql`**. Neither has been pasted. **`9949` is the
+newest; the next migration takes 9948 — confirm with
+`npm run check:migrations`, which reads `origin/main` too.**
+
+**`9950` is the one to paste first, and it is different in kind from every
+pending migration this repo has had.** The rest degrade to "the feature is
+off". Without `ads.owed_cents` there is nothing to quote, reserve or collect —
+and since 023 the code does not charge at posting time either, so **no ad
+would be charged for at all.** The send path refuses to send without it rather
+than running every ad free (`collectForBatch` halts and logs), and
+`/api/health` probes it by name. `9949` degrades normally: every message uses
+the wording shipped in the code and /admin/replies shows but cannot save.
+
+### Everything from 9951 down IS applied (user confirmed 2026-08-21)
 
 **`9951`, `9952` and `9953` are all applied**, along with everything before
-them. Nothing is waiting. Every feature below is fully on rather than
-degrading, so if one misbehaves, a pending migration is NOT the explanation —
-look at the code. **`9951` is the newest; the next migration takes 9950 —
-confirm with `npm run check:migrations`, which reads `origin/main` too.**
+them. Every feature below is fully on rather than degrading, so if one
+misbehaves, a pending migration is NOT the explanation — look at the code.
 
 Consequences now live: held-unpaid ads are really held and released by a card
 (9953), scheduled admin broadcasts work (9952), and test ads carry the
 `is_test` label so they can be found and deleted (9951 —
 `delete from ads where is_test;`).
 
-### Everything before them was already applied (user confirmed 2026-08-21)
+#### And everything before those
 
 **`9954`, `9955`, `9956` and `9957` are applied.** Nothing else is waiting. Every
 feature below is fully on rather than degrading, so if one of them misbehaves,
@@ -67,6 +83,39 @@ Consequences worth carrying:
   it ever shows a figure again, that is a NEW unclassified row, not history.
 - **`9956_featured_requests.sql` has RUN** — featured listings and the request
   queue are fully on.
+
+---
+
+## 💰 AN AD IS CHARGED WHEN IT RUNS (user decision, session 023)
+
+*"When people create an ad, and have a card on file, I want the confirmation
+message to include that the card won't be charged until the ad is run. Make
+the system honor the truth of this message."*
+
+Posting QUOTES a price and RESERVES it against the member's balance;
+the batch that carries the ad out to subscribers COLLECTS it. `ads.owed_cents`
+is the frozen quote. The arithmetic is `lib/ad-funding.ts` (pure, unit-pinned);
+the money is `lib/ad-billing.ts`. Full reasoning in the session-023 log.
+
+Four things that will bite a future session:
+
+1. **`pending` no longer implies "paid for".** `owed_cents is not null` is the
+   new question; ask it with `getAdsOwed` / `listOwedAds` (not in `AD_SELECT`).
+2. **A collection has THREE states.** `owed_cents` set = owing;
+   `charge_claimed_at` set = being collected for right now; both null = paid.
+   Collapsing the middle one is what made a concurrent batch broadcast an ad
+   to the whole list for nothing — never do it again.
+3. **Rejecting an ad refunds nothing**, because nothing was taken. The refund
+   code stays for ads posted before 9950 and still fires for those.
+4. **An unfunded ad is reviewed and can be approved** (user's second decision).
+   It holds its place and goes out once the money lands. `maxAdsAwaitingPayment`
+   (default 3) caps how many one number may have waiting before further posts
+   are held out of the queue.
+
+The IVR consent script (`lib/voice.ts payTwiml`) now says the charge happens
+when the ad goes out. It is the stored-credential authorization the card
+networks require and is pinned by `test/voice.test.mjs` — **if the charging
+moment ever moves again, that sentence moves in the same commit.**
 
 ---
 

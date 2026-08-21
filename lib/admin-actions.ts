@@ -4,6 +4,10 @@ import "@/analytics/src/register-after";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
 import { redirect } from "next/navigation";
 import { normalizeAdminMessage } from "@/lib/admin-messages";
+import { gsmSanitize } from "@/lib/sms-segments";
+import { templateSpec, validateTemplateBody } from "@/lib/message-templates";
+import { clearTemplateOverride, saveTemplateOverride } from "@/lib/message-template-store";
+import { forgetMessageBook } from "@/lib/messages";
 import { cancelAdminMessage, createAdminMessage } from "@/lib/engine-store";
 import { requireAdmin } from "@/lib/admin";
 import { approveAd, rejectAd } from "@/lib/moderation";
@@ -167,7 +171,7 @@ export async function adminReject(formData: FormData): Promise<void> {
  * Edit an ad's public text (and, where the form offers it, its category) from
  * the Ads or Digests tab.
  *
- * Editable in EVERY status but deleted (user decision, session 021 — "operator
+ * Editable in EVERY status but deleted (user decision, session 023 — "operator
  * only, but everywhere"). The case that prompted it is a held `unpaid` ad: the
  * seller rings in about the ad they are one card away from running, and their
  * text was the one thing that could not be fixed while they were on the line.
@@ -688,6 +692,65 @@ export async function adminSetBan(formData: FormData): Promise<void> {
  * accepted only when the form says so explicitly with its hidden marker. A
  * request missing either field leaves the filter untouched.
  */
+/* ---------- editable auto-reply copy (session 023) ---------- */
+
+/**
+ * Save an operator's rewording of one automatic message.
+ *
+ * Everything that could quietly break is checked BEFORE the write, not after:
+ *
+ *  - a `{variable}` this message doesn't have would render as nothing, and the
+ *    operator would never find out — so an unknown one is refused by name;
+ *  - a phrase the code depends on (STOP on the opt-out confirmation, and the
+ *    substrings the outbound log is scanned for to keep a reply from repeating
+ *    itself every five minutes) is required to survive the edit;
+ *  - the text is GSM-sanitised, because one smart quote pasted from a word
+ *    processor flips the whole message to UCS-2 and doubles the bill to every
+ *    person who receives it.
+ *
+ * Saving the shipped wording back verbatim DELETES the override rather than
+ * storing a copy of it, so a message the operator has not really changed keeps
+ * following the code — a later improvement to that default still reaches them.
+ */
+export async function adminSaveReply(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const key = String(formData.get("key") ?? "");
+  const spec = templateSpec(key);
+  if (!spec) redirect("/admin/replies?error=unknown");
+  // A textarea posts CRLF line endings. Without normalising them, saving the
+  // shipped wording back byte-for-byte compared UNEQUAL to the default and was
+  // stored as a permanent override — quietly pinning that message to today's
+  // text forever, which is the one thing the overrides-only design exists to
+  // avoid.
+  const raw = String(formData.get("body") ?? "").replace(/\r\n/g, "\n");
+  const body = spec.channel === "sms" ? gsmSanitize(raw).trim() : raw.trim();
+  const problems = validateTemplateBody(spec, body);
+  if (problems.length) {
+    const params = new URLSearchParams({ key, error: problems[0].message });
+    redirect(`/admin/replies?${params}`);
+  }
+  if (body === spec.body) {
+    await clearTemplateOverride(key);
+  } else {
+    await saveTemplateOverride(key, body);
+  }
+  // Drop this process's cache so the operator's very next look — and the very
+  // next text this instance sends — is the new wording. Other warm instances
+  // pick it up within the cache window; see lib/messages.ts.
+  forgetMessageBook();
+  redirect(`/admin/replies?key=${encodeURIComponent(key)}&saved=1`);
+}
+
+/** Put a message back to the wording shipped in the code. */
+export async function adminResetReply(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const key = String(formData.get("key") ?? "");
+  if (!templateSpec(key)) redirect("/admin/replies?error=unknown");
+  await clearTemplateOverride(key);
+  forgetMessageBook();
+  redirect(`/admin/replies?key=${encodeURIComponent(key)}&reset=1`);
+}
+
 export async function adminSaveWordFilter(formData: FormData): Promise<void> {
   await requireAdmin();
   const reject = formData.get("reject");
@@ -756,6 +819,8 @@ const SETTING_MAX: Record<string, number> = {
   digestCap: 15,
   batchMinAds: 15,
   batchMaxWaitMinutes: 720,
+  maxAdsAwaitingPayment: 50,
+  chargeRetryHours: 168,
   // An hour of the day, nothing more. Saturday can only ever close EARLIER
   // than the published window (digest-engine clamps it), so the ceiling here
   // just keeps the stored value a real hour.
@@ -825,6 +890,8 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
     "digestCap",
     "batchMinAds",
     "batchMaxWaitMinutes",
+    "maxAdsAwaitingPayment",
+    "chargeRetryHours",
     "smsSaturdayEndHour",
     "maxChars",
     "expiryDays",
@@ -868,6 +935,13 @@ export async function adminSaveSettings(formData: FormData): Promise<void> {
   // "unchanged" — the form ships a hidden marker, and only when that marker
   // is present is an absent box taken to mean off. Without it, any partial
   // POST would silently switch the whole policy off.
+  // The ad-ran receipt, same hidden-marker rule as the policy boxes below: an
+  // unchecked box sends nothing, so only a POST that carried the marker may be
+  // read as "the operator turned it off".
+  if (formData.get("receiptForm") === "1") {
+    await saveEngineSettings({ adRanReceipt: formData.get("adRanReceipt") === "on" });
+  }
+
   if (formData.get("lookupForm") === "1") {
     await saveEngineSettings({
       lookupEnabled: formData.get("lookupEnabled") === "on",
@@ -1216,7 +1290,7 @@ export async function adminSetUnderAttack(formData: FormData): Promise<void> {
 }
 
 /**
- * Turn TEST MODE on or off (session 021).
+ * Turn TEST MODE on or off (session 023).
  *
  * The EXPIRY IS STAMPED HERE, at the moment the switch goes on, rather than
  * being a duration checked against some later "when did this start" guess.

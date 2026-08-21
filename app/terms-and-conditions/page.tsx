@@ -100,6 +100,13 @@ export default async function TermsAndConditions() {
         automatic top-up off under your account. Payments are processed by Stripe.
       </p>
       <p>
+        <strong>An ad is charged when it runs, not when you post it.</strong> Posting
+        quotes you a price and sets that much of your balance aside for the ad; the money
+        is taken — from your balance, and from your saved card for anything it
+        doesn&rsquo;t cover — at the moment the ad goes out to subscribers. An ad that
+        never runs is never charged.
+      </p>
+      <p>
         Ad credit doesn&rsquo;t expire and can&rsquo;t be transferred to anyone else.
         Charges for declined-for-ordinary-reasons ads are returned as described above,
         and <strong>money you have added and not yet spent comes back whenever you ask

@@ -7,7 +7,7 @@
  * See lib/voice.ts for the flow, the TwiML, and the PCI rule (card digits
  * never reach this app — Twilio tokenizes them straight into Stripe).
  *
- * No stage here dials a phone (session 021, user decision). The ring / whisper
+ * No stage here dials a phone (session 023, user decision). The ring / whisper
  * / accept / after-ring stages are gone along with VOICE_RING_FIRST,
  * VOICE_RING_TO and VOICE_RING_SECONDS — an inbound call goes straight to the
  * attendant menu.
@@ -20,7 +20,7 @@ import { site } from "@/lib/config";
 import { isProduction } from "@/lib/env";
 import { email } from "@/lib/email";
 import { savePhoneCapturedCard } from "@/lib/payments";
-import { releaseUnpaidAds } from "@/lib/engine";
+import { releaseHeldAds, releasedAdsMessage } from "@/lib/ad-billing";
 import { normalizePhone } from "@/lib/phone";
 import { sms } from "@/lib/sms";
 import { ensureAccount, getAccount, setAutoTopUp } from "@/lib/store";
@@ -255,29 +255,36 @@ async function handle(req: NextRequest) {
         outcome: "card_saved",
         detail: last4 ? `card ending ${last4} saved` : "card saved",
       });
-      // Anything this member wrote while they had no money is waiting in
-      // 'unpaid'. Charging and posting it HERE is what makes the promise in
-      // the held-ad reply ("call and press 1 — we'll charge it and send your
-      // ad") true at the moment the caller is still on the line. Never throws:
-      // the card is already saved and a live call must not fail over this.
-      const release = await releaseUnpaidAds(caller);
+      // Anything this member wrote while they had no money is waiting: held
+      // ads out of the review queue, approved ads backed off after a failed
+      // collection. Letting them move HERE is what makes the promise in the
+      // held-ad reply ("call and press 1") true at the moment the caller is
+      // still on the line. Never throws: the card is already saved and a live
+      // call must not fail over this.
+      //
+      // ⚠️ It no longer CHARGES them (session 023) — an ad is collected for
+      // when it runs — so the wording below says "covered and on the way",
+      // not "paid for". That distinction is the whole point of the change and
+      // it must not drift back.
+      const release = await releaseHeldAds(caller);
+      const freed = [...release.admitted, ...release.unheld];
       // The confirmation goes out on the REGISTERED Telnyx line (the same
       // number members already text), not the Twilio voice number.
       // What the member is told depends on what actually happened, because
       // "you can post ads automatically now" is a claim and it has to be true.
-      const heldNote = release.released.length
-        ? ` Your waiting ad${release.released.length === 1 ? "" : "s"} (${release.released
-            .map((id) => `#${id}`)
-            .join(", ")}) ${release.released.length === 1 ? "is" : "are"} paid for and on the way.`
+      // release.admitted went back into the REVIEW queue and still needs a
+      // yes; release.unheld was already approved and rides the next batch.
+      const heldNote = freed.length
+        ? ` ${await releasedAdsMessage(freed, release.admitted)}`
         : "";
       await sms
         .send(
           caller,
-          `${site.name}: your card ending ${last4 || "on file"} is saved, so you can post ads any time — we charge this card automatically when your ad credit runs short.${heldNote} Call this number any time to change or remove it. Reply STOP to opt out of texts.`,
+          `${site.name}: your card ending ${last4 || "on file"} is saved, so you can post ads any time — we charge this card when your ad runs, never before.${heldNote} Call this number any time to change or remove it. Reply STOP to opt out of texts.`,
         )
         .catch((e) => console.error("[voice] card confirmation text failed:", e));
-      const spokenHeld = release.released.length
-        ? ` Your waiting ad${release.released.length === 1 ? " is" : "s are"} paid for and on the way.`
+      const spokenHeld = freed.length
+        ? ` Your waiting ad${freed.length === 1 ? " is" : "s are"} covered and will go out with the next batch.`
         : "";
       return xml(
         sayAndHangUpTwiml(

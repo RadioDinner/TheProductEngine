@@ -46,6 +46,8 @@ const SUITES = [
   "admin-handbook",
   "analytics",
   "admin-messages",
+  "ad-funding",
+  "message-templates",
 ];
 
 let totalPass = 0;

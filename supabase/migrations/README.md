@@ -4,8 +4,13 @@ Per `new_session_instructions.md` §4 (adopted for this repo in session 009,
 user decision): migrations are numbered **descending** so the newest file
 sorts to the top of the folder. The first migration is `9999_init.sql` and
 every later one counts down. **The lowest number is always the most recent;
-the next migration takes (lowest existing − 1)** — as of the rename that
-means `9980_*.sql` is next.
+the next migration takes (lowest existing − 1)**.
+
+Read the number off the DIRECTORY, never off this sentence: it said `9980` was
+next for a year after that stopped being true, because a line of prose does not
+get updated by the act of adding a file. As of session 021 the lowest is
+`9950_message_templates.sql`, so `9949` is next — and if that disagrees with
+`ls`, `ls` is right.
 
 Two rules that follow from this scheme:
 

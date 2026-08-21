@@ -9,6 +9,7 @@ import {
 } from "@/lib/admin-actions";
 import {
   getAdCategories,
+  getAdsOwed,
   getAdDelivery,
   getAdRecord,
   getAllAds,
@@ -171,6 +172,15 @@ export default async function AdminAds({
   // Where each ad has actually been delivered (session 022). Its own read,
   // so a missing migration costs this line and not the page.
   const delivery = await getAdDelivery(ads.map((ad) => ad.id));
+  // What each ad still owes (session 023). An ad is collected for when it
+  // RUNS, so an approved ad with a price still on it has not been paid for —
+  // which is exactly the state the operator hit and asked to be able to see:
+  // "I approved the ad, but it wasn't paid, I want the status to go to
+  // 'approved, pending payment'". Its own read, so a missing migration costs
+  // this tag and not the page.
+  const owedByAd = await getAdsOwed(ads.map((ad) => ad.id)).catch(
+    () => new Map<number, number>(),
+  );
   // Inline category editing (item 22) — hidden until migration 9976.
   const withCategories = await categoriesSupported();
   const adCategories = withCategories
@@ -356,7 +366,7 @@ export default async function AdminAds({
           const submissions = submissionsByAd.get(ad.id) ?? [];
           const canBump =
             (ad.status === "approved" || ad.status === "expired") && !bumpQueued.has(ad.id);
-          // Editable in every status but deleted (user decision, session 021).
+          // Editable in every status but deleted (user decision, session 023).
           // A deleted ad has no public text left to change; everything else
           // does, including a held `unpaid` ad — the seller on the phone about
           // the ad they are one card away from running is the whole point.
@@ -402,6 +412,11 @@ export default async function AdminAds({
                   )}
                 </span>
                 <span className={`adcard-tag${statusTone(ad.status)}`}>{ad.status}</span>
+                {owedByAd.get(ad.id) ? (
+                  <span className="adcard-tag adcard-tag--flag">
+                    {formatPrice(owedByAd.get(ad.id)!)} due when it runs
+                  </span>
+                ) : null}
                 {ad.photo && <span className="adcard-tag">📷 Picture</span>}
                 {ad.flagged && <span className="adcard-tag adcard-tag--flag">⚑ Flagged</span>}
                 <Link className="adcard-who" href={`/admin/users?phone=${ad.ownerPhone}`}>
