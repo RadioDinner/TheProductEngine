@@ -353,6 +353,55 @@ was reverted and never reached a commit (verified against `origin/main`).
 **Still unexplained, deliberately:** the original error. The next occurrence
 will carry a digest code the operator can quote.
 
+## Session wrap
+
+**Every commit is on `main`.** Ten commits, all pushed, working tree clean.
+
+| commit | what |
+| --- | --- |
+| `e14d161` | /admin/ads card layout; red means flagged again |
+| `75812ea` | editing in every status but deleted; saves say so |
+| `cd2e71f` | renumbered 021 → 022 (parallel-session folder collision) |
+| `58f10d3` | merge to main |
+| `f4641bf` | merge session 021's voice/test-mode work |
+| `ee73ef8` | settings toggles readable; refund policy matches reality |
+| `65c669b` | merge: fold into 021's restructured HANDOFF |
+| `413a51d` | email honours the pause; ad delivery lines |
+| `8715048` | admin error boundary |
+| `15c0bac`, `551a12b` | session log; merge session 023's charge-on-run |
+
+**Final state:** tsc clean, build clean, unit **1641/1641** (1466 at session
+start; +13 `planBatches` here, the rest from sessions 021/023 merged in).
+Version **1.6.11** — session 023 moved the second digit for its own features
+after this session had already taken it to 1.5.11.
+
+### Directional decisions made this session
+
+- **Member self-editing was offered and declined** — "operator only, but
+  everywhere". Do not add it unprompted.
+- **Promoting to Featured asks about money every time**, rather than defaulting
+  to charge or gift.
+- **Unused balances are refundable on request, minus ~5%** — replacing "at our
+  discretion" in both published policy pages.
+- **Website publication is not a separate step.** Riding a batch IS being
+  published; do not build a publish stage.
+
+### The three bugs worth remembering
+
+1. **`PGRST205`** — table-missing guards checked only Postgres's `42P01`, never
+   PostgREST's schema-cache code. Use `tableMissing()`.
+2. **`.field input { width: 100% }`** stretched checkboxes across the row, which
+   is what made the VoIP toggles unreadable.
+3. **Email composed during a pause**, finalizing the slot and stamping
+   `emailed_at` — so a pause would have LOST those ads rather than delaying them.
+
+### Left unexplained, on purpose
+
+The user's report that an ad reached the website while ads were paused. All
+three public queries require `broadcast_at`, so that ad must have broadcast.
+Rather than "fix" correct code, /admin/ads now shows the exact timestamps and
+the admin error boundary surfaces a digest code for the next occurrence.
+
 ## Open / next
 
 - ⚠️ **NOTHING FROM THE THIRD ASK IS COMMITTED.** The user said "dont commit
