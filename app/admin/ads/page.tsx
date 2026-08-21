@@ -9,11 +9,13 @@ import {
 } from "@/lib/admin-actions";
 import {
   getAdCategories,
+  getAdDelivery,
   getAdRecord,
   getAllAds,
   getQueuedBumps,
   listPhotoSubmissions,
   type PhotoSubmission,
+  type AdDelivery,
   type StoredAd,
   type StoredAdStatus,
 } from "@/lib/engine-store";
@@ -51,6 +53,48 @@ function statusTone(status: StoredAdStatus): string {
   if (status === "approved") return " adcard-tag--live";
   if (status === "pending" || status === "unpaid") return " adcard-tag--waiting";
   return "";
+}
+
+function when(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+  });
+}
+
+/**
+ * Where this ad has actually been delivered, as one line per channel (user
+ * request, session 022).
+ *
+ * ⚠️ **Texted and "on the website" are the SAME moment, and the line says so
+ * rather than inventing a second timestamp.** Every public query in
+ * lib/ads-supabase.ts requires `broadcast_at IS NOT NULL`, so an ad becomes
+ * visible on the site exactly when its batch goes out — there is no separate
+ * publish step, and reporting one would be reporting a stage that does not
+ * exist. It is also why a paused ad is not on the website: it never broadcast.
+ */
+function deliveryLines(sent: AdDelivery | undefined, status: StoredAdStatus): string[] {
+  const lines: string[] = [];
+  if (!sent) return lines;
+  if (sent.broadcastAt) {
+    lines.push(`Texted ${when(sent.broadcastAt)} · on the website since`);
+  } else if (status === "approved") {
+    lines.push("Not texted yet — and not on the website until it is");
+  }
+  if (sent.emailedAt) {
+    lines.push(
+      sent.emailDigestNo !== null
+        ? `Emailed ${when(sent.emailedAt)} · Digest No. ${sent.emailDigestNo}`
+        : `Emailed ${when(sent.emailedAt)}`,
+    );
+  } else if (sent.broadcastAt) {
+    lines.push("Not in an email edition yet");
+  }
+  return lines;
 }
 
 /**
@@ -124,6 +168,9 @@ export default async function AdminAds({
   const settings = await getEngineSettings();
   const featuredPrice = settings.featuredMonthlyCents;
   const bumpQueued = new Set((await getQueuedBumps()).map((b) => b.adId));
+  // Where each ad has actually been delivered (session 022). Its own read,
+  // so a missing migration costs this line and not the page.
+  const delivery = await getAdDelivery(ads.map((ad) => ad.id));
   // Inline category editing (item 22) — hidden until migration 9976.
   const withCategories = await categoriesSupported();
   const adCategories = withCategories
@@ -320,6 +367,7 @@ export default async function AdminAds({
           // again, and nowhere else.
           const edited = ad.originalBody.trim() !== ad.body.trim();
           const scope = editScope(ad.status);
+          const sent = delivery.get(ad.id);
           // Every picture on the ad, in the order the site holds them. The
           // page used to say "📷 PICTURE" and show nothing, so the operator had
           // to open the public listing to see what a seller had actually sent
@@ -390,6 +438,11 @@ export default async function AdminAds({
                   <div className="adcard-copy">
                     <p className="adcard-text">{ad.body}</p>
                     {meta.length > 0 && <p className="adcard-meta">{meta.join(" · ")}</p>}
+                    {deliveryLines(sent, ad.status).map((line) => (
+                      <p key={line} className="adcard-meta">
+                        {line}
+                      </p>
+                    ))}
                     {ad.rejectedReason && (
                       <p className="adcard-meta">
                         Rejected ({ad.rejectionKind}): {ad.rejectedReason}

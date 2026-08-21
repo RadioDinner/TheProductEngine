@@ -11,6 +11,7 @@ import { AD_TTL_DAYS } from "@/lib/ads";
 import { isPicReplaceSubmission } from "@/lib/myads";
 import { removeHostedPhotos } from "@/lib/photos";
 import type {
+  AdDelivery,
   BumpRecord,
   CreateAdOptions,
   DigestRecord,
@@ -2008,4 +2009,69 @@ export async function countRecentOutbound(
   const { count, error } = await query;
   if (error) throw error;
   return count ?? 0;
+}
+
+/**
+ * Delivery state for a set of ads — did it go out by TEXT, did an email
+ * edition carry it, and which edition (user request, session 022: "I want to
+ * see if and when it was sent out to the SMS subscribers, the Digest number of
+ * the email it went out on, and when it got posted to the website").
+ *
+ * Read SEPARATELY from `AD_SELECT` rather than added to it, and that is
+ * deliberate: the shared select leaves `broadcast_at` out so /admin never
+ * hard-depends on migration 9993 (see the comment above it), and the same
+ * reasoning covers `emailed_at` (9971) and `digest_no` (9959). Every column
+ * here belongs to a migration that could be unpasted, so a missing one costs
+ * this one panel and nothing else.
+ *
+ * ⚠️ `broadcastAt` answers "when did it go on the WEBSITE" too. That is not a
+ * simplification — the public queries in lib/ads-supabase.ts all require
+ * `broadcast_at IS NOT NULL`, so riding a batch is exactly the moment an ad
+ * becomes visible on the site. There is no separate publish step to report.
+ */
+export async function getAdDelivery(ids: number[]): Promise<Map<number, AdDelivery>> {
+  const out = new Map<number, AdDelivery>();
+  if (!ids.length) return out;
+  const { data, error } = await db()
+    .from("ads")
+    .select("id, broadcast_at, emailed_at")
+    .in("id", ids);
+  if (error) {
+    // 42703 = the column isn't there yet. Report nothing rather than 500 a page.
+    if (error.code !== "42703" && error.code !== "PGRST204") throw error;
+    return out;
+  }
+  for (const row of (data ?? []) as { id: number; broadcast_at?: string | null; emailed_at?: string | null }[]) {
+    out.set(row.id, {
+      broadcastAt: row.broadcast_at ?? null,
+      emailedAt: row.emailed_at ?? null,
+      emailDigestNo: null,
+    });
+  }
+  // Which numbered EMAIL edition carried each ad. Best-effort on top of the
+  // above: losing the number must not lose the timestamps.
+  try {
+    const { data: items, error: itemsError } = await db()
+      .from("digest_items")
+      .select("ad_id, digests!inner(digest_no, channel)")
+      .in("ad_id", ids)
+      .eq("digests.channel", "email");
+    if (!itemsError) {
+      for (const row of (items ?? []) as unknown as {
+        ad_id: number;
+        digests: { digest_no: number | null } | { digest_no: number | null }[];
+      }[]) {
+        const digest = Array.isArray(row.digests) ? row.digests[0] : row.digests;
+        const no = digest?.digest_no ?? null;
+        const entry = out.get(row.ad_id);
+        // Keep the FIRST numbered edition that carried it: an ad re-run by a
+        // bump rides later editions too, and "which one did it go out on"
+        // means the one that introduced it.
+        if (entry && no !== null && entry.emailDigestNo === null) entry.emailDigestNo = no;
+      }
+    }
+  } catch {
+    // digest_no (9959) or the join isn't available — timestamps still stand.
+  }
+  return out;
 }

@@ -25,6 +25,7 @@ import {
 import { listEmailRecipientsWithCategories } from "@/lib/store";
 import { adMatchesCategories } from "@/lib/categories";
 import { getEngineSettings } from "@/lib/settings";
+import { pauseBlocks } from "@/lib/outbound";
 import { site } from "@/lib/config";
 import { markEmailSponsorRan, pickEmailSponsorFor } from "@/lib/business";
 import { formatPhone } from "@/lib/phone";
@@ -140,6 +141,22 @@ export async function runDueEmailDigests(now = new Date()): Promise<SlotResult[]
   const { day, hour } = etParts(now);
   const settings = await getEngineSettings();
   const results: SlotResult[] = [];
+
+  // ⚠️ An ads pause stops the EMAIL edition too (user, session 022: "when ADS
+  // are paused, they're paused everywhere — SMS, email and web posting").
+  //
+  // The drain already refused to deliver these rows while paused, so nothing
+  // ever reached an inbox — but composing anyway was still wrong in two ways
+  // that only show up when the pause lifts. Finalizing the edition CONSUMES
+  // its slot, and stamping `emailed_at` marks those ads as carried, so the
+  // ads in a paused edition would never appear in a later one: the edition
+  // that eventually sends is missing exactly the ads the pause was holding
+  // back. And the rows composed during the pause all release at once the
+  // moment it lifts.
+  //
+  // Skipping outright is what "paused" has to mean: the ads stay unemailed,
+  // and the first edition after the pause carries them properly.
+  if (pauseBlocks("bulk", settings)) return [];
 
   // Same slots as the SMS digests — the email edition is their mirror.
   for (const slot of settings.slots) {

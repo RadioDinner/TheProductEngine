@@ -90,6 +90,37 @@ refunded" must never be read as promising the $40 welcome credit back as cash.
 before shipping. Add that figure to /account and the policy page can say so;
 until then it tells members to ask.
 
+## 📡 Where an ad goes, and what "paused" covers (session 022)
+
+**The pipeline, and it is already what the user asked for:** approved → rides
+the next SMS batch → `broadcast_at` stamped → **that same stamp is what puts it
+on the website** → the next email edition carries it (`getUnemailedBroadcastAds`
+requires `broadcast_at`).
+
+⚠️ **There is no separate "publish to web" step, and do not add one.** All three
+public queries in `lib/ads-supabase.ts` — list, single ad, category counts —
+require `broadcast_at IS NOT NULL`, and the file store matches. Riding a batch
+IS becoming visible. /admin/ads reports the two as one event for that reason.
+
+**A paused ad therefore never reaches the website**, because it never
+broadcasts. Pause coverage, all four checked: SMS compose ✔, outbox drain ✔,
+**email compose ✔ (fixed session 022 — it was the one gap)**, website ✔ (via
+`broadcast_at`).
+
+⚠️ The email fix SKIPS the edition rather than composing it. Composing while
+paused finalized the slot and stamped `emailed_at`, so the ads a pause was
+holding back would have been marked carried and never appeared in the edition
+that actually sent — the pause would have LOST them, not delayed them.
+
+**An empty email edition already sends nothing** — `runDueEmailDigests` skips
+when no ads are waiting, and always did.
+
+⚠️ **Still unexplained: the user reported an ad reaching the website while ads
+were paused.** The code above says that requires `broadcast_at`, so the ad must
+have broadcast — the pause was not on at that moment, or something else stamped
+it. The new /admin/ads delivery lines give the exact timestamps; settle it with
+those rather than re-fixing code that already gates correctly.
+
 ## ⚠️ Open items
 
 Live and unfinished. Anything resolved should be deleted from this list, not

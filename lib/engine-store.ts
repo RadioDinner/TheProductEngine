@@ -82,6 +82,17 @@ export interface StoredAd {
 }
 
 /** An emailed-in picture awaiting admin review (FEATURES item 1). */
+/** Where an ad has actually been delivered — see the Supabase twin. */
+export interface AdDelivery {
+  /** When the SMS batch carried it. Also when it appeared on the WEBSITE:
+   * every public query requires broadcast_at, so the two are one event. */
+  broadcastAt: string | null;
+  /** When an email edition carried it. */
+  emailedAt: string | null;
+  /** The number of the email edition that introduced it, when known. */
+  emailDigestNo: number | null;
+}
+
 export interface PhotoSubmission {
   id: number;
   adId: number;
@@ -735,6 +746,11 @@ const file = {
     return load()
       .bumps.filter((b) => b.status === "queued")
       .sort((a, b) => Date.parse(a.requestedAt) - Date.parse(b.requestedAt));
+  },
+
+  /** Every stored ad, for lookups that need columns the readers omit. */
+  allAds(): StoredAd[] {
+    return load().ads;
   },
 
   getNewDigestAds(cap: number): StoredAd[] {
@@ -1468,6 +1484,25 @@ export async function setAdCategory(
  * the paste this returns an empty map — every ad reads uncategorized and
  * digests/pages behave exactly as today.
  */
+/**
+ * Delivery state per ad (session 022). File store: the ad rows already carry
+ * both stamps, and dev never numbers an email edition, so the number is null.
+ */
+export async function getAdDelivery(ids: number[]): Promise<Map<number, AdDelivery>> {
+  if (supabaseConfigured) return remote.getAdDelivery(ids);
+  const wanted = new Set(ids);
+  const out = new Map<number, AdDelivery>();
+  for (const ad of file.allAds()) {
+    if (!wanted.has(ad.id)) continue;
+    out.set(ad.id, {
+      broadcastAt: ad.broadcastAt ?? null,
+      emailedAt: ad.emailedAt ?? null,
+      emailDigestNo: null,
+    });
+  }
+  return out;
+}
+
 export async function getAdCategories(ids: number[]): Promise<Map<number, string | null>> {
   return supabaseConfigured ? remote.getAdCategories(ids) : file.getAdCategories(ids);
 }
