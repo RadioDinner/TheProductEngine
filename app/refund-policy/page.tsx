@@ -23,25 +23,36 @@ export default async function RefundPolicy() {
 
       <h2>The short version</h2>
       <ul>
-        <li>Your ad never ran? You get your money back.</li>
-        <li>Your ad went out in a digest? The money is spent — that was the product.</li>
+        <li>
+          <strong>You are not charged until your ad actually goes out.</strong> Posting
+          quotes you a price and sets that money aside; the text that carries your ad to
+          subscribers is what collects it.
+        </li>
+        <li>Your ad never ran? You were never charged, so there is nothing to refund.</li>
+        <li>Your ad went out to subscribers? The money is spent — that was the product.</li>
         <li>Ads declined for breaking the rules are not refunded.</li>
       </ul>
 
-      <h2>When your money is returned</h2>
+      <h2>When you are not charged, or your money comes back</h2>
       <ul>
         <li>
           <strong>Declined for an ordinary reason.</strong> Every ad is read by a person
           before it runs. If we decline yours for an ordinary reason — too long, unclear,
-          not a good fit — the full charge is returned to your balance automatically.
+          not a good fit — nothing is charged, and the money set aside for it is yours
+          again straight away.
         </li>
         <li>
           <strong>Removed before approval.</strong> If your ad is deleted while it is
-          still waiting for review, the charge is returned.
+          still waiting for review, nothing is charged.
         </li>
         <li>
           <strong>Approved but never broadcast.</strong> If your ad was approved but is
-          deleted before it has ever gone out in a digest, the charge is returned.
+          deleted before it has ever gone out, nothing is charged.
+        </li>
+        <li>
+          <strong>Ads posted before this changed.</strong> Ads placed while the service
+          charged at posting time were charged then, and those charges are returned to
+          your balance in the cases above, exactly as they always were.
         </li>
       </ul>
 

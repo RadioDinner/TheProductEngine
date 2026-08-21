@@ -9,6 +9,7 @@ import { afterResponse } from "@/analytics/src/after";
 import {
   approveAdRecord,
   getAdRecord,
+  getAdsOwed,
   logMessage,
   rejectAdRecord,
   setAdCategory,
@@ -16,9 +17,14 @@ import {
 import {
   OFFENSE_BAN_THRESHOLD,
   addLedgerEntry,
+  ensureAccount,
   getLedger,
   recordOffense,
 } from "@/lib/store";
+import { memberFunding } from "@/lib/ad-billing";
+import { purseForAd, shortfallCents } from "@/lib/ad-funding";
+import { messageBook } from "@/lib/messages";
+import { site } from "@/lib/config";
 import { getEngineSettings } from "@/lib/settings";
 import {
   batchWaitLabel,
@@ -86,6 +92,48 @@ export async function approveAd(
     }),
   );
   const open = smsWindowOpen(now, settings);
+  const book = await messageBook();
+
+  // APPROVED BUT NOT PAID FOR (user request, session 021: "I approved the ad,
+  // but it wasn't paid, I want the status to go to 'approved, pending payment'
+  // but I want the message that the seller gets, to remind them to pay up").
+  //
+  // Since session 021 an ad is collected for when it runs, so an unfunded ad
+  // is reviewed like any other and keeps its place in the queue once approved
+  // — it simply doesn't ride a batch until the money is there. Telling the
+  // seller "it goes out within the hour" when it cannot is the specific thing
+  // the user hit, so the money is checked here and the approval text says which
+  // of the two situations they are in.
+  const owed = (await getAdsOwed([id]).catch(() => new Map<number, number>())).get(id) ?? 0;
+  if (owed > 0) {
+    const funding = await memberFunding(ad.ownerPhone, await ensureAccount(ad.ownerPhone));
+    // Measured against what is left for THIS ad once the ads ahead of it in
+    // the queue have taken their share — not against the raw balance. A member
+    // with $20 and two $20 ads must not be told both of them are on their way;
+    // the second one is waiting for money and this is where they find out.
+    const purse = purseForAd(funding.owedAds, id, funding.balanceCents);
+    const short = shortfallCents(owed, purse);
+    if (short > 0 && !funding.hasCard) {
+      await notify(
+        ad.ownerPhone,
+        book.render("ad.approved.awaiting-payment", {
+          adId: id,
+          price: formatPrice(owed),
+          // Same scale as {short}: what is left for THIS ad, not the raw
+          // balance their other waiting ads have already spoken for.
+          spare: formatPrice(purse),
+          balance: formatPrice(funding.balanceCents),
+          short: formatPrice(short),
+          supportPhone: site.supportPhone,
+          siteUrl: site.webHost,
+        }),
+      );
+      // No broadcast attempt: the batch would only decline it and text them a
+      // second time about the same money.
+      return;
+    }
+  }
+
   // The hours are recited only when they EXPLAIN the wait. Inside Saturday's
   // unpublished early close they would contradict it ("goes out Monday — we
   // text until 6pm, Mon-Sat", sent at half five on a Saturday), so that hour
@@ -97,8 +145,12 @@ export async function approveAd(
   await notify(
     ad.ownerPhone,
     open
-      ? `Your ad #${id} is approved. It goes out to subscribers ${batchWaitLabel(settings)}. Text STATUS ${id} any time to check it.`
-      : `Your ad #${id} is approved. It goes out ${nextSendLabel(now, settings)}${hoursClause}. Text STATUS ${id} any time to check it.`,
+      ? book.render("ad.approved", { adId: id, batchWait: batchWaitLabel(settings) })
+      : book.render("ad.approved.closed", {
+          adId: id,
+          nextSend: nextSendLabel(now, settings),
+          hoursClause,
+        }),
   );
   if (!open) return;
   try {
@@ -130,6 +182,7 @@ export async function rejectAd(
   afterResponse(() =>
     analytics.listingRejected({ phone: ad.ownerPhone, channel: "sms", reason: kind }),
   );
+  const book = await messageBook();
 
   if (kind === "benign") {
     // Full refund of whatever the submission charged (spec Q4/Q8) — the base
@@ -147,14 +200,19 @@ export async function rejectAd(
         owed = legacyPassRefundCents(charge.note, settings.costTextCents, settings.costPhotoCents);
       }
     }
-    let refundNote = "charge";
+    // Since session 021 an ad is collected for when it RUNS, so an ad turned
+    // down before it ran was never charged and there is nothing to give back —
+    // owed comes out at 0 and the reply says so. The refund path below stays
+    // for ads posted BEFORE 9951, which really were charged at submission and
+    // really are owed their money.
+    let refundNote = "Nothing was charged.";
     if (owed > 0) {
       await addLedgerEntry(ad.ownerPhone, {
         delta: owed,
         kind: "refund",
         note: `Refund — ad #${id} not accepted`,
       });
-      refundNote = formatPrice(owed);
+      refundNote = `Your ${formatPrice(owed)} was returned.`;
       afterResponse(() =>
         analytics.refunded({
           phone: ad.ownerPhone,
@@ -166,7 +224,7 @@ export async function rejectAd(
     }
     await notify(
       ad.ownerPhone,
-      `Your ad #${id} was not accepted: ${reason} Your ${refundNote} was returned — you can fix it and send it again.`,
+      book.render("ad.rejected.benign", { adId: id, reason, refundNote }),
     );
     return;
   }
@@ -179,6 +237,6 @@ export async function rejectAd(
       : `Warning ${count} of ${OFFENSE_BAN_THRESHOLD} — a third violation will suspend your ability to post.`;
   await notify(
     ad.ownerPhone,
-    `Your ad #${id} violated our posting guidelines and was not accepted: ${reason} ${warning}`,
+    book.render("ad.rejected.violation", { adId: id, reason, warning }),
   );
 }

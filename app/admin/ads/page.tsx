@@ -9,6 +9,7 @@ import {
 import {
   getAdCategories,
   getAdRecord,
+  getAdsOwed,
   getAllAds,
   getQueuedBumps,
   listPhotoSubmissions,
@@ -50,6 +51,14 @@ export default async function AdminAds({
     : undefined;
   const ads = await getAllAds(params.q, status);
   const bumpQueued = new Set((await getQueuedBumps()).map((b) => b.adId));
+  // What each ad still owes (session 021). An ad is collected for when it RUNS,
+  // so an approved ad with a price still on it has not been paid for — which is
+  // exactly the state the operator hit and asked to be able to see: "I approved
+  // the ad, but it wasn't paid, I want the status to go to 'approved, pending
+  // payment'". Absent (migration 9951 pending) simply means nothing is owing.
+  const owedByAd = await getAdsOwed(ads.map((ad) => ad.id)).catch(
+    () => new Map<number, number>(),
+  );
   // Inline category editing (item 22) — hidden until migration 9976.
   const withCategories = await categoriesSupported();
   const adCategories = withCategories
@@ -178,6 +187,13 @@ export default async function AdminAds({
                 <>#{ad.id}</>
               )}{" "}
               · {ad.status}
+              {owedByAd.get(ad.id) ? (
+                <span className="ad-sold">
+                  {" "}
+                  {ad.status === "approved" ? "waiting for payment" : "unpaid"} ·{" "}
+                  {formatPrice(owedByAd.get(ad.id)!)} due when it runs
+                </span>
+              ) : null}
               {ad.flagged && <span className="ad-sold"> Flagged</span>}
               {ad.photo && <span className="ad-sold"> 📷 Picture</span>} ·{" "}
               <Link href={`/admin/users?phone=${ad.ownerPhone}`}>{formatPhone(ad.ownerPhone)}</Link>

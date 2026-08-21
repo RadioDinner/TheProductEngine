@@ -38,7 +38,7 @@ export const site = {
    * This constant is the only place it is written down; the footer and the
    * health probe both read it, so they can never disagree.
    */
-  version: "1.4.9",
+  version: "1.5.9",
   tagline: "Buy and sell by text message",
   adsPerPage: 15,
 } as const;
@@ -156,6 +156,38 @@ export const engineDefaults = {
    */
   batchMinAds: 3,
   batchMaxWaitMinutes: 60,
+  /**
+   * How many ads one number may have sitting in the review queue waiting on
+   * money before further posts are HELD out of it instead (session 021).
+   *
+   * An ad is now paid for when it RUNS, so a member with nothing on their
+   * account still gets read and still gets an answer — the user's decision:
+   * "I approved the ad, but it wasn't paid, I want the status to go to
+   * 'approved, pending payment'". This is the one guard on that. Reviewing is
+   * hand work, and a number with no money and no card should not be able to
+   * fill a morning with it.
+   *
+   * 0 turns the guard off: every ad is reviewed, however many are waiting.
+   * Ads the member CAN pay for never count against it.
+   */
+  maxAdsAwaitingPayment: 3,
+  /**
+   * Hours an ad stays out of batch selection after a collection failed
+   * (session 021). Long enough that a declined card is not presented again
+   * every five minutes; short enough that money added this afternoon runs the
+   * ad this afternoon. Any payment clears the back-off immediately anyway, so
+   * this only governs the case where nobody does anything.
+   */
+  chargeRetryHours: 6,
+  /**
+   * Text the seller when their ad goes out and the money moves (session 021).
+   *
+   * ON by default, and it is the receipt that makes "nothing is charged until
+   * your ad runs" checkable rather than merely stated — a member who is told a
+   * charge is coming later should be told when it lands. It costs one segment
+   * per ad that runs. Turn it off if that bill outgrows the reassurance.
+   */
+  adRanReceipt: true,
   /**
    * Website-listing add-on in cents. 0 (launch value) = every ad lists on
    * the website automatically, free. Set to 1500 to start charging +$15:

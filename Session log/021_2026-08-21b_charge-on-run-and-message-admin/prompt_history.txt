@@ -1,0 +1,18 @@
+--- 2026-08-21 (session 021) ---
+When people create an ad, and have a card on file, I want the confirmation message to include that the card won't be charged until the ad is run. Make the system honor the truth of this message.
+
+Also, I want an admin tab where I can go in and edit the messages and add or remove variables from auto replies, rather than having a code/prompt session. Plus, I can see the messages
+
+--- 2026-08-21 (session 021, follow-up) ---
+Also, when I sent in an ad and didn't have enough credit, I got this message
+
+Got it - your ad is saved as #1024 and nothing has been charged. It costs $50 and you have $20, so it won't go out until that's covered. Call (330) 275-1603 and press 1 to put a card on file - we'll charge it and send your ad. Text BAL any time.
+
+But then I approved it from the admin dashboard and it sent this message
+
+Your ad #1023 is approved. It goes out to subscribers with the next batch of ads, usually within the hour. Text STATUS 1023 any time to check it.
+
+I approved the ad, but it wasn't paid, I want the status to go to "approved, pending payment" but I want the message that the seller gets, to remind them to pay up
+
+--- 2026-08-21 (session 021, follow-up 2) ---
+Dont commit anything until I tell you to

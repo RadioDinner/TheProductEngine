@@ -8,12 +8,13 @@ import {
   adminReject,
   adminResolveChatReport,
 } from "@/lib/admin-actions";
-import { getAdCategories, getPendingAds } from "@/lib/engine-store";
-import { categoriesSupported, listChatReports } from "@/lib/store";
+import { getAdCategories, getAdsOwed, getPendingAds, listOwedAds } from "@/lib/engine-store";
+import { categoriesSupported, getAccount, getCreditBalance, listChatReports } from "@/lib/store";
+import { purseForAd } from "@/lib/ad-funding";
 import { CATEGORIES } from "@/lib/categories";
 import { findLinks } from "@/lib/content-filter";
 import { formatPhone } from "@/lib/phone";
-import { site } from "@/lib/config";
+import { formatPrice, site } from "@/lib/config";
 import { etParts } from "@/lib/et";
 import { formatEventDay } from "@/lib/town-hall";
 import { listPendingEvents } from "@/lib/town-hall-store";
@@ -57,6 +58,59 @@ export default async function AdminReview() {
     ? await getAdCategories(pending.map((ad) => ad.id))
     : new Map<number, string | null>();
 
+  // Whether each waiting ad is paid for (session 021). An ad is collected for
+  // when it RUNS, so one can reach this queue unfunded and be approved — the
+  // user hit exactly that and asked to be able to tell. Approving an unfunded
+  // ad is still the right move: it keeps its place and goes out the moment the
+  // money lands. The badge is so the decision is made knowing which it is.
+  const owed = await getAdsOwed(pending.map((ad) => ad.id)).catch(
+    () => new Map<number, number>(),
+  );
+  const payment = new Map<number, string>();
+  if (owed.size) {
+    // One pass per SELLER, not per ad, and capped: an operator who lets the
+    // queue run to hundreds should not turn this page into hundreds of
+    // sequential round trips. Past the cap the badges are simply omitted —
+    // the ads still review normally.
+    const sellers = [...new Set(pending.map((ad) => ad.ownerPhone))].slice(0, 40);
+    const funding = new Map<string, { purse: (id: number) => number; hasCard: boolean }>();
+    await Promise.all(
+      sellers.map(async (phone) => {
+        try {
+          const [balance, owedAds, account] = await Promise.all([
+            getCreditBalance(phone),
+            listOwedAds(phone),
+            getAccount(phone),
+          ]);
+          funding.set(phone, {
+            purse: (id: number) => purseForAd(owedAds, id, balance),
+            // The CHEAP card signal on purpose: a stored Stripe customer. The
+            // thorough check (lib/ad-billing cardOnFile) can make a Stripe
+            // call per member, and an admin page listing forty sellers is not
+            // the place for forty of those.
+            hasCard: Boolean(account?.stripeCustomerId),
+          });
+        } catch (e) {
+          console.error(`[admin/review] funding unreadable for ${phone}:`, e);
+        }
+      }),
+    );
+    for (const ad of pending) {
+      const due = owed.get(ad.id) ?? 0;
+      if (!due) continue;
+      const f = funding.get(ad.ownerPhone);
+      if (!f) continue;
+      // A card on file means it pays itself when it runs, however small the
+      // balance — labelling that "waiting for payment" would send the operator
+      // chasing a member who owes nothing.
+      const covered = f.hasCard || f.purse(ad.id) >= due;
+      payment.set(
+        ad.id,
+        covered ? `${formatPrice(due)} — pays when it runs` : `${formatPrice(due)} — waiting for payment`,
+      );
+    }
+  }
+
   return (
     <>
       <h1>
@@ -86,6 +140,9 @@ export default async function AdminReview() {
           <li key={ad.id} className="myad-row">
             <p className="myad-title">
               #{ad.id} from {formatPhone(ad.ownerPhone)}
+              {payment.get(ad.id) && (
+                <span className="ad-sold"> {payment.get(ad.id)}</span>
+              )}
               {ad.flagged && <span className="ad-sold"> Flagged</span>}
               {links.length > 0 && <span className="ad-sold"> 🔗 Link</span>}
               {ad.photo && <span className="ad-sold"> 📷 Picture ad</span>}

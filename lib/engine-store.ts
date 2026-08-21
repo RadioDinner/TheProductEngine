@@ -57,6 +57,21 @@ export interface StoredAd {
    * release charges this, not a recomputed price — an ad held on Monday must
    * not cost more on Wednesday because the price list changed (9953). */
   unpaidCents?: number | null;
+  /** The quoted price this ad still owes, in cents (session 021, migration
+   * 9951). Set the moment the ad is written down and cleared when the batch
+   * that carries it collects — so a non-null value means "not yet paid for",
+   * whatever the status. It is the FROZEN quote: an ad written on Monday costs
+   * Monday's price however long it waits. Reserved against the member's
+   * balance while it stands (see lib/ad-funding.ts). NOT part of the shared
+   * Supabase AD_SELECT — read it with getAdsOwed / listOwedAds. */
+  owedCents?: number | null;
+  /** Set while a batch is collecting for this ad, cleared when it finishes.
+   * The third state that keeps a concurrent batch from reading a collection
+   * in progress as "nothing owing, run it free" (session 021). */
+  chargeClaimedAt?: string | null;
+  /** Keeps the ad out of batch selection for a while after a collection
+   * failed. Its OWN field, never holdUntil — that one is the operator's. */
+  chargeHoldUntil?: string | null;
   /** Category key (items 22/25, migration 9976); null/undefined =
    * uncategorized — rides EVERY digest, shows under All on the site. NOT part
    * of the shared Supabase AD_SELECT (so nothing hard-depends on 9976); the
@@ -200,11 +215,29 @@ export interface InsightAd {
 /** A claimed row older than this is presumed orphaned by a dead run. */
 const OUTBOX_RECLAIM_MS = 10 * 60 * 1000;
 
+/** A collection claim older than this is presumed orphaned (session 021).
+ * Deliberately long: a claim is only ever held across one card charge, so
+ * re-claiming is a recovery path rather than a routine. */
+export const CHARGE_CLAIM_STALE_MS = 60 * 60 * 1000;
+
+/** An ad that has been quoted a price and not yet collected for. */
+export interface OwedAd {
+  id: number;
+  owedCents: number;
+  status: StoredAdStatus;
+  createdAt: string;
+  /** hold_until, when a failed collection has backed this ad off. */
+  heldUntil?: string | null;
+}
+
 export interface CreateAdOptions {
   status?: "pending" | "rejected" | "unpaid";
   rejectedReason?: string;
   /** With status "unpaid": the price the seller was quoted, in cents. */
   unpaidCents?: number;
+  /** The quoted price this ad owes until it runs (session 021). Written on
+   * every ad that is accepted, held or not — see StoredAd.owedCents. */
+  owedCents?: number;
 }
 
 // ---------- file implementation ----------
@@ -412,6 +445,7 @@ const file = {
       body: input.body,
       status: options.status ?? "pending",
       ...(options.status === "unpaid" && { unpaidCents: options.unpaidCents ?? 0 }),
+      ...(options.owedCents && options.owedCents > 0 && { owedCents: options.owedCents }),
       createdAt: new Date().toISOString(),
       flagged: input.flagged,
       ...(options.status === "rejected" && {
@@ -553,6 +587,104 @@ const file = {
     ad.status = "unpaid";
     ad.unpaidCents = costCents;
     save(store);
+  },
+
+  /* ---------- owed prices (session 021, migration 9951) ---------- */
+
+  listOwedAds(phone: string): OwedAd[] {
+    return load()
+      .ads.filter(
+        (a) =>
+          a.ownerPhone === phone &&
+          Number(a.owedCents) > 0 &&
+          !a.broadcastAt &&
+          (a.status === "pending" || a.status === "approved" || a.status === "unpaid"),
+      )
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id)
+      .map((a) => ({
+        id: a.id,
+        owedCents: Number(a.owedCents) || 0,
+        status: a.status,
+        createdAt: a.createdAt,
+        heldUntil: a.chargeHoldUntil ?? null,
+      }));
+  },
+
+  getAdsOwed(ids: number[]): Map<number, number> {
+    const out = new Map<number, number>();
+    for (const ad of load().ads) {
+      if (ids.includes(ad.id) && Number(ad.owedCents) > 0) out.set(ad.id, Number(ad.owedCents));
+    }
+    return out;
+  },
+
+  bumpAdOwed(id: number, deltaCents: number, opts: { anyStatus?: boolean } = {}): boolean {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === id);
+    if (!ad || ad.broadcastAt) return false;
+    if (!opts.anyStatus && ad.status !== "pending" && ad.status !== "unpaid") return false;
+    const next = Math.max(0, (Number(ad.owedCents) || 0) + Math.round(deltaCents));
+    ad.owedCents = next > 0 ? next : null;
+    save(store);
+    return true;
+  },
+
+  claimAdCharge(id: number, cents: number): boolean {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === id);
+    if (!ad || Number(ad.owedCents) !== cents || ad.broadcastAt) return false;
+    const claimed = ad.chargeClaimedAt ? Date.parse(ad.chargeClaimedAt) : 0;
+    if (claimed && Date.now() - claimed < CHARGE_CLAIM_STALE_MS) return false;
+    ad.chargeClaimedAt = new Date().toISOString();
+    save(store);
+    return true;
+  },
+
+  settleAdCharge(id: number): void {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === id);
+    if (!ad) return;
+    ad.owedCents = null;
+    ad.chargeClaimedAt = null;
+    save(store);
+  },
+
+  releaseAdCharge(id: number): void {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === id);
+    if (!ad) return;
+    ad.chargeClaimedAt = null;
+    save(store);
+  },
+
+  holdAdCharge(id: number, untilIso: string): void {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === id);
+    if (!ad) return;
+    ad.chargeHoldUntil = untilIso;
+    save(store);
+  },
+
+  clearChargeHolds(ids: number[]): void {
+    const store = load();
+    for (const ad of store.ads) {
+      if (ids.includes(ad.id)) ad.chargeHoldUntil = null;
+    }
+    save(store);
+  },
+
+  admitHeldAd(id: number, owedCents: number): boolean {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === id);
+    // One-way and idempotent, exactly like markAdPaid was: only a held ad can
+    // be admitted, so two callers racing (the card line and a web top-up in the
+    // same second) cannot both announce it.
+    if (!ad || ad.status !== "unpaid") return false;
+    ad.status = "pending";
+    ad.unpaidCents = null;
+    ad.owedCents = owedCents;
+    save(store);
+    return true;
   },
 
   listAdminMessages(limit = 25): AdminMessage[] {
@@ -737,6 +869,7 @@ const file = {
         (a) =>
           a.status === "approved" &&
           !a.broadcastAt &&
+          !(a.chargeHoldUntil && a.chargeHoldUntil > new Date().toISOString()) &&
           (!a.holdUntil || Date.parse(a.holdUntil) <= now),
       )
       .sort(
@@ -1351,6 +1484,106 @@ export async function markAdPaid(id: number): Promise<boolean> {
  * status flipped. Only ever reverses 'pending' back to 'unpaid'. */
 export async function setAdUnpaid(id: number, costCents: number): Promise<void> {
   return supabaseConfigured ? remote.setAdUnpaid(id, costCents) : file.setAdUnpaid(id, costCents);
+}
+
+/* ---------- owed prices (session 021, migration 9951) ----------
+ *
+ * Every one of these degrades to "nothing is owed" without the column, which
+ * is the pre-9951 truth: ads were charged at posting time, so no ad carried a
+ * balance into its run. That degradation is what lets the code deploy ahead of
+ * the migration without stranding a single text.
+ */
+
+/** The member's ads that have been quoted a price and not yet collected for,
+ * oldest first. The reservation set: their total is what a new post is
+ * measured against (lib/ad-funding.ts). */
+export async function listOwedAds(phone: string): Promise<OwedAd[]> {
+  return supabaseConfigured ? remote.listOwedAds(phone) : file.listOwedAds(phone);
+}
+
+/** What each of these ads still owes, in cents. Ads with nothing owing are
+ * absent from the map — that is how a batch tells "already paid for" from
+ * "needs collecting". */
+export async function getAdsOwed(ids: number[]): Promise<Map<number, number>> {
+  if (!ids.length) return new Map();
+  return supabaseConfigured ? remote.getAdsOwed(ids) : file.getAdsOwed(ids);
+}
+
+/**
+ * Change what an unrun ad owes — a text ad gaining its first picture moves up
+ * a price rung, and the same call with a negative delta puts it back when the
+ * picture fails to attach. Only ever touches an ad that is still in review and
+ * has not run; returns whether it moved.
+ */
+export async function bumpAdOwed(
+  id: number,
+  deltaCents: number,
+  opts: { anyStatus?: boolean } = {},
+): Promise<boolean> {
+  if (!deltaCents) return false;
+  return supabaseConfigured
+    ? remote.bumpAdOwed(id, deltaCents, opts)
+    : file.bumpAdOwed(id, deltaCents, opts);
+}
+
+/**
+ * Take ownership of an ad's collection. True = THIS caller got it and must now
+ * collect; false = somebody else holds it, the amount moved under us, or the
+ * ad has already run.
+ *
+ * ⚠️ The price STAYS ON THE AD while the claim is held. Clearing it here would
+ * leave only two states, and "nothing owing" would mean both "already paid
+ * for" and "being charged for right now" — a second batch reading during the
+ * first one's card charge would carry the ad as a freebie. See the Supabase
+ * implementation for the full reasoning; the ordering (claim, charge, settle)
+ * is the same in both stores.
+ */
+export async function claimAdCharge(id: number, cents: number): Promise<boolean> {
+  return supabaseConfigured ? remote.claimAdCharge(id, cents) : file.claimAdCharge(id, cents);
+}
+
+/** The collection succeeded: clear the debt and the claim together. */
+export async function settleAdCharge(id: number): Promise<void> {
+  return supabaseConfigured ? remote.settleAdCharge(id) : file.settleAdCharge(id);
+}
+
+/** Hand the claim back when the collection failed. The price was never
+ * cleared, so this only lifts the claim. */
+export async function releaseAdCharge(id: number): Promise<void> {
+  return supabaseConfigured ? remote.releaseAdCharge(id) : file.releaseAdCharge(id);
+}
+
+/** Keep an ad out of batch selection for a while after a collection failed, so
+ * a declined card isn't presented again every cron tick. Its own column: never
+ * the operator's hold_until. */
+export async function holdAdCharge(id: number, untilIso: string): Promise<void> {
+  return supabaseConfigured ? remote.holdAdCharge(id, untilIso) : file.holdAdCharge(id, untilIso);
+}
+
+/** Money arrived: lift those back-offs. An operator's own hold survives. */
+export async function clearChargeHolds(ids: number[]): Promise<void> {
+  if (!ids.length) return;
+  return supabaseConfigured ? remote.clearChargeHolds(ids) : file.clearChargeHolds(ids);
+}
+
+/** Is ads.owed_cents actually there? False means NOTHING IS BEING COLLECTED
+ * FOR — see the Supabase implementation. Always true in file mode. */
+export async function owedPricesSupported(): Promise<boolean> {
+  return supabaseConfigured ? remote.owedPricesSupported() : true;
+}
+
+/**
+ * Move a HELD ad into the review queue, keeping what it owes.
+ *
+ * This is the old markAdPaid with the charge taken out of it: since session
+ * 021 an ad is collected for when it RUNS, so admitting one is a queue move,
+ * not a payment. The CAS on 'unpaid' is unchanged and still the concurrency
+ * guard — only the winner announces the ad to its seller.
+ */
+export async function admitHeldAd(id: number, owedCents: number): Promise<boolean> {
+  return supabaseConfigured
+    ? remote.admitHeldAd(id, owedCents)
+    : file.admitHeldAd(id, owedCents);
 }
 
 /* ---------- admin broadcasts (migration 9952) ----------

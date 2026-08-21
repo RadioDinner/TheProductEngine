@@ -48,10 +48,13 @@ export function postingPreview(
 
 export type ChargeOutcome = {
   costCents: number;
+  /** Ad credit left once this ad has run and been collected for. */
   leftCents: number;
-  /** Cents the saved card covered (0 = balance covered it all). */
-  toppedUpCents: number;
-  /** Set ("$150") when the one-time starter credit paid for this post. */
+  /** Cents the member is short of the price (0 = their credit covers it). */
+  shortCents: number;
+  /** A card is on file, so the shortfall is charged when the ad runs. */
+  hasCard: boolean;
+  /** Set ("$150") when the one-time starter credit covers this post. */
   welcomeLabel?: string;
 };
 
@@ -62,16 +65,26 @@ function dollars(cents: number): string {
 }
 
 /**
- * The parenthesized charge note on the confirmation — EXACTLY the SMS lane's
- * wording (lib/engine.ts handleAdSubmission), so web and text posts read the
- * same everywhere.
+ * The payment sentence on the web confirmation — the same three cases the SMS
+ * lane words from /admin/replies (ad.money.covered / .card / .owing), so web
+ * and text posts say the same thing.
+ *
+ * ⚠️ It no longer describes a charge, because since session 021 there isn't
+ * one yet: an ad is quoted a price at posting and collected for by the batch
+ * that carries it out to subscribers. This is the WEB half of the user's
+ * "the card won't be charged until the ad is run", and a note here still
+ * saying "$20 — $130 of ad credit left" would be the one screen that
+ * contradicted it.
  */
 export function chargeNoteLine(charge: ChargeOutcome): string {
-  let note = charge.welcomeLabel
-    ? `${dollars(charge.costCents)} of your ${charge.welcomeLabel} welcome credit — ${dollars(charge.leftCents)} left.`
-    : `${dollars(charge.costCents)} — ${dollars(charge.leftCents)} of ad credit left.`;
-  if (charge.toppedUpCents > 0) {
-    note += ` ${dollars(charge.toppedUpCents)} was charged to your card to cover it.`;
+  const price = charge.welcomeLabel
+    ? `${dollars(charge.costCents)} of your ${charge.welcomeLabel} welcome credit`
+    : dollars(charge.costCents);
+  if (charge.shortCents > 0 && charge.hasCard) {
+    return `It costs ${price} and your card won't be charged until your ad runs.`;
   }
-  return note;
+  if (charge.shortCents > 0) {
+    return `It costs ${price} and you're ${dollars(charge.shortCents)} short, so add money before it can go out — nothing is charged until it does.`;
+  }
+  return `It costs ${price} and nothing is charged until your ad goes out — ${dollars(charge.leftCents)} of ad credit left after it does.`;
 }

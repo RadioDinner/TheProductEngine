@@ -25,6 +25,13 @@ export interface EngineSettings {
   /** Send whatever is waiting once the oldest ad has waited this long,
    * in minutes (0 = count only). */
   batchMaxWaitMinutes: number;
+  /** Ads one number may have in the review queue waiting on money before
+   * further posts are held out of it (session 021; 0 = no guard). */
+  maxAdsAwaitingPayment: number;
+  /** Hours an ad is held out of batch selection after a failed collection. */
+  chargeRetryHours: number;
+  /** Text the seller when their ad goes out and the money moves. */
+  adRanReceipt: boolean;
   /** Members who may ever receive the starter credit (0 = no cap). */
   starterCreditLimit: number;
   /** Website-listing add-on in CENTS. 0 = included free for every ad. */
@@ -117,6 +124,9 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   photosInBroadcast: "photos_in_broadcast",
   batchMinAds: "batch_min_ads",
   batchMaxWaitMinutes: "batch_max_wait_minutes",
+  maxAdsAwaitingPayment: "max_ads_awaiting_payment",
+  chargeRetryHours: "charge_retry_hours",
+  adRanReceipt: "ad_ran_receipt",
   starterCreditLimit: "starter_credit_limit",
   webAddonCents: "web_addon_cents",
   eventListingCents: "event_listing_cents",
@@ -192,6 +202,9 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     photosInBroadcast: engineDefaults.photosInBroadcast,
     batchMinAds: engineDefaults.batchMinAds,
     batchMaxWaitMinutes: engineDefaults.batchMaxWaitMinutes,
+    maxAdsAwaitingPayment: engineDefaults.maxAdsAwaitingPayment,
+    chargeRetryHours: engineDefaults.chargeRetryHours,
+    adRanReceipt: engineDefaults.adRanReceipt,
     starterCreditLimit: engineDefaults.starterCreditLimit,
     webAddonCents: engineDefaults.webAddonCents,
     eventListingCents: engineDefaults.eventListingCents,

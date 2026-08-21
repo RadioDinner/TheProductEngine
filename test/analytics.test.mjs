@@ -315,7 +315,16 @@ export async function run(t) {
     // Loaded by the unit and abuse suites under plain node, where next/server
     // does not resolve. They must NOT import the registration; their CALLERS
     // register instead, and registration is process-wide.
-    const TEST_LOADED = new Set(["engine.ts", "moderation.ts", "digest-engine.ts", "analytics.ts"]);
+    // ad-billing.ts joined this set in session 021: digest-engine imports it
+    // (the batch is what collects for an ad now), so it is loaded under plain
+    // node by everything that loads digest-engine.
+    const TEST_LOADED = new Set([
+      "engine.ts",
+      "moderation.ts",
+      "digest-engine.ts",
+      "ad-billing.ts",
+      "analytics.ts",
+    ]);
 
     const offenders = [];
     const testLoadedImportingNextServer = [];

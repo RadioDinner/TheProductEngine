@@ -3,23 +3,223 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-21 (session 020 wrap — the send window, the ledger
-reset, the call flow, AD replacing AD NEW, held-unpaid ads, and scheduled
-admin broadcasts. v1.4.9).
+**Last updated:** 2026-08-21 (session 021 wrap — an ad is paid for when it RUNS,
+unfunded ads are reviewable, and the auto-reply copy became editable. v1.5.9).
 
-## ⚠️ START HERE: two NEW migrations are waiting
+## ⚠️ START HERE: FOUR migrations are waiting, and ONE of them is not optional
 
-**`9953_unpaid_ads.sql`** and **`9952_admin_messages.sql`** were written AFTER
-the user confirmed the queue clear, and have NOT been pasted. Both degrade
-safely — held ads simply are not held, and the broadcast form says the table is
-missing — so nothing is broken, but two features are off until they go in.
-**`9952` is the newest; the next migration takes 9951.**
+**`9950_message_templates.sql`**, **`9951_charge_on_run.sql`**,
+**`9952_admin_messages.sql`** and **`9953_unpaid_ads.sql`** have NOT been
+pasted. **`9950` is now the newest; the next migration takes 9949.**
 
-### Everything before them IS applied (user confirmed 2026-08-21)
+**`9951` is the one to paste first, and it is different in kind from every other
+pending migration in this repo's history.** The rest degrade to "the feature is
+off". 9951 degrades to **no ad being charged for at all**: since session 021 the
+code does not charge at posting time, and without `ads.owed_cents` there is
+nothing to quote, reserve or collect at the run. Nothing breaks, nothing is
+lost, no text fails — every ad simply runs free, silently. `/api/health` (with
+CRON_SECRET) probes it by name and says exactly that.
 
-**`9954`, `9955`, `9956` and `9957` are applied.** Nothing else is waiting. Every
-feature below is fully on rather than degrading, so if one of them misbehaves,
-a pending migration is NOT the explanation — look at the code.
+The other three degrade safely as usual: without 9950 every message uses the
+wording shipped in the code and /admin/replies can show but not save; without
+9953 held ads are not held; without 9952 the broadcast form says the table is
+missing.
+
+## Session 021 (2026-08-21) — AN AD IS PAID FOR WHEN IT RUNS
+
+**Version 1.4.9 → 1.5.9.** ⚠️ **Nothing was committed** — the user said mid-
+session *"Dont commit anything until I tell you to."* It is all in the working
+tree on `claude/ad-confirmation-admin-panel-ak1ze0`.
+
+The user's sentence is the specification: *"when people create an ad, and have a
+card on file, I want the confirmation message to include that the card won't be
+charged until the ad is run. Make the system honor the truth of this message."*
+
+### The change, in one paragraph
+
+An ad used to be charged the instant the text arrived. Now **posting QUOTES a
+price and RESERVES it against the member's balance, and the batch that carries
+the ad out to subscribers COLLECTS it.** `ads.owed_cents` (migration 9951) is
+the frozen quote — not null means "not paid for yet", whatever the status. The
+arithmetic is `lib/ad-funding.ts` (pure, unit-pinned); the part that touches
+money is `lib/ad-billing.ts`.
+
+The refund matrix already knew this distinction — `deleteRefundDecision` has
+said "ran" versus "never-ran" since session 009 — so charging at the run is the
+arithmetic the rest of the system was already written against. **Rejecting an ad
+now returns nothing, because nothing was taken.**
+
+### Reserving is not the same as charging, and both are needed
+
+Not charging is not the same as not counting. $40 of credit still buys exactly
+two $20 ads however many are in flight, because a quoted-but-uncollected price
+stays reserved. Without it a member with $20 could put five ads into the review
+queue, have every one approved by hand, and then discover four of them at the
+till. `BAL` says so: *"Your ads waiting to go out will use $40 of it."*
+
+### Where the money moves, and why exactly there
+
+`composeSmsEdition` in `lib/digest-engine.ts` — and the placement took two
+attempts. **The first version collected in `runQueuedBroadcasts`, before
+composing, and charged for ads that reached nobody** (every subscriber's
+category filter excluded them). A real end-to-end walk caught it.
+
+What is there now: `buildCategorizedSmsRows` is pure, so it runs TWICE — a dry
+run with no pictures to learn which ads would actually reach somebody (plus any
+the email edition would carry), then the collection for exactly those, then the
+real compose for the ads that paid. **An ad that reaches nobody is not charged;
+an ad that cannot pay never reaches a phone.**
+
+⚠️ `sendDigestNow` (the operator's "send early"/"send extra") deliberately skips
+the dry run — pressing send means "send what is waiting". The consequence is
+commented at the call site.
+
+**A collection has THREE states, and that is a bug fix rather than a detail.**
+`owed_cents` set = owing; `charge_claimed_at` set = being collected for right
+now; both null = paid. `claimAdCharge` stamps the claim and LEAVES THE PRICE ON
+THE AD, so only the winner collects and a second pass reading mid-collection
+sees an ad that owes money rather than a freebie.
+
+⚠️ The two-state version was a real bug, found by review. Clearing `owed_cents`
+at claim time made "nothing owing" mean both "already paid for, run it free"
+and "being charged for this second" — so a cron tick reading an ad while an
+approval-triggered send sat inside its Stripe call **broadcast it to the whole
+list for nothing**, and the losing pass's undo then found `broadcast_at` set
+and silently dropped the debt. Never collapse those states again.
+`collectForBatch` also reports CONTENTION: a pass that loses any claim abandons
+the whole batch rather than composing a second one out of the leftovers.
+
+⚠️ **Residual risk, stated in the file header:** a card charge that succeeds at
+Stripe with the response lost in flight reads as a decline, the claim goes back,
+and the member is charged twice — the extra landing on their balance as credit
+rather than being lost. Same exposure the posting-time charge always had. Not
+made worse. The fix is a per-attempt reference stored on the ad, worth doing the
+day anyone sees it happen.
+
+### An unfunded ad is REVIEWED, and can be APPROVED
+
+Second user decision, same session, after hitting it live: *"I approved the ad,
+but it wasn't paid, I want the status to go to 'approved, pending payment' but I
+want the message that the seller gets, to remind them to pay up."*
+
+An ad the member cannot pay for goes into the review queue like any other.
+Approving it is the right move — **it holds its place and goes out on the next
+batch after the money lands, and nobody approves it twice.** `approveAd` sends
+`ad.approved.awaiting-payment` instead of the ordinary text and returns early
+rather than attempting a broadcast that would decline the ad and text the seller
+again about the same money. /admin/review and /admin/ads both label it.
+
+**The one guard: `maxAdsAwaitingPayment` (default 3, 0 = off).** Past that many
+ads waiting on money from one number, further posts are HELD out of the queue —
+the session-020 `unpaid` path, unchanged. It refuses VOLUME, not poverty: a
+member with money or a card may post as many as they like, because each pays for
+itself as it runs.
+
+A failed collection pushes `hold_until` forward by `chargeRetryHours` (6) and
+texts the seller ONCE, so a declined card is not presented again every five
+minutes. Any payment clears the hold — `releaseHeldAds` does it.
+
+### /admin/replies — 28 messages, editable, with their variables
+
+Second ask: *"an admin tab where I can go in and edit the messages and add or
+remove variables from auto replies, rather than having a code/prompt session.
+Plus, I can see the messages."*
+
+- `lib/message-templates.ts` — the catalogue (pure, unit-pinned): key, group,
+  when it is sent, default body, declared variables with descriptions and
+  realistic examples, and `requires` phrases.
+- `lib/message-template-store.ts` — **only overrides are stored** (9950). A
+  message nobody rewrote has no row, so a later improvement to a default still
+  reaches production instead of being shadowed by a copy of the old text. Reset
+  is a DELETE.
+- `lib/messages.ts` — `messageBook()`, cached 30s per process,
+  `forgetMessageBook()` on save.
+- `components/ReplyEditor.tsx` — insert a variable AT THE CURSOR, live preview
+  with example values, live segment count, UCS-2 warning.
+
+**Three rules there that are not style:**
+
+1. A variable the operator deletes is deleted; one they invent is refused.
+   `{ballance}` would render as nothing and they would never find out.
+2. **Some phrases are load-bearing**, and `requires` refuses a save that loses
+   one: carrier words (STOP/HELP) and DEDUP MARKERS. Several replies are
+   suppressed to one per number per day by scanning the outbound log for a
+   substring of their own text — edit that away and the message is fine while
+   the service starts texting somebody the same sentence every five minutes.
+3. Optional clauses are their own templates carried as variables, and
+   `renderTemplate` closes the sentence up around one that does not apply.
+   Newlines survive: the blank lines in the welcome texts ARE the layout.
+
+⚠️ Found by walking it in a browser: saving or resetting navigates to the same
+route with a different query, so React kept the editor mounted and the textarea
+went on showing the operator's own edit after "put back to the original
+wording". Fixed with a `key` carrying the stored body.
+
+**Deliberately not on the page, and it says so:** HELP and the opt-in
+confirmation (the CARRIER answers those, from the Telnyx profile — nothing here
+can read them), and the batch itself (a per-subscriber layout packed to a
+segment budget, not a sentence).
+
+### The receipt
+
+`ad.ran` goes out as the ad does, which is the moment the money moves. It is
+what makes "nothing is charged until your ad runs" checkable rather than merely
+stated. On by default (`adRanReceipt` on Settings); one text per ad that runs.
+
+### Things a future session must not get wrong
+
+1. **`pending` no longer implies "paid for".** That invariant is gone.
+   `owed_cents is not null` is the new question, asked with `getAdsOwed` /
+   `listOwedAds` — it is NOT in the shared `AD_SELECT`, like `broadcast_at`.
+2. **Rejecting refunds nothing now**, because nothing was taken. The refund code
+   stays for ads posted before 9951 and still fires for them.
+3. **The picture upgrade raises `owed_cents`; it does not charge.** The
+   ref-guarded ledger debit and its failed-attach refund are gone; the undo is
+   `bumpAdOwed(id, -delta)`. Legacy `(picture upgrade)` rows still match the
+   matchers in `lib/myads.ts`, which look for `Ad #<id> (`.
+4. **The collection's ledger note must keep the `Ad #<id> (<kind>)` shape** —
+   every refund matcher keys on that delimited token.
+5. **`ad-billing.ts` is on the analytics test-loaded list** (it emits, and
+   digest-engine imports it). It must never import `next/server`.
+6. **`releaseUnpaidAds` is gone**, replaced by `releaseHeldAds`: it admits held
+   ads into review, clears failed-collection holds, and charges nothing. Its two
+   callers (voice route, Stripe webhook) say "covered", not "paid for", and that
+   wording is now the point.
+7. **The IVR consent script is NOT editable from /admin/replies, on purpose.**
+   It is the stored-credential authorization the card networks require, it is the
+   legal record of what a caller agreed to, and it is pinned by
+   `test/voice.test.mjs`. It now says the charge happens "when each ad goes out
+   and your ad credit doesn't cover it". If the charging moment moves again,
+   that sentence moves in the same commit.
+
+### The review found six bugs that would have cost money
+
+Full list in the session log. The ones to carry: the free-ad race above; a
+batch whose head ad could not be paid for **burned that slot key forever, so
+nothing would ever have sent again** (the key names the head of what actually
+goes out now); the picture-upgrade undo was dead code and left a text ad owing
+the picture price; `approveAd` measured the shortfall against the raw balance
+and told a member with $20 that BOTH their $20 ads were on their way;
+`sendDigestNow` took the money before its own early returns; and `listOwedAds`
+named the unpasted 9953 enum value, which Postgres rejected and the code read
+as "nothing is reserved" — silently letting one member commit the same money to
+any number of ads.
+
+Verified: tsc + build clean, unit **1470 → 1561** (new `ad-funding` 50,
+`message-templates` 41), a real eight-scenario engine walk with every message
+printed, and a real Chromium walk of /admin/replies at 23/23 — both re-run
+after each review fix.
+
+Full detail: `Session log/021_2026-08-21b_charge-on-run-and-message-admin/session_log.md`.
+
+## Migrations already applied
+
+### Everything from 9954 down IS applied (user confirmed 2026-08-21)
+
+**`9954`, `9955`, `9956` and `9957` are applied.** Only `9950`–`9953` are
+waiting (see the top of this file). Every feature below is fully on rather than
+degrading, so if one of them misbehaves, a pending migration is NOT the
+explanation — look at the code.
 
 Consequences worth carrying:
 

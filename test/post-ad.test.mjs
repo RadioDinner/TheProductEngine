@@ -85,25 +85,47 @@ export function run(t) {
     false,
   );
 
-  // Charge notes — EXACT SMS-lane wording (lib/engine.ts handleAdSubmission).
+  // The payment sentence on the web confirmation. Since session 021 an ad is
+  // collected for when it RUNS, so none of these may claim a charge has
+  // happened — that is the promise the whole change exists to keep.
   t.eq(
-    "dollar note",
-    chargeNoteLine({ costCents: 4500, leftCents: 10500, toppedUpCents: 0 }),
-    "$45 — $105 of ad credit left.",
+    "covered by credit — says nothing is charged yet",
+    chargeNoteLine({ costCents: 4500, leftCents: 10500, shortCents: 0, hasCard: false }),
+    "It costs $45 and nothing is charged until your ad goes out — $105 of ad credit left after it does.",
   );
   t.eq(
-    "dollar note with cents",
-    chargeNoteLine({ costCents: 4500, leftCents: 1050, toppedUpCents: 0 }),
-    "$45 — $10.50 of ad credit left.",
+    "cents render as cents",
+    chargeNoteLine({ costCents: 4500, leftCents: 1050, shortCents: 0, hasCard: false }),
+    "It costs $45 and nothing is charged until your ad goes out — $10.50 of ad credit left after it does.",
   );
   t.eq(
-    "welcome-credit note",
-    chargeNoteLine({ costCents: 6000, leftCents: 9000, toppedUpCents: 0, welcomeLabel: "$150" }),
-    "$60 of your $150 welcome credit — $90 left.",
+    "welcome credit is named",
+    chargeNoteLine({
+      costCents: 6000,
+      leftCents: 9000,
+      shortCents: 0,
+      hasCard: false,
+      welcomeLabel: "$150",
+    }),
+    "It costs $60 of your $150 welcome credit and nothing is charged until your ad goes out — $90 of ad credit left after it does.",
+  );
+  // THE SENTENCE THE USER ASKED FOR, on the web lane.
+  t.eq(
+    "card on file — the card waits for the run",
+    chargeNoteLine({ costCents: 4500, leftCents: 0, shortCents: 3300, hasCard: true }),
+    "It costs $45 and your card won't be charged until your ad runs.",
   );
   t.eq(
-    "top-up note",
-    chargeNoteLine({ costCents: 4500, leftCents: 0, toppedUpCents: 3300 }),
-    "$45 — $0 of ad credit left. $33 was charged to your card to cover it.",
+    "short with no card — asks for money, still charges nothing",
+    chargeNoteLine({ costCents: 4500, leftCents: 0, shortCents: 3300, hasCard: false }),
+    "It costs $45 and you're $33 short, so add money before it can go out — nothing is charged until it does.",
   );
+  // No note may ever say the money has already moved.
+  for (const note of [
+    chargeNoteLine({ costCents: 4500, leftCents: 10500, shortCents: 0, hasCard: false }),
+    chargeNoteLine({ costCents: 4500, leftCents: 0, shortCents: 3300, hasCard: true }),
+    chargeNoteLine({ costCents: 4500, leftCents: 0, shortCents: 3300, hasCard: false }),
+  ]) {
+    t.eq(`no note claims a past charge: ${note.slice(0, 24)}…`, /was charged/.test(note), false);
+  }
 }

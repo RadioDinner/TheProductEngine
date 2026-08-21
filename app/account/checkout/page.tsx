@@ -55,7 +55,8 @@ export default async function CheckoutPage({
           <p className="auth-intro">
             You&rsquo;ll finish paying on a secure checkout page run by Stripe, our payment
             processor. The money is added to your account as soon as the payment goes
-            through, and your card is saved so future ads can top up automatically.
+            through, and your card is saved so a later ad can top up automatically — charged
+            when that ad goes out, never when you post it.
           </p>
           <form action={startStripeCheckout}>
             <input type="hidden" name="amount" value={amountCents} />

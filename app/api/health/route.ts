@@ -108,6 +108,36 @@ export async function GET(req: NextRequest) {
       // missing one breaks a whole surface (9989: every inbound SMS command;
       // 9988: digest composition + /admin/digests). Surface drift here instead
       // of leaving it to be inferred from 500s.
+      // Migration 9951: an ad is collected for when it RUNS. Without
+      // ads.owed_cents nothing is quoted, nothing is reserved and nothing is
+      // collected at the run — which is silently the PRE-9951 world, where ads
+      // were charged at posting time. Except they aren't any more: the code no
+      // longer charges at posting either. So a deploy without this migration
+      // runs every ad for free, and nothing fails to tell you. It is the most
+      // important probe on this list.
+      const owed = await db().from("ads").select("owed_cents", { count: "exact", head: true });
+      report.migration9951 = owed.error
+        ? {
+            applied: false,
+            code: owed.error.code,
+            error: owed.error.message,
+            fix: "run supabase/migrations/9951_charge_on_run.sql in the SQL editor — until then NO AD IS BEING CHARGED FOR",
+          }
+        : { applied: true };
+      // Migration 9950: editable auto-reply copy. Until it is pasted every
+      // message uses the wording shipped in the code and /admin/replies can
+      // show but not save. Nothing breaks.
+      const templates = await db()
+        .from("message_templates")
+        .select("key", { count: "exact", head: true });
+      report.migration9950 = templates.error
+        ? {
+            applied: false,
+            code: templates.error.code,
+            error: templates.error.message,
+            fix: "run supabase/migrations/9950_message_templates.sql in the SQL editor",
+          }
+        : { applied: true };
       // Migration 9958: the member name a feedback form teaches us. Until it
       // is pasted the forms work and the name rides the operator's email; it
       // simply isn't stored on the account.
