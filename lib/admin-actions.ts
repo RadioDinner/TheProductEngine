@@ -57,6 +57,7 @@ import {
   logMessage,
   queueBump,
   reassignAdOwnership,
+  refreshAdBadge,
   resolvePhotoSubmission,
   revertAdToPending,
   reviveAd,
@@ -66,6 +67,7 @@ import {
   updateAdBody,
 } from "@/lib/engine-store";
 import { isCategoryKey } from "@/lib/categories";
+import { badgeSourceSrc } from "@/lib/ad-badge-photo";
 import { textedAdPhotos } from "@/lib/photo-collage";
 import { deriveTitle } from "@/lib/ad-display";
 import { siteUrl } from "@/lib/email";
@@ -201,6 +203,32 @@ export async function adminEditAd(formData: FormData): Promise<void> {
     await setAdCategory(id, isCategoryKey(String(rawCategory)) ? String(rawCategory) : null);
   }
   redirect(backTarget(formData, { saved: String(id) }));
+}
+
+/**
+ * Make this ad's SMS picture now — the first texted photo with "AD 1024"
+ * burned into the corner — instead of waiting for the batch to make it.
+ *
+ * Normally the label is made the moment a picture arrives (session 024), so
+ * this button is for the two cases where there isn't one: an ad posted before
+ * that shipped, and a labelling that failed. It exists because the failure is
+ * otherwise invisible — the send path falls back to the clean original, which
+ * looks exactly like an ad that was never a picture ad. Pressing it either
+ * produces the picture or SAYS why not, which is the whole point of having it.
+ */
+export async function adminLabelAdPicture(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (!Number.isInteger(id)) redirect(backTarget(formData));
+  const ad = await getAdRecord(id);
+  if (!ad) redirect(backTarget(formData, { error: "labelmissing", id: String(id) }));
+  if (!badgeSourceSrc(ad!)) {
+    redirect(backTarget(formData, { error: "labelnopic", id: String(id) }));
+  }
+  const url = await refreshAdBadge(id).catch(() => null);
+  redirect(
+    backTarget(formData, url ? { labelled: String(id) } : { error: "labelfailed", id: String(id) }),
+  );
 }
 
 /** Queue a free admin re-run: the ad rides the next digest again. An expired

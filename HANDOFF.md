@@ -11,7 +11,12 @@ doing. Kept deliberately short.
   `new_session_instructions.md` — several sessions run against this repo at
   once, and the collisions that hurt are the ones that merge cleanly.
 
-**Last updated:** 2026-08-21, **v1.6.11** — session 023 landed on top of 021
+**Last updated:** 2026-08-21, **v1.6.12** — session 024 shipped item 53: the
+"AD 1024" label is now burned into a picture **when it arrives** rather than
+while a batch is composed, and the labelled copy is KEPT on the ad, so
+/admin/ads shows the exact picture a subscriber receives. Before this it was
+made at send time and discarded, which is why the operator had never seen it
+and why a failed render was invisible. Below it, session 023 landed on top of 021
 and 022. **023 moved when an ad is paid for: it is charged when it RUNS, not
 when it is posted.** It also made an unfunded ad reviewable and approvable,
 and put the auto-reply copy behind an admin tab. 021 and 022 ran in parallel
@@ -29,27 +34,26 @@ know on day one.*
 
 ---
 
-## ⚠️ START HERE: TWO migrations are waiting, and one of them is not optional
+## ⚠️ START HERE: ONE migration is waiting, and it degrades gently
 
-Session 023 added **`9950_charge_on_run.sql`** and
-**`9949_message_templates.sql`**. Neither has been pasted. **`9949` is the
-newest; the next migration takes 9948 — confirm with
-`npm run check:migrations`, which reads `origin/main` too.**
+Session 024 added **`9948_ad_badged_photo.sql`** (`ads.badged_photo` +
+`ads.badged_photo_src`). **It is the newest; the next migration takes 9947 —
+confirm with `npm run check:migrations`, which reads `origin/main` too.**
 
-**`9950` is the one to paste first, and it is different in kind from every
-pending migration this repo has had.** The rest degrade to "the feature is
-off". Without `ads.owed_cents` there is nothing to quote, reserve or collect —
-and since 023 the code does not charge at posting time either, so **no ad
-would be charged for at all.** The send path refuses to send without it rather
-than running every ad free (`collectForBatch` halts and logs), and
-`/api/health` probes it by name. `9949` degrades normally: every message uses
-the wording shipped in the code and /admin/replies shows but cannot save.
+**Unpasted, nothing sends wrong.** The ad number is still burned into every
+broadcast picture exactly as it was before — rendered while the batch is being
+composed and then discarded. What you lose is the /admin/ads preview of it and
+the saved re-render. `/api/health` probes it by name.
 
-### Everything from 9951 down IS applied (user confirmed 2026-08-21)
+### Everything from 9949 down IS applied (user confirmed 2026-08-21)
 
-**`9951`, `9952` and `9953` are all applied**, along with everything before
-them. Every feature below is fully on rather than degrading, so if one
-misbehaves, a pending migration is NOT the explanation — look at the code.
+**`9949`, `9950`, `9951`, `9952` and `9953` are all applied**, along with
+everything before them. Every feature below is fully on rather than degrading,
+so if one misbehaves, a pending migration is NOT the explanation — look at the
+code.
+
+That includes the two that used to head this section: **ads are being charged
+when they run (9950)** and **/admin/replies can save its wording (9949)**.
 
 Consequences now live: held-unpaid ads are really held and released by a card
 (9953), scheduled admin broadcasts work (9952), and test ads carry the
@@ -138,6 +142,31 @@ refunded" must never be read as promising the $40 welcome credit back as cash.
 /account page.** A draft of the policy page claimed otherwise and was corrected
 before shipping. Add that figure to /account and the policy page can say so;
 until then it tells members to ask.
+
+## 🖼 The SMS picture carries a LABEL, and sharp is now load-bearing for it alone
+
+A picture ad broadcasts ONE photo with its ad number burned into the corner
+("AD 1024") — the only thing tying a photo arriving on its own to its line in
+the batch text and to `PIC`. Since session 024 that label is made **when the
+picture arrives** and kept on the ad (`badged_photo` + `badged_photo_src`,
+migration 9948), so /admin/ads shows exactly what a subscriber receives.
+
+Three things a future session must know:
+
+1. **Staleness is decided by COMPARING `badged_photo_src` to the ad's current
+   first texted picture, never by a flag.** A replaced picture makes the stored
+   label read "not labelled yet"; it can never make it read wrong. Do not
+   "optimise" that into a boolean somebody has to remember to clear.
+2. **A labelling failure is non-fatal and therefore invisible** — the batch
+   broadcasts the plain original instead. The self-test on `/admin/sms-diag`
+   ("Picture-label self-test") renders one for real on the live deploy and
+   counts the ink; that is how you tell a broken renderer from an ad that never
+   had a picture.
+3. ⚠️ **Since session 016 removed collaging, `stampAdNumber` is the ONLY
+   production code path that uses `sharp`.** A deploy that loses the native
+   binding (it happened on 2026-08-19 — Next 16 tracing dropped libvips) shows
+   up as unlabelled pictures and nothing else. If the badge ever quietly
+   vanishes after a framework upgrade, look there first.
 
 ## 📡 Where an ad goes, and what "paused" covers (session 022)
 

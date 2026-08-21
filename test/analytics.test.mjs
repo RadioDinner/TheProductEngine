@@ -318,11 +318,16 @@ export async function run(t) {
     // ad-billing.ts joined this set in session 023: digest-engine imports it
     // (the batch is what collects for an ad now), so it is loaded under plain
     // node by everything that loads digest-engine.
+    // engine-store.ts joined in session 024: creating an ad with a picture
+    // schedules the SMS label after the response, and the store is imported by
+    // nearly every module the suites load. Its callers all register — the
+    // Telnyx inbound route, the digest cron, post-actions and admin-actions.
     const TEST_LOADED = new Set([
       "engine.ts",
       "moderation.ts",
       "digest-engine.ts",
       "ad-billing.ts",
+      "engine-store.ts",
       "analytics.ts",
     ]);
 

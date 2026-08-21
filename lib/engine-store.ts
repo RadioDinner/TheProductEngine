@@ -9,7 +9,11 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { supabaseConfigured } from "@/lib/db";
+import { afterResponse } from "@/analytics/src/after";
 import * as remote from "@/lib/engine-store-supabase";
+import { badgeLabel, badgeSourceSrc, type AdBadge } from "@/lib/ad-badge-photo";
+import { storeBadgedPhoto } from "@/lib/photos";
+import { siteUrl } from "@/lib/email";
 import { isPicReplaceSubmission } from "@/lib/myads";
 import { COLLAGE_QUIET_MS } from "@/lib/collage-confirm";
 import { MAX_AD_PHOTOS } from "@/lib/photo-collage";
@@ -87,6 +91,13 @@ export interface StoredAd {
   rejectionKind?: "benign" | "violation";
   /** The MMS picture (position 0) — the one SMS/PIC/email digests carry. */
   photo?: { src: string; alt: string; width: number; height: number };
+  /** The SMS copy of this ad's first texted picture, with the ad number burned
+   * into the corner (session 024, migration 9948) — send-only, never an
+   * ad_photos row. Paired with `badgedPhotoSrc`, the picture it was rendered
+   * from: a mismatch means the picture was replaced and the label is stale.
+   * NOT part of the shared Supabase AD_SELECT — read them with getAdBadges. */
+  badgedPhoto?: string | null;
+  badgedPhotoSrc?: string | null;
   /** Approved emailed-in extras (FEATURES item 1) — website gallery only. */
   morePhotos?: { src: string; alt: string; width: number; height: number }[];
   /** Website-listing add-on flag (session 016, migration 9973). false = off
@@ -1051,6 +1062,27 @@ const file = {
     return submission;
   },
 
+  getAdBadges(ids: number[]): Map<number, AdBadge> {
+    const out = new Map<number, AdBadge>();
+    for (const ad of load().ads) {
+      if (!ids.includes(ad.id)) continue;
+      // Both halves or neither — an unverifiable label is worse than none.
+      if (ad.badgedPhoto && ad.badgedPhotoSrc) {
+        out.set(ad.id, { url: ad.badgedPhoto, src: ad.badgedPhotoSrc });
+      }
+    }
+    return out;
+  },
+
+  setAdBadge(id: number, badge: AdBadge | null): void {
+    const store = load();
+    const ad = store.ads.find((a) => a.id === id);
+    if (!ad) return;
+    ad.badgedPhoto = badge?.url ?? null;
+    ad.badgedPhotoSrc = badge?.src ?? null;
+    save(store);
+  },
+
   adEverBroadcast(id: number): boolean {
     return Boolean(load().ads.find((a) => a.id === id)?.broadcastAt);
   },
@@ -1446,9 +1478,89 @@ export async function createAd(input: NewAdInput, options: CreateAdOptions = {})
   const settings = await getEngineSettings();
   const asTest = testModeActive(settings, Date.now());
   const finalInput = asTest ? { ...input, webListing: false, isTest: true } : input;
-  return supabaseConfigured
-    ? remote.createAd(finalInput, options)
+  const id = supabaseConfigured
+    ? await remote.createAd(finalInput, options)
     : file.createAd(finalInput, options);
+  // The ad now has both halves the label needs — a number and a picture — so
+  // this is the moment the user asked for: "if I send in an image for an ad,
+  // get the ad number from the ad I'm posting and add it to the image."
+  // AFTER the response, always: a seller texting an ad waits on the reply, and
+  // a fetch + render + upload is seconds of it. Never awaited, never fatal.
+  if (finalInput.photo) scheduleAdBadge(id);
+  return id;
+}
+
+/* ---------- the labelled SMS picture (session 024) ----------
+ *
+ * A picture ad broadcasts one photo with its ad number burned into the corner
+ * (session 018). Until now that copy was made while the batch was being
+ * composed and its URL was dropped on the floor once the outbox rows existed,
+ * so the ONLY place it had ever been seen was a subscriber's phone — the
+ * operator could not check the label before a batch went out or after it, and
+ * a failed render fell back to the clean original with nothing to show for it.
+ *
+ * Now the label is made when the PICTURE ARRIVES and kept on the ad, so
+ * /admin/ads can show exactly what goes out. `resolveBroadcastPictures` still
+ * renders one on the spot when there isn't a fresh one — an ad posted before
+ * this shipped, a render that failed at ingest, a picture replaced since — so
+ * the send path never depends on this having worked.
+ */
+
+/** Read the labelled copies on file for these ads. Its own read, never part of
+ * AD_SELECT: an unpasted 9948 must cost a preview, not a page. */
+export async function getAdBadges(ids: number[]): Promise<Map<number, AdBadge>> {
+  return supabaseConfigured ? remote.getAdBadges(ids) : file.getAdBadges(ids);
+}
+
+/** Record (or clear) an ad's labelled copy. */
+export async function setAdBadge(id: number, badge: AdBadge | null): Promise<void> {
+  return supabaseConfigured ? remote.setAdBadge(id, badge) : file.setAdBadge(id, badge);
+}
+
+/**
+ * Make (or re-make) the labelled SMS copy of an ad's picture and record it.
+ * Returns the URL to send, or null when there is nothing to label or the
+ * render/upload failed.
+ *
+ * ⚠️ Every failure here returns null and the caller broadcasts the UNBADGED
+ * original, because a picture with no number on it still sells the item and no
+ * picture at all does not. That fallback is also why this has to be loud: it
+ * is invisible from the outside, so the reason goes to the function log and
+ * /admin/ads says the picture is unlabelled rather than quietly showing a
+ * clean original as if all were well.
+ */
+export async function refreshAdBadge(id: number): Promise<string | null> {
+  // Dev mode has no storage bucket, so there is nowhere to put a labelled copy
+  // and nothing downstream would fetch it. Bail before the work, not after.
+  if (!supabaseConfigured) return null;
+  const ad = await getAdRecord(id);
+  if (!ad) return null;
+  const src = badgeSourceSrc(ad);
+  if (!src) return null;
+  // Telnyx needs an ABSOLUTE media URL, and so does the fetch below: a
+  // site-relative src (fixtures, pre-re-hosting ads) has to be prefixed.
+  const absolute = src.startsWith("http") ? src : `${siteUrl}${src}`;
+  const url = await storeBadgedPhoto(absolute, badgeLabel(ad.id));
+  if (!url) return null;
+  // Keyed on the src we actually rendered FROM, so a picture replaced between
+  // the read above and now leaves a label that reads stale rather than one
+  // that claims to describe a picture it never saw.
+  await setAdBadge(id, { url, src }).catch((e) => {
+    console.error("[engine-store] couldn't record the labelled picture:", e instanceof Error ? e.message : e);
+  });
+  return url;
+}
+
+/** `refreshAdBadge` after the response has gone out. Fire-and-forget: the
+ * label is worth seconds of a cron tick, never of a seller's reply. */
+export function scheduleAdBadge(id: number): void {
+  if (!supabaseConfigured) return;
+  afterResponse(() =>
+    refreshAdBadge(id).then(
+      () => {},
+      (e) => console.error("[engine-store] labelling the picture failed:", e instanceof Error ? e.message : e),
+    ),
+  );
 }
 
 export async function getAdRecord(id: number): Promise<StoredAd | null> {
@@ -1475,9 +1587,16 @@ export async function attachAdPhotos(
   primary: StoredAd["photo"] | null,
   addParts: NonNullable<StoredAd["morePhotos"]>,
 ): Promise<{ oldPrimarySrc: string | null } | null> {
-  return supabaseConfigured
-    ? remote.attachAdPhotos(id, primary, addParts)
+  const attached = supabaseConfigured
+    ? await remote.attachAdPhotos(id, primary, addParts)
     : file.attachAdPhotos(id, primary, addParts);
+  // A picture landed on an ad that already has a number: label it, exactly as
+  // at posting. Scheduled on ANY successful attach rather than only when
+  // `primary` is set — the gallery parts are what a legacy combined ad
+  // broadcasts (textedAdPhotos hands back the originals, not the collage), so
+  // "the picture that goes out" can change without primary being touched.
+  if (attached) scheduleAdBadge(id);
+  return attached;
 }
 
 export async function getPendingAds(): Promise<StoredAd[]> {
@@ -1885,9 +2004,16 @@ export async function resolvePhotoSubmission(
   id: number,
   approve: boolean,
 ): Promise<PhotoSubmission | null> {
-  return supabaseConfigured
-    ? remote.resolvePhotoSubmission(id, approve)
+  const submission = supabaseConfigured
+    ? await remote.resolvePhotoSubmission(id, approve)
     : file.resolvePhotoSubmission(id, approve);
+  // An approved PIC REPLACEMENT swaps the position-0 picture, which is the one
+  // that goes out — so the label on file was made from a picture this ad no
+  // longer sends. It already reads stale (badgedPhotoSrc no longer matches),
+  // so nothing is wrong meanwhile; this just re-makes it now rather than
+  // leaving the operator looking at "not labelled yet" until the batch sends.
+  if (submission && approve) scheduleAdBadge(submission.adId);
+  return submission;
 }
 
 /**

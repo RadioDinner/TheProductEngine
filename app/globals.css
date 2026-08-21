@@ -2598,6 +2598,17 @@ a.btn-sm:hover {
   background: var(--surface);
 }
 
+/* The picture that goes out by text is shown WHOLE and larger than the rest.
+   A square `cover` crop of a portrait photo cuts off the bottom-right corner
+   — which is exactly where the ad number is burned in, so the one thing this
+   preview exists to let the operator check was the one thing cropped away. */
+.adcard-thumb--texted img {
+  width: 11rem;
+  height: auto;
+  max-height: 13rem;
+  object-fit: contain;
+}
+
 /* Which picture the seller PAID to send, marked on the picture itself —
    beside it in a caption the mark would be one more line to read. */
 .adcard-shot-tag {

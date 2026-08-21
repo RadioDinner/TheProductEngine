@@ -4,6 +4,7 @@
  * project exists.
  */
 import { db } from "@/lib/db";
+import { type AdBadge } from "@/lib/ad-badge-photo";
 import { type AdminMessage } from "@/lib/admin-messages";
 import { COLLAGE_QUIET_MS } from "@/lib/collage-confirm";
 import { MAX_AD_PHOTOS } from "@/lib/photo-collage";
@@ -592,6 +593,66 @@ export async function setAdUnpaid(id: number, costCents: number): Promise<void> 
  */
 export function tableMissing(error: { code?: string } | null): boolean {
   return error?.code === "42P01" || error?.code === "PGRST205";
+}
+
+/* ---------- the labelled SMS picture (session 024, migration 9948) ----------
+ *
+ * `badged_photo` is the ad's first texted picture with its ad number burned
+ * into the corner, and `badged_photo_src` is the picture it was made from.
+ * Neither is in AD_SELECT: a core select naming a column a pending migration
+ * has not created yet is how the whole site 500s, and these two are worth
+ * exactly one preview each.
+ *
+ * A missing column reads as "this ad has no label on file", which is precisely
+ * the pre-9948 truth — the badge was rendered at send time and thrown away —
+ * so the send path just renders it again. Nothing degrades except the preview.
+ */
+
+/** Postgres/PostgREST codes that mean "9948 isn't pasted yet". */
+function missingBadgeColumn(error: { code?: string } | null): boolean {
+  return error?.code === "42703" || error?.code === "PGRST204";
+}
+
+export async function getAdBadges(ids: number[]): Promise<Map<number, AdBadge>> {
+  const out = new Map<number, AdBadge>();
+  if (!ids.length) return out;
+  const { data, error } = await db()
+    .from("ads")
+    .select("id, badged_photo, badged_photo_src")
+    .in("id", ids)
+    .not("badged_photo", "is", null);
+  if (error) {
+    if (missingBadgeColumn(error)) return out;
+    throw error;
+  }
+  for (const raw of data ?? []) {
+    const row = raw as { id: number; badged_photo: string | null; badged_photo_src: string | null };
+    // Both halves or neither: a URL with no source src cannot be checked for
+    // staleness, and an unverifiable label is worse than none.
+    if (row.badged_photo && row.badged_photo_src) {
+      out.set(row.id, { url: row.badged_photo, src: row.badged_photo_src });
+    }
+  }
+  return out;
+}
+
+/**
+ * Record the labelled copy made for an ad. Best-effort by design: the label
+ * has already been rendered and stored by the time this is called, so failing
+ * to write the pointer costs a re-render later and never an ad.
+ */
+export async function setAdBadge(id: number, badge: AdBadge | null): Promise<void> {
+  const { error } = await db()
+    .from("ads")
+    .update({
+      badged_photo: badge?.url ?? null,
+      badged_photo_src: badge?.src ?? null,
+    })
+    .eq("id", id);
+  if (error && !missingBadgeColumn(error)) throw error;
+  if (error) {
+    console.error("[engine-store] ads.badged_photo missing (migration 9948) — the labelled SMS picture was made but not recorded, so it is re-rendered every time it is needed");
+  }
 }
 
 /* ---------- owed prices (session 023, migration 9950) ----------

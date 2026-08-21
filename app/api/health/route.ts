@@ -147,6 +147,20 @@ export async function GET(req: NextRequest) {
             fix: "run supabase/migrations/9950_charge_on_run.sql in the SQL editor — until then NO AD IS BEING CHARGED FOR",
           }
         : { applied: true };
+      // Migration 9948: the labelled SMS picture, kept rather than thrown away.
+      // Until it is pasted, the label is still burned into every broadcast
+      // picture — it is just rendered at send time and discarded, exactly as
+      // before, so /admin/ads has nothing to preview and every batch re-renders.
+      // Nothing sends wrong; the operator simply can't see it beforehand.
+      const badged = await db().from("ads").select("badged_photo", { count: "exact", head: true });
+      report.migration9948 = badged.error
+        ? {
+            applied: false,
+            code: badged.error.code,
+            error: badged.error.message,
+            fix: "run supabase/migrations/9948_ad_badged_photo.sql in the SQL editor — until then /admin/ads cannot show the labelled picture and each batch re-renders it",
+          }
+        : { applied: true };
       // Migration 9949: editable auto-reply copy. Until it is pasted every
       // message uses the wording shipped in the code and /admin/replies can
       // show but not save. Nothing breaks.

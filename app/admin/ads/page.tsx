@@ -3,11 +3,13 @@ import Link from "next/link";
 import {
   adminDeleteAd,
   adminEditAd,
+  adminLabelAdPicture,
   adminPromoteAdToFeatured,
   adminQueueBump,
   adminResolvePhotoSubmission,
 } from "@/lib/admin-actions";
 import {
+  getAdBadges,
   getAdCategories,
   getAdsOwed,
   getAdDelivery,
@@ -23,6 +25,7 @@ import {
 import { categoriesSupported, getLedger } from "@/lib/store";
 import { CATEGORIES, categoryLabel } from "@/lib/categories";
 import { isPicReplaceSubmission } from "@/lib/myads";
+import { badgeLabel, badgeSourceSrc, freshBadgeUrl, type AdBadge } from "@/lib/ad-badge-photo";
 import { textedAdPhotos } from "@/lib/photo-collage";
 import { formatPhone } from "@/lib/phone";
 import { formatPrice, site } from "@/lib/config";
@@ -99,7 +102,7 @@ function deliveryLines(sent: AdDelivery | undefined, status: StoredAdStatus): st
 }
 
 /**
- * What happens to picture number `i` of an ad — the three fates are genuinely
+ * What happens to one of an ad's pictures — the three fates are genuinely
  * different, and lumping them together would misreport what the seller bought.
  *
  *  - **Picture 1 BROADCASTS.** `resolveBroadcastPictures` sends exactly
@@ -110,11 +113,42 @@ function deliveryLines(sent: AdDelivery | undefined, status: StoredAdStatus): st
  *    times as much to send to the whole list.
  *  - **Anything past `MAX_COMBINED_PHOTOS` is website-only** — an emailed-in
  *    extra nobody was charged to broadcast.
+ *
+ * ⚠️ Matched by SRC against the texted set, never by position in the raw list.
+ * The two orders differ for a legacy combined ad: its position-0 picture is a
+ * collage, which has not been sent since session 018, and `textedAdPhotos`
+ * hands back the individual originals from position 1 up. Marking the raw
+ * first picture "texts" put the badge on the one picture that ISN'T sent.
  */
-function pictureRole(index: number, textedCount: number): { tag: string | null; title: string } {
-  if (index === 0) return { tag: "texts", title: "goes out with the batch" };
-  if (index < textedCount) return { tag: "PIC", title: "texted only if someone replies PIC" };
+function pictureRole(src: string, textedSrcs: string[]): { tag: string | null; title: string } {
+  const at = textedSrcs.indexOf(src);
+  if (at === 0) return { tag: "texts", title: "goes out with the batch, labelled with the ad number" };
+  if (at > 0) return { tag: "PIC", title: "texted only if someone replies PIC" };
   return { tag: null, title: "website only" };
+}
+
+/**
+ * The picture this ad's text message actually carries, and whether the copy on
+ * file is the LABELLED one (session 024).
+ *
+ * The label — "AD 1024" burned into the corner — is what ties a photo arriving
+ * on its own to its line in the batch text and to the PIC command, so it is
+ * the difference between the picture a subscriber can act on and one they
+ * can't. It used to be made while a batch was composed and thrown away
+ * immediately, which meant this page had no way to show what went out; now it
+ * is made when the picture arrives and kept, and this is where it is read.
+ *
+ * `freshBadgeUrl` returns null for a label made from a picture the ad no
+ * longer sends, so a replaced picture reads "not labelled yet" rather than
+ * showing the operator a confident picture of the wrong thing.
+ */
+function smsPicture(
+  ad: StoredAd,
+  badge: AdBadge | undefined,
+): { src: string; labelled: string | null } | null {
+  const src = badgeSourceSrc(ad);
+  if (!src) return null;
+  return { src, labelled: freshBadgeUrl(ad, badge) };
 }
 
 /**
@@ -159,6 +193,7 @@ export default async function AdminAds({
     billed?: string;
     short?: string;
     phone?: string;
+    labelled?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -180,6 +215,14 @@ export default async function AdminAds({
   // this tag and not the page.
   const owedByAd = await getAdsOwed(ads.map((ad) => ad.id)).catch(
     () => new Map<number, number>(),
+  );
+  // The labelled SMS copy of each ad's picture (session 024, migration 9948) —
+  // what the operator asked to be able to see: "the same image that was or
+  // will be sent out in the SMS". Its own read, so an unpasted 9948 costs the
+  // preview and not the page; the list then reads as "not labelled yet", which
+  // is honest — the batch labels it on the way out.
+  const badgeByAd = await getAdBadges(ads.map((ad) => ad.id)).catch(
+    () => new Map<number, AdBadge>(),
   );
   // Inline category editing (item 22) — hidden until migration 9976.
   const withCategories = await categoriesSupported();
@@ -238,7 +281,9 @@ export default async function AdminAds({
         Bump re-runs an ad free <Tip k="ads.bump" />, Edit changes the public text or
         category <Tip k="ads.edit" />, Delete removes without refunding or notifying{" "}
         <Tip k="ads.delete" />, and emailed-in pictures wait on their ad&apos;s row for
-        your review <Tip k="ads.photoSubmissions" />.
+        your review <Tip k="ads.photoSubmissions" />. The thumbnail marked{" "}
+        <strong>texts</strong> is the picture that goes out by SMS, labelled with the ad
+        number <Tip k="ads.textPicture" />.
       </p>
       {params.deleted && (
         <p className="notice" role="status">
@@ -260,6 +305,33 @@ export default async function AdminAds({
             ? `, and ${formatPrice(Number(params.billed) || 0)} came off the seller's balance.`
             : ", on the house — nothing was billed."}{" "}
           <Link href="/admin/featured">Arrange the slots</Link>.
+        </p>
+      )}
+      {params.labelled && (
+        <p className="notice" role="status">
+          Labelled the text picture for ad #{Number(params.labelled) || params.labelled}. Its
+          thumbnail below is now the copy subscribers receive.
+        </p>
+      )}
+      {params.error === "labelnopic" && (
+        <p className="form-error" role="alert">
+          Ad #{Number(params.id) || params.id} has no picture that goes out by text, so there is
+          nothing to label.
+        </p>
+      )}
+      {params.error === "labelmissing" && (
+        <p className="form-error" role="alert">
+          Ad #{Number(params.id) || params.id} could not be found, so nothing was labelled.
+        </p>
+      )}
+      {params.error === "labelfailed" && (
+        <p className="form-error" role="alert">
+          The picture on ad #{Number(params.id) || params.id} could not be labelled. The reason is
+          in the function log (search <code>[photos] badge skipped</code>) — the usual causes are
+          an unreadable picture or the image renderer missing on this deploy.{" "}
+          <strong>Ads still send</strong>: a picture that can&apos;t be labelled goes out as the
+          plain original. Run the picture self-test on{" "}
+          <Link href="/admin/sms-diag">SMS diagnostics</Link> to tell the two apart.
         </p>
       )}
       {params.error === "promotenopic" && (
@@ -386,7 +458,12 @@ export default async function AdminAds({
           // website-only extras, and the difference is what the seller paid
           // for, so it is labelled rather than left to be guessed.
           const pictures = [...(ad.photo ? [ad.photo] : []), ...(ad.morePhotos ?? [])];
-          const textedCount = textedAdPhotos(ad.photo, ad.morePhotos).length;
+          const textedSrcs = textedAdPhotos(ad.photo, ad.morePhotos).map((p) => p.src);
+          const textedCount = textedSrcs.length;
+          // What the text message carries, and whether the labelled copy of it
+          // exists yet. When it does, the thumbnail below shows THAT rather
+          // than the clean original — this page's job is what goes out.
+          const sms = smsPicture(ad, badgeByAd.get(ad.id));
           // A Featured spot IS a picture, so an ad without one has nothing to
           // promote — and only an ad that is actually live is worth sending
           // homepage traffic to. Offering the button on a rejected or held ad
@@ -427,27 +504,41 @@ export default async function AdminAds({
                 <div className="adcard-main">
                   {pictures.length > 0 && (
                     <div className="adcard-shots">
-                      {pictures.map((picture, i) => (
-                        <a
-                          key={`${picture.src}-${i}`}
-                          className="adcard-thumb"
-                          href={picture.src}
-                          target="_blank"
-                          rel="noreferrer"
-                          title={`Picture ${i + 1} — ${pictureRole(i, textedCount).title}. Open full size.`}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={picture.src}
-                            alt={picture.alt || `Picture ${i + 1} on ad #${ad.id}`}
-                          />
-                          {pictureRole(i, textedCount).tag && (
-                            <span className="adcard-shot-tag">
-                              {pictureRole(i, textedCount).tag}
-                            </span>
-                          )}
-                        </a>
-                      ))}
+                      {pictures.map((picture, i) => {
+                        const role = pictureRole(picture.src, textedSrcs);
+                        // The one the text carries is shown AS TEXTED — the
+                        // labelled copy, not the clean original — when that
+                        // copy exists. Same picture, plus the "AD 1024" the
+                        // subscriber sees, so the operator is looking at the
+                        // message rather than at its raw material.
+                        const asTexted = role.tag === "texts" ? sms?.labelled : null;
+                        const href = asTexted ?? picture.src;
+                        return (
+                          <a
+                            key={`${picture.src}-${i}`}
+                            className={`adcard-thumb${asTexted ? " adcard-thumb--texted" : ""}`}
+                            href={href}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={
+                              `Picture ${i + 1} — ${role.title}.` +
+                              (asTexted ? " This is the labelled copy, exactly as texted." : "") +
+                              " Open full size."
+                            }
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={href}
+                              alt={
+                                asTexted
+                                  ? `Ad #${ad.id} as texted, labelled ${badgeLabel(ad.id)}`
+                                  : picture.alt || `Picture ${i + 1} on ad #${ad.id}`
+                              }
+                            />
+                            {role.tag && <span className="adcard-shot-tag">{role.tag}</span>}
+                          </a>
+                        );
+                      })}
                     </div>
                   )}
                   <div className="adcard-copy">
@@ -458,6 +549,25 @@ export default async function AdminAds({
                         {line}
                       </p>
                     ))}
+                    {sms && (
+                      <p className="adcard-meta">
+                        {sms.labelled ? (
+                          <>
+                            Text picture is labelled <strong>{badgeLabel(ad.id)}</strong> — the
+                            thumbnail is the copy that goes out.
+                          </>
+                        ) : (
+                          <>
+                            Text picture isn&apos;t labelled yet. The batch labels it{" "}
+                            <strong>{badgeLabel(ad.id)}</strong> on the way out
+                            {ad.status === "approved" || ad.status === "sold" || ad.status === "expired"
+                              ? " — if this ad has already gone out, it was labelled then and simply wasn't kept"
+                              : ""}
+                            .
+                          </>
+                        )}
+                      </p>
+                    )}
                     {ad.rejectedReason && (
                       <p className="adcard-meta">
                         Rejected ({ad.rejectionKind}): {ad.rejectedReason}
@@ -557,6 +667,17 @@ export default async function AdminAds({
               </div>
               {ad.status !== "deleted" && (
                 <div className="adcard-foot">
+                  {sms && !sms.labelled && (
+                    <form action={adminLabelAdPicture}>
+                      <input type="hidden" name="id" value={ad.id} />
+                      <input type="hidden" name="back" value="/admin/ads" />
+                      <input type="hidden" name="q" value={params.q ?? ""} />
+                      <input type="hidden" name="status" value={status ?? ""} />
+                      <button className="btn btn-sm btn-secondary" type="submit">
+                        Label the picture {badgeLabel(ad.id)} now
+                      </button>
+                    </form>
+                  )}
                   {canBump && (
                     <form action={adminQueueBump}>
                       <input type="hidden" name="id" value={ad.id} />

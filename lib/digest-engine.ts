@@ -28,12 +28,14 @@ import {
   enqueueDigestOutbox,
   finalizeDigest,
   finalizeExtraDigest,
+  getAdBadges,
   getAdCategories,
   getAdRecord,
   getNewDigestAds,
   getQueuedBumps,
   getRecentDigestAdIds,
   listDueAdminMessages,
+  refreshAdBadge,
   logMessage,
   markOutboxFailed,
   markOutboxSent,
@@ -67,8 +69,7 @@ import { gsmSanitize, packMessages, segmentation } from "@/lib/sms-segments";
 import { listDueSponsors, markSponsorRan } from "@/lib/business";
 import { sponsorLine } from "@/lib/business-packages";
 import { textedAdPhotos } from "@/lib/photo-collage";
-import { badgeLabel } from "@/lib/ad-badge";
-import { storeBadgedPhoto } from "@/lib/photos";
+import { freshBadgeUrl, type AdBadge } from "@/lib/ad-badge-photo";
 
 /**
  * Max GSM-7 characters in ONE batch text — exactly six concatenated segments.
@@ -336,15 +337,42 @@ export function buildCategorizedSmsRows(params: {
  */
 export async function resolveBroadcastPictures(items: StoredAd[]): Promise<Map<number, string>> {
   const pictures = new Map<number, string>();
+  if (!items.length) return pictures;
+  // The label is normally made when the picture ARRIVES and kept on the ad
+  // (session 024), so most batches do no image work at all here. Its own read,
+  // so an unpasted 9948 costs a re-render rather than the batch: an empty map
+  // simply means every ad renders on the spot, exactly as before.
+  const stored = await getAdBadges(items.map((ad) => ad.id)).catch((e) => {
+    console.error("[digest] couldn't read the stored picture labels:", e instanceof Error ? e.message : e);
+    return new Map<number, AdBadge>();
+  });
   for (const ad of items) {
     const first = textedAdPhotos(ad.photo, ad.morePhotos)[0];
     if (!first) continue;
+    // A label made from the picture this ad still sends is the one to send.
+    const fresh = freshBadgeUrl(ad, stored.get(ad.id));
+    if (fresh) {
+      pictures.set(ad.id, fresh);
+      continue;
+    }
+    // No label on file, or one made from a picture since replaced: make it
+    // now. Ads posted before session 024 land here, as does any ad whose
+    // labelling failed at ingest — the batch must never depend on that having
+    // worked. `refreshAdBadge` records what it makes, so /admin/ads afterwards
+    // shows precisely what went out.
+    // Caught, not awaited bare: refreshAdBadge reads the ad back before it
+    // renders, so unlike the old storeBadgedPhoto call it CAN throw on a
+    // database hiccup — and a picture problem must never stop the ads going
+    // out. A throw here costs this ad its label, nothing more.
+    const made = await refreshAdBadge(ad.id).catch((e) => {
+      console.error("[digest] couldn't label the picture:", e instanceof Error ? e.message : e);
+      return null;
+    });
     // Telnyx needs an ABSOLUTE media URL: re-hosted photos already carry one,
     // but a site-relative src (fixtures, pre-re-hosting ads) must be prefixed
     // or the MMS send 400s and nobody gets the picture.
     const absolute = first.src.startsWith("http") ? first.src : `${siteUrl}${first.src}`;
-    const badged = await storeBadgedPhoto(absolute, badgeLabel(ad.id));
-    pictures.set(ad.id, badged ?? absolute);
+    pictures.set(ad.id, made ?? absolute);
   }
   return pictures;
 }

@@ -13,6 +13,7 @@ import { supabaseConfigured } from "@/lib/db";
 import { CONTENT_TYPE_BY_EXT, sniffImage } from "@/lib/image-sniff";
 import { normalizePhone } from "@/lib/phone";
 import { rehostInboundPhotoDetailed, storeImageBytes, type RehostResult } from "@/lib/photos";
+import { badgeLabel, stampAdNumber } from "@/lib/ad-badge";
 import { Tip } from "@/components/Tip";
 
 export const maxDuration = 60;
@@ -186,6 +187,7 @@ export default async function SmsDiagPage({
     mediaUrl?: string;
     checkUrl?: string;
     selftest?: string;
+    badgetest?: string;
   }>;
 }) {
   const adminPhone = await requireAdmin();
@@ -218,6 +220,58 @@ export default async function SmsDiagPage({
     const stored = await storeImageBytes(testJpeg);
     selfTest = { stored };
     if (stored.ok) selfTest.check = await checkStoredPhoto(stored.url);
+  }
+  // Picture-label self-test (session 024). The reason this exists: when the
+  // labeller fails, the batch broadcasts the CLEAN ORIGINAL instead — which is
+  // indistinguishable, from the outside, from an ad that was never labelled.
+  // The label is drawn as vector paths precisely because the runtime ships no
+  // fonts (lib/ad-badge.ts), but it still needs sharp's native binding and
+  // librsvg, and a deploy CAN land without them: this repo lost libvips to
+  // Next 16 tracing once already. Since session 016 dropped collaging, the
+  // labeller is the ONLY production code path that uses sharp, so a broken
+  // binding shows up here and nowhere else. This renders one for real and
+  // probes the pixels, so "is the ink actually there on THIS deploy" is a
+  // question with a button rather than an inference from a subscriber's phone.
+  let badgeTest: { ok: boolean; detail: string; url?: string } | null = null;
+  if (params.badgetest === "1") {
+    try {
+      const sharp = (await import("sharp")).default;
+      const plain = await sharp({
+        create: { width: 800, height: 600, channels: 3, background: { r: 235, g: 235, b: 235 } },
+      })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+      const stamped = await stampAdNumber(plain, badgeLabel(1024));
+      // Count the badge's high-visibility yellow (#FFE000). A render that
+      // silently produced no glyphs — a missing font in a <text> build, a
+      // failed SVG load — comes back with none of it, and THAT is the failure
+      // this whole page section exists to catch. A plain grey background
+      // contains no such pixels, so any is proof the ink landed.
+      const { data, info } = await sharp(stamped).raw().toBuffer({ resolveWithObject: true });
+      let ink = 0;
+      for (let i = 0; i + 2 < data.length; i += info.channels) {
+        if (data[i] > 200 && data[i + 1] > 160 && data[i + 2] < 90) ink++;
+      }
+      if (!ink) {
+        badgeTest = {
+          ok: false,
+          detail:
+            "the image rendered but the label has NO INK — every broadcast picture is going out unlabelled. sharp decoded fine, so the SVG layer (librsvg) is the suspect on this deploy.",
+        };
+      } else {
+        const stored = supabaseConfigured ? await storeImageBytes(stamped, "badged") : null;
+        badgeTest = {
+          ok: true,
+          detail: `the label rendered with ${ink.toLocaleString()} pixels of ink on a ${info.width}×${info.height} picture.`,
+          ...(stored?.ok && { url: stored.url }),
+        };
+      }
+    } catch (e) {
+      badgeTest = {
+        ok: false,
+        detail: `${e instanceof Error ? e.message : String(e)} — pictures are still going out, but as the plain original with no ad number on them.`,
+      };
+    }
   }
 
   if (configured && params.send === "1") {
@@ -337,6 +391,33 @@ export default async function SmsDiagPage({
             Open the test image
           </a>{" "}
           (a small blue rectangle; harmless to leave in storage).
+        </p>
+      )}
+
+      <h2>Picture-label self-test</h2>
+      <p className="fine">
+        Every picture that goes out by text carries its ad number burned into the corner
+        (&ldquo;AD 1024&rdquo;) — it is the only thing tying a photo arriving on its own to its
+        line in the batch text and to <code>PIC</code>. When the labeller fails, the batch sends
+        the <strong>plain original instead</strong>, which looks from the outside exactly like an
+        ad that was never labelled. This renders a label for real on this deployment and counts
+        the ink, so a broken image renderer is something you can see rather than infer.
+      </p>
+      <form method="get" action="/admin/sms-diag">
+        <input type="hidden" name="badgetest" value="1" />
+        <button type="submit">Run picture-label self-test</button>
+      </form>
+      {badgeTest && (
+        <p>
+          <strong>
+            {badgeTest.ok ? "✓ Labelling works on this deploy" : "✗ Labelling is BROKEN"}
+          </strong>{" "}
+          — {badgeTest.detail}{" "}
+          {badgeTest.url && (
+            <a href={badgeTest.url} target="_blank" rel="noreferrer">
+              Open the test label
+            </a>
+          )}
         </p>
       )}
 

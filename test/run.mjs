@@ -48,6 +48,7 @@ const SUITES = [
   "admin-messages",
   "ad-funding",
   "message-templates",
+  "ad-badge-photo",
 ];
 
 let totalPass = 0;
