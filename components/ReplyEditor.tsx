@@ -6,7 +6,7 @@ import { renderTemplate } from "@/lib/message-templates";
 import { segmentation } from "@/lib/sms-segments";
 
 /**
- * The message editor on /admin/replies (session 021, user request: "edit the
+ * The message editor on /admin/replies (session 023, user request: "edit the
  * messages and add or remove variables from auto replies").
  *
  * It is a client component for three reasons, all of them about the operator

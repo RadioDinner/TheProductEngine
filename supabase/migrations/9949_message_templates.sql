@@ -1,9 +1,9 @@
 -- =====================================================================
--- 9950 — editable auto-reply copy.
+-- 9949 — editable auto-reply copy.
 --
 -- "I want an admin tab where I can go in and edit the messages and add or
 --  remove variables from auto replies, rather than having a code/prompt
---  session. Plus, I can see the messages"        (user, session 021)
+--  session. Plus, I can see the messages"        (user, session 023)
 --
 -- One row per message the operator has actually REWRITTEN. Everything else
 -- falls through to the wording shipped in lib/message-templates.ts, and
@@ -35,7 +35,7 @@ create table if not exists message_templates (
 );
 
 comment on table message_templates is
-  'Session 021: operator overrides for automatic message copy. Only edited messages have a row; everything else uses the default in lib/message-templates.ts. Deleting a row restores the shipped wording.';
+  'Session 023: operator overrides for automatic message copy. Only edited messages have a row; everything else uses the default in lib/message-templates.ts. Deleting a row restores the shipped wording.';
 
 comment on column message_templates.body is
   'The wording, with {variable} tokens. Some messages MUST keep certain phrases — carrier words like STOP, and the substrings the outbound log is scanned for to suppress a repeat. /admin/replies enforces that.';

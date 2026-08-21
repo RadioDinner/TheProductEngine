@@ -1,0 +1,58 @@
+--- 2026-08-21 ---
+[image: screenshot of /admin/ads — "All ads" page, four ads in a flat list]
+I'd like to make some changes to the admin pages. For now, make a branch to work on as to not interfere with the 7 other sessions committing to this github right now.
+
+On the "Ads" page of the admin dashboard, it's visually very busy, and at a glance it's hard to see where one ad ends and where the next one begins. Can you make them on "cards" of sorts in a list style ?
+
+--- 2026-08-21 ---
+I also want to be able to edit ads, I'm sure there will be people that want to make edits to their ads.
+
+--- 2026-08-21 ---
+Go ahead and merge these changes if it doesn't interfere with other active sessions
+
+--- 2026-08-21 ---
+the /admin/digests page isn't working. I want that to be renamed batches and I want to be able to see the ad queue there. If there are 8 ads waiting, I want to see which ones will go out with which ads. And I want to see which pictures will go along with them
+
+--- 2026-08-21 ---
+Go ahead and merge these changes if it doesn't interfere with other active sessions
+
+--- 2026-08-21 ---
+I also want the ability to "promote" ads in the admin ad page to the featured section
+
+--- 2026-08-21 ---
+dont commit until I tell you
+
+--- 2026-08-21 (AskUserQuestion answers) ---
+Q: What does /admin/digests do when it "isn't working"?  A: Error page / won't load
+Q: When you promote an ad to the featured section, what should happen to the money?  A: Ask me each time
+
+--- 2026-08-21 ---
+I still can't see the pictures in the "all ads" part of the admin dashboard
+
+--- 2026-08-21 ---
+you stuck?
+
+--- 2026-08-21 ---
+is this stuck?
+
+--- 2026-08-21 ---
+commit and merge
+
+--- 2026-08-21 ---
+[image: /admin/settings "Number checks (VoIP policy)" — checkboxes floating above their labels]
+This page doesn't look great. I can't clearly see what I toggling on and off, fix this
+
+--- 2026-08-21 ---
+Opt in on telynx is fixed. It says "The Plain Exchange: you're opted in to receive marketing texts - our local classified-ad digests. Msg freq varies. Msg & data rates may apply. Reply STOP to cancel, HELP for help. We won't sell or share your mobile info with third parties for marketing."
+
+--- 2026-08-21 ---
+on the refund policy page, fix it to match our actual policy. Unused credits get refunded minus the 5% credit card processing fee
+
+--- 2026-08-21 ---
+when ads are paused, don't post them to the website or to the email newsletter. Maybe I need to overhaul this system yet again... 
+
+When someone posts an ad, and it gets approved, it automatically gets queued for the next opportunity to send to the SMS list. After it is sent to the SMS list, it gets added to the list for the next email (also, if the email has no new ads to go on it, don't send it. Never send an email without ads without flagging my attention first). After it goes out on the SMS batch, post it to the website
+
+On the "ADS" page of the admin dashboard, I want to see if and when it was sent out to the SMS subscribers, the Digest number of the email it went out on, and when it got posted to the website. 
+
+I had posted an ad today and, even though ads were paused, it posted to the website. When ADS are paused, they're paused everywhere (SMS, email and web posting)

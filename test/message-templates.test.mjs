@@ -1,4 +1,4 @@
-// Editable auto-reply copy (session 021): "I want an admin tab where I can go
+// Editable auto-reply copy (session 023): "I want an admin tab where I can go
 // in and edit the messages and add or remove variables from auto replies,
 // rather than having a code/prompt session."
 //

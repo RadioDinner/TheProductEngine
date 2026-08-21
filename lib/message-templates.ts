@@ -1,5 +1,5 @@
 /**
- * EDITABLE AUTO-REPLY COPY (session 021, user request: "I want an admin tab
+ * EDITABLE AUTO-REPLY COPY (session 023, user request: "I want an admin tab
  * where I can go in and edit the messages and add or remove variables from
  * auto replies, rather than having a code/prompt session. Plus, I can see the
  * messages").

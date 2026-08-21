@@ -1,4 +1,4 @@
-// When an ad is paid for (session 021). The user's sentence is the spec:
+// When an ad is paid for (session 023). The user's sentence is the spec:
 // "when people create an ad, and have a card on file, I want the confirmation
 // message to include that the card won't be charged until the ad is run. Make
 // the system honor the truth of this message."

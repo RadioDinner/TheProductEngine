@@ -229,7 +229,7 @@ export async function POST(req: NextRequest) {
         // delivery raced the ledger write would strand an ad until the member
         // happened to post again.
         //
-        // ⚠️ Since session 021 this does NOT charge — an ad is collected for
+        // ⚠️ Since session 023 this does NOT charge — an ad is collected for
         // when it runs — so the text says "covered", not "paid for".
         const release = await releaseHeldAds(phone);
         const note = await releasedAdsMessage(

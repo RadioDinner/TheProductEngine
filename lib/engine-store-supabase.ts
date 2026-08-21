@@ -11,6 +11,7 @@ import { AD_TTL_DAYS } from "@/lib/ads";
 import { isPicReplaceSubmission } from "@/lib/myads";
 import { removeHostedPhotos } from "@/lib/photos";
 import type {
+  AdDelivery,
   BumpRecord,
   CreateAdOptions,
   DigestRecord,
@@ -110,19 +111,23 @@ export async function createAd(input: NewAdInput, options: CreateAdOptions = {})
   const userId = await userIdByPhone(input.ownerPhone);
   if (!userId) throw new Error(`no user for phone ${input.ownerPhone}`);
   const owed = Math.max(0, Math.round(options.owedCents ?? 0));
-  const row = (withWebListing: boolean, withOwed: boolean) => ({
+  const row = (opts: { web: boolean; owed: boolean; test: boolean }) => ({
     user_id: userId,
     original_body: input.body,
     body: input.body,
     status: options.status ?? "pending",
+    // Test-mode label (migration 9951). Rides the insert ONLY for a test ad, so
+    // a database without 9951 never sees a column it does not have on the
+    // ordinary posting path — same rule as unpaid_cents and web_listing below.
+    ...(opts.test && { is_test: true }),
     // The quoted price rides the insert only for a HELD ad, so a database
     // without migration 9953 is never sent a column it does not have on the
     // ordinary posting path.
     ...(options.status === "unpaid" && { unpaid_cents: options.unpaidCents ?? 0 }),
-    // What the ad owes until it runs (session 021, migration 9951). Same
+    // What the ad owes until it runs (session 023, migration 9950). Same
     // pattern as web_listing above: it rides only when there is something to
     // say, so a deploy that lands before the migration still posts ads.
-    ...(withOwed && owed > 0 && { owed_cents: owed }),
+    ...(opts.owed && owed > 0 && { owed_cents: owed }),
     flagged: input.flagged,
     ...(options.status === "rejected" && {
       rejected_reason: options.rejectedReason,
@@ -131,44 +136,60 @@ export async function createAd(input: NewAdInput, options: CreateAdOptions = {})
     // web_listing rides the insert ONLY when explicitly false (session 016):
     // true is the column default, and omitting it keeps this insert working
     // before migration 9973 lands.
-    ...(withWebListing && { web_listing: false }),
+    ...(opts.web && { web_listing: false }),
   });
-  // Two optional columns ride this insert — `owed_cents` (9951) and
-  // `web_listing` (9973) — and either may be missing on a deploy that landed
-  // before its migration. So the insert is a LADDER rather than two
-  // independent retries: drop one optional column, then the other, then both.
+  // THREE optional columns ride this insert — `owed_cents` (9950), `is_test`
+  // (9951) and `web_listing` (9973) — and any of them may be missing on a
+  // deploy that landed before its migration. So the insert is a LADDER: try
+  // everything the caller asked for, then progressively fewer of the optional
+  // columns, ending with none of them.
   //
-  // It is written as a ladder because the two-retry version had a hole. Each
-  // retry re-added the column the other had just dropped, so a database
-  // missing BOTH columns exhausted the retries still failing, and the ad — a
-  // seller's text, the one thing here that cannot be reconstructed — was
-  // thrown away. Losing the flag is a degradation; losing the ad is not.
-  const wantWeb = input.webListing === false;
-  const attempts: { web: boolean; owed: boolean; lost?: string }[] = [
-    { web: wantWeb, owed: owed > 0 },
-    ...(owed > 0
-      ? [{ web: wantWeb, owed: false, lost: "ads.owed_cents missing (migration 9951) — ad stored WITHOUT its quoted price, so nothing will be collected for it" }]
-      : []),
-    ...(wantWeb
-      ? [{ web: false, owed: owed > 0, lost: "ads.web_listing missing (migration 9973) — ad stored WITHOUT the off-website flag" }]
-      : []),
-    ...(owed > 0 && wantWeb
-      ? [{ web: false, owed: false, lost: "ads.owed_cents AND ads.web_listing both missing — ad stored with neither" }]
-      : []),
-  ];
+  // It is a ladder because the retry-per-column version had a hole. Each retry
+  // re-added a column another had just proved missing, so a database short of
+  // two of them exhausted the retries still failing — and the ad, which is a
+  // seller's text and the one thing here that cannot be reconstructed, was
+  // thrown away. Losing a flag is a degradation. Losing the ad is not.
+  //
+  // The error does not say WHICH column is missing, so the ladder walks the
+  // subsets rather than guessing. At most eight attempts, only ever on a
+  // badly-behind deploy, and it ends with the ad saved.
+  const want = { web: input.webListing === false, owed: owed > 0, test: input.isTest === true };
+  const LOST: Record<keyof typeof want, string> = {
+    owed: "ads.owed_cents missing (migration 9950) — ad stored WITHOUT its quoted price, so nothing will be collected for it",
+    test: "ads.is_test missing (migration 9951) — test ad stored UNLABELLED (still hidden from the site)",
+    web: "ads.web_listing missing (migration 9973) — ad stored WITHOUT the off-website flag",
+  };
+  const flags = (Object.keys(want) as (keyof typeof want)[]).filter((k) => want[k]);
+  // Subsets of the wanted flags, largest first: everything, then each one
+  // dropped, then each pair dropped, … ending at none.
+  const attempts: (keyof typeof want)[][] = [];
+  for (let dropped = 0; dropped <= flags.length; dropped++) {
+    for (let mask = 0; mask < 1 << flags.length; mask++) {
+      const keep = flags.filter((_, i) => (mask >> i) & 1);
+      if (flags.length - keep.length === dropped) attempts.push(keep);
+    }
+  }
   let data: { id: number } | null = null;
   let error: { code?: string; message?: string } | null = null;
-  for (const attempt of attempts) {
-    if (attempt.lost) console.error(`[engine-store] ${attempt.lost}`);
+  for (const keep of attempts) {
+    for (const flag of flags) {
+      if (!keep.includes(flag)) console.error(`[engine-store] ${LOST[flag]}`);
+    }
     ({ data, error } = await db()
       .from("ads")
-      .insert(row(attempt.web, attempt.owed))
+      .insert(
+        row({
+          web: keep.includes("web"),
+          owed: keep.includes("owed"),
+          test: keep.includes("test"),
+        }),
+      )
       .select("id")
       .single());
     if (!error) break;
     // Only a MISSING COLUMN is worth retrying without it. Anything else (a
-    // constraint, a dead connection) means the next attempt fails the same
-    // way, and looping would just make the seller wait longer for it.
+    // constraint, a dead connection) fails the same way next time, and looping
+    // would just make the seller wait longer for it.
     if (error.code !== "PGRST204" && error.code !== "42703") break;
   }
   if (error || !data) throw error ?? new Error("ad insert returned no row");
@@ -551,17 +572,39 @@ export async function setAdUnpaid(id: number, costCents: number): Promise<void> 
   if (error && error.code !== "42703" && error.code !== "22P02") throw error;
 }
 
-/* ---------- owed prices (session 021, migration 9951) ----------
+/**
+ * Does this error mean "that TABLE does not exist yet"?
+ *
+ * ⚠️ Two codes, and missing the second one is a page-down bug rather than a
+ * dormant feature. Requests go through PostgREST, which answers from its own
+ * schema cache: a table it has never seen comes back as **PGRST205**, not as
+ * Postgres's 42P01. 42P01 only surfaces when the statement actually reaches
+ * Postgres (inside a view or function, say).
+ *
+ * The column-level twin of this pair — 42703 and PGRST204 — is already handled
+ * carefully all over this file (see `slotKeySchemaMissing`). The table-level
+ * guards were written against 42P01 alone, so every "not pasted yet" fallback
+ * below silently failed to catch the real-world case: with 9952 unpasted,
+ * `listAdminMessages` threw instead of returning [], and because
+ * /admin/digests reads it unconditionally the WHOLE PAGE 500'd. The feature
+ * was supposed to be dormant; the page was supposed to say the table was
+ * missing. Neither happened.
+ */
+export function tableMissing(error: { code?: string } | null): boolean {
+  return error?.code === "42P01" || error?.code === "PGRST205";
+}
+
+/* ---------- owed prices (session 023, migration 9950) ----------
  *
  * `owed_cents` is the quoted price an ad still has to be collected for; it is
  * written when the ad is accepted and cleared by the batch that carries it.
  * Every read here treats a missing column (42703) as "nothing is owed", which
- * is precisely the pre-9951 truth — ads were collected for at posting time, so
+ * is precisely the pre-9950 truth — ads were collected for at posting time, so
  * none of them carried a price into their run. That is what lets this code
  * deploy ahead of the migration instead of taking posting down with it.
  */
 
-/** Postgres codes that mean "9951 (or 9953) isn't pasted yet". */
+/** Postgres codes that mean "9950 (or 9953) isn't pasted yet". */
 function missingOwedColumn(error: { code?: string } | null): boolean {
   return error?.code === "42703" || error?.code === "22P02" || error?.code === "PGRST204";
 }
@@ -798,7 +841,7 @@ export async function owedPricesSupported(): Promise<boolean> {
  * The CAS on `status = 'unpaid'` is unchanged from markAdPaid, which this
  * replaces: it is still one-way, still idempotent, and still the thing that
  * decides which of two concurrent callers gets to tell the seller. What is
- * gone is the charge — since session 021 an ad is collected for when it runs,
+ * gone is the charge — since session 023 an ad is collected for when it runs,
  * so admitting one moves it into review and leaves the debt standing.
  */
 export async function admitHeldAd(id: number, owedCents: number): Promise<boolean> {
@@ -811,7 +854,7 @@ export async function admitHeldAd(id: number, owedCents: number): Promise<boolea
     .eq("status", "unpaid")
     .select("id");
   if (error && missingOwedColumn(error) && owedCents > 0) {
-    // No owed_cents column (9951 pending): admit the ad anyway rather than
+    // No owed_cents column (9950 pending): admit the ad anyway rather than
     // stranding it. It simply carries no price, exactly as before 9951.
     ({ data, error } = await db()
       .from("ads")
@@ -838,7 +881,7 @@ export async function listAdminMessages(limit = 25): Promise<AdminMessage[]> {
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) {
-    if (error.code === "42P01") return []; // no such table
+    if (tableMissing(error)) return []; // 9952 not pasted yet
     throw error;
   }
   return (data ?? []).map(toAdminMessage);
@@ -853,7 +896,7 @@ export async function listDueAdminMessages(nowIso: string): Promise<AdminMessage
     .lte("send_after", nowIso)
     .order("send_after", { ascending: true });
   if (error) {
-    if (error.code === "42P01") return [];
+    if (tableMissing(error)) return [];
     throw error;
   }
   return (data ?? []).map(toAdminMessage);
@@ -866,7 +909,7 @@ export async function createAdminMessage(body: string, sendAfterIso: string): Pr
     .select("id")
     .maybeSingle();
   if (error) {
-    if (error.code === "42P01") return null;
+    if (tableMissing(error)) return null;
     throw error;
   }
   return (data?.id as number | undefined) ?? null;
@@ -885,7 +928,7 @@ export async function claimAdminMessage(id: number): Promise<boolean> {
     .eq("status", "scheduled")
     .select("id");
   if (error) {
-    if (error.code === "42P01") return false;
+    if (tableMissing(error)) return false;
     throw error;
   }
   return Boolean(data?.length);
@@ -902,7 +945,7 @@ export async function recordAdminMessageSend(
     .from("admin_messages")
     .update({ digest_id: digestId, recipients, segments })
     .eq("id", id);
-  if (error && error.code !== "42P01") throw error;
+  if (error && !tableMissing(error)) throw error;
 }
 
 /** Un-claim after a failed compose, so the next tick tries again rather than
@@ -913,7 +956,7 @@ export async function releaseAdminMessage(id: number): Promise<void> {
     .update({ status: "scheduled", sent_at: null })
     .eq("id", id)
     .eq("status", "sent");
-  if (error && error.code !== "42P01") throw error;
+  if (error && !tableMissing(error)) throw error;
 }
 
 export async function cancelAdminMessage(id: number): Promise<void> {
@@ -922,7 +965,7 @@ export async function cancelAdminMessage(id: number): Promise<void> {
     .update({ status: "canceled" })
     .eq("id", id)
     .eq("status", "scheduled");
-  if (error && error.code !== "42P01") throw error;
+  if (error && !tableMissing(error)) throw error;
 }
 
 function toAdminMessage(row: Record<string, unknown>): AdminMessage {
@@ -1001,13 +1044,13 @@ export async function getNewDigestAds(cap: number): Promise<StoredAd[]> {
     .eq("status", "approved")
     .is("broadcast_at", null)
     .or(`hold_until.is.null,hold_until.lte.${new Date().toISOString()}`)
-    // The failed-collection back-off (session 021) is its own column, so
+    // The failed-collection back-off (session 023) is its own column, so
     // money arriving can lift it without touching the operator's hold above.
     .or(`charge_hold_until.is.null,charge_hold_until.lte.${new Date().toISOString()}`)
     .order("approved_at", { ascending: true })
     .limit(cap);
   if (error) {
-    // charge_hold_until missing (9951 pending): fall back to the pre-9951
+    // charge_hold_until missing (9950 pending): fall back to the pre-9950
     // query rather than stranding every ad in the queue.
     if (error.code === "42703" || error.code === "PGRST204") {
       const retry = await db()
@@ -1201,7 +1244,7 @@ export async function deleteAdRecord(
 /** Missing ad_photo_submissions table = migration 9985 not applied yet; the
  * emailed-pictures feature stays dormant instead of erroring. */
 function submissionsSchemaMissing(error: { code?: string } | null): boolean {
-  return error?.code === "42P01";
+  return tableMissing(error);
 }
 
 export async function addPhotoSubmission(
@@ -2293,4 +2336,69 @@ export async function countRecentOutbound(
   const { count, error } = await query;
   if (error) throw error;
   return count ?? 0;
+}
+
+/**
+ * Delivery state for a set of ads — did it go out by TEXT, did an email
+ * edition carry it, and which edition (user request, session 022: "I want to
+ * see if and when it was sent out to the SMS subscribers, the Digest number of
+ * the email it went out on, and when it got posted to the website").
+ *
+ * Read SEPARATELY from `AD_SELECT` rather than added to it, and that is
+ * deliberate: the shared select leaves `broadcast_at` out so /admin never
+ * hard-depends on migration 9993 (see the comment above it), and the same
+ * reasoning covers `emailed_at` (9971) and `digest_no` (9959). Every column
+ * here belongs to a migration that could be unpasted, so a missing one costs
+ * this one panel and nothing else.
+ *
+ * ⚠️ `broadcastAt` answers "when did it go on the WEBSITE" too. That is not a
+ * simplification — the public queries in lib/ads-supabase.ts all require
+ * `broadcast_at IS NOT NULL`, so riding a batch is exactly the moment an ad
+ * becomes visible on the site. There is no separate publish step to report.
+ */
+export async function getAdDelivery(ids: number[]): Promise<Map<number, AdDelivery>> {
+  const out = new Map<number, AdDelivery>();
+  if (!ids.length) return out;
+  const { data, error } = await db()
+    .from("ads")
+    .select("id, broadcast_at, emailed_at")
+    .in("id", ids);
+  if (error) {
+    // 42703 = the column isn't there yet. Report nothing rather than 500 a page.
+    if (error.code !== "42703" && error.code !== "PGRST204") throw error;
+    return out;
+  }
+  for (const row of (data ?? []) as { id: number; broadcast_at?: string | null; emailed_at?: string | null }[]) {
+    out.set(row.id, {
+      broadcastAt: row.broadcast_at ?? null,
+      emailedAt: row.emailed_at ?? null,
+      emailDigestNo: null,
+    });
+  }
+  // Which numbered EMAIL edition carried each ad. Best-effort on top of the
+  // above: losing the number must not lose the timestamps.
+  try {
+    const { data: items, error: itemsError } = await db()
+      .from("digest_items")
+      .select("ad_id, digests!inner(digest_no, channel)")
+      .in("ad_id", ids)
+      .eq("digests.channel", "email");
+    if (!itemsError) {
+      for (const row of (items ?? []) as unknown as {
+        ad_id: number;
+        digests: { digest_no: number | null } | { digest_no: number | null }[];
+      }[]) {
+        const digest = Array.isArray(row.digests) ? row.digests[0] : row.digests;
+        const no = digest?.digest_no ?? null;
+        const entry = out.get(row.ad_id);
+        // Keep the FIRST numbered edition that carried it: an ad re-run by a
+        // bump rides later editions too, and "which one did it go out on"
+        // means the one that introduced it.
+        if (entry && no !== null && entry.emailDigestNo === null) entry.emailDigestNo = no;
+      }
+    }
+  } catch {
+    // digest_no (9959) or the join isn't available — timestamps still stand.
+  }
+  return out;
 }

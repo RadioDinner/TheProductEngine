@@ -9,7 +9,8 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { db, supabaseConfigured } from "@/lib/db";
 import { isProduction } from "@/lib/env";
-import { ringToPhones } from "@/lib/voice";
+import { getEngineSettings } from "@/lib/settings";
+import { parseTestNumbers, testModeMinutesLeft, testModeState } from "@/lib/test-mode";
 import { site } from "@/lib/config";
 
 function keyKind(key: string | undefined): string {
@@ -71,11 +72,12 @@ export async function GET(req: NextRequest) {
       // to move — checkout, auto top-up, business packages, phone orders.
       STRIPE_SECRET_KEY: Boolean(process.env.STRIPE_SECRET_KEY),
       STRIPE_WEBHOOK_SECRET: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
-      // The call-in card line: the token gates /api/voice entirely, and the
-      // ring list is what makes the phones ring before the attendant.
+      // The call-in card line: the token gates /api/voice entirely. There is no
+      // ring list to report any more — as of session 021 the attendant answers
+      // every call and nothing dials out (VOICE_RING_TO / VOICE_RING_FIRST /
+      // VOICE_RING_SECONDS are gone from the code; delete them from Vercel).
       TWILIO_ACCOUNT_SID: Boolean(process.env.TWILIO_ACCOUNT_SID),
       TWILIO_AUTH_TOKEN: Boolean(process.env.TWILIO_AUTH_TOKEN),
-      VOICE_RING_TO: ringToPhones().length,
       // Google Analytics (analytics/). Booleans only — the api secret and the
       // salt are secrets and must never appear in a response.
       // All three must be true before ANY server-side event is sent; missing
@@ -94,6 +96,27 @@ export async function GET(req: NextRequest) {
     },
   };
 
+  // TEST MODE (session 023) is reported FIRST and unconditionally, because it
+  // is the one state where every other line in this report reads healthy while
+  // the subscriber list receives nothing at all. Anything that can produce a
+  // silent outage has to be visible from outside the admin screens.
+  try {
+    const settings = await getEngineSettings();
+    const nowMs = Date.now();
+    const state = testModeState(settings, nowMs);
+    report.testMode =
+      state === "active"
+        ? {
+            ON: true,
+            warning: "ADS ARE GOING ONLY TO THE TEST NUMBERS — the subscriber list receives nothing",
+            testNumbers: parseTestNumbers(settings.testNumbers).length,
+            minutesUntilAutoOff: testModeMinutesLeft(settings, nowMs),
+          }
+        : { ON: false, state };
+  } catch (e) {
+    report.testMode = { ON: "unknown", error: (e as Error).message };
+  }
+
   if (supabaseConfigured) {
     try {
       const config = await db().from("config").select("key", { count: "exact", head: true });
@@ -108,7 +131,7 @@ export async function GET(req: NextRequest) {
       // missing one breaks a whole surface (9989: every inbound SMS command;
       // 9988: digest composition + /admin/digests). Surface drift here instead
       // of leaving it to be inferred from 500s.
-      // Migration 9951: an ad is collected for when it RUNS. Without
+      // Migration 9950: an ad is collected for when it RUNS. Without
       // ads.owed_cents nothing is quoted, nothing is reserved and nothing is
       // collected at the run — which is silently the PRE-9951 world, where ads
       // were charged at posting time. Except they aren't any more: the code no
@@ -116,26 +139,26 @@ export async function GET(req: NextRequest) {
       // runs every ad for free, and nothing fails to tell you. It is the most
       // important probe on this list.
       const owed = await db().from("ads").select("owed_cents", { count: "exact", head: true });
-      report.migration9951 = owed.error
+      report.migration9950 = owed.error
         ? {
             applied: false,
             code: owed.error.code,
             error: owed.error.message,
-            fix: "run supabase/migrations/9951_charge_on_run.sql in the SQL editor — until then NO AD IS BEING CHARGED FOR",
+            fix: "run supabase/migrations/9950_charge_on_run.sql in the SQL editor — until then NO AD IS BEING CHARGED FOR",
           }
         : { applied: true };
-      // Migration 9950: editable auto-reply copy. Until it is pasted every
+      // Migration 9949: editable auto-reply copy. Until it is pasted every
       // message uses the wording shipped in the code and /admin/replies can
       // show but not save. Nothing breaks.
       const templates = await db()
         .from("message_templates")
         .select("key", { count: "exact", head: true });
-      report.migration9950 = templates.error
+      report.migration9949 = templates.error
         ? {
             applied: false,
             code: templates.error.code,
             error: templates.error.message,
-            fix: "run supabase/migrations/9950_message_templates.sql in the SQL editor",
+            fix: "run supabase/migrations/9949_message_templates.sql in the SQL editor",
           }
         : { applied: true };
       // Migration 9958: the member name a feedback form teaches us. Until it

@@ -18,6 +18,7 @@ import {
   batchReady,
   batchSlotKey,
   batchWaitLabel,
+  planBatches,
   buildCategorizedSmsRows,
   composeBatchMessages,
   composeCatchupMessages,
@@ -56,6 +57,53 @@ function ad(id, body, opts = {}) {
 }
 
 export async function run(t) {
+  // ---------- planning the WHOLE queue into batches (session 022) ----------
+  // The operator asked to see "which ones will go out with which ads" — so
+  // what is pinned here is that the preview obeys the same rules the composer
+  // does, several batches deep.
+  const plan = { digestCap: 3, photosInBroadcast: true };
+  const eight = [1, 2, 3, 4, 5, 6, 7, 8].map((n) =>
+    ad(1000 + n, `ad ${n}`, n % 2 === 1 ? { photos: [`/p${n}.jpg`] } : {}),
+  );
+  const planned = planBatches(eight, [], plan);
+  t.eq("eight ads at a cap of three make three batches", planned.length, 3);
+  t.eq("batch one is full", planned[0].items.length, 3);
+  t.eq("the last batch holds the remainder", planned[2].items.length, 2);
+  t.eq(
+    "batch one lists the first three ads in queue order",
+    planned[0].items.map((i) => i.ad.id).join(","),
+    "1001,1002,1003",
+  );
+  t.eq("batches are numbered from one", planned[0].number, 1);
+  t.eq(
+    "a picture ad adds ONE picture message however many pictures it holds",
+    planBatches([ad(1, "three pics", { photos: ["/a.jpg", "/b.jpg", "/c.jpg"] })], [], plan)[0]
+      .pictures,
+    1,
+  );
+  t.eq("two picture ads in batch one", planned[0].pictures, 2);
+  t.eq("a batch sends one list text plus its pictures", planned[0].messages, 3);
+  t.eq(
+    "pictures switched off means a text-only batch",
+    planBatches(eight, [], { ...plan, photosInBroadcast: false })[0].messages,
+    1,
+  );
+  // Bumps only ride once new ads run out — the rule selectDigestItems applies
+  // to one batch, carried forward across all of them.
+  const withBumps = planBatches(eight, [ad(2001, "bumped")], plan);
+  t.eq("bumps cannot jump ahead of waiting new ads", withBumps.length, 3);
+  t.eq(
+    "the bump lands in the last batch, after every new ad",
+    withBumps[2].items.map((i) => `${i.ad.id}:${i.kind}`).join(","),
+    "1007:new,1008:new,2001:bump",
+  );
+  t.eq("an empty queue plans no batches", planBatches([], [], plan).length, 0);
+  t.eq(
+    "a zero cap falls back to one ad per batch rather than dividing by zero",
+    planBatches(eight, [], { ...plan, digestCap: 0 }).length,
+    8,
+  );
+
   // ---------- when a batch goes out ----------
   const settings = { batchMinAds: 3, batchMaxWaitMinutes: 60 };
   const fresh = [ad(1, "a"), ad(2, "b")].map((a) => ({

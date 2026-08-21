@@ -1,5 +1,5 @@
 /**
- * COLLECTING FOR AN AD (session 021).
+ * COLLECTING FOR AN AD (session 023).
  *
  * lib/ad-funding.ts holds the arithmetic; this is the part that touches money.
  * Two moments matter and they are deliberately far apart:
@@ -302,7 +302,7 @@ export interface BatchCollection {
  *
  * Ads with nothing owing pass straight through. That covers everything that is
  * meant to run for free — an operator's re-run of an ad that already went out,
- * a catch-up to a new subscriber, and every ad posted before migration 9951.
+ * a catch-up to a new subscriber, and every ad posted before migration 9950.
  */
 export async function collectForBatch(
   items: StoredAd[],
@@ -320,8 +320,8 @@ export async function collectForBatch(
   // already gone out for nothing is not. /api/health names this by name.
   if (!(await owedPricesSupported())) {
     console.error(
-      "[ad-billing] ⚠️ ads.owed_cents is missing (migration 9951) — NOT SENDING. " +
-        "Nothing can be collected for, so sending would run every ad free. Paste 9951.",
+      "[ad-billing] ⚠️ ads.owed_cents is missing (migration 9950) — NOT SENDING. " +
+        "Nothing can be collected for, so sending would run every ad free. Paste 9950.",
     );
     return { payable, unpaid, contended };
   }
@@ -472,7 +472,7 @@ export async function releasedAdsMessage(
  * let everything that was waiting on it move again.
  *
  * This replaces releaseUnpaidAds and no longer charges anything, because since
- * session 021 an ad is collected for when it runs. Two things happen:
+ * session 023 an ad is collected for when it runs. Two things happen:
  * held ads are admitted into the review queue keeping the price they were
  * quoted, and approved ads that a failed collection had backed off are
  * released to ride the next batch.
@@ -515,7 +515,7 @@ export async function releaseHeldAds(phone: string): Promise<ReleaseResult> {
   return { admitted, unheld };
 }
 
-/** Held ads from before migration 9951, which carry unpaid_cents rather than
+/** Held ads from before migration 9950, which carry unpaid_cents rather than
  * owed_cents. One extra read, only on the paths where money just landed. */
 async function legacyHeldAds(phone: string): Promise<{ id: number; costCents: number }[]> {
   const { listUnpaidAds } = await import("@/lib/engine-store");

@@ -66,7 +66,7 @@ export default async function PostAdPage({
   // is PENDING — it is deliberately not promised as "live on the website".
   const postedId = Number(params.posted);
   const posted = Number.isInteger(postedId) && postedId > 0;
-  // Since session 021 nothing is charged at posting time — the ad is QUOTED a
+  // Since session 023 nothing is charged at posting time — the ad is QUOTED a
   // price and the batch that carries it collects. The note says which of the
   // three situations the poster is in, in the same words the SMS lane uses.
   const chargeNote = !posted

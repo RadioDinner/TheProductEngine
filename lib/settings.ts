@@ -26,7 +26,7 @@ export interface EngineSettings {
    * in minutes (0 = count only). */
   batchMaxWaitMinutes: number;
   /** Ads one number may have in the review queue waiting on money before
-   * further posts are held out of it (session 021; 0 = no guard). */
+   * further posts are held out of it (session 023; 0 = no guard). */
   maxAdsAwaitingPayment: number;
   /** Hours an ad is held out of batch selection after a failed collection. */
   chargeRetryHours: number;
@@ -91,6 +91,14 @@ export interface EngineSettings {
   outboundPaused: boolean;
   /** UNDER ATTACK mode: suppress+tighten+throttle outbound while true. */
   underAttack: boolean;
+  /** TEST MODE (session 023): ad broadcasts go ONLY to testNumbers and new ads
+   * are marked as test ads (kept off the public site). Expires itself — see
+   * lib/test-mode.ts for why that is not optional. */
+  testMode: boolean;
+  /** Comma-separated 10-digit numbers that receive ads while testMode is on. */
+  testNumbers: string;
+  /** ISO timestamp testMode turns itself off at ("" / unparseable = expired). */
+  testModeExpiresAt: string;
   /** Global outbound sends/minute ceiling, enforced only while underAttack. */
   outboundThrottlePerMin: number;
   /** Spread a backlog when MORE than this many ads wait. 0 = never pace. */
@@ -156,6 +164,9 @@ const CONFIG_KEYS: Record<keyof EngineSettings, string> = {
   adsPaused: "ads_paused",
   outboundPaused: "outbound_paused",
   underAttack: "under_attack",
+  testMode: "test_mode",
+  testNumbers: "test_numbers",
+  testModeExpiresAt: "test_mode_expires_at",
   outboundThrottlePerMin: "outbound_throttle_per_min",
   pacedReleaseOver: "paced_release_over",
   pacedGapMinMinutes: "paced_gap_min_minutes",
@@ -234,6 +245,9 @@ export async function getEngineSettings(): Promise<EngineSettings> {
     adsPaused: engineDefaults.adsPaused,
     outboundPaused: engineDefaults.outboundPaused,
     underAttack: engineDefaults.underAttack,
+    testMode: engineDefaults.testMode,
+    testNumbers: engineDefaults.testNumbers,
+    testModeExpiresAt: engineDefaults.testModeExpiresAt,
     outboundThrottlePerMin: engineDefaults.outboundThrottlePerMin,
     pacedReleaseOver: engineDefaults.pacedReleaseOver,
     pacedGapMinMinutes: engineDefaults.pacedGapMinMinutes,

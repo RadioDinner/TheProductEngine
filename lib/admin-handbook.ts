@@ -29,7 +29,7 @@ export const HANDBOOK_PAGES: { prefix: string; label: string; href: string }[] =
   { prefix: "dashboard", label: "Dashboard", href: "/admin" },
   { prefix: "money", label: "Money", href: "/admin/money" },
   { prefix: "review", label: "Review queue", href: "/admin/review" },
-  { prefix: "digests", label: "Digests", href: "/admin/digests" },
+  { prefix: "digests", label: "Batches", href: "/admin/batches" },
   { prefix: "reports", label: "Reports", href: "/admin/reports" },
   { prefix: "insights", label: "Insights", href: "/admin/insights" },
   { prefix: "ads", label: "All ads", href: "/admin/ads" },
@@ -171,7 +171,7 @@ const ENTRIES = {
     why: "The user's session-009 ask: a Town hall where people add upcoming events, \"an approval process same as the regular ads.\" v1 is deliberately the free board only — the paid SMS/email event blast is a later phase whose pricing (\"probably just $19.99 a listing\") was never settled, so nothing about events sends messages today.",
   },
 
-  /* ---------------- Digests (/admin/digests) ---------------- */
+  /* ---------------- Batches (/admin/batches) ---------------- */
 
   "digests.slots": {
     title: "Slots, and what they cost",
@@ -187,17 +187,18 @@ const ENTRIES = {
   },
   "digests.queue": {
     title: "The queue is the truth",
-    what: "This list shares its selection code with the real composer, so what you see is literally what the next digest will carry: new ads first in approval order, queued bumps filling what's left, capped at the per-digest maximum set on Settings.",
-    why: "Built in session 007 so the page can never disagree with reality — the same function (selectDigestItems) drives both. New-ads-outrank-bumps is a founding rule (session 001).",
+    what: "The whole waiting queue, split into the BATCHES it will actually go out in: new ads first in approval order, bumps only filling capacity left over once new ads run out, and each batch capped at 'Max ads per pass' from Settings. One batch goes per run, so a backlog leaves as the batches shown, in order. Each batch's line says what every subscriber receives from it — one list text, plus one picture message per picture ad.",
+    why: "Built in session 007 as a preview of the next digest; session 022 extended it over the whole queue on the user's request (\"if there are 8 ads waiting, I want to see which ones will go out with which ads, and which pictures will go along with them\"). Before that the page stopped at the cap, so ads 11 and beyond were invisible. planBatches applies the same rules as the composer, forward, and is unit-pinned against them.",
+    gotchas: "A picture ad adds ONE picture message however many pictures it holds — only the first broadcasts, and PIC pulls the rest on request. Switching pictures off in Settings makes every batch a single text. The preview stops at 200 waiting ads and says so rather than under-reporting the backlog.",
   },
   "digests.reorder": {
     title: "Move up / Move down",
-    what: "Swaps the ad's place in the approval order, which is the order the digest prints.",
+    what: "Swaps the ad's place in the approval order, which is the order the batches are filled in — so moving an ad up can move it into an earlier batch.",
     why: "Part of the session-007 queue-controls batch, built the day real SMS went live and the queue needed hands-on control.",
   },
   "digests.skipNext": {
-    title: "Skip next digest",
-    what: "Holds the ad out of the next digest only; it returns to the queue automatically afterward (the Held section shows it, with a Release button to bring it back early).",
+    title: "Skip next batch",
+    what: "Holds the ad out of the next batch only; it returns to the queue automatically afterward (the Held section shows it, with a Release button to bring it back early).",
     why: "Session-007 queue controls. Its migration (ads.hold_until) caused that day's second migration race — the deploy read a column that wasn't pasted yet, the cron crashed, and the 4 PM digest was missed. That incident is why schema-dependent features now degrade gracefully and /api/health probes each migration.",
   },
   "digests.backToReview": {
@@ -288,8 +289,9 @@ const ENTRIES = {
   },
   "ads.edit": {
     title: "Inline edit",
-    what: "Change the public text or category any time — pending, approved, or expired. The seller's original stays in the message log.",
-    why: "Inline editing arrived in session 007 when the digest queue needed hands-on control; the category joined in session 009 with the category system.",
+    what: "Change the public text or category on any ad that still exists — pending, unpaid, approved, rejected, sold or expired. Only a deleted ad can't be edited, having no public text left to change. The seller's own words are never overwritten: the box shows what they wrote once you've changed it, and the message log keeps the original either way.",
+    why: "Inline editing arrived in session 007 when the digest queue needed hands-on control; the category joined in session 009 with the category system. Session 021 opened it to every status on the user's decision — the case that prompted it is a HELD unpaid ad, where the seller rings in about the ad they're one card away from running and their text was the one thing you couldn't fix on that call. Rejected and sold were shut out for no better reason.",
+    gotchas: "The seller is NOT notified of an edit, and nothing re-runs — editing changes the website listing and what any future run carries, never a text that already sent. A held unpaid ad goes out as you've edited it once their card lands. Saving an emptied box is refused rather than blanking the ad; Delete is how you take one down.",
   },
   "ads.delete": {
     title: "Delete vs Reject",
@@ -435,7 +437,7 @@ const ENTRIES = {
   "settings.awaitingPayment": {
     title: "Ads that aren't paid for yet",
     what: "An ad is charged when it RUNS — the batch that carries it out to subscribers is what collects, and until then the price is only reserved against the seller's balance. So an ad can reach the review queue, and be approved, without having been paid for. These two numbers govern what happens then: how many unpaid ads one number may have in the queue at a time, and how long an ad waits after we try to collect and can't.",
-    why: "Session 021, two user decisions in one. First: \"when people create an ad, and have a card on file, I want the confirmation message to include that the card won't be charged until the ad is run. Make the system honor the truth of this message.\" Then, after approving an ad that hadn't been paid for: \"I want the status to go to 'approved, pending payment' but I want the message that the seller gets, to remind them to pay up.\" So an unfunded ad is reviewed like any other, keeps its place once approved, and goes out the moment the money lands.",
+    why: "Session 023, two user decisions in one. First: \"when people create an ad, and have a card on file, I want the confirmation message to include that the card won't be charged until the ad is run. Make the system honor the truth of this message.\" Then, after approving an ad that hadn't been paid for: \"I want the status to go to 'approved, pending payment' but I want the message that the seller gets, to remind them to pay up.\" So an unfunded ad is reviewed like any other, keeps its place once approved, and goes out the moment the money lands.",
     gotchas: "Approving an unpaid ad is the right move — it holds its place and needs no second decision. But the batch will not carry it, so the ad sits until the seller pays; the review queue and the Ads tab both label it. The waiting-ads cap only counts ads the seller CANNOT pay for: somebody with money or a card on file may post as many as they like, because each one is paid for as it runs. Turning off the receipt (below) saves a text per ad but leaves a member with a card on file no notification that they have been charged.",
   },
 
@@ -444,7 +446,7 @@ const ENTRIES = {
   "replies.editing": {
     title: "Rewording what the service says",
     what: "Every message the service sends on its own — the ad confirmations, the approval and turn-down texts, the welcome, the balance reply — in the exact words it will use. Click one to change the wording, and use the buttons to drop a variable in or take one out.",
-    why: "Built in session 021 on a plain request: \"I want an admin tab where I can go in and edit the messages and add or remove variables from auto replies, rather than having a code/prompt session. Plus, I can see the messages.\" Only what you actually rewrite is stored, so a message you have not touched keeps following the code and still gets improved with it.",
+    why: "Built in session 023 on a plain request: \"I want an admin tab where I can go in and edit the messages and add or remove variables from auto replies, rather than having a code/prompt session. Plus, I can see the messages.\" Only what you actually rewrite is stored, so a message you have not touched keeps following the code and still gets improved with it.",
     gotchas: "Two kinds of word are refused if you delete them, and both refusals are protecting something real. Carrier words (STOP, HELP) have to stay on the messages that carry them. And a few replies are stopped from repeating themselves by looking for a phrase of their own text in the sent log — lose that phrase and the message starts going out every few minutes. The page names the exact phrase in each case. HELP itself and the confirmation a new member gets are answered by the carrier, not by us, so they are not here at all.",
   },
 

@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 /**
- * THE AUTO-REPLY TAB (session 021, user request: "I want an admin tab where I
+ * THE AUTO-REPLY TAB (session 023, user request: "I want an admin tab where I
  * can go in and edit the messages and add or remove variables from auto
  * replies, rather than having a code/prompt session. Plus, I can see the
  * messages").
@@ -88,7 +88,7 @@ export default async function AdminReplies({
         {!ready && (
           <p className="notice" role="status">
             <strong>Editing is not switched on yet.</strong> Paste migration{" "}
-            <code>9950_message_templates.sql</code> into the Supabase SQL editor and this will
+            <code>9949_message_templates.sql</code> into the Supabase SQL editor and this will
             start saving. Until then every message uses the wording below and a save will fail.
           </p>
         )}
@@ -170,7 +170,7 @@ export default async function AdminReplies({
       {!ready && (
         <p className="notice" role="status">
           <strong>Editing is not switched on yet.</strong> Paste migration{" "}
-          <code>9950_message_templates.sql</code> into the Supabase SQL editor. Until then this
+          <code>9949_message_templates.sql</code> into the Supabase SQL editor. Until then this
           page shows the wording in use but can&rsquo;t save a change.
         </p>
       )}

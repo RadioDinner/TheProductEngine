@@ -207,7 +207,7 @@ async function priceSheetLine(settings: EngineSettings): Promise<string> {
 /**
  * What to do about an empty balance. Every reply that has to ask a member for
  * money ends with this one sentence, so there is a single place to change the
- * answer — and since session 021 it is editable at /admin/replies too
+ * answer — and since session 023 it is editable at /admin/replies too
  * (money.pay-instructions).
  *
  * Leads with the CALL (user decision, session 020, replacing a proposed $50
@@ -218,7 +218,7 @@ async function priceSheetLine(settings: EngineSettings): Promise<string> {
  * for word.
  *
  * ⚠️ It now says "we'll charge it WHEN YOUR AD RUNS", not "we'll charge it and
- * your ad goes out". That is not a tidy-up: since session 021 the card really
+ * your ad goes out". That is not a tidy-up: since session 023 the card really
  * is not touched until the batch carrying the ad goes out, and a sentence
  * promising an immediate charge would be the one place the service still said
  * otherwise.
@@ -360,7 +360,7 @@ async function handleAdSubmission(from: string, rawBody: string, media?: string[
       analytics.starterCreditGranted({ phone: from, amountCents: settings.starterCreditCents }),
     );
   }
-  // NOTHING IS CHARGED HERE ANY MORE (session 021, user decision: "when people
+  // NOTHING IS CHARGED HERE ANY MORE (session 023, user decision: "when people
   // create an ad, and have a card on file, I want the confirmation message to
   // include that the card won't be charged until the ad is run. Make the system
   // honor the truth of this message.")
@@ -619,7 +619,7 @@ async function handlePhotoFollowup(
   // price goes UP. Ads that already have a picture were quoted the picture
   // price; more pictures for the one collage photo cost nothing extra.
   //
-  // NOTHING IS CHARGED HERE EITHER (session 021). The upgrade raises what the
+  // NOTHING IS CHARGED HERE EITHER (session 023). The upgrade raises what the
   // ad OWES — one quote, collected once, by the batch that carries it. That
   // replaces a ref-guarded ledger debit whose whole complexity existed to make
   // a mid-flight charge safe against retries and refunds: with no charge until
@@ -1078,7 +1078,7 @@ async function route(
     }
     case "credits": {
       const account = await ensureAccount(from);
-      // Since session 021 an ad is collected for when it RUNS, so a balance on
+      // Since session 023 an ad is collected for when it RUNS, so a balance on
       // its own can mislead: $40 with two $20 ads waiting is not $40 to spend.
       // The reply says what is committed, when anything is.
       const funding = await memberFunding(from, account);
@@ -1107,7 +1107,7 @@ async function route(
       ) {
         return { body: `No ad found with number ${command.id}.` };
       }
-      // What the ad still owes (session 021). An ad is collected for when it
+      // What the ad still owes (session 023). An ad is collected for when it
       // RUNS, so an approved ad can be sitting there because the money isn't
       // in yet — and "Available" would be the least useful thing to tell the
       // one person who can fix that.

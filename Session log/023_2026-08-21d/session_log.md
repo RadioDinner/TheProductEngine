@@ -1,12 +1,41 @@
-# Session 021 (2026-08-21b) — AN AD IS PAID FOR WHEN IT RUNS, and the copy became editable
+# Session 023 (2026-08-21d) — AN AD IS PAID FOR WHEN IT RUNS, and the copy became editable
 
-**Version 1.4.9 → 1.5.9** (§6: six features and one of them changes how money
-moves through the whole service, so the SECOND digit moved. The far-right digit
-did not move separately at any point this session.)
+**Version 1.5.11 → 1.6.11** (§6: six features and one of them changes how money
+moves through the whole service, so the SECOND digit moved. Bumped from what
+was on `origin/main` at MERGE time, per §8b — the value at session start was
+1.4.9 and would have been wrong.)
 
-**⚠️ NOTHING WAS COMMITTED.** The user said, mid-session, *"Dont commit anything
-until I tell you to."* Everything below is in the working tree on
-`claude/ad-confirmation-admin-panel-ak1ze0`, verified, and waiting for the word.
+## ⚠️ This session ran for three hours beside two others, and that shaped the end of it
+
+The user said mid-session *"Dont commit anything until I tell you to,"* then,
+when they came back: *"Take a look at main and see if you can commit. You took
+almost 3 hours to run, so my main branch is ahead."* It was 17 commits ahead,
+carrying two whole sessions (021 and 022) — and §8 of
+`new_session_instructions.md`, the parallel-session protocol, had been WRITTEN
+on main during those three hours by one of them.
+
+**Every single counter §8 warns about had collided**, which is a fair
+demonstration that the protocol is right:
+
+| Counter | Collision | Resolution |
+|---|---|---|
+| Migration number | main took `9951` for `test_ads`; I had `9951_charge_on_run` and `9950_message_templates` | mine renumbered to **9950** and **9949**; `npm run check:migrations` clean |
+| `Session log/NNN` | 021 AND 022 both claimed while I ran | mine became **023_2026-08-21d** |
+| `FEATURES.md` item | main took 48 for Test mode; I had 48–51 | mine renumbered **49–52** |
+| `version` | I bumped from 1.4.9; main was at 1.5.11 | rebumped **1.5.11 → 1.6.11** |
+| `HANDOFF.md` | session 021 SPLIT the file (narrative → `HANDOFF-ARCHIVE.md`) while I was writing a long narrative section into the old shape | took main's structure wholesale; kept only what a future session needs on day one; the narrative is this file |
+
+The lesson worth carrying beyond the mechanics: **the merge was easy and the
+counters were hard.** Six files conflicted and every one was resolvable in
+minutes. The damage would all have come from the four collisions that merged
+CLEANLY — two migrations wearing the same number is the one that would have
+gone unnoticed for weeks, exactly as §8c predicts.
+
+One thing came back the other way. Session 022 found that PostgREST answers a
+missing table with **PGRST205**, not Postgres's 42P01, and that every
+table-level fallback written against 42P01 alone had silently failed. My
+`message-template-store.ts` had exactly that bug; it is fixed here because of
+their work.
 
 ## What the user asked for
 
@@ -309,7 +338,8 @@ Two confirmed findings are **noted rather than fixed**, both pre-existing:
 - `tsc --noEmit` clean, `npm run build` clean.
 - Unit suite **1470 → 1561** (new: `ad-funding` 50, `message-templates` 41;
   `post-ad` 11 → 15, rewritten around the three payment sentences and pinned
-  with "no note claims a past charge").
+  with "no note claims a past charge"). After merging main the suite runs
+  **1739**, main's own suites included.
 - **A real end-to-end walk of the engine** (file store, frozen clock, real
   subscribers) through six scenarios: plenty of credit, no credit and no card,
   approve-then-pay, card on file, turned down before it ran, two ads against one

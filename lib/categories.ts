@@ -15,7 +15,7 @@
  * - Texting a category word TOGGLES it; the first specific pick switches the
  *   member from ALL to selective; replying ALL returns to everything.
  *
- * Session 021 added one import — lib/message-templates, which is pure too — so
+ * Session 023 added one import — lib/message-templates, which is pure too — so
  * the welcome sequence can be worded from the catalogue the operator edits.
  * The shape of the sequence still lives here.
  */
@@ -93,7 +93,7 @@ export function welcomeMessages(
     priceLine: string;
   },
   /**
-   * Where the wording comes from (session 021). The engine passes the message
+   * Where the wording comes from (session 023). The engine passes the message
    * book, so an operator's edits on /admin/replies reach the welcome; leave it
    * out and the five defaults in lib/message-templates.ts are used, which is
    * what the unit suite walks. Either way this function still owns the SHAPE —

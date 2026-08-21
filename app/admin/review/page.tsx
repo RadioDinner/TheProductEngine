@@ -58,7 +58,7 @@ export default async function AdminReview() {
     ? await getAdCategories(pending.map((ad) => ad.id))
     : new Map<number, string | null>();
 
-  // Whether each waiting ad is paid for (session 021). An ad is collected for
+  // Whether each waiting ad is paid for (session 023). An ad is collected for
   // when it RUNS, so one can reach this queue unfunded and be approved — the
   // user hit exactly that and asked to be able to tell. Approving an unfunded
   // ad is still the right move: it keeps its place and goes out the moment the

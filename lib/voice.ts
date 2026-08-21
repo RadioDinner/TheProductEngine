@@ -10,11 +10,9 @@
  * out over the REGISTERED Telnyx line instead of an unregistered Twilio one.
  * The standalone service stays in the repo as a reference/fallback.
  *
- * Call flow (one route, `?step=` picks the stage). Session 020, user
- * decision — "I want it to ring directly to my twilio number where they can
- * add a card": THE MENU ANSWERS FIRST. The operator's phones no longer ring
- * ahead of it, so a caller reaches the card line immediately instead of
- * waiting out eighteen seconds of ringing first.
+ * Call flow (one route, `?step=` picks the stage). THE MENU ANSWERS. Nothing
+ * in here ever dials a phone, so a caller reaches the card line on the first
+ * ring instead of waiting out someone else's cell.
  *
  *   menu     → answers immediately: 1 = save a card, 2 = voicemail + callback.
  *   pay      → consent script, then <Pay> keypad capture (tokenize only).
@@ -22,18 +20,24 @@
  *   voicemail→ recording lands; the operator gets a text AND an email with the
  *              audio attached.
  *
- * Ringing the operator first is still available (`VOICE_RING_FIRST=true`) and
- * its stages — ring / whisper / accept / after-ring — are unchanged. It is
- * OPT-IN now rather than "on whenever VOICE_RING_TO happens to be set",
- * because leaving it keyed to that variable would have silently kept the old
- * order for the very deployment that asked to change it.
+ * Session 021, user decision — "I don't want it to ring to my cell phone
+ * first". Session 020 had already made the menu answer first, but kept the old
+ * ring-first path alive behind `VOICE_RING_FIRST`. That switch, its stages
+ * (ring / whisper / accept / after-ring) and its three environment variables
+ * are now GONE rather than merely defaulted off, because "off by default" and
+ * "cannot happen" are different guarantees: the first is one Vercel setting
+ * away from ringing a cell phone again, and this behaviour should be a
+ * property of the code that no console can flip back.
+ *
+ * The operator still hears about a call — just not by being dialed. A
+ * voicemail texts every number in ADMIN_PHONES and emails ADMIN_EMAIL with the
+ * audio attached, which is the path that already worked when nobody picked up.
  *
  * PCI: card digits go carrier → Twilio → Stripe. They never reach this app,
  * its logs, or an SMS thread. Never add a <Gather> that collects card digits.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { site } from "@/lib/config";
-import { normalizePhone } from "@/lib/phone";
 
 /** The webhook path to give Twilio ("A call comes in"). */
 export const VOICE_PATH = "/api/voice";
@@ -43,37 +47,6 @@ export const voiceConfigured = Boolean(process.env.TWILIO_AUTH_TOKEN);
 
 /** Pay Connector name from the Twilio console (README step 4). */
 export const payConnector = process.env.TWILIO_PAY_CONNECTOR || "Default";
-
-/**
- * The phones that ring before the attendant picks up — "my cell and my
- * wife's" (user request, session 016). Comma-separated 10-digit numbers in
- * VOICE_RING_TO; empty means the attendant answers immediately.
- */
-export function ringToPhones(): string[] {
-  return (process.env.VOICE_RING_TO ?? "")
-    .split(",")
-    .map((entry) => normalizePhone(entry.trim()))
-    .filter((phone): phone is string => Boolean(phone));
-}
-
-/**
- * Ring the operator's phones BEFORE the menu? Off by default since session
- * 020 — the menu answers first. Set VOICE_RING_FIRST=true (with VOICE_RING_TO
- * populated) to put the old order back.
- */
-export function ringFirst(): boolean {
-  return /^(1|true|yes|on)$/i.test((process.env.VOICE_RING_FIRST ?? "").trim());
-}
-
-/** How long those phones ring before the attendant takes over. Keep it UNDER
- * the cells' own voicemail delay (usually 25–30 s) — otherwise a personal
- * voicemail "answers" the call and the attendant never gets its turn. */
-export function ringSeconds(): number {
-  const configured = Number(process.env.VOICE_RING_SECONDS);
-  return Number.isFinite(configured) && configured >= 5 && configured <= 60
-    ? Math.round(configured)
-    : 18;
-}
 
 /* ------------------------------------------------------------------ */
 /* Request authenticity                                                */
@@ -146,60 +119,19 @@ export function spokenDigits(value: string): string {
   return value.replace(/\D/g, "").split("").join(" ");
 }
 
-/** Stage 1 — ring the operator phones, then fall through to the attendant.
- * callerId is deliberately NOT set: on a call forwarded from your own Twilio
- * number Twilio passes the ORIGINAL caller through, so the cell shows the
- * member's number and you can just call them back. */
-export function ringTwiml(args: {
-  phones: string[];
-  seconds: number;
-  actionUrl: string;
-  whisperUrl: string;
-}): string {
-  const numbers = args.phones
-    .map((phone) => `<Number url="${escapeXml(args.whisperUrl)}">+1${phone}</Number>`)
-    .join("");
-  return twiml(
-    `<Dial timeout="${args.seconds}" action="${escapeXml(args.actionUrl)}" method="POST">${numbers}</Dial>`,
-  );
-}
-
 /**
- * Played to whoever picks up, before they're connected — and it demands a
- * keypress ("answer confirmation").
+ * NOTHING IN THIS FILE MAY DIAL A PHONE (session 023, user decision).
  *
- * The keypress is the load-bearing part: a CELL'S VOICEMAIL ANSWERS THE CALL
- * (phone off, busy, or — the way this was found — the member is calling from
- * a number that is itself on the ring list, so the carrier sends it straight
- * to their mailbox). An answered leg would otherwise bridge the caller to a
- * beep, and the attendant would never run. A mailbox can't press a key, so
- * it gets hung up and the caller falls through to the menu.
+ * There used to be a `<Dial>` here that rang the operator's cells before the
+ * menu, with a whisper leg and an answer-confirmation keypress to stop a
+ * carrier voicemail from swallowing the call. All of it is deleted. A caller
+ * to the card line reaches the menu on the first ring, every time.
+ *
+ * If a `<Dial>` is ever wanted back, it needs a deliberate decision rather
+ * than a resurrected environment variable — the whole reason the old switch
+ * went away is that it could be flipped from a console without anyone reading
+ * this comment. `voice.test.mjs` asserts that no stage emits `<Dial`.
  */
-export function whisperTwiml(args: { callerPhone: string | null; acceptUrl: string }): string {
-  const who = args.callerPhone ? ` from ${spokenDigits(args.callerPhone)}` : "";
-  return twiml(
-    `<Gather numDigits="1" timeout="6" action="${escapeXml(args.acceptUrl)}" method="POST">` +
-      say(`${site.name} call${who}. Press any key to take it.`) +
-      `</Gather><Hangup/>`,
-  );
-}
-
-/** The answer-confirmation verdict on the ANSWERING leg: a key was pressed,
- * so bridge the two calls (an empty response ends the whisper and connects);
- * otherwise drop this leg and let the caller move on to the attendant. */
-export function acceptTwiml(pressedKey: boolean): string {
-  return pressedKey ? twiml("") : twiml(`<Hangup/>`);
-}
-
-/**
- * Did a person actually take the call? Twilio reports a voicemail pickup —
- * and a leg the whisper hung up — as `completed` too, so the DURATION of the
- * bridged conversation is what separates them: nothing was bridged unless
- * someone confirmed, which makes any positive duration a real conversation.
- */
-export function callWasAnswered(status: string | undefined, duration: string | undefined): boolean {
-  return status === "completed" && Number(duration) > 0;
-}
 
 /**
  * How many times a caller may press something that isn't 1 or 2 before the
@@ -265,7 +197,7 @@ export function menuTwiml(args: {
  * networks require before a card may be kept for later off-session charges;
  * the Stripe customer gets a `card_consent_at` stamp as the record.
  *
- * ⚠️ It says WHEN the charge happens, and since session 021 that is when the
+ * ⚠️ It says WHEN the charge happens, and since session 023 that is when the
  * ad runs rather than when it is written. This is not editable from
  * /admin/replies with the rest of the copy, deliberately: it is the legal
  * record of what the caller agreed to, it is pinned by test/voice.test.mjs,

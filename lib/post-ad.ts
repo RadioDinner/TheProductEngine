@@ -69,7 +69,7 @@ function dollars(cents: number): string {
  * lane words from /admin/replies (ad.money.covered / .card / .owing), so web
  * and text posts say the same thing.
  *
- * ⚠️ It no longer describes a charge, because since session 021 there isn't
+ * ⚠️ It no longer describes a charge, because since session 023 there isn't
  * one yet: an ad is quoted a price at posting and collected for by the batch
  * that carries it out to subscribers. This is the WEB half of the user's
  * "the card won't be charged until the ad is run", and a note here still

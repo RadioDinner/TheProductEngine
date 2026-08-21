@@ -1,5 +1,5 @@
 /**
- * The front door for editable copy (session 021).
+ * The front door for editable copy (session 023).
  *
  *     const book = await messageBook();
  *     book.render("ad.approved", { adId: 1042, batchWait: "within the hour" });

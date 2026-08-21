@@ -23,6 +23,8 @@ import { unreadChatCount } from "@/lib/unread";
 import { normalizePhone } from "@/lib/phone";
 import { USER_ID_MAX_ATTEMPTS, isRetirementActive, randomUserId } from "@/lib/user-id";
 import { decideCategoryConfirm, type ConfirmAction } from "@/lib/categories";
+import { getEngineSettings } from "@/lib/settings";
+import { narrowToTestNumbers, parseTestNumbers, testModeActive } from "@/lib/test-mode";
 import type { LineType } from "@/lib/number-lookup";
 import type { PurgeCounts } from "@/lib/store-supabase";
 export type { PurgeCounts };
@@ -1830,19 +1832,46 @@ export async function reserveCategoryConfirm(
     : file.reserveCategoryConfirm(phone, limit);
 }
 
-/** Every subscriber with their category prefs — the digest composer groups
- * these by effective set. Pre-9976, categories read as null (= ALL). */
+/**
+ * Every subscriber with their category prefs — the digest composer groups
+ * these by effective set. Pre-9976, categories read as null (= ALL).
+ *
+ * TEST MODE IS ENFORCED HERE (session 021), not at the four places that ask
+ * "who receives this". The callers are lib/digest-engine.ts (three) and the
+ * outage notice in lib/admin-actions.ts, and the fifth one somebody adds next
+ * year is exactly the one that would leak a test send to the whole list. A
+ * rule that every future caller has to remember is not a rule; putting it in
+ * the answer instead of in each question is what makes it hold.
+ *
+ * The narrowing FILTERS the real list — it never invents a recipient — so a
+ * test number receives ads only if it is a genuine subscriber, with its own
+ * category prefs, opt-out state and block status intact. See lib/test-mode.ts.
+ */
 export async function listSubscribersWithCategories(): Promise<SubscriberCategories[]> {
-  return supabaseConfigured
-    ? remote.listSubscribersWithCategories()
+  const all = supabaseConfigured
+    ? await remote.listSubscribersWithCategories()
     : file.listSubscribersWithCategories();
+  const settings = await getEngineSettings();
+  if (!testModeActive(settings, Date.now())) return all;
+  return narrowToTestNumbers(all, parseTestNumbers(settings.testNumbers));
 }
 
-/** Email-edition recipients with category prefs (null = ALL) — the email
- * mirror filters per recipient with these. */
+/**
+ * Email-edition recipients with category prefs (null = ALL) — the email
+ * mirror filters per recipient with these.
+ *
+ * Test mode suppresses the email edition ENTIRELY rather than trying to narrow
+ * it. The test list is phone numbers, and this list is email addresses with no
+ * phone on the row to match them against — so any "narrowing" here would be a
+ * guess, and a wrong guess means emailing the real subscriber list from a test
+ * run. Sending nothing is the only answer that cannot do damage. Test mode is
+ * an SMS bench; the email edition resumes the moment it is off.
+ */
 export async function listEmailRecipientsWithCategories(): Promise<
   EmailRecipientCategories[]
 > {
+  const settings = await getEngineSettings();
+  if (testModeActive(settings, Date.now())) return [];
   return supabaseConfigured
     ? remote.listEmailRecipientsWithCategories()
     : file.listEmailRecipientsWithCategories();

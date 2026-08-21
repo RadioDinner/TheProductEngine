@@ -1,5 +1,5 @@
 /**
- * WHEN AN AD IS PAID FOR (session 021, user decision).
+ * WHEN AN AD IS PAID FOR (session 023, user decision).
  *
  * The rule the whole file exists to serve, in the user's words: *"when people
  * create an ad, and have a card on file, I want the confirmation message to
@@ -211,7 +211,7 @@ export function runChargePlan(args: {
  * What to call an ad's state on an admin screen.
  *
  * "Approved — waiting for payment" is the user's own phrasing for the case
- * they hit (session 021). The distinction it draws is the one an operator
+ * they hit (session 023). The distinction it draws is the one an operator
  * actually needs: an approved ad that is merely queued will go out on its own,
  * and an approved ad that is short will not, however long they wait.
  */

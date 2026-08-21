@@ -123,7 +123,7 @@ export default async function MyAdsPage({
         );
         confirmMoney = `This ad hasn't run in any digest yet. Delete it and ${formatPrice(owed)} comes back.`;
       } else {
-        // The ordinary case since session 021: an ad is charged when it RUNS,
+        // The ordinary case since session 023: an ad is charged when it RUNS,
         // so one that hasn't run was never charged and there is nothing to
         // give back. Saying "no charge is on record" would read like a fault;
         // this says the true and reassuring thing instead.

@@ -94,11 +94,11 @@ export async function approveAd(
   const open = smsWindowOpen(now, settings);
   const book = await messageBook();
 
-  // APPROVED BUT NOT PAID FOR (user request, session 021: "I approved the ad,
+  // APPROVED BUT NOT PAID FOR (user request, session 023: "I approved the ad,
   // but it wasn't paid, I want the status to go to 'approved, pending payment'
   // but I want the message that the seller gets, to remind them to pay up").
   //
-  // Since session 021 an ad is collected for when it runs, so an unfunded ad
+  // Since session 023 an ad is collected for when it runs, so an unfunded ad
   // is reviewed like any other and keeps its place in the queue once approved
   // — it simply doesn't ride a batch until the money is there. Telling the
   // seller "it goes out within the hour" when it cannot is the specific thing
@@ -200,7 +200,7 @@ export async function rejectAd(
         owed = legacyPassRefundCents(charge.note, settings.costTextCents, settings.costPhotoCents);
       }
     }
-    // Since session 021 an ad is collected for when it RUNS, so an ad turned
+    // Since session 023 an ad is collected for when it RUNS, so an ad turned
     // down before it ran was never charged and there is nothing to give back —
     // owed comes out at 0 and the reply says so. The refund path below stays
     // for ads posted BEFORE 9951, which really were charged at submission and

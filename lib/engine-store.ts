@@ -16,6 +16,8 @@ import { MAX_AD_PHOTOS } from "@/lib/photo-collage";
 import { FIXTURE_ADS, fixtureDate } from "@/lib/fixtures";
 import { AD_TTL_DAYS, type Ad, type AdPage, type AdQuery, type AdStatus } from "@/lib/ads";
 import { type AdminMessage } from "@/lib/admin-messages";
+import { getEngineSettings } from "@/lib/settings";
+import { testModeActive } from "@/lib/test-mode";
 import { websiteAdPhotos } from "@/lib/photo-collage";
 
 // ---------- types ----------
@@ -57,7 +59,7 @@ export interface StoredAd {
    * release charges this, not a recomputed price — an ad held on Monday must
    * not cost more on Wednesday because the price list changed (9953). */
   unpaidCents?: number | null;
-  /** The quoted price this ad still owes, in cents (session 021, migration
+  /** The quoted price this ad still owes, in cents (session 023, migration
    * 9951). Set the moment the ad is written down and cleared when the batch
    * that carries it collects — so a non-null value means "not yet paid for",
    * whatever the status. It is the FROZEN quote: an ad written on Monday costs
@@ -67,11 +69,14 @@ export interface StoredAd {
   owedCents?: number | null;
   /** Set while a batch is collecting for this ad, cleared when it finishes.
    * The third state that keeps a concurrent batch from reading a collection
-   * in progress as "nothing owing, run it free" (session 021). */
+   * in progress as "nothing owing, run it free" (session 023). */
   chargeClaimedAt?: string | null;
   /** Keeps the ad out of batch selection for a while after a collection
    * failed. Its OWN field, never holdUntil — that one is the operator's. */
   chargeHoldUntil?: string | null;
+  /** Created while TEST MODE was on (migration 9951). The label only — the ad
+   * is kept off the public site by webListing:false. */
+  isTest?: boolean;
   /** Category key (items 22/25, migration 9976); null/undefined =
    * uncategorized — rides EVERY digest, shows under All on the site. NOT part
    * of the shared Supabase AD_SELECT (so nothing hard-depends on 9976); the
@@ -92,6 +97,17 @@ export interface StoredAd {
 }
 
 /** An emailed-in picture awaiting admin review (FEATURES item 1). */
+/** Where an ad has actually been delivered — see the Supabase twin. */
+export interface AdDelivery {
+  /** When the SMS batch carried it. Also when it appeared on the WEBSITE:
+   * every public query requires broadcast_at, so the two are one event. */
+  broadcastAt: string | null;
+  /** When an email edition carried it. */
+  emailedAt: string | null;
+  /** The number of the email edition that introduced it, when known. */
+  emailDigestNo: number | null;
+}
+
 export interface PhotoSubmission {
   id: number;
   adId: number;
@@ -153,6 +169,9 @@ export interface NewAdInput {
    * public site. Omitted/true = listed — the default, and the only value
    * while web_addon_cents is 0. */
   webListing?: boolean;
+  /** Created while TEST MODE was on (session 023). Set by createAd, never by a
+   * caller. The LABEL only — `webListing: false` is what hides it. */
+  isTest?: boolean;
 }
 
 /**
@@ -215,7 +234,7 @@ export interface InsightAd {
 /** A claimed row older than this is presumed orphaned by a dead run. */
 const OUTBOX_RECLAIM_MS = 10 * 60 * 1000;
 
-/** A collection claim older than this is presumed orphaned (session 021).
+/** A collection claim older than this is presumed orphaned (session 023).
  * Deliberately long: a claim is only ever held across one card charge, so
  * re-claiming is a recovery path rather than a routine. */
 export const CHARGE_CLAIM_STALE_MS = 60 * 60 * 1000;
@@ -235,7 +254,7 @@ export interface CreateAdOptions {
   rejectedReason?: string;
   /** With status "unpaid": the price the seller was quoted, in cents. */
   unpaidCents?: number;
-  /** The quoted price this ad owes until it runs (session 021). Written on
+  /** The quoted price this ad owes until it runs (session 023). Written on
    * every ad that is accepted, held or not — see StoredAd.owedCents. */
   owedCents?: number;
 }
@@ -464,6 +483,7 @@ const file = {
         ).toISOString(),
       }),
       ...(input.webListing === false && { webListing: false }),
+      ...(input.isTest === true && { isTest: true }),
     });
     save(store);
     return id;
@@ -589,7 +609,7 @@ const file = {
     save(store);
   },
 
-  /* ---------- owed prices (session 021, migration 9951) ---------- */
+  /* ---------- owed prices (session 023, migration 9950) ---------- */
 
   listOwedAds(phone: string): OwedAd[] {
     return load()
@@ -858,6 +878,11 @@ const file = {
     return load()
       .bumps.filter((b) => b.status === "queued")
       .sort((a, b) => Date.parse(a.requestedAt) - Date.parse(b.requestedAt));
+  },
+
+  /** Every stored ad, for lookups that need columns the readers omit. */
+  allAds(): StoredAd[] {
+    return load().ads;
   },
 
   getNewDigestAds(cap: number): StoredAd[] {
@@ -1396,8 +1421,34 @@ const file = {
 
 // ---------- public interface (picks the implementation) ----------
 
+/**
+ * TEST MODE marks the ad here (session 023), for the same reason the recipient
+ * narrowing lives in lib/store.ts rather than in its callers: there are six
+ * places that create an ad, and the one added next year is the one that would
+ * put a test ad on the public website.
+ *
+ * TWO flags, deliberately, because they fail differently:
+ *
+ *  - `webListing: false` is what actually HIDES the ad. It is the existing,
+ *    already-migrated "keep this off the site" filter (lib/ads-supabase.ts
+ *    `web_listing.is.null,web_listing.eq.true`), so hiding works the moment
+ *    this deploys, with no migration pasted and nothing to forget.
+ *  - `isTest: true` is the LABEL, so test ads can be found and cleaned up
+ *    later, and so /admin/ads can badge them. It needs migration 9951, and it
+ *    degrades to "unlabelled but still hidden" until that is pasted — the
+ *    same shape the web_listing and unpaid_cents inserts already use.
+ *
+ * A test ad is otherwise a completely ordinary ad: real number, real price,
+ * real review queue, real broadcast. Only its audience and its visibility are
+ * narrowed.
+ */
 export async function createAd(input: NewAdInput, options: CreateAdOptions = {}): Promise<number> {
-  return supabaseConfigured ? remote.createAd(input, options) : file.createAd(input, options);
+  const settings = await getEngineSettings();
+  const asTest = testModeActive(settings, Date.now());
+  const finalInput = asTest ? { ...input, webListing: false, isTest: true } : input;
+  return supabaseConfigured
+    ? remote.createAd(finalInput, options)
+    : file.createAd(finalInput, options);
 }
 
 export async function getAdRecord(id: number): Promise<StoredAd | null> {
@@ -1486,10 +1537,10 @@ export async function setAdUnpaid(id: number, costCents: number): Promise<void> 
   return supabaseConfigured ? remote.setAdUnpaid(id, costCents) : file.setAdUnpaid(id, costCents);
 }
 
-/* ---------- owed prices (session 021, migration 9951) ----------
+/* ---------- owed prices (session 023, migration 9950) ----------
  *
  * Every one of these degrades to "nothing is owed" without the column, which
- * is the pre-9951 truth: ads were charged at posting time, so no ad carried a
+ * is the pre-9950 truth: ads were charged at posting time, so no ad carried a
  * balance into its run. That degradation is what lets the code deploy ahead of
  * the migration without stranding a single text.
  */
@@ -1666,6 +1717,25 @@ export async function setAdCategory(
  * the paste this returns an empty map — every ad reads uncategorized and
  * digests/pages behave exactly as today.
  */
+/**
+ * Delivery state per ad (session 022). File store: the ad rows already carry
+ * both stamps, and dev never numbers an email edition, so the number is null.
+ */
+export async function getAdDelivery(ids: number[]): Promise<Map<number, AdDelivery>> {
+  if (supabaseConfigured) return remote.getAdDelivery(ids);
+  const wanted = new Set(ids);
+  const out = new Map<number, AdDelivery>();
+  for (const ad of file.allAds()) {
+    if (!wanted.has(ad.id)) continue;
+    out.set(ad.id, {
+      broadcastAt: ad.broadcastAt ?? null,
+      emailedAt: ad.emailedAt ?? null,
+      emailDigestNo: null,
+    });
+  }
+  return out;
+}
+
 export async function getAdCategories(ids: number[]): Promise<Map<number, string | null>> {
   return supabaseConfigured ? remote.getAdCategories(ids) : file.getAdCategories(ids);
 }

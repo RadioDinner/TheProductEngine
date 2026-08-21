@@ -38,7 +38,7 @@ export const site = {
    * This constant is the only place it is written down; the footer and the
    * health probe both read it, so they can never disagree.
    */
-  version: "1.5.9",
+  version: "1.6.11",
   tagline: "Buy and sell by text message",
   adsPerPage: 15,
 } as const;
@@ -158,7 +158,7 @@ export const engineDefaults = {
   batchMaxWaitMinutes: 60,
   /**
    * How many ads one number may have sitting in the review queue waiting on
-   * money before further posts are HELD out of it instead (session 021).
+   * money before further posts are HELD out of it instead (session 023).
    *
    * An ad is now paid for when it RUNS, so a member with nothing on their
    * account still gets read and still gets an answer — the user's decision:
@@ -173,14 +173,14 @@ export const engineDefaults = {
   maxAdsAwaitingPayment: 3,
   /**
    * Hours an ad stays out of batch selection after a collection failed
-   * (session 021). Long enough that a declined card is not presented again
+   * (session 023). Long enough that a declined card is not presented again
    * every five minutes; short enough that money added this afternoon runs the
    * ad this afternoon. Any payment clears the back-off immediately anyway, so
    * this only governs the case where nobody does anything.
    */
   chargeRetryHours: 6,
   /**
-   * Text the seller when their ad goes out and the money moves (session 021).
+   * Text the seller when their ad goes out and the money moves (session 023).
    *
    * ON by default, and it is the receipt that makes "nothing is charged until
    * your ad runs" checkable rather than merely stated — a member who is told a
@@ -355,6 +355,22 @@ export const engineDefaults = {
    * outboundThrottlePerMin. Pair it with the blocklist to kill bad actors fast.
    */
   underAttack: false,
+  /**
+   * TEST MODE (session 023). While on, ad broadcasts go ONLY to testNumbers —
+   * the real subscriber list receives nothing — and ads created while it is on
+   * are marked as test ads and kept off the public website.
+   *
+   * It expires by itself (testModeExpiresAt, set when the switch is flipped on;
+   * see lib/test-mode.ts). Left on it is worse than an outage, because every
+   * screen looks healthy while the whole list silently gets nothing — so the
+   * default state of a forgotten switch is OFF, not on forever.
+   */
+  testMode: false,
+  /** Comma-separated 10-digit numbers that receive ads while test mode is on.
+   * Empty makes test mode inert rather than a service-wide blackout. */
+  testNumbers: "",
+  /** ISO timestamp test mode turns itself off at. Empty/unparseable = expired. */
+  testModeExpiresAt: "",
   /**
    * Global outbound sends-per-minute ceiling enforced ONLY while underAttack is
    * on. Excess defers to the next cron tick (digests) or is dropped (replies),

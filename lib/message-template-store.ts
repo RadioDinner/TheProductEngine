@@ -1,5 +1,5 @@
 /**
- * Where an edited auto-reply lives (session 021).
+ * Where an edited auto-reply lives (session 023).
  *
  * Only OVERRIDES are stored — one row per message the operator has actually
  * changed. Everything else falls through to the default in
@@ -10,9 +10,9 @@
  * the old text taken the day the table was created.
  *
  * Dual-mode like every other store here: `.data/message-templates.json` in
- * development, the `message_templates` table (migration 9950) in Supabase.
+ * development, the `message_templates` table (migration 9949) in Supabase.
  *
- * ⚠️ A MISSING TABLE READS AS "NO OVERRIDES", NOT AS AN ERROR. Until 9950 is
+ * ⚠️ A MISSING TABLE READS AS "NO OVERRIDES", NOT AS AN ERROR. Until 9949 is
  * pasted, every message renders its shipped default and the admin page says the
  * table is missing. The alternative — throwing — would take down every inbound
  * text on a deploy that landed before the migration, to protect an edit nobody
@@ -45,9 +45,18 @@ function saveFile(shape: FileShape): void {
   writeFileSync(STORE_PATH, JSON.stringify(shape, null, 2), "utf8");
 }
 
-/** Postgres "relation does not exist" — migration 9950 not pasted yet. */
+/**
+ * "That table does not exist yet" — migration 9949 not pasted.
+ *
+ * TWO codes, and the second one is the one that actually happens. Requests go
+ * through PostgREST, which answers from its own schema cache: a table it has
+ * never seen comes back as PGRST205, not Postgres's 42P01. Session 022 found
+ * that the hard way — every table-level fallback in the repo was written
+ * against 42P01 alone, so with 9952 unpasted /admin/digests 500'd instead of
+ * saying the table was missing.
+ */
 function missingTable(error: { code?: string } | null): boolean {
-  return error?.code === "42P01";
+  return error?.code === "42P01" || error?.code === "PGRST205";
 }
 
 /**

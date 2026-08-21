@@ -170,7 +170,7 @@ async function postAdInner(formData: FormData): Promise<void> {
         settings.starterCreditLimit,
       )
     : { account, granted: false };
-  // NOTHING IS CHARGED HERE ANY MORE (session 021) — the ad is quoted a price,
+  // NOTHING IS CHARGED HERE ANY MORE (session 023) — the ad is quoted a price,
   // the price is reserved against the member's balance, and the batch that
   // carries the ad collects. The SMS lane does exactly the same thing and for
   // the same reasons; see lib/ad-funding.ts.

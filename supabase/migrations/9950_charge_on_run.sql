@@ -1,10 +1,10 @@
 -- =====================================================================
--- 9951 — an ad is paid for when it RUNS, not when it is written.
+-- 9950 — an ad is paid for when it RUNS, not when it is written.
 --
 -- "When people create an ad, and have a card on file, I want the
 --  confirmation message to include that the card won't be charged until the
 --  ad is run. Make the system honor the truth of this message."
---                                             (user, session 021)
+--                                             (user, session 023)
 --
 -- and, the same session, on an ad that was approved without being paid for:
 --
@@ -43,7 +43,7 @@
 alter table ads add column if not exists owed_cents integer;
 
 comment on column ads.owed_cents is
-  'Session 021: the frozen quoted price this ad still owes. Set when the ad is accepted, cleared by the batch that collects for it. Not null = not paid for yet. Reserved against the member''s balance while it stands.';
+  'Session 023: the frozen quoted price this ad still owes. Set when the ad is accepted, cleared by the batch that collects for it. Not null = not paid for yet. Reserved against the member''s balance while it stands.';
 
 -- A collection IN PROGRESS. Stamped while one pass is taking the money and
 -- cleared when it finishes, either way.
@@ -57,7 +57,7 @@ comment on column ads.owed_cents is
 alter table ads add column if not exists charge_claimed_at timestamptz;
 
 comment on column ads.charge_claimed_at is
-  'Session 021: set while a batch is collecting for this ad, cleared when it finishes. A claim older than the staleness window is ignored, so a pass that died mid-collection cannot strand an ad forever.';
+  'Session 023: set while a batch is collecting for this ad, cleared when it finishes. A claim older than the staleness window is ignored, so a pass that died mid-collection cannot strand an ad forever.';
 
 -- The back-off after a collection FAILED. Deliberately its own column rather
 -- than reusing hold_until: that one belongs to the operator ("skip the next
@@ -66,7 +66,7 @@ comment on column ads.charge_claimed_at is
 alter table ads add column if not exists charge_hold_until timestamptz;
 
 comment on column ads.charge_hold_until is
-  'Session 021: keeps an ad out of batch selection for a few hours after a collection failed, so a declined card is not presented again every five minutes. Cleared the moment the member pays. Separate from hold_until, which is the operator''s own hold.';
+  'Session 023: keeps an ad out of batch selection for a few hours after a collection failed, so a declined card is not presented again every five minutes. Cleared the moment the member pays. Separate from hold_until, which is the operator''s own hold.';
 
 -- Held ads written under 9953 carry their quote in unpaid_cents. Move it
 -- across so the reservation and the collection can see it. Guarded on the
