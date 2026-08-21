@@ -11,3 +11,6 @@ A: Leave email alone — the Saturday 5pm email edition still composes at 5pm.
 
 --- 2026-08-21 ---
 Also the money dashboard has some problems. I want it "reset" since all the day so far has been test data, so it's off in terms of accuracy.
+
+--- 2026-08-21 ---
+merge to main
