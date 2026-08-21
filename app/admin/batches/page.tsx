@@ -196,7 +196,23 @@ export default async function AdminBatches({
   }>;
 }) {
   const params = await searchParams;
-  const settings = await getEngineSettings();
+  // The last unwrapped read on this page. Everything below is panelled, so a
+  // failure here was the one remaining way for one query to blank the lot.
+  const settingsPanel = await panel("settings", getEngineSettings);
+  if (!settingsPanel.ok) {
+    return (
+      <>
+        <h1>Batches</h1>
+        <PanelError panel={settingsPanel} />
+        <p className="fine">
+          Settings drive every number on this page — the send window, the batch
+          triggers, how many ads fit in a batch — so there is nothing trustworthy to
+          show without them.
+        </p>
+      </>
+    );
+  }
+  const settings = settingsPanel.value;
   // ⚠️ Every read below is INDEPENDENT and none of them may take the page down.
   //
   // This page has now gone dark in production twice: session 018's slot-key
