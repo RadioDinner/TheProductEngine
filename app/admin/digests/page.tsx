@@ -127,6 +127,9 @@ export default async function AdminDigests({
     msgqueued?: string;
     msgcanceled?: string;
     msgerror?: string;
+    saved?: string;
+    id?: string;
+    error?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -160,6 +163,19 @@ export default async function AdminDigests({
         </p>
       )}
       {params.senderror && <p className="fine">✗ Not sent: {params.senderror}</p>}
+      {/* Editing an ad here redirects back with the same markers /admin/ads
+          uses — a save that says nothing reads exactly like one that failed. */}
+      {params.saved && (
+        <p className="notice" role="status">
+          Saved ad #{Number(params.saved) || params.saved}. The seller is not notified.
+        </p>
+      )}
+      {params.error === "emptybody" && (
+        <p className="form-error" role="alert">
+          Ad #{Number(params.id) || params.id} was left blank, so nothing was saved — an ad
+          needs some text.
+        </p>
+      )}
       <p>
         Batches go out{" "}
         <strong>

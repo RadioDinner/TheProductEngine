@@ -3,9 +3,10 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-21 (session 020 wrap — the send window, the ledger
-reset, the call flow, AD replacing AD NEW, held-unpaid ads, and scheduled
-admin broadcasts. v1.4.9).
+**Last updated:** 2026-08-21 (session 022 — /admin/ads becomes a list of cards
+and an ad is editable in every status. v1.4.10). ⚠️ A parallel session 021 (the
+call line) was in flight at the same time and lands its own section below when
+it merges — keep both.
 
 ## ⚠️ START HERE: two NEW migrations are waiting
 
@@ -47,6 +48,103 @@ Consequences worth carrying:
 description registered with the carrier still says 7am–9pm.** That lives at
 Telnyx. The published window and the registered description have to agree —
 this is the last piece of the session-020 change not yet done.
+
+## Session 022 (2026-08-21) — /admin/ads: CARDS, and editing in every status
+
+**Version 1.4.9 → 1.4.10** (§6: two features this session, so the far-right
+digit moves ONCE and stays; 9 + 1 = 10, taken literally).
+
+⚠️ **This session is numbered 022, not 021, and it is the SECOND of two
+sessions that both started on 2026-08-21 and both picked `021_2026-08-21b`.**
+The other one (the voice line — "nothing dials the operator's cell any more",
+branch `claude/twilio-error-18602-4f4tnj`) committed two minutes earlier and
+pushed first, so it keeps 021 and this one moved to `022_2026-08-21c`. Without
+the rename BOTH sessions' verbatim `prompt_history.txt` would have merged into
+one file, interleaving two unrelated conversations — which is the one thing
+that log exists to prevent. If you are a future session picking a folder
+number, `git fetch` and look at the other branches, not just `main`.
+
+Developed on `claude/admin-ads-card-layout-awt8zq` (the user asked for a branch
+because **seven other sessions were committing to this repo**), then merged to
+`main` on their word once the check above showed no code overlap with any live
+branch. No migration, no data change — presentation and one server action.
+
+The user's complaint about /admin/ads was that it is "visually very busy, and
+at a glance it's hard to see where one ad ends and where the next one begins."
+Each ad is now a three-part card — a tonal head band (number · status markers ·
+phone), a paper body (text, one muted meta line, Edit, emailed-in pictures) and
+a foot (Bump left, Delete right).
+
+**Two things here a future session should not undo:**
+
+- **`.adcards`/`.adcard` is a NEW class family, and that is deliberate.**
+  `.myad-row` — what the page used to use — is shared by **fifteen** pages
+  including the member-facing `/account/ads`. Restyling it would have changed
+  the whole site for a one-page request. If the card treatment is later wanted
+  on `/admin/review`, `/admin/users` or `/admin/reports` (all still `.myad-row`),
+  reuse `.adcard`; do not push it down into `.myad-row`.
+- **Red now means "flagged" and nothing else on this page.** `📷 Picture` and
+  `Flagged` both used to render through `.ad-sold`, which is red uppercase — so
+  on a list where most ads carry a picture, red was the commonest colour on the
+  page and carried no information. Every marker now shares one shape
+  (`.adcard-tag`) and only colour varies: ink = approved (live), blue =
+  pending/unpaid (waiting on you), muted = everything else, red = flagged.
+  Re-reddening the picture marker would put the noise straight back.
+
+DESIGN.md governs the shape: Ruled-Not-Raised (hairline box + tonal step, no
+shadow), and **no side-stripe borders** — which rules out the obvious
+colour-coded left edge, so the colour lives in the status word instead.
+
+### An ad is editable in EVERY status but `deleted`
+
+The user's second ask was "I also want to be able to edit ads, I'm sure there
+will be people that want to make edits to their ads." That reads two ways —
+the operator wanting an editor (one already existed) or MEMBERS editing their
+own (which does not exist anywhere: no `/account/ads` edit, no `EDIT` command).
+**Asked, and the user chose "operator only, but everywhere."**
+
+⚠️ **Member self-editing was therefore considered and NOT chosen — do not add
+it on your own initiative.** If it comes back, the open question is the one put
+to the user and left unanswered: does an edited ad return to review, trip only
+on the word filter, or go live at once? Editing after approval is the obvious
+way to slip banned text past a filter that only runs on new ads.
+
+`canEdit` went from `pending || approved || expired` to `status !== "deleted"`.
+The case that decided it is a **held `unpaid` ad** — the seller rings in about
+the ad they are one card away from running, and their text was the one thing
+that could not be fixed on that call. `adminEditAd` reads no status at all, on
+purpose: the page decides what to offer, the action writes what it is given.
+
+**Three things here are load-bearing:**
+
+- **`editScope(status)` is keyed off STATUS, and must stay that way.** It puts
+  one line above the box saying what the edit reaches. The obvious version
+  reads `broadcastAt` and says "this already went out" — but `broadcast_at` is
+  deliberately absent from the shared Supabase `AD_SELECT` (so /admin never
+  hard-depends on migration 9993), so it is `undefined` for **every** ad in
+  production. That note would have told the operator "not sent yet" about ads
+  texted days ago, confidently and always.
+- **An emptied box is refused, not swallowed.** `adminEditAd` used to be
+  `if (id && body) update(...)` then redirect — a blank save wrote nothing and
+  looked exactly like a save that worked. Saves now redirect with `saved=<id>`
+  or `error=emptybody` and both pages say so.
+- **`backTarget` keeps its two-entry PATH allowlist.** An action redirecting to
+  whatever a form field said would be an open redirect. The list filters ride
+  separate named, length-capped `q`/`status` fields instead, so a save returns
+  to the same filtered list rather than dumping the operator into all 100 ads.
+
+The seller's own words were always preserved (`updateAdBody` writes `body`
+alone) and simply never shown; the disclosure now prints "Edited. The seller
+wrote: …" when the two differ — inside the disclosure, so the collapsed card
+pays nothing for it.
+
+Verified: tsc + build clean, unit **1466/1466** unchanged, plus two real
+Chromium walks — the card layout over a store seeded with every status, a flag,
+a rejection reason and two photo submissions (no horizontal overflow at 1280px
+or 480px), and an 18-check editor walk including a real save on a **rejected**
+ad and a blank save refused without blanking the ad.
+
+Full detail: `Session log/022_2026-08-21c/session_log.md`.
 
 ## Session 020 (2026-08-21) — THE SEND WINDOW MOVES, AND SATURDAY CLOSES EARLY
 
