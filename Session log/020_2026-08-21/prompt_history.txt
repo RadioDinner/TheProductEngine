@@ -42,3 +42,6 @@ Currently I get a text message like this "The Plain Exchange: voicemail on the c
 
 --- 2026-08-21 ---
 Also, I want my system to allow for up to $50 of "debt". When someone wants to post an ad, but they don't have money on their books, I want my number to call them to request them to add a card, or have a text sent to them to add a card to automatically settle the balance. Or call and leave a voicemail and we'll send them an invoice. Then I want you to wire all the tech to honor this
+
+--- 2026-08-21 ---
+Well when someone posts an ad by texting "AD New holland tractor", I want it to keep the "New"

@@ -10,8 +10,12 @@ export function run(t) {
   const body = (text) => parseCommand(text).body;
   t.eq("bare AD posts", parseCommand("AD Hay for sale, $5 a bale").kind, "ad");
   t.eq("bare AD keeps the whole body", body("AD Hay for sale, $5 a bale"), "Hay for sale, $5 a bale");
-  t.eq("AD NEW still works for members trained on it",
-    body("AD NEW Hay for sale, $5 a bale"), "Hay for sale, $5 a bale");
+  // No casing rule, on purpose (user: "when someone posts an ad by texting
+  // 'AD New holland tractor', I want it to keep the New"). A member still
+  // typing the old keyword keeps a leading NEW, which the operator trims in
+  // review — cheap and visible, unlike an eaten brand name.
+  t.eq("a trained member's AD NEW keeps the word rather than risk eating one",
+    body("AD NEW Hay for sale, $5 a bale"), "NEW Hay for sale, $5 a bale");
   t.eq("AD NEW: separator", body("AD NEW: hay for sale"), "hay for sale");
   t.eq("AD NEW - separator", body("AD NEW - hay for sale"), "hay for sale");
   t.eq("bare AD NEW asks for the guide", body("AD NEW"), "");
@@ -19,8 +23,12 @@ export function run(t) {
   t.eq("New Idea keeps its brand", body("AD New Idea manure spreader, $900"), "New Idea manure spreader, $900");
   t.eq("a lower-case new is the seller's word",
     body("AD new puppies ready August 1"), "new puppies ready August 1");
-  t.eq("an ALL-CAPS message keeps NEW (casing says nothing there)",
-    body("AD NEW HOLLAND BALER, $2800"), "NEW HOLLAND BALER, $2800");
+  // Every casing a flip-phone typer might send "New Holland" in.
+  t.eq("New holland — the user's own example", body("AD New holland tractor"), "New holland tractor");
+  t.eq("NEW Holland (caps-lock N)", body("AD NEW Holland tractor"), "NEW Holland tractor");
+  t.eq("NEW holland", body("AD NEW holland tractor"), "NEW holland tractor");
+  t.eq("ALL CAPS", body("AD NEW HOLLAND BALER, $2800"), "NEW HOLLAND BALER, $2800");
+  t.eq("all lower", body("AD new holland tractor"), "new holland tractor");
   t.eq("reversed NEW AD hands off the bare form", body("NEW AD Hay for sale"), "Hay for sale");
   t.eq("run-together NEWAD hands off the bare form", body("NEWAD Hay for sale"), "Hay for sale");
   // The owner-command re-route has to survive a NEW the strip declined to take.
@@ -33,10 +41,15 @@ export function run(t) {
   t.eq("lowercase stop", parseCommand("stop").kind, "stop");
   t.eq("cancel -> stop", parseCommand("cancel").kind, "stop");
   t.eq("/help with slash", parseCommand("/help").kind, "help");
-  t.eq("AD NEW body", parseCommand("AD NEW Horse cart, $50").body, "Horse cart, $50");
+  // These two pinned the OLD behaviour, where any leading "new" was stripped.
+  // Session 020 narrowed that to protect brand names ("AD New holland tractor"
+  // must keep its New), so an unseparated NEW now stays in the body and the
+  // operator trims it in review. See stripKeywordNew for the full reasoning.
+  t.eq("AD NEW body keeps the word now", parseCommand("AD NEW Horse cart, $50").body, "NEW Horse cart, $50");
   t.eq("bare AD body", parseCommand("ad Horse cart").body, "Horse cart");
+  // A separator still marks it unambiguously as the keyword, so this is unchanged.
   t.eq("ad new mixed case + punctuation", parseCommand("Ad New: Hay $5").body, "Hay $5");
-  t.eq("extra whitespace AD NEW", parseCommand("  AD   NEW   Wagon  ").body, "Wagon");
+  t.eq("extra whitespace AD NEW", parseCommand("  AD   NEW   Wagon  ").body, "NEW   Wagon");
   // Reversed order (item: flip-phone typers) — "NEW AD" means "AD NEW".
   t.eq("NEW AD reversed -> ad", parseCommand("NEW AD Horse cart, $50").kind, "ad");
   t.eq("NEW AD reversed body", parseCommand("NEW AD Horse cart, $50").body, "Horse cart, $50");

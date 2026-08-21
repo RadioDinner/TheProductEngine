@@ -65,28 +65,33 @@ function adNumber(arg: string): number | null {
  *   "AD New Idea manure spreader"   the seller means New Idea
  *   "AD new puppies ready Aug 1"    the seller means new puppies
  *
- * Three rules, in order. Anything else keeps the word:
+ * Two rules. Anything else keeps the word:
  *
  *   1. A separator after it makes it unambiguously a keyword: "AD NEW: hay".
  *   2. Nothing after it is the bare "AD NEW" that asks for the posting guide.
- *   3. A SHOUTED "NEW" in an otherwise normally-typed message is the keyword
- *      ("AD NEW Hay for sale"), because a seller writing about something new
- *      writes "New" or "new". When the whole message is upper case the casing
- *      says nothing, so the word stays — "AD NEW HOLLAND BALER" keeps its
- *      brand.
  *
- * Erring toward keeping the word is deliberate: a stray "NEW " is visible to
- * the operator in review and trimmed in a second, while an eaten "New" ships
- * an ad that misnames what is for sale.
+ * Anything else keeps the word.
+ * There is deliberately NO casing rule. An earlier version treated a shouted
+ * "NEW" as the keyword, on the theory that a seller writing about something
+ * new writes "New" or "new". It reads well and it was wrong in practice:
+ * "AD NEW Holland tractor" and "AD NEW holland tractor" are exactly what a
+ * flip-phone typer sends — caps lock, or habit from the old instructions —
+ * and both had their brand eaten. The user's rule, plainly: when someone
+ * texts "AD New holland tractor", KEEP the "New".
+ *
+ * So the word survives unless it cannot possibly be part of the ad. The cost
+ * is that a member still typing "AD NEW Hay for sale" gets a leading "NEW " on
+ * their ad text, which the operator sees in review and trims in a second —
+ * and which fades as the published instruction is now just "AD". That is the
+ * right direction to be wrong in: a stray word is visible and cheap, while an
+ * eaten one ships an ad that misnames what is for sale.
  */
 export function stripKeywordNew(rest: string): string {
-  const match = rest.match(/^(new)\b([\s:,-]*)/i);
+  const match = rest.match(/^new\b([\s:,-]*)/i);
   if (!match) return rest.trim();
-  const [, word, gap] = match;
   const after = rest.slice(match[0].length);
-  const separated = /[:,-]/.test(gap);
-  const shouted = word === "NEW" && after !== after.toUpperCase();
-  if (separated || !after.trim() || shouted) return after.trim();
+  const separated = /[:,-]/.test(match[1]);
+  if (separated || !after.trim()) return after.trim();
   return rest.trim();
 }
 
