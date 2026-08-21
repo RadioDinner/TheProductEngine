@@ -1,0 +1,5 @@
+--- 2026-08-21 ---
+[image: screenshot of /admin/ads — "All ads" page, four ads in a flat list]
+I'd like to make some changes to the admin pages. For now, make a branch to work on as to not interfere with the 7 other sessions committing to this github right now.
+
+On the "Ads" page of the admin dashboard, it's visually very busy, and at a glance it's hard to see where one ad ends and where the next one begins. Can you make them on "cards" of sorts in a list style ?

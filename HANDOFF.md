@@ -3,9 +3,8 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-21 (session 020 wrap — the send window, the ledger
-reset, the call flow, AD replacing AD NEW, held-unpaid ads, and scheduled
-admin broadcasts. v1.4.9).
+**Last updated:** 2026-08-21 (session 021 — /admin/ads becomes a list of cards,
+on a branch. v1.4.10).
 
 ## ⚠️ START HERE: two NEW migrations are waiting
 
@@ -47,6 +46,47 @@ Consequences worth carrying:
 description registered with the carrier still says 7am–9pm.** That lives at
 Telnyx. The published window and the registered description have to agree —
 this is the last piece of the session-020 change not yet done.
+
+## Session 021 (2026-08-21) — /admin/ads is a list of CARDS, on a branch
+
+**Version 1.4.9 → 1.4.10** (§6: one feature, far-right digit, taken literally).
+
+⚠️ **NOT ON `main`.** It lives on `claude/admin-ads-card-layout-awt8zq` and was
+left unmerged on purpose — the user said **seven other sessions are committing
+to this repo right now** and asked for a branch so this wouldn't collide.
+Merging is their call. No migration, no data change: two files, all presentation.
+
+The user's complaint about /admin/ads was that it is "visually very busy, and
+at a glance it's hard to see where one ad ends and where the next one begins."
+Each ad is now a three-part card — a tonal head band (number · status markers ·
+phone), a paper body (text, one muted meta line, Edit, emailed-in pictures) and
+a foot (Bump left, Delete right).
+
+**Two things here a future session should not undo:**
+
+- **`.adcards`/`.adcard` is a NEW class family, and that is deliberate.**
+  `.myad-row` — what the page used to use — is shared by **fifteen** pages
+  including the member-facing `/account/ads`. Restyling it would have changed
+  the whole site for a one-page request. If the card treatment is later wanted
+  on `/admin/review`, `/admin/users` or `/admin/reports` (all still `.myad-row`),
+  reuse `.adcard`; do not push it down into `.myad-row`.
+- **Red now means "flagged" and nothing else on this page.** `📷 Picture` and
+  `Flagged` both used to render through `.ad-sold`, which is red uppercase — so
+  on a list where most ads carry a picture, red was the commonest colour on the
+  page and carried no information. Every marker now shares one shape
+  (`.adcard-tag`) and only colour varies: ink = approved (live), blue =
+  pending/unpaid (waiting on you), muted = everything else, red = flagged.
+  Re-reddening the picture marker would put the noise straight back.
+
+DESIGN.md governs the shape: Ruled-Not-Raised (hairline box + tonal step, no
+shadow), and **no side-stripe borders** — which rules out the obvious
+colour-coded left edge, so the colour lives in the status word instead.
+
+Verified: tsc + build clean, unit **1466/1466** unchanged, plus a real Chromium
+walk over a store seeded with every status, a flag, a rejection reason and two
+photo submissions — no horizontal overflow at 1280px or 480px.
+
+Full detail: `Session log/021_2026-08-21b/session_log.md`.
 
 ## Session 020 (2026-08-21) — THE SEND WINDOW MOVES, AND SATURDAY CLOSES EARLY
 
