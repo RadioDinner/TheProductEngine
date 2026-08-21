@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getIncomeReport } from "@/lib/income";
+import { getBooksOpenedAt, getIncomeReport } from "@/lib/income";
 import { formatPrice, site } from "@/lib/config";
 import { Tip } from "@/components/Tip";
 
@@ -36,8 +36,22 @@ function Row({
   );
 }
 
+/** "21 August 2026" — the books-opened stamp, or null if it is unreadable. */
+function booksOpenedLabel(stamp: string | null): string | null {
+  if (!stamp) return null;
+  const at = new Date(stamp.includes("T") ? stamp : stamp.replace(" ", "T"));
+  if (Number.isNaN(at.getTime())) return null;
+  return at.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "America/New_York",
+  });
+}
+
 export default async function AdminMoney() {
   const report = await getIncomeReport();
+  const booksOpened = booksOpenedLabel(await getBooksOpenedAt());
 
   const owed = report.unearnedCashCents;
   const collected = report.cashCollectedCents;
@@ -137,6 +151,15 @@ export default async function AdminMoney() {
           {report.coverage.rows.toLocaleString()} ledger rows. Every figure above is at
           least this much and probably more — say the word and this can be turned into a
           proper export.
+        </p>
+      )}
+
+      {booksOpened && (
+        <p className="fine status-muted">
+          <strong>Books opened {booksOpened}.</strong> Everything before that was the
+          service being tested on itself and was cleared out; the welcome credit was
+          kept, which is why credit issued can be more than nothing while cash
+          collected is nothing. Figures above cover this date onward.
         </p>
       )}
 

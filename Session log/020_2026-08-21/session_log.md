@@ -84,14 +84,84 @@ stomp a later operator choice, and inserts `sms_saturday_end_hour` = 17.
 - **`smsSaturdayEndHour` is optional in `WindowSettings`.** Settings saved
   before this session then give Saturday the published close rather than a
   Saturday that never opens. Fail toward sending, not toward silence.
-- **Version 1.2.9** (§6): three features — the new published window, the
-  Saturday close, the copy rule that protects it — so the FAR-RIGHT digit
-  moved. It is arguably a "major change" (it rewrites the public promise on
-  nine pages), but by the letter of the rule that is a feature count of three.
-  Say the word and the second digit moves instead.
+- **Version 1.2.8 → 1.3.9** (§6). The far-right digit moved mid-session when
+  the work looked like three features (published window, Saturday close, the
+  copy rule). It then went past four — the operator-editable Saturday setting
+  and operator label, the ledger reset, the books-opened line — so the SECOND
+  digit moved as well, cumulatively, the same shape session 019 used
+  (1.1.7 → 1.2.8). Auditable count: six features.
+- **The money reset was put to the user before any SQL was written**, because
+  the ledger is the balance. Two of the three options offered could not be
+  walked back.
+
+## Part two — the money books were reset
+
+`/admin/money` reads EVERY `credit_ledger` row, all time, no date filter. Pre-
+launch that meant it was adding up the operator testing the service on himself
+and calling it income. The user's words: *"I want it reset since all the data
+so far has been test data, so it's off in terms of accuracy."*
+
+Asked before touching anything, because `credit_ledger` is append-only by
+design (9966) and is what every member's balance is MADE of — deleting rows
+moves real balances. Answers: **wipe to zero aside from the $40 ad credit**,
+and **none of it is real money**.
+
+`9954_reset_ledger.sql` keeps only `kind = 'grant' AND note LIKE 'Welcome %'`
+(what `starterCreditNote()` writes, and what 9990 already uses to recognise a
+starter grant) and deletes everything else — purchases, payments, spends,
+refunds, payouts, admin invite credit, legacy adjustments. Everyone who has
+had their welcome credit lands at exactly $40 granted, $0 cash.
+
+**Verified rather than eyeballed.** Spun up a throwaway Postgres 16, built a
+fixture with the ledger shapes that actually occur (welcome credit + Stripe
+top-up + two spends + a refund; a cheque + a legacy adjustment + a payout; a
+member with only admin invite credit), ran the migration, and fed the
+surviving rows through the real `moneyPosition`/`incomeSummary`: $0 collected,
+$0 earned, $0 owed, $80 credit issued across the two welcome-credit members.
+
+**It disarms itself, and that was the main design decision.** A wipe that
+re-ran on every paste would be a loaded gun in the migrations folder — a
+future session told to "paste the pending migrations" would destroy real
+money. First run writes `config.ledger_reset_at`; every run after does
+nothing. Tested by adding "real" rows after the reset and re-pasting: they
+survived untouched. Resetting again requires deleting that config row by hand.
+
+`/admin/money` now prints "Books opened <date>" from the same stamp, so the
+figures' starting point is visible rather than folklore.
+
+## Part three — what the review pass caught
+
+An adversarial review of the send-window diff (four lenses, refute-first
+verification) surfaced three real defects, all fixed here:
+
+1. **`drainDigestOutbox` snapshotted the send window once per run.** A drain
+   gets up to 45 seconds, so a run starting at 4:59:55pm on a Saturday would
+   have kept texting straight through the 5pm close on a stale reading. The
+   gate now re-reads the clock per chunk; the start-of-run value survives only
+   for the pacing decision it was actually for. Pre-existing, but the whole
+   point of this session is that 5pm means 5pm.
+2. **The migration and HANDOFF both asserted a false invariant** — that an
+   absent `sms_saturday_end_hour` row means "no shortening". It does not:
+   `getEngineSettings` falls back to `engineDefaults` (17) for any key with no
+   row, so deleting the row leaves Saturday closing at 5pm. Two different
+   fallbacks (object-level vs row-level) with opposite outcomes. Both docs
+   corrected; the distinction is now called out in HANDOFF and the test.
+3. **A Saturday hour of 0 switched Saturday off while the label said
+   "7am–12am Sat"** — which reads like a midnight close, the exact opposite.
+   `operatorWindowLabel` now says "no Saturday sending", and the settings hint
+   explains both the off-switch and the run-full-hours value. Pinned by tests.
+
+Findings it raised that were NOT bugs: the published-copy-vs-unpasted-9955 gap
+(a documented operator step, already loud in HANDOFF and the commit message),
+and the generic "ads go out 7am to 6pm Mon–Sat" line in the welcome text —
+that is the published claim, the same sentence the website carries, and it
+contradicts nothing. Only copy that pairs "your ad won't go until Monday" with
+"we text until 6pm today" needed suppressing.
 
 ## Open questions / next step
 
+0. **`9954_reset_ledger.sql` is destructive and runs once.** Paste it when you
+   are ready for the books to start from today. It disarms itself afterwards.
 1. **Paste `9955_saturday_close.sql` first.** Until it goes in, production
    still texts until **9pm** while every public page now says 6pm — the stored
    `sms_window_end_hour` row (21, from migration 9971) overrides the code

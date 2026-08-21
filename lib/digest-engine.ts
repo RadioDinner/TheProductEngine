@@ -743,8 +743,15 @@ export function operatorWindowLabel(settings: WindowSettings): string {
   const open = hourLabel(settings.smsWindowStartHour);
   const published = hourLabel(settings.smsWindowEndHour);
   if (!saturdayClosesEarly(settings)) return `${open}–${published}, Mon–Sat`;
-  const saturday = hourLabel(windowEndHourFor(SATURDAY, settings));
-  return `${open}–${published} Mon–Fri · ${open}–${saturday} Sat`;
+  const end = windowEndHourFor(SATURDAY, settings);
+  // A close at or before the open hour means Saturday never sends at all —
+  // say THAT. Rendering the hour would print "7am–12am Sat" for a stored 0,
+  // which reads like a close at midnight: the exact opposite of a Saturday
+  // that is switched off, and the operator would never go looking.
+  if (end <= settings.smsWindowStartHour) {
+    return `${open}–${published} Mon–Fri · no Saturday sending`;
+  }
+  return `${open}–${published} Mon–Fri · ${open}–${hourLabel(end)} Sat`;
 }
 
 /**
@@ -1049,7 +1056,10 @@ export async function drainDigestOutbox(
   // close included); EMAIL rows are exempt,
   // since the window is an SMS courtesy and an inbox has no bedtime.
   const paused = pauseBlocks("bulk", settings);
-  const windowShut = !smsWindowOpen(new Date(startedAt), settings);
+  // Taken at the START of the run, and used ONLY for the pacing decision
+  // below. The per-row send gate re-reads the clock (windowShutNow) — see
+  // there for why a single snapshot is not good enough.
+  const windowShutAtStart = !smsWindowOpen(new Date(startedAt), settings);
 
   // Paced release (session 016, user decision): before claiming anything,
   // give a BACKLOG its release times. Stamping here rather than at the moment
@@ -1061,7 +1071,7 @@ export async function drainDigestOutbox(
   // Skipped while paused or outside the window: scheduling a spread that
   // starts before sending is even allowed would waste most of the gaps on
   // time nothing could have sent in anyway.
-  if (!paused && !windowShut) {
+  if (!paused && !windowShutAtStart) {
     const { min, max } = safeGapRange(settings);
     try {
       const paced = await stampReleaseSchedule(settings.pacedReleaseOver, min, max);
@@ -1118,13 +1128,20 @@ export async function drainDigestOutbox(
         break outer;
       }
       const chunk = batch.slice(i, i + SEND_CONCURRENCY);
+      // Re-read the clock per chunk rather than once per run. A drain gets up
+      // to 45 seconds, so a run that starts at 4:59:55pm on a Saturday would
+      // otherwise keep texting straight through the 5pm close on a snapshot
+      // taken before it — the close is the whole point, and "within a minute"
+      // is not closed. Checking per chunk bounds the overrun to the handful of
+      // sends already in flight. smsWindowOpen is pure and cheap.
+      const windowShutNow = !smsWindowOpen(new Date(), settings);
       await Promise.all(
         chunk.map(async (row) => {
           // Outside the send window an SMS row is left claimed and released
           // at the end of the run, exactly like a budget-deferred row — so
           // the claim still reaches the email rows behind it, and the text
           // goes out on the next tick after the window opens.
-          if (row.channel === "sms" && windowShut) {
+          if (row.channel === "sms" && windowShutNow) {
             deferredSms.push(row.id);
             return;
           }

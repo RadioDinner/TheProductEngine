@@ -70,8 +70,10 @@ export function run(t) {
   t.eq("7pm Saturday stays shut even with a 8pm setting",
     smsWindowOpen(ET("2026-08-22T23:00:00Z"), overrun), false);
 
-  // Settings saved before session 020 have no Saturday hour at all: Saturday
-  // then simply runs to the published close, never "closed all day".
+  // A settings OBJECT with no Saturday hour (a test, an old serialized blob)
+  // runs Saturday to the published close, never "closed all day". NB this is
+  // the object-level fallback only — a config TABLE with no
+  // sms_saturday_end_hour row still gets 17 from engineDefaults.
   const legacy = { smsWindowStartHour: 7, smsWindowEndHour: 18, smsQuietDays: [0] };
   t.eq("no Saturday hour set — Saturday runs to the published close",
     windowEndHourFor(6, legacy), 18);
@@ -109,6 +111,17 @@ export function run(t) {
 
   /* ---- the operator's label tells the truth; nothing else does ---- */
   t.eq("operator label spells Saturday out", operatorWindowLabel(SETTINGS), "7am–6pm Mon–Fri · 7am–5pm Sat");
+  // A close at or below the open hour is Saturday switched OFF. Saying
+  // "7am–12am Sat" for a stored 0 would read as a MIDNIGHT close — the exact
+  // opposite — so the label names the real state instead.
+  const satOff = { ...SETTINGS, smsSaturdayEndHour: 0 };
+  t.eq("a 0 Saturday hour means no Saturday sending at all",
+    smsWindowOpen(ET("2026-08-22T16:00:00Z"), satOff), false);
+  t.eq("...and the operator label says so, not '12am'",
+    operatorWindowLabel(satOff), "7am–6pm Mon–Fri · no Saturday sending");
+  const satAtOpen = { ...SETTINGS, smsSaturdayEndHour: 7 };
+  t.eq("a Saturday close at the open hour is also no sending",
+    operatorWindowLabel(satAtOpen), "7am–6pm Mon–Fri · no Saturday sending");
   t.eq("no shortening -> the plain label", operatorWindowLabel(legacy), "7am–6pm, Mon–Sat");
   t.eq("a clamped overrun reads as no shortening", operatorWindowLabel(overrun), "7am–6pm, Mon–Sat");
 

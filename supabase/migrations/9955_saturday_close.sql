@@ -48,9 +48,16 @@ update config
  where key = 'sms_window_end_hour'
    and value = '21'::jsonb;
 
--- Saturday's real, unpublished close. Absent = no shortening (the engine falls
--- back to the published hour), so a database that never gets this row still
--- behaves exactly as it did before — it just doesn't stop early on Saturdays.
+-- Saturday's real, unpublished close.
+--
+-- NOTE, because it is the opposite of what you would guess: DELETING this row
+-- does NOT turn the shortening off. getEngineSettings falls back to the code
+-- default in lib/config.ts (17) for any config key with no row, so an absent
+-- row leaves Saturday closing at 5pm — which is why the shortening is live the
+-- moment the code deploys, migration or no migration. The row exists so the
+-- hour is EDITABLE on /admin/settings, not so it can be switched off by
+-- removal. To run Saturday full hours, set this to the same value as
+-- sms_window_end_hour.
 insert into config (key, value) values
   ('sms_saturday_end_hour', '17')
 on conflict (key) do nothing;

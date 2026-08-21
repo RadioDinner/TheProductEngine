@@ -42,6 +42,35 @@ export interface IncomeReport extends IncomeSummary {
   coverage: IncomeCoverage;
 }
 
+/**
+ * When the books were last opened — the `ledger_reset_at` stamp written by
+ * migration 9954, or null if they never have been.
+ *
+ * The money page SHOWS this. A reset that leaves no visible mark is how a
+ * figure becomes a mystery six months later: the totals start from a date
+ * nobody remembers choosing, and the only way to find out is to read a
+ * migration. Absent, unreadable, or dev/file mode all read as null — the page
+ * then simply says nothing, which is the truth when nothing was reset.
+ */
+export async function getBooksOpenedAt(): Promise<string | null> {
+  if (!supabaseConfigured) return null;
+  try {
+    const { data, error } = await db()
+      .from("config")
+      .select("value")
+      .eq("key", "ledger_reset_at")
+      .maybeSingle();
+    if (error) throw error;
+    const value = (data as { value?: unknown } | null)?.value;
+    return typeof value === "string" && value.trim() ? value : null;
+  } catch (e) {
+    // Never let a missing note take the money page down — the figures are the
+    // point, the provenance line is a courtesy.
+    console.error("[income] could not read ledger_reset_at:", e);
+    return null;
+  }
+}
+
 export async function getIncomeReport(): Promise<IncomeReport> {
   const byMember = new Map<string, MoneyEntry[]>();
   let rows = 0;

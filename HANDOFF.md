@@ -4,9 +4,10 @@ Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
 **Last updated:** 2026-08-21 (session 020 — the send window moves to
-7am–6pm, and Saturday secretly stops at 5pm. v1.2.9).
+7am–6pm, Saturday secretly stops at 5pm, and the money books were reset.
+v1.3.9).
 
-## ⚠️ START HERE: three migrations are waiting
+## ⚠️ START HERE: four migrations are waiting
 
 **`9957_money_kinds.sql`** and **`9956_featured_requests.sql`** have NOT been
 pasted. Both degrade safely, so nothing is broken — but two features are only
@@ -14,15 +15,26 @@ half on until they are. `9956` was amended mid-session and is re-runnable;
 paste it again if an earlier copy went in. Detail in each section below.
 
 **`9955_saturday_close.sql`** is new and needs pasting too. Until it goes in,
-**production still texts until 9pm** while every public page now says 6pm —
-the stored `sms_window_end_hour` row (`21`, seeded by 9971) overrides the code
-default. The Saturday shortening degrades safely on its own (a missing
-`sms_saturday_end_hour` row just means no shortening), but the end-hour update
-does not. Paste 9955 before anything else this session.
+**production still texts until 9pm on weekdays** while every public page now
+says 6pm — the stored `sms_window_end_hour` row (`21`, seeded by 9971)
+overrides the code default, and a stored row always wins.
+
+Saturday is the other way round and it catches people out: there has never
+been a `sms_saturday_end_hour` row, and `getEngineSettings` falls back to the
+CODE default for any key with no row — so Saturday's 5pm close goes live the
+moment this deploys, with or without the migration. **Deleting that row does
+not disable the shortening**; setting it equal to `sms_window_end_hour` does.
+Paste 9955 before anything else this session.
+
+**`9954_reset_ledger.sql`** — ⚠️ **DESTRUCTIVE, and it runs exactly once.**
+See the money section below before pasting.
 
 ## Session 020 (2026-08-21) — THE SEND WINDOW MOVES, AND SATURDAY CLOSES EARLY
 
-**Version 1.2.8 → 1.2.9** (§6: three features, so the far-right digit moved).
+**Version 1.2.8 → 1.3.9** (§6: the far-right digit moved mid-session when the
+work looked like three features; the send-window copy rule, the operator
+setting, the ledger reset and the books-opened line took it past four, so the
+SECOND digit moved as well — the same cumulative shape session 019 used).
 
 The user brought back community advice: *"9pm is way too late to send ads on
 Saturday nights, and 6 would work for the week days."* Then went one step
@@ -72,6 +84,43 @@ Both still say WHEN the ad goes. The promise is kept, it just isn't recited.
   /admin/digests and the /admin/settings pause notice. An operator who does
   not know Saturday closes at five will file the quiet hour as a bug.
 
+### The money books were reset (migration 9954)
+
+`/admin/money` reads EVERY `credit_ledger` row, all time, with no date filter
+— so pre-launch it was adding up the operator testing the service on himself
+and calling it income. The user's decision, asked and answered: *"I want to
+wipe to zero aside from the 40 dollar ad credit"*, and *"no real member money
+is in the system yet"*.
+
+`9954_reset_ledger.sql` deletes every ledger row EXCEPT
+`kind = 'grant' AND note LIKE 'Welcome %'` — the welcome credit, which is what
+`starterCreditNote()` writes and what migration 9990 already uses to recognise
+a starter grant. Everyone who has had their welcome credit ends at exactly $40
+of GRANTED balance and $0 cash. Verified against a throwaway Postgres 16 with
+a realistic fixture, then the surviving rows were run through the real
+`moneyPosition`/`incomeSummary`: $0 collected, $0 earned, $0 owed, credit
+issued = $40 × those members.
+
+**⚠️ It disarms itself, and that is load-bearing.** `credit_ledger` is
+append-only by design (9966) and it is what every balance is MADE of. A wipe
+that simply re-ran on every paste would be a loaded gun in the migrations
+folder — a future session told to "paste the pending migrations" would destroy
+real money. The first run writes `config.ledger_reset_at`; every run after
+checks for it and does nothing. Pasting it twice is safe; pasting it in six
+months is safe. Tested: real rows added after the reset survive a re-paste
+untouched. **To reset the books again you must delete that config row first —
+an explicit act, which is the point.**
+
+`/admin/money` reads the same stamp (`getBooksOpenedAt`) and prints "Books
+opened <date>" under the figures, so the totals' starting point is never a
+mystery. Unreadable or absent = the line simply doesn't render.
+
+**Not touched, deliberately:** ads (their spend rows are gone, so old test ads
+stay live but unrecorded as paid — `/admin/purge` is the tool for removing a
+test member and their ads together), `business_packages`, `users.free_ads`,
+`users.starter_granted_at` (kept, so nobody is granted the welcome credit
+twice and the 200-member launch-offer count stays honest), and Stripe itself.
+
 ### Things a future session must not get wrong here
 
 - **The email edition is NOT affected, on purpose** (user decision this
@@ -83,9 +132,16 @@ Both still say WHEN the ad goes. The promise is kept, it just isn't recited.
   registered with the carrier. That is EXTERNAL to this repo and the code
   cannot fix it. The published window and the registered description have to
   agree — update it at Telnyx.
-- `smsSaturdayEndHour` is optional in `WindowSettings`. A caller holding
-  pre-020 settings gets the published close on Saturday too, rather than a
-  Saturday that never opens. Do not make it required.
+- `smsSaturdayEndHour` is optional in `WindowSettings` — but that fallback is
+  about the OBJECT, not the database. A caller that passes a settings object
+  without the key (a test, an old serialized blob) gets the published close on
+  Saturday; a config table with no `sms_saturday_end_hour` ROW still gets 17,
+  from `engineDefaults`. Two different fallbacks, opposite outcomes. Do not
+  make the field required, and do not read a missing row as "no shortening".
+- A Saturday hour at or below the open hour switches Saturday OFF entirely
+  (`hour >= 7 && hour < 0` is never true). That is a legitimate setting, and
+  `operatorWindowLabel` says "no Saturday sending" rather than printing
+  "7am–12am Sat", which reads like the opposite.
 - Setting the Saturday hour EQUAL to the published one is the documented way
   to switch the shortening off — not deleting the setting.
 
