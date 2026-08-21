@@ -539,6 +539,28 @@ export async function setAdUnpaid(id: number, costCents: number): Promise<void> 
   if (error && error.code !== "42703" && error.code !== "22P02") throw error;
 }
 
+/**
+ * Does this error mean "that TABLE does not exist yet"?
+ *
+ * ⚠️ Two codes, and missing the second one is a page-down bug rather than a
+ * dormant feature. Requests go through PostgREST, which answers from its own
+ * schema cache: a table it has never seen comes back as **PGRST205**, not as
+ * Postgres's 42P01. 42P01 only surfaces when the statement actually reaches
+ * Postgres (inside a view or function, say).
+ *
+ * The column-level twin of this pair — 42703 and PGRST204 — is already handled
+ * carefully all over this file (see `slotKeySchemaMissing`). The table-level
+ * guards were written against 42P01 alone, so every "not pasted yet" fallback
+ * below silently failed to catch the real-world case: with 9952 unpasted,
+ * `listAdminMessages` threw instead of returning [], and because
+ * /admin/digests reads it unconditionally the WHOLE PAGE 500'd. The feature
+ * was supposed to be dormant; the page was supposed to say the table was
+ * missing. Neither happened.
+ */
+export function tableMissing(error: { code?: string } | null): boolean {
+  return error?.code === "42P01" || error?.code === "PGRST205";
+}
+
 /* ---------- admin broadcasts (migration 9952) ---------- */
 
 /** Every broadcast, newest first, for the admin page. Empty when 9952 is not
@@ -550,7 +572,7 @@ export async function listAdminMessages(limit = 25): Promise<AdminMessage[]> {
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) {
-    if (error.code === "42P01") return []; // no such table
+    if (tableMissing(error)) return []; // 9952 not pasted yet
     throw error;
   }
   return (data ?? []).map(toAdminMessage);
@@ -565,7 +587,7 @@ export async function listDueAdminMessages(nowIso: string): Promise<AdminMessage
     .lte("send_after", nowIso)
     .order("send_after", { ascending: true });
   if (error) {
-    if (error.code === "42P01") return [];
+    if (tableMissing(error)) return [];
     throw error;
   }
   return (data ?? []).map(toAdminMessage);
@@ -578,7 +600,7 @@ export async function createAdminMessage(body: string, sendAfterIso: string): Pr
     .select("id")
     .maybeSingle();
   if (error) {
-    if (error.code === "42P01") return null;
+    if (tableMissing(error)) return null;
     throw error;
   }
   return (data?.id as number | undefined) ?? null;
@@ -597,7 +619,7 @@ export async function claimAdminMessage(id: number): Promise<boolean> {
     .eq("status", "scheduled")
     .select("id");
   if (error) {
-    if (error.code === "42P01") return false;
+    if (tableMissing(error)) return false;
     throw error;
   }
   return Boolean(data?.length);
@@ -614,7 +636,7 @@ export async function recordAdminMessageSend(
     .from("admin_messages")
     .update({ digest_id: digestId, recipients, segments })
     .eq("id", id);
-  if (error && error.code !== "42P01") throw error;
+  if (error && !tableMissing(error)) throw error;
 }
 
 /** Un-claim after a failed compose, so the next tick tries again rather than
@@ -625,7 +647,7 @@ export async function releaseAdminMessage(id: number): Promise<void> {
     .update({ status: "scheduled", sent_at: null })
     .eq("id", id)
     .eq("status", "sent");
-  if (error && error.code !== "42P01") throw error;
+  if (error && !tableMissing(error)) throw error;
 }
 
 export async function cancelAdminMessage(id: number): Promise<void> {
@@ -634,7 +656,7 @@ export async function cancelAdminMessage(id: number): Promise<void> {
     .update({ status: "canceled" })
     .eq("id", id)
     .eq("status", "scheduled");
-  if (error && error.code !== "42P01") throw error;
+  if (error && !tableMissing(error)) throw error;
 }
 
 function toAdminMessage(row: Record<string, unknown>): AdminMessage {
@@ -894,7 +916,7 @@ export async function deleteAdRecord(
 /** Missing ad_photo_submissions table = migration 9985 not applied yet; the
  * emailed-pictures feature stays dormant instead of erroring. */
 function submissionsSchemaMissing(error: { code?: string } | null): boolean {
-  return error?.code === "42P01";
+  return tableMissing(error);
 }
 
 export async function addPhotoSubmission(

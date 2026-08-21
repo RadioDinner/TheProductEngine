@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   adminDeleteAd,
   adminEditAd,
+  adminPromoteAdToFeatured,
   adminQueueBump,
   adminResolvePhotoSubmission,
 } from "@/lib/admin-actions";
@@ -19,8 +20,10 @@ import {
 import { categoriesSupported, getLedger } from "@/lib/store";
 import { CATEGORIES, categoryLabel } from "@/lib/categories";
 import { isPicReplaceSubmission } from "@/lib/myads";
+import { textedAdPhotos } from "@/lib/photo-collage";
 import { formatPhone } from "@/lib/phone";
 import { formatPrice, site } from "@/lib/config";
+import { getEngineSettings } from "@/lib/settings";
 import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
@@ -48,6 +51,25 @@ function statusTone(status: StoredAdStatus): string {
   if (status === "approved") return " adcard-tag--live";
   if (status === "pending" || status === "unpaid") return " adcard-tag--waiting";
   return "";
+}
+
+/**
+ * What happens to picture number `i` of an ad — the three fates are genuinely
+ * different, and lumping them together would misreport what the seller bought.
+ *
+ *  - **Picture 1 BROADCASTS.** `resolveBroadcastPictures` sends exactly
+ *    `textedAdPhotos(...)[0]`, so one picture ad = one picture message however
+ *    many pictures it holds.
+ *  - **Pictures 2-3 are PIC-on-request.** They're texted only when a member
+ *    replies PIC, which is what keeps a three-picture ad from costing three
+ *    times as much to send to the whole list.
+ *  - **Anything past `MAX_COMBINED_PHOTOS` is website-only** — an emailed-in
+ *    extra nobody was charged to broadcast.
+ */
+function pictureRole(index: number, textedCount: number): { tag: string | null; title: string } {
+  if (index === 0) return { tag: "texts", title: "goes out with the batch" };
+  if (index < textedCount) return { tag: "PIC", title: "texted only if someone replies PIC" };
+  return { tag: null, title: "website only" };
 }
 
 /**
@@ -87,6 +109,11 @@ export default async function AdminAds({
     saved?: string;
     id?: string;
     error?: string;
+    promoted?: string;
+    slot?: string;
+    billed?: string;
+    short?: string;
+    phone?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -94,6 +121,8 @@ export default async function AdminAds({
     ? (params.status as StoredAdStatus)
     : undefined;
   const ads = await getAllAds(params.q, status);
+  const settings = await getEngineSettings();
+  const featuredPrice = settings.featuredMonthlyCents;
   const bumpQueued = new Set((await getQueuedBumps()).map((b) => b.adId));
   // Inline category editing (item 22) — hidden until migration 9976.
   const withCategories = await categoriesSupported();
@@ -157,13 +186,62 @@ export default async function AdminAds({
       {params.deleted && (
         <p className="notice" role="status">
           Deleted ad #{Number(params.deleted) || params.deleted}. It&apos;s off the website and
-          out of the digests; past digests and the message log keep its number.
+          out of the send queue; past batches and the message log keep its number.
         </p>
       )}
       {params.saved && (
         <p className="notice" role="status">
           Saved ad #{Number(params.saved) || params.saved}. The seller is not notified, and
           what they originally wrote is still on file.
+        </p>
+      )}
+      {params.promoted && (
+        <p className="notice" role="status">
+          Ad #{Number(params.promoted) || params.promoted} is now a Featured spot in slot{" "}
+          {params.slot}
+          {params.billed
+            ? `, and ${formatPrice(Number(params.billed) || 0)} came off the seller's balance.`
+            : ", on the house — nothing was billed."}{" "}
+          <Link href="/admin/featured">Arrange the slots</Link>.
+        </p>
+      )}
+      {params.error === "promotenopic" && (
+        <p className="form-error" role="alert">
+          Ad #{Number(params.id) || params.id} has no picture, and a Featured spot is a
+          picture — add one to the ad first, or build the spot by hand on{" "}
+          <Link href="/admin/featured">Featured</Link>.
+        </p>
+      )}
+      {params.error === "promotefunds" && (
+        <p className="form-error" role="alert">
+          Nothing was promoted and nothing was charged: the seller of ad #
+          {Number(params.id) || params.id} is {formatPrice(Number(params.short) || 0)} short of
+          the {formatPrice(featuredPrice)} featured price. Take payment on their{" "}
+          <Link href={`/admin/users?phone=${params.phone ?? ""}`}>account</Link> first, or
+          promote it on the house.
+        </p>
+      )}
+      {params.error === "promotecharge" && (
+        <p className="form-error" role="alert">
+          Nothing was promoted — say whether to charge the seller or run it on the house.
+        </p>
+      )}
+      {params.error === "promoteprice" && (
+        <p className="form-error" role="alert">
+          Nothing was promoted: the featured price is set to $0 on{" "}
+          <Link href="/admin/settings">Settings</Link>, so there is nothing to charge. Set a
+          price, or promote it on the house.
+        </p>
+      )}
+      {params.error === "promotemigration" && (
+        <p className="form-error" role="alert">
+          Featured spots need migration 9956 — paste it, then try again. (Nothing was changed
+          and nothing was charged.)
+        </p>
+      )}
+      {params.error === "promotemissing" && (
+        <p className="form-error" role="alert">
+          Ad #{Number(params.id) || params.id} could not be found, so nothing was promoted.
         </p>
       )}
       {params.error === "emptybody" && (
@@ -242,6 +320,22 @@ export default async function AdminAds({
           // again, and nowhere else.
           const edited = ad.originalBody.trim() !== ad.body.trim();
           const scope = editScope(ad.status);
+          // Every picture on the ad, in the order the site holds them. The
+          // page used to say "📷 PICTURE" and show nothing, so the operator had
+          // to open the public listing to see what a seller had actually sent
+          // — on the one screen whose job is reviewing what goes out.
+          // `textedAdPhotos` marks the leading few that ride SMS; the rest are
+          // website-only extras, and the difference is what the seller paid
+          // for, so it is labelled rather than left to be guessed.
+          const pictures = [...(ad.photo ? [ad.photo] : []), ...(ad.morePhotos ?? [])];
+          const textedCount = textedAdPhotos(ad.photo, ad.morePhotos).length;
+          // A Featured spot IS a picture, so an ad without one has nothing to
+          // promote — and only an ad that is actually live is worth sending
+          // homepage traffic to. Offering the button on a rejected or held ad
+          // would be offering to advertise a page that isn't there.
+          const canPromote =
+            textedCount > 0 &&
+            (ad.status === "approved" || ad.status === "sold" || ad.status === "expired");
           // The head band is identity only; everything that is a detail about
           // the ad rather than a name for it collects on one muted line under
           // the text, so the top of a card reads as a heading and not a
@@ -267,13 +361,42 @@ export default async function AdminAds({
                 </Link>
               </div>
               <div className="adcard-body">
-                <p className="adcard-text">{ad.body}</p>
-                {meta.length > 0 && <p className="adcard-meta">{meta.join(" · ")}</p>}
-                {ad.rejectedReason && (
-                  <p className="adcard-meta">
-                    Rejected ({ad.rejectionKind}): {ad.rejectedReason}
-                  </p>
-                )}
+                <div className="adcard-main">
+                  {pictures.length > 0 && (
+                    <div className="adcard-shots">
+                      {pictures.map((picture, i) => (
+                        <a
+                          key={`${picture.src}-${i}`}
+                          className="adcard-thumb"
+                          href={picture.src}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={`Picture ${i + 1} — ${pictureRole(i, textedCount).title}. Open full size.`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={picture.src}
+                            alt={picture.alt || `Picture ${i + 1} on ad #${ad.id}`}
+                          />
+                          {pictureRole(i, textedCount).tag && (
+                            <span className="adcard-shot-tag">
+                              {pictureRole(i, textedCount).tag}
+                            </span>
+                          )}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  <div className="adcard-copy">
+                    <p className="adcard-text">{ad.body}</p>
+                    {meta.length > 0 && <p className="adcard-meta">{meta.join(" · ")}</p>}
+                    {ad.rejectedReason && (
+                      <p className="adcard-meta">
+                        Rejected ({ad.rejectionKind}): {ad.rejectedReason}
+                      </p>
+                    )}
+                  </div>
+                </div>
                 {canEdit && (
                   <details className="adcard-edit">
                     <summary>Edit text{withCategories ? " / category" : ""}</summary>
@@ -373,9 +496,69 @@ export default async function AdminAds({
                       <input type="hidden" name="q" value={params.q ?? ""} />
                       <input type="hidden" name="status" value={status ?? ""} />
                       <button className="btn btn-sm btn-secondary" type="submit">
-                        Bump — run in next digest{ad.status === "expired" ? " (relists)" : ""}
+                        Bump — run in the next batch{ad.status === "expired" ? " (relists)" : ""}
                       </button>
                     </form>
+                  )}
+                  {canPromote && (
+                    <details className="adcard-promote">
+                      <summary>Promote to Featured…</summary>
+                      <form action={adminPromoteAdToFeatured} className="review-form">
+                        <input type="hidden" name="id" value={ad.id} />
+                        <input type="hidden" name="back" value="/admin/ads" />
+                        <input type="hidden" name="q" value={params.q ?? ""} />
+                        <input type="hidden" name="status" value={status ?? ""} />
+                        <p className="fine">
+                          Builds a Featured spot from this ad: its broadcast picture, its
+                          first line as the caption, linking to /ad/{ad.id}.
+                        </p>
+                        <p className="fine">
+                          <label htmlFor={`promote-slot-${ad.id}`}>Slot </label>
+                          <select
+                            id={`promote-slot-${ad.id}`}
+                            name="slot"
+                            className="admin-select"
+                            defaultValue="1"
+                          >
+                            {[1, 2, 3, 4].map((s) => (
+                              <option key={s} value={s}>
+                                {s} — {s <= 2 ? "left" : "right"} column,{" "}
+                                {s % 2 === 1 ? "top" : "bottom"}
+                              </option>
+                            ))}
+                          </select>{" "}
+                          <label htmlFor={`promote-order-${ad.id}`}>Order </label>
+                          <select
+                            id={`promote-order-${ad.id}`}
+                            name="position"
+                            className="admin-select"
+                            defaultValue="1"
+                          >
+                            {[1, 2, 3].map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
+                            ))}
+                          </select>
+                        </p>
+                        {/* No default. Whether this is a $199 sale or a favour is
+                            the operator's call, and guessing it wrong puts a
+                            number in /admin/money that nobody will catch. */}
+                        <div className="sim-actions">
+                          <button className="btn btn-sm" name="charge" value="bill" type="submit">
+                            Charge {formatPrice(featuredPrice)} to the seller
+                          </button>
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            name="charge"
+                            value="free"
+                            type="submit"
+                          >
+                            On the house — bill nothing
+                          </button>
+                        </div>
+                      </form>
+                    </details>
                   )}
                   <Link className="adcard-delete" href={deleteHref(ad.id)}>
                     Delete this ad…

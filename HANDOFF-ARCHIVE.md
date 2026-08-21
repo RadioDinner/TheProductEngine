@@ -23,102 +23,81 @@ Per-session detail beyond this also lives in `Session log/<session>/`.
 
 ---
 
-## Session 022 (2026-08-21) — /admin/ads: CARDS, and editing in every status
+## Session 022 (2026-08-21) — CARDS, editing everywhere, BATCHES, and a page-down bug
 
-**Version 1.4.9 → 1.4.10** (§6: two features this session, so the far-right
-digit moves ONCE and stays; 9 + 1 = 10, taken literally).
+**Version 1.4.9 → 1.4.10 → 1.5.10** (§6: the far-right digit moved mid-session
+at two features; the Batches queue view, promote-to-Featured and
+pictures-on-ads took it to five, so the SECOND digit moved as well and the
+third stayed — the cumulative shape sessions 019 and 020 both used. The
+/admin/digests crash is a FIX and is not counted).
 
-⚠️ **This session is numbered 022, not 021, and it is the SECOND of two
-sessions that both started on 2026-08-21 and both picked `021_2026-08-21b`.**
-The other one (the voice line — "nothing dials the operator's cell any more",
-branch `claude/twilio-error-18602-4f4tnj`) committed two minutes earlier and
-pushed first, so it keeps 021 and this one moved to `022_2026-08-21c`. Without
-the rename BOTH sessions' verbatim `prompt_history.txt` would have merged into
-one file, interleaving two unrelated conversations — which is the one thing
-that log exists to prevent. If you are a future session picking a folder
-number, `git fetch` and look at the other branches, not just `main`.
+⚠️ **THE SECOND HALF OF THIS SESSION IS NOT COMMITTED.** Cards + editing are
+merged to `main` (`58f10d3`). Everything from "Digests becomes Batches"
+onward is verified but sitting in the working tree, because the user said
+**"dont commit until I tell you"** and has not lifted it. A stop hook nags
+about the dirty tree every turn — that is the hook, not the user.
 
-Developed on `claude/admin-ads-card-layout-awt8zq` (the user asked for a branch
-because **seven other sessions were committing to this repo**), then merged to
-`main` on their word once the check above showed no code overlap with any live
-branch. No migration, no data change — presentation and one server action.
+### ⚠️ A PAGE-DOWN BUG, and the trap that caused it
 
-The user's complaint about /admin/ads was that it is "visually very busy, and
-at a glance it's hard to see where one ad ends and where the next one begins."
-Each ad is now a three-part card — a tonal head band (number · status markers ·
-phone), a paper body (text, one muted meta line, Edit, emailed-in pictures) and
-a foot (Bump left, Delete right).
+`/admin/digests` was returning an error page in production. **Root cause:
+PostgREST's schema-cache error codes.**
 
-**Two things here a future session should not undo:**
+Supabase requests go through PostgREST, which answers from its own cache. This
+file already handled that for missing COLUMNS — every column guard checks
+`42703` (Postgres) **and** `PGRST204` (PostgREST), with a comment saying why.
+Every missing-TABLE guard checked only `42P01` and never **`PGRST205`**, the
+table-level twin.
 
-- **`.adcards`/`.adcard` is a NEW class family, and that is deliberate.**
-  `.myad-row` — what the page used to use — is shared by **fifteen** pages
-  including the member-facing `/account/ads`. Restyling it would have changed
-  the whole site for a one-page request. If the card treatment is later wanted
-  on `/admin/review`, `/admin/users` or `/admin/reports` (all still `.myad-row`),
-  reuse `.adcard`; do not push it down into `.myad-row`.
-- **Red now means "flagged" and nothing else on this page.** `📷 Picture` and
-  `Flagged` both used to render through `.ad-sold`, which is red uppercase — so
-  on a list where most ads carry a picture, red was the commonest colour on the
-  page and carried no information. Every marker now shares one shape
-  (`.adcard-tag`) and only colour varies: ink = approved (live), blue =
-  pending/unpaid (waiting on you), muted = everything else, red = flagged.
-  Re-reddening the picture marker would put the noise straight back.
+`admin_messages` genuinely does not exist (9952 unpasted). The page calls
+`listAdminMessages` on every render, its "return [] when not pasted" fallback
+never fired, and the throw took the queue, the send buttons and the history
+down with it. Fixed with one `tableMissing()` helper covering both codes, used
+by all eight table guards.
 
-DESIGN.md governs the shape: Ruled-Not-Raised (hairline box + tonal step, no
-shadow), and **no side-stripe borders** — which rules out the obvious
-colour-coded left edge, so the colour lives in the status word instead.
+**Never write a bare `42P01` guard again — use `tableMissing`.** A table guard
+that knows only the Postgres code is a page-down bug waiting for the next
+unpasted migration.
 
-### An ad is editable in EVERY status but `deleted`
+The page also now loads every panel INDEPENDENTLY: one that fails renders its
+error in place, naming it, and the rest still works. This page has gone dark
+twice now (session 018's slot-key bug, and this).
 
-The user's second ask was "I also want to be able to edit ads, I'm sure there
-will be people that want to make edits to their ads." That reads two ways —
-the operator wanting an editor (one already existed) or MEMBERS editing their
-own (which does not exist anywhere: no `/account/ads` edit, no `EDIT` command).
-**Asked, and the user chose "operator only, but everywhere."**
+### Digests → Batches, and the queue is planned into real batches
 
-⚠️ **Member self-editing was therefore considered and NOT chosen — do not add
-it on your own initiative.** If it comes back, the open question is the one put
-to the user and left unanswered: does an edited ad return to review, trip only
-on the word filter, or go live at once? Editing after approval is the obvious
-way to slip banned text past a filter that only runs on new ads.
+`/admin/batches` is the page; `/admin/digests` **permanently redirects** with
+its query params. Nav, `backTarget`'s allowlist and every `redirect()` moved.
+The name had been wrong since session 018.
 
-`canEdit` went from `pending || approved || expired` to `status !== "deleted"`.
-The case that decided it is a **held `unpaid` ad** — the seller rings in about
-the ad they are one card away from running, and their text was the one thing
-that could not be fixed on that call. `adminEditAd` reads no status at all, on
-purpose: the page decides what to offer, the action writes what it is given.
+`planBatches` (pure, unit-pinned) splits the WHOLE queue into the batches it
+will actually go out in, mirroring the composer forward: one batch per run,
+new ads first by approval order, bumps only filling capacity left over. Each
+batch says what every subscriber receives from it.
 
-**Three things here are load-bearing:**
+**One picture message per picture AD, not per picture** —
+`resolveBroadcastPictures` sends `textedAdPhotos(...)[0]` only. Counting
+pictures would overstate every batch's cost, which is the phone bill.
+`selectQueuePreview` stops at 200 waiting ads and SAYS so.
 
-- **`editScope(status)` is keyed off STATUS, and must stay that way.** It puts
-  one line above the box saying what the edit reaches. The obvious version
-  reads `broadcastAt` and says "this already went out" — but `broadcast_at` is
-  deliberately absent from the shared Supabase `AD_SELECT` (so /admin never
-  hard-depends on migration 9993), so it is `undefined` for **every** ad in
-  production. That note would have told the operator "not sent yet" about ads
-  texted days ago, confidently and always.
-- **An emptied box is refused, not swallowed.** `adminEditAd` used to be
-  `if (id && body) update(...)` then redirect — a blank save wrote nothing and
-  looked exactly like a save that worked. Saves now redirect with `saved=<id>`
-  or `error=emptybody` and both pages say so.
-- **`backTarget` keeps its two-entry PATH allowlist.** An action redirecting to
-  whatever a form field said would be an open redirect. The list filters ride
-  separate named, length-capped `q`/`status` fields instead, so a save returns
-  to the same filtered list rather than dumping the operator into all 100 ads.
+### Promote an ad to Featured
 
-The seller's own words were always preserved (`updateAdBody` writes `body`
-alone) and simply never shown; the disclosure now prints "Edited. The seller
-wrote: …" when the two differ — inside the disclosure, so the collapsed card
-pays nothing for it.
+On the ad card, for a live ad with a picture. Builds the spot from the ad
+(broadcast picture, derived title, link to `/ad/####`).
 
-Verified: tsc + build clean, unit **1466/1466** unchanged, plus two real
-Chromium walks — the card layout over a store seeded with every status, a flag,
-a rejection reason and two photo submissions (no horizontal overflow at 1280px
-or 480px), and an 18-check editor walk including a real save on a **rejected**
-ad and a blank save refused without blanking the ad.
+**The money is asked every time — the user's explicit decision.** Two buttons,
+charge or on-the-house; an unanswered value bounces rather than defaulting,
+because either one silently misfiled puts a number in /admin/money nobody
+would catch. Two orderings are load-bearing: a short balance refuses BEFORE
+the spot exists, and the charge lands AFTER `addFeaturedSpot` succeeds —
+charging first can take $199 and place nothing, which the seller notices and
+the operator does not.
 
-Full detail: `Session log/022_2026-08-21c/session_log.md`.
+### Pictures finally visible on /admin/ads
+
+The card said "📷 PICTURE" and showed nothing. Thumbnails now render, each
+marked with what it DOES: `texts` (rides the batch), `PIC` (only on request),
+unmarked (website only) — the distinction the seller actually paid for. Only
+picture 1 broadcasts; a first pass marking all three texted photos as "texts"
+was wrong.
 
 ## Session 021, part two — TEST MODE, and the first end-to-end category tests
 

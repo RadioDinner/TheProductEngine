@@ -11,7 +11,13 @@ doing. Kept deliberately short.
   `new_session_instructions.md` — several sessions run against this repo at
   once, and the collisions that hurt are the ones that merge cleanly.
 
-**Last updated:** 2026-08-21 (sessions 021 and 022, which ran in parallel).
+**Last updated:** 2026-08-21, **v1.5.11** — sessions 021 and 022 ran in
+parallel and both landed. 022: ad cards, editing in every status, Digests
+becomes Batches with a real queue preview, promote-to-Featured, pictures on
+/admin/ads, and a page-down bug. 021: the call line no longer dials the
+operator's cell, admin TEST MODE, the first end-to-end category delivery
+tests, Twilio Trust Hub verified, and this file split. Both narratives are in
+`HANDOFF-ARCHIVE.md`.
 
 *Why this file is short: it was the hottest file in the repo — 8 of 12
 consecutive commits touched it, and it was the only conflict when 021 and 022
@@ -146,6 +152,17 @@ Runtime-editable config: `lib/settings.ts` (admin `/admin/settings` edits it;
 engine reads it live). Fixtures/seed data: `lib/fixtures.ts` ↔
 `supabase/seed.sql` (keep in sync). Cron: `vercel.json` hits
 `/api/cron/digests` every 5 min (SMS digests then email edition; idempotent).
+
+**Guarding against an unpasted migration — read this before writing a query.**
+Supabase requests go through PostgREST, which answers from its own schema
+cache, so EVERY "column/table might not exist yet" guard needs BOTH codes:
+columns are `42703` (Postgres) **and** `PGRST204`; tables are `42P01` **and**
+`PGRST205`. Use the `tableMissing()` helper — never write a bare `42P01`
+check. Session 022 took `/admin/digests` down in production this way: eight
+table guards knew only the Postgres code, the "return [] when not pasted"
+fallback never fired, and one unpasted migration threw the whole page. That
+page has now gone dark twice, so its panels also load INDEPENDENTLY — one
+failing renders its error in place and names itself while the rest still works.
 
 **Dev-mode warning:** with no `TELNYX_API_KEY`, sign-in codes render
 on-screen — anyone with the URL can log in as any number, and `/dev/sms` /

@@ -29,7 +29,7 @@ export const HANDBOOK_PAGES: { prefix: string; label: string; href: string }[] =
   { prefix: "dashboard", label: "Dashboard", href: "/admin" },
   { prefix: "money", label: "Money", href: "/admin/money" },
   { prefix: "review", label: "Review queue", href: "/admin/review" },
-  { prefix: "digests", label: "Digests", href: "/admin/digests" },
+  { prefix: "digests", label: "Batches", href: "/admin/batches" },
   { prefix: "reports", label: "Reports", href: "/admin/reports" },
   { prefix: "insights", label: "Insights", href: "/admin/insights" },
   { prefix: "ads", label: "All ads", href: "/admin/ads" },
@@ -170,7 +170,7 @@ const ENTRIES = {
     why: "The user's session-009 ask: a Town hall where people add upcoming events, \"an approval process same as the regular ads.\" v1 is deliberately the free board only — the paid SMS/email event blast is a later phase whose pricing (\"probably just $19.99 a listing\") was never settled, so nothing about events sends messages today.",
   },
 
-  /* ---------------- Digests (/admin/digests) ---------------- */
+  /* ---------------- Batches (/admin/batches) ---------------- */
 
   "digests.slots": {
     title: "Slots, and what they cost",
@@ -186,17 +186,18 @@ const ENTRIES = {
   },
   "digests.queue": {
     title: "The queue is the truth",
-    what: "This list shares its selection code with the real composer, so what you see is literally what the next digest will carry: new ads first in approval order, queued bumps filling what's left, capped at the per-digest maximum set on Settings.",
-    why: "Built in session 007 so the page can never disagree with reality — the same function (selectDigestItems) drives both. New-ads-outrank-bumps is a founding rule (session 001).",
+    what: "The whole waiting queue, split into the BATCHES it will actually go out in: new ads first in approval order, bumps only filling capacity left over once new ads run out, and each batch capped at 'Max ads per pass' from Settings. One batch goes per run, so a backlog leaves as the batches shown, in order. Each batch's line says what every subscriber receives from it — one list text, plus one picture message per picture ad.",
+    why: "Built in session 007 as a preview of the next digest; session 022 extended it over the whole queue on the user's request (\"if there are 8 ads waiting, I want to see which ones will go out with which ads, and which pictures will go along with them\"). Before that the page stopped at the cap, so ads 11 and beyond were invisible. planBatches applies the same rules as the composer, forward, and is unit-pinned against them.",
+    gotchas: "A picture ad adds ONE picture message however many pictures it holds — only the first broadcasts, and PIC pulls the rest on request. Switching pictures off in Settings makes every batch a single text. The preview stops at 200 waiting ads and says so rather than under-reporting the backlog.",
   },
   "digests.reorder": {
     title: "Move up / Move down",
-    what: "Swaps the ad's place in the approval order, which is the order the digest prints.",
+    what: "Swaps the ad's place in the approval order, which is the order the batches are filled in — so moving an ad up can move it into an earlier batch.",
     why: "Part of the session-007 queue-controls batch, built the day real SMS went live and the queue needed hands-on control.",
   },
   "digests.skipNext": {
-    title: "Skip next digest",
-    what: "Holds the ad out of the next digest only; it returns to the queue automatically afterward (the Held section shows it, with a Release button to bring it back early).",
+    title: "Skip next batch",
+    what: "Holds the ad out of the next batch only; it returns to the queue automatically afterward (the Held section shows it, with a Release button to bring it back early).",
     why: "Session-007 queue controls. Its migration (ads.hold_until) caused that day's second migration race — the deploy read a column that wasn't pasted yet, the cron crashed, and the 4 PM digest was missed. That incident is why schema-dependent features now degrade gracefully and /api/health probes each migration.",
   },
   "digests.backToReview": {

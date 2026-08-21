@@ -38,7 +38,7 @@ export const site = {
    * This constant is the only place it is written down; the footer and the
    * health probe both read it, so they can never disagree.
    */
-  version: "1.4.11",
+  version: "1.5.11",
   tagline: "Buy and sell by text message",
   adsPerPage: 15,
 } as const;
