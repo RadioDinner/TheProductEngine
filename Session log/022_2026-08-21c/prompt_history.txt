@@ -56,3 +56,12 @@ When someone posts an ad, and it gets approved, it automatically gets queued for
 On the "ADS" page of the admin dashboard, I want to see if and when it was sent out to the SMS subscribers, the Digest number of the email it went out on, and when it got posted to the website. 
 
 I had posted an ad today and, even though ads were paused, it posted to the website. When ADS are paused, they're paused everywhere (SMS, email and web posting)
+
+--- 2026-08-21 ---
+/admin/digests still give an error
+
+--- 2026-08-21 ---
+wait to commit, I have a commit running in another session
+
+--- 2026-08-21 ---
+ok, go ahead and commit

@@ -318,6 +318,41 @@ digit moves as well and the third stays where it is — the cumulative shape
 sessions 019 and 020 both used. The digests crash is a FIX and is deliberately
 not counted.
 
+## The /admin/digests error, round two — and an admin error boundary
+
+The user reported `/admin/digests` **still** erroring after the PGRST205 fix.
+Chased it and could NOT reproduce: a real production build (`next build` +
+`next start`, not dev) redirects `/admin/digests` → `/admin/batches` and renders
+200, and every data read on the Batches page is already wrapped so a failing
+query costs its own panel rather than the page.
+
+That left one honest conclusion: **the failure is Supabase-specific and I have
+no way to see it**, because the app had **no error boundary anywhere**. Any
+throw under /admin produced a blank "something went wrong" screen — which is
+literally why the only available description was "it gives an error".
+
+So the fix was to make the failure describe itself:
+
+- **`app/admin/error.tsx`** — an error boundary for the whole portal. ⚠️ In
+  production Next.js deliberately withholds a server-component error's message
+  from the client and gives only `error.digest`, a hash matching the server log
+  line. The page therefore asks for the digest BY NAME rather than pretending
+  to show a cause it does not have. In dev the real message renders.
+- **`getEngineSettings()` was the last unwrapped read** on the Batches page —
+  the one remaining way for a single query to blank everything. It is panelled
+  now, with its own explanation of why nothing else is worth showing without it.
+
+⚠️ **A testing footgun to remember:** verifying the panel mechanism by
+injecting a throwing `panel(...)` call broke `tsc` (the unused import, then a
+`never`-typed panel), and `next start` happily served the PREVIOUS build — so
+the "proof" ran against un-injected code and looked like a pass. `next build`
+printing "Failed to type check" AFTER "✓ Compiled" is easy to miss. Check the
+build actually succeeded before trusting what the server serves. The injection
+was reverted and never reached a commit (verified against `origin/main`).
+
+**Still unexplained, deliberately:** the original error. The next occurrence
+will carry a digest code the operator can quote.
+
 ## Open / next
 
 - ⚠️ **NOTHING FROM THE THIRD ASK IS COMMITTED.** The user said "dont commit
