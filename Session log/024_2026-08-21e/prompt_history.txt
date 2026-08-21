@@ -2,3 +2,6 @@
 On the ads with pictures, I noticed that my system is not automatically labeling the "text" image with the ad number. I had given instructions that told you to create a label on the FIRST picture that comes in on an ad with the ad number. For example, if I send in an image for an ad, get the ad number from the ad im posting and add it to the image. I want that same image to be on the "ADS" page of the admin portal, so I can see what was or what will be sent out in the SMS
 
 All open migrations are ran
+
+--- 2026-08-21 ---
+comit it to main
