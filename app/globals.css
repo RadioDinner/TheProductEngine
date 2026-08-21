@@ -2546,6 +2546,16 @@ a.btn-sm:hover {
   cursor: pointer;
 }
 
+/* What this edit will and won't reach, and the seller's own words when the
+   text has already been changed. Inside the disclosure, so it costs the
+   collapsed card nothing. */
+.adcard-scope {
+  margin-top: var(--space-xs);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  max-width: 58ch;
+}
+
 /* An emailed-in picture waiting on this ad. A solid hairline box on the tonal
    surface — the dashed .dev-notice it used to borrow read as a second card
    nested inside the first. */

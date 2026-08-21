@@ -102,9 +102,30 @@ import {
 import { deleteView, saveView } from "@/lib/user-table-store";
 import { readSession } from "@/lib/session";
 
-/** Whitelisted return targets for shared ad actions — never trust a form string. */
-function backTarget(formData: FormData): string {
-  return String(formData.get("back")) === "/admin/digests" ? "/admin/digests" : "/admin/ads";
+/**
+ * Where a shared ad action returns to.
+ *
+ * The PATH stays a two-entry allowlist — a server action that redirected to
+ * whatever a form field said would be an open redirect, and these forms are
+ * one CSRF away from being posted by someone else's page.
+ *
+ * The /admin/ads list filters ride their own named fields and are re-encoded
+ * here, so saving an edit lands back on the SAME filtered list. Editing used
+ * to bounce the operator to the unfiltered page, which on a hundred-ad list
+ * means finding your place again after every save. Both are length-capped:
+ * they end up in a URL, and a form field is not a size the page controls.
+ */
+function backTarget(formData: FormData, extra?: Record<string, string>): string {
+  const path = String(formData.get("back")) === "/admin/digests" ? "/admin/digests" : "/admin/ads";
+  const params = new URLSearchParams();
+  if (path === "/admin/ads") {
+    const q = String(formData.get("q") ?? "").slice(0, 200);
+    const status = String(formData.get("status") ?? "").slice(0, 20);
+    if (q) params.set("q", q);
+    if (status) params.set("status", status);
+  }
+  for (const [key, value] of Object.entries(extra ?? {})) params.set(key, value);
+  return params.size ? `${path}?${params}` : path;
 }
 
 export async function adminApprove(formData: FormData): Promise<void> {
@@ -138,22 +159,40 @@ export async function adminReject(formData: FormData): Promise<void> {
   redirect("/admin/review");
 }
 
-/** Edit an ad's public text (and, where the form offers it, its category)
- * from the Ads or Digests tab. */
+/**
+ * Edit an ad's public text (and, where the form offers it, its category) from
+ * the Ads or Digests tab.
+ *
+ * Editable in EVERY status but deleted (user decision, session 021 — "operator
+ * only, but everywhere"). The case that prompted it is a held `unpaid` ad: the
+ * seller rings in about the ad they are one card away from running, and their
+ * text was the one thing that could not be fixed while they were on the line.
+ * `rejected` and `sold` were shut out for no better reason. Nothing here reads
+ * the status at all — the page decides what to offer, and this action simply
+ * writes what it is given.
+ *
+ * The seller's own words are never overwritten: `updateAdBody` sets `body`
+ * alone, so `originalBody` and the message log keep what they actually sent.
+ */
 export async function adminEditAd(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = Number(formData.get("id"));
   // Same ceiling as the maxChars setting clamp — an admin edit shouldn't be
   // able to balloon a digest.
   const body = String(formData.get("body") ?? "").trim().slice(0, 300);
-  if (Number.isInteger(id) && body) await updateAdBody(id, body);
+  if (!Number.isInteger(id)) redirect(backTarget(formData));
+  // An emptied box used to write nothing and redirect silently, which looks
+  // exactly like a save that worked. Blanking an ad is never what the operator
+  // meant — Delete is that — so refuse it out loud instead of no-opping.
+  if (!body) redirect(backTarget(formData, { error: "emptybody", id: String(id) }));
+  await updateAdBody(id, body);
   // Inline category (item 22): only forms that rendered the select send it
   // (it's hidden pre-9976), so a missing field never clears a category.
   const rawCategory = formData.get("category");
-  if (Number.isInteger(id) && rawCategory !== null) {
+  if (rawCategory !== null) {
     await setAdCategory(id, isCategoryKey(String(rawCategory)) ? String(rawCategory) : null);
   }
-  redirect(backTarget(formData));
+  redirect(backTarget(formData, { saved: String(id) }));
 }
 
 /** Queue a free admin re-run: the ad rides the next digest again. An expired

@@ -97,11 +97,100 @@ The complaint was two separate problems and both are fixed:
   wrapped head doesn't leave a right-aligned phone stranded under a
   left-aligned ad number.
 
+---
+
+# Second ask: "I also want to be able to edit ads"
+
+> "I also want to be able to edit ads, I'm sure there will be people that want
+> to make edits to their ads."
+
+## The question that had to be asked first
+
+Two readings, and they lead to completely different work:
+
+- the **operator** wants an editor — one already existed, on `/admin/ads`
+  ("Edit text / category", visible in the user's own screenshot), on
+  `/admin/review` (the editable box at approval) and on `/admin/digests`;
+- **members** want to edit their own — `/account/ads` offers mark-sold,
+  replace-picture, add-pictures and delete but no edit, and there is no `EDIT`
+  text command. That one is a real feature with a policy call attached (does an
+  edited ad go back through review?).
+
+Asked. **The user chose "operator only, but everywhere."** Member self-edit is
+NOT built and was not asked for — do not add it on your own initiative.
+
+## What shipped
+
+### Editing works in every status but `deleted`
+
+`canEdit` was `pending || approved || expired`. It is now `status !== "deleted"`.
+
+The case that decided it is a **held `unpaid` ad**: the seller rings in about
+the ad they are one card away from running, and their text was the one thing
+that could not be fixed while they were on the line. `rejected` and `sold` were
+shut out for no better reason — a sold ad is still on the website, and a
+rejected one's text is what you would fix before any future re-approval.
+`deleted` stays out because there is no public text left to change.
+
+`adminEditAd` itself reads no status at all, and deliberately: the page decides
+what to offer, the action writes what it is given.
+
+### An edit now says what it reached, and a save says it happened
+
+- **`editScope(status)`** puts one muted line above the box before you type:
+  held-for-payment, not-on-the-website, or "this ad has been out — the website
+  listing updates, a text that already sent can't be changed."
+  ⚠️ **It is keyed off STATUS on purpose.** The obvious line to write is "this
+  already went out", off `broadcastAt` — but `broadcast_at` is deliberately
+  left out of the shared Supabase `AD_SELECT` (so /admin never hard-depends on
+  migration 9993), so it reads `undefined` for **every** ad in production. That
+  note would have said "not sent yet" about ads that went out days ago,
+  confidently and always.
+- **A save redirects with `?saved=<id>`** and the page says so. Before, a save
+  redirected silently — identical to a save that failed.
+- **An emptied box is refused** with `?error=emptybody`. It used to be a silent
+  no-op (`if (id && body)`), which looks exactly like a save that worked.
+  Blanking an ad is never what an operator means; Delete is that.
+- **The seller's own words are surfaced.** `updateAdBody` only ever wrote
+  `body`, so `originalBody` was already preserved and simply never shown.
+  When the two differ the disclosure now prints "Edited. The seller wrote: …".
+  It lives INSIDE the disclosure, so the collapsed card pays nothing for it —
+  the same page was called too busy an hour earlier.
+
+### Saving returns to the filtered list
+
+`backTarget` kept a two-entry path allowlist (an action redirecting to a posted
+string would be an open redirect) but dropped the list filters, so editing from
+`?status=pending` dumped you into all hundred ads. The Edit and Bump forms now
+carry `q`/`status` as their own named, length-capped fields and `backTarget`
+re-encodes them.
+
+`/admin/digests` shares `adminEditAd`, so it got the same two notices.
+
+The `ads.edit` handbook tip was rewritten: it claimed "any time — pending,
+approved, or expired", which was a contradiction even before this change.
+
+## Verification (second ask)
+
+- `tsc` clean, `next build` clean, unit **1466/1466**.
+- A scripted Chromium walk, **18/18**, over a store seeded with an edited
+  approved ad, an unpaid, a pending, a rejected, a sold and a deleted one:
+  which statuses offer an editor (and that `deleted` does not), all three scope
+  notes, a real save on a **rejected** ad (previously impossible) with the
+  filter preserved and the notice shown, the original surviving that save, and
+  a blank save refused **without** blanking the ad.
+- Two assertions failed on the first run and were a test-harness race, not a
+  product bug: `page.url()` was read before Next's router finished the
+  post-action URL update, while the rendered content was already correct.
+  Fixed with `waitForURL`.
+
 ## Version
 
-**1.4.9 → 1.4.10** (§6: one feature, so the FAR RIGHT digit moves; 9 + 1 = 10,
-taken literally as §6 says to). If more features land in this session the rule
-should be re-applied over the session's whole count, the way session 020 did.
+**1.4.9 → 1.4.10**, moved once for the whole session. §6 counts FEATURES: the
+card layout and operator-editing-everywhere make **two**, which is still "3 or
+fewer", so the far-right digit moves once and stays there. (9 + 1 = 10, taken
+literally as §6 says to.) A third feature would not move it again; a fourth
+would move the SECOND digit instead.
 
 ## Open / next
 
@@ -110,6 +199,11 @@ should be re-applied over the session's whole count, the way session 020 did.
 - The user opened with "I'd like to make some changes to the admin pages" —
   plural, and "for now" about the branch. Expect more admin work on this
   branch.
+- **Member self-editing was considered and NOT chosen.** If it ever comes back,
+  the unresolved question is the one that was put to the user and left
+  unanswered: does an edited ad return to the review queue, trip only on the
+  word filter, or go live immediately? Editing after approval is the obvious
+  way to slip banned text past a filter that only runs on new ads.
 - Not touched, and the obvious next candidates if the busy-ness complaint
   generalises: the four `<Tip>` "?" marks in the page's intro paragraph, and
   the same flat-row treatment on `/admin/review`, `/admin/users` and

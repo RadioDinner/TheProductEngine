@@ -287,8 +287,9 @@ const ENTRIES = {
   },
   "ads.edit": {
     title: "Inline edit",
-    what: "Change the public text or category any time — pending, approved, or expired. The seller's original stays in the message log.",
-    why: "Inline editing arrived in session 007 when the digest queue needed hands-on control; the category joined in session 009 with the category system.",
+    what: "Change the public text or category on any ad that still exists — pending, unpaid, approved, rejected, sold or expired. Only a deleted ad can't be edited, having no public text left to change. The seller's own words are never overwritten: the box shows what they wrote once you've changed it, and the message log keeps the original either way.",
+    why: "Inline editing arrived in session 007 when the digest queue needed hands-on control; the category joined in session 009 with the category system. Session 021 opened it to every status on the user's decision — the case that prompted it is a HELD unpaid ad, where the seller rings in about the ad they're one card away from running and their text was the one thing you couldn't fix on that call. Rejected and sold were shut out for no better reason.",
+    gotchas: "The seller is NOT notified of an edit, and nothing re-runs — editing changes the website listing and what any future run carries, never a text that already sent. A held unpaid ad goes out as you've edited it once their card lands. Saving an emptied box is refused rather than blanking the ad; Delete is how you take one down.",
   },
   "ads.delete": {
     title: "Delete vs Reject",
