@@ -10,7 +10,11 @@
 import { setAfterImpl } from "@/analytics/src/after";
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest, after } from "next/server";
-import { drainDigestOutbox, runQueuedBroadcasts } from "@/lib/digest-engine";
+import {
+  drainDigestOutbox,
+  runDueAdminMessages,
+  runQueuedBroadcasts,
+} from "@/lib/digest-engine";
 import { runDueEmailDigests } from "@/lib/email-digest";
 import { expireDueAds } from "@/lib/engine-store";
 import { isProduction } from "@/lib/env";
@@ -43,12 +47,17 @@ export async function GET(req: NextRequest) {
   // hasn't gone yet, one per ad, and does nothing outside the send window —
   // which is what drains the overnight and Sunday queue each morning.
   const sms = await runQueuedBroadcasts();
+  // Operator broadcasts (migration 9952) — the operator's own message to every
+  // subscriber. After the ads on purpose: an ad someone PAID for goes out
+  // ahead of a note from us, and if the segment budget can only cover one of
+  // the two that is the right order to find out in.
+  const admin = await runDueAdminMessages();
   const email = await runDueEmailDigests();
-  const newlyEnqueued = [...sms, ...email].some((r) => (r.queued ?? 0) > 0);
+  const newlyEnqueued = [...sms, ...admin, ...email].some((r) => (r.queued ?? 0) > 0);
   // Spend what's left of the invocation (cap 45s) delivering queued rows.
   const drain = await drainDigestOutbox({
     timeBudgetMs: Math.max(5_000, 45_000 - (Date.now() - startedAt)),
     newlyEnqueued,
   });
-  return NextResponse.json({ ok: true, expired, sms, email, drain });
+  return NextResponse.json({ ok: true, expired, sms, admin, email, drain });
 }

@@ -15,6 +15,7 @@ import { COLLAGE_QUIET_MS } from "@/lib/collage-confirm";
 import { MAX_AD_PHOTOS } from "@/lib/photo-collage";
 import { FIXTURE_ADS, fixtureDate } from "@/lib/fixtures";
 import { AD_TTL_DAYS, type Ad, type AdPage, type AdQuery, type AdStatus } from "@/lib/ads";
+import { type AdminMessage } from "@/lib/admin-messages";
 import { websiteAdPhotos } from "@/lib/photo-collage";
 
 // ---------- types ----------
@@ -209,6 +210,8 @@ export interface CreateAdOptions {
 // ---------- file implementation ----------
 
 interface EngineShape {
+  /** Scheduled operator broadcasts (migration 9952); absent in older stores. */
+  adminMessages?: AdminMessage[];
   seeded: boolean;
   nextId: number;
   ads: StoredAd[];
@@ -549,6 +552,74 @@ const file = {
     if (!ad || ad.status !== "pending") return;
     ad.status = "unpaid";
     ad.unpaidCents = costCents;
+    save(store);
+  },
+
+  listAdminMessages(limit = 25): AdminMessage[] {
+    const store = load();
+    return [...((store.adminMessages ??= []) as AdminMessage[])]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  },
+
+  listDueAdminMessages(nowIso: string): AdminMessage[] {
+    const store = load();
+    return ((store.adminMessages ??= []) as AdminMessage[])
+      .filter((m) => m.status === "scheduled" && m.sendAfter <= nowIso)
+      .sort((a, b) => a.sendAfter.localeCompare(b.sendAfter));
+  },
+
+  createAdminMessage(body: string, sendAfterIso: string): number {
+    const store = load();
+    const list = (store.adminMessages ??= []) as AdminMessage[];
+    const id = Math.max(0, ...list.map((m) => m.id)) + 1;
+    list.push({
+      id,
+      body,
+      sendAfter: sendAfterIso,
+      status: "scheduled",
+      recipients: 0,
+      segments: 0,
+      sentAt: null,
+      createdAt: new Date().toISOString(),
+    });
+    save(store);
+    return id;
+  },
+
+  claimAdminMessage(id: number): boolean {
+    const store = load();
+    const m = ((store.adminMessages ??= []) as AdminMessage[]).find((x) => x.id === id);
+    if (!m || m.status !== "scheduled") return false;
+    m.status = "sent";
+    m.sentAt = new Date().toISOString();
+    save(store);
+    return true;
+  },
+
+  recordAdminMessageSend(id: number, _digestId: number, recipients: number, segments: number): void {
+    const store = load();
+    const m = ((store.adminMessages ??= []) as AdminMessage[]).find((x) => x.id === id);
+    if (!m) return;
+    m.recipients = recipients;
+    m.segments = segments;
+    save(store);
+  },
+
+  releaseAdminMessage(id: number): void {
+    const store = load();
+    const m = ((store.adminMessages ??= []) as AdminMessage[]).find((x) => x.id === id);
+    if (!m || m.status !== "sent") return;
+    m.status = "scheduled";
+    m.sentAt = null;
+    save(store);
+  },
+
+  cancelAdminMessage(id: number): void {
+    const store = load();
+    const m = ((store.adminMessages ??= []) as AdminMessage[]).find((x) => x.id === id);
+    if (!m || m.status !== "scheduled") return;
+    m.status = "canceled";
     save(store);
   },
 
@@ -1280,6 +1351,58 @@ export async function markAdPaid(id: number): Promise<boolean> {
  * status flipped. Only ever reverses 'pending' back to 'unpaid'. */
 export async function setAdUnpaid(id: number, costCents: number): Promise<void> {
   return supabaseConfigured ? remote.setAdUnpaid(id, costCents) : file.setAdUnpaid(id, costCents);
+}
+
+/* ---------- admin broadcasts (migration 9952) ----------
+ *
+ * File mode keeps them in the same .data store as everything else, so the dev
+ * simulator can schedule and send one without a database. Supabase is the real
+ * implementation; both degrade to "no broadcasts" when 9952 is missing.
+ */
+
+export async function listAdminMessages(limit = 25): Promise<AdminMessage[]> {
+  return supabaseConfigured ? remote.listAdminMessages(limit) : file.listAdminMessages(limit);
+}
+
+export async function listDueAdminMessages(nowIso: string): Promise<AdminMessage[]> {
+  return supabaseConfigured ? remote.listDueAdminMessages(nowIso) : file.listDueAdminMessages(nowIso);
+}
+
+export async function createAdminMessage(
+  body: string,
+  sendAfterIso: string,
+): Promise<number | null> {
+  return supabaseConfigured
+    ? remote.createAdminMessage(body, sendAfterIso)
+    : file.createAdminMessage(body, sendAfterIso);
+}
+
+/** Claim a broadcast for sending. True = THIS caller composes it. Never
+ * compose without a true: it is what stops two overlapping cron ticks from
+ * texting four hundred people twice. */
+export async function claimAdminMessage(id: number): Promise<boolean> {
+  return supabaseConfigured ? remote.claimAdminMessage(id) : file.claimAdminMessage(id);
+}
+
+export async function recordAdminMessageSend(
+  id: number,
+  digestId: number,
+  recipients: number,
+  segments: number,
+): Promise<void> {
+  return supabaseConfigured
+    ? remote.recordAdminMessageSend(id, digestId, recipients, segments)
+    : file.recordAdminMessageSend(id, digestId, recipients, segments);
+}
+
+/** Un-claim after a failed compose, so the next tick retries rather than
+ * leaving a broadcast marked sent that nobody received. */
+export async function releaseAdminMessage(id: number): Promise<void> {
+  return supabaseConfigured ? remote.releaseAdminMessage(id) : file.releaseAdminMessage(id);
+}
+
+export async function cancelAdminMessage(id: number): Promise<void> {
+  return supabaseConfigured ? remote.cancelAdminMessage(id) : file.cancelAdminMessage(id);
 }
 
 export async function markAdSold(id: number): Promise<void> {

@@ -3,6 +3,8 @@
 import "@/analytics/src/register-after";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
 import { redirect } from "next/navigation";
+import { normalizeAdminMessage } from "@/lib/admin-messages";
+import { cancelAdminMessage, createAdminMessage } from "@/lib/engine-store";
 import { requireAdmin } from "@/lib/admin";
 import { approveAd, rejectAd } from "@/lib/moderation";
 import {
@@ -933,6 +935,56 @@ export async function adminPurgeMember(
   if (result === "unsupported") return { phone, unsupported: true };
   if (!result.found) return { phone, notFound: true };
   return { phone, counts: result, deleted: Boolean(result.deleted) };
+}
+
+/**
+ * Schedule an ADMIN BROADCAST — the operator's own message to every SMS
+ * subscriber (session 020; migration 9952).
+ *
+ * The time typed is LOCAL to the operator (America/New_York, like every other
+ * hour in this service) and is a FLOOR, not an appointment: the send window
+ * decides the real moment, so scheduling into a Sunday means Monday morning
+ * rather than a message that quietly never goes.
+ */
+export async function adminScheduleMessage(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const body = normalizeAdminMessage(String(formData.get("body") ?? ""));
+  if (!body) redirect("/admin/digests?msgerror=empty");
+  // datetime-local gives "2026-08-21T14:30" with no zone. Read it as ET, which
+  // is what the operator meant and what every other hour in this service is.
+  const typed = String(formData.get("sendAfter") ?? "").trim();
+  const sendAfter = typed ? etLocalToIso(typed) : new Date().toISOString();
+  if (!sendAfter) redirect("/admin/digests?msgerror=when");
+  const id = await createAdminMessage(body, sendAfter);
+  redirect(id ? `/admin/digests?msgqueued=${id}` : "/admin/digests?msgerror=unsupported");
+}
+
+/** Cancel a scheduled broadcast that has not gone out yet. */
+export async function adminCancelMessage(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (Number.isInteger(id)) await cancelAdminMessage(id);
+  redirect("/admin/digests?msgcanceled=1");
+}
+
+/**
+ * "2026-08-21T14:30" typed by an operator in Ohio -> the matching UTC instant.
+ *
+ * Done by probing rather than by hardcoding -4/-5: the offset depends on the
+ * DATE, and a hardcoded one is how a scheduled message lands an hour out for
+ * half the year. Parse as UTC, ask what that instant reads as in ET, and shift
+ * by the difference.
+ */
+function etLocalToIso(local: string): string | null {
+  // Validate the SHAPE first. Date.parse is lenient enough to turn junk into a
+  // real date — "nonsense:00Z" parsed to the year 2000 — which would schedule a
+  // broadcast to the distant past and send it on the very next cron tick.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local)) return null;
+  const asUtc = Date.parse(`${local}:00Z`);
+  if (!Number.isFinite(asUtc)) return null;
+  const shown = new Date(asUtc).toLocaleString("en-US", { timeZone: "America/New_York" });
+  const offsetMs = asUtc - Date.parse(`${shown} UTC`);
+  return new Date(asUtc + offsetMs).toISOString();
 }
 
 /** Mark a help report dealt with, or reopen it. */

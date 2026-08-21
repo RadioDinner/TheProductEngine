@@ -84,7 +84,13 @@ stomp a later operator choice, and inserts `sms_saturday_end_hour` = 17.
 - **`smsSaturdayEndHour` is optional in `WindowSettings`.** Settings saved
   before this session then give Saturday the published close rather than a
   Saturday that never opens. Fail toward sending, not toward silence.
-- **Version 1.2.8 → 1.3.9** (§6). The far-right digit moved mid-session when
+- **Version 1.2.8 → 1.4.9** (§6). The far-right digit moved mid-session at
+  three features; the second digit moved at four; and the session then shipped
+  a second wave — the call flow, error handling, voicemail-by-email, AD
+  replacing AD NEW, held-unpaid ads and admin broadcasts — so the second digit
+  moved again. Auditable count: twelve features. The FIRST digit has not moved
+  and will not without the user saying so.
+- (superseded) **Version 1.2.8 → 1.3.9** (§6). The far-right digit moved mid-session when
   the work looked like three features (published window, Saturday close, the
   copy rule). It then went past four — the operator-editable Saturday setting
   and operator label, the ledger reset, the books-opened line — so the SECOND
@@ -196,6 +202,57 @@ that is the published claim, the same sentence the website carries, and it
 contradicts nothing. Only copy that pairs "your ad won't go until Monday" with
 "we text until 6pm today" needed suppressing.
 
+## Part five — the call line, AD, and everything after
+
+The session kept going well past the send window work. In order:
+
+**The call flow.** The menu answers immediately now instead of ringing the
+operator's phones for eighteen seconds first, saying the user's own words:
+"Thank you for calling The Plain Exchange. To add a card on file, press 1. To
+leave a voicemail and receive a callback, press 2." Ring-first survives behind
+`VOICE_RING_FIRST`, opt-in rather than keyed to `VOICE_RING_TO` — leaving it on
+that variable would have silently kept the old order for the very deployment
+that asked to change it.
+
+**Error handling, where there had been none.** Every stage runs inside a catch
+(a throw used to reach Twilio as a 500, which it answers with its own robot
+apology before dropping the call). The menu could re-prompt forever on an
+unrecognised key — every lap billed — and is now capped, then voicemail.
+Silence takes a message instead of hanging up. `menuTwiml` degrades rather than
+throwing when handed no voicemail URL: a TwiML builder that throws takes a live
+call down with it.
+
+**Voicemail by email.** The text stays — it is the one that reaches a phone in
+a barn — and an email now goes to `ADMIN_EMAIL` with the recording ATTACHED as
+an mp3. A Twilio media link needs account credentials to open and dies with the
+recording; an attachment plays anywhere and is still there next year.
+
+**AD replaces AD NEW**, and it exposed a live bug. Bare `AD` already parsed, so
+this was mostly copy — but the parser stripped ANY leading "new", which ate a
+word out of the seller's own text. In this market the words it ate were brand
+names: New Holland, New Idea. Two passes were needed. The first tried a casing
+heuristic (a shouted NEW is the keyword); the user rejected it with the exact
+case that breaks it — "AD New holland tractor" — and the right answer turned
+out to be simpler: keep the word unless it CANNOT be part of the ad (an
+explicit separator, or nothing after it). A member still typing the old keyword
+gets a leading "NEW " the operator trims in review. Cheap and visible beats
+silent and wrong.
+
+**No debt system.** A $50 allowance was proposed and cancelled before any of it
+was built. `payInstructions()` now leads with "call and press 1" — the same
+line the IVR answers. That exposed a dead end: saving a card never switched
+auto-top-up on, so a member could call, add a card, re-text their ad and be
+told again they had no credit. The IVR's own consent script had been promising
+the opposite the whole time. Fixed.
+
+**Held-unpaid ads (migration 9953).** An unfunded post used to be refused
+outright — the seller's text gone, retype it on a flip phone. Now it is written
+down in an `unpaid` status with the quoted price on the row, and adding a card
+(or topping up on the web) charges and posts it.
+
+**Scheduled admin broadcasts (migration 9952).** The operator's own message to
+every subscriber, individually, during active hours only.
+
 ## Open questions / next step
 
 **All migrations are run** — the user confirmed at session end, including
@@ -203,6 +260,9 @@ contradicts nothing. Only copy that pairs "your ad won't go until Monday" with
 clear for the first time in two sessions; the next migration takes **9953**.
 `9954` has disarmed itself, so re-pasting it does nothing.
 
+0. **Two migrations are waiting again**: `9953_unpaid_ads.sql` and
+   `9952_admin_messages.sql`, written after the queue was confirmed clear. Both
+   degrade safely. The next migration takes 9951.
 1. **The 10DLC campaign description still says 7am–9pm** wherever it was
    registered with the carrier — the LAST piece of this session's change still
    outstanding. It is external to this repo and no code change can fix it; the

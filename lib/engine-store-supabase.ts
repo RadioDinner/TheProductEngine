@@ -4,6 +4,7 @@
  * project exists.
  */
 import { db } from "@/lib/db";
+import { type AdminMessage } from "@/lib/admin-messages";
 import { COLLAGE_QUIET_MS } from "@/lib/collage-confirm";
 import { MAX_AD_PHOTOS } from "@/lib/photo-collage";
 import { AD_TTL_DAYS } from "@/lib/ads";
@@ -518,6 +519,117 @@ export async function setAdUnpaid(id: number, costCents: number): Promise<void> 
     .eq("id", id)
     .eq("status", "pending");
   if (error && error.code !== "42703" && error.code !== "22P02") throw error;
+}
+
+/* ---------- admin broadcasts (migration 9952) ---------- */
+
+/** Every broadcast, newest first, for the admin page. Empty when 9952 is not
+ * pasted — the feature is simply not there yet, which is not an error. */
+export async function listAdminMessages(limit = 25): Promise<AdminMessage[]> {
+  const { data, error } = await db()
+    .from("admin_messages")
+    .select("id, body, send_after, status, recipients, segments, sent_at, created_at")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    if (error.code === "42P01") return []; // no such table
+    throw error;
+  }
+  return (data ?? []).map(toAdminMessage);
+}
+
+/** The scheduled broadcasts whose time has come, oldest first. */
+export async function listDueAdminMessages(nowIso: string): Promise<AdminMessage[]> {
+  const { data, error } = await db()
+    .from("admin_messages")
+    .select("id, body, send_after, status, recipients, segments, sent_at, created_at")
+    .eq("status", "scheduled")
+    .lte("send_after", nowIso)
+    .order("send_after", { ascending: true });
+  if (error) {
+    if (error.code === "42P01") return [];
+    throw error;
+  }
+  return (data ?? []).map(toAdminMessage);
+}
+
+export async function createAdminMessage(body: string, sendAfterIso: string): Promise<number | null> {
+  const { data, error } = await db()
+    .from("admin_messages")
+    .insert({ body, send_after: sendAfterIso })
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    if (error.code === "42P01") return null;
+    throw error;
+  }
+  return (data?.id as number | undefined) ?? null;
+}
+
+/**
+ * Claim a scheduled broadcast for sending. Guarded on status = 'scheduled', so
+ * two overlapping cron ticks cannot both compose it — only the caller that
+ * flips it composes, exactly like markAdPaid guards a held ad's charge.
+ */
+export async function claimAdminMessage(id: number): Promise<boolean> {
+  const { data, error } = await db()
+    .from("admin_messages")
+    .update({ status: "sent", sent_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("status", "scheduled")
+    .select("id");
+  if (error) {
+    if (error.code === "42P01") return false;
+    throw error;
+  }
+  return Boolean(data?.length);
+}
+
+/** Record what the send actually reached, after the rows are enqueued. */
+export async function recordAdminMessageSend(
+  id: number,
+  digestId: number,
+  recipients: number,
+  segments: number,
+): Promise<void> {
+  const { error } = await db()
+    .from("admin_messages")
+    .update({ digest_id: digestId, recipients, segments })
+    .eq("id", id);
+  if (error && error.code !== "42P01") throw error;
+}
+
+/** Un-claim after a failed compose, so the next tick tries again rather than
+ * marking a broadcast "sent" that nobody received. */
+export async function releaseAdminMessage(id: number): Promise<void> {
+  const { error } = await db()
+    .from("admin_messages")
+    .update({ status: "scheduled", sent_at: null })
+    .eq("id", id)
+    .eq("status", "sent");
+  if (error && error.code !== "42P01") throw error;
+}
+
+export async function cancelAdminMessage(id: number): Promise<void> {
+  const { error } = await db()
+    .from("admin_messages")
+    .update({ status: "canceled" })
+    .eq("id", id)
+    .eq("status", "scheduled");
+  if (error && error.code !== "42P01") throw error;
+}
+
+function toAdminMessage(row: Record<string, unknown>): AdminMessage {
+  return {
+    id: row.id as number,
+    body: String(row.body ?? ""),
+    sendAfter: String(row.send_after ?? ""),
+    status: (row.status as AdminMessage["status"]) ?? "scheduled",
+    recipients: Number(row.recipients) || 0,
+    segments: Number(row.segments) || 0,
+    sentAt: (row.sent_at as string | null) ?? null,
+    createdAt: String(row.created_at ?? ""),
+  };
 }
 
 export async function markAdSold(id: number): Promise<void> {

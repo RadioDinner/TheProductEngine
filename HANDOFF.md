@@ -3,16 +3,23 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-21 (session 019's word-filter follow-up merged over
-session 020's send-window and ledger-reset work; all four migrations confirmed
-pasted. v1.3.9).
+**Last updated:** 2026-08-21 (session 020 wrap — the send window, the ledger
+reset, the call flow, AD replacing AD NEW, held-unpaid ads, and scheduled
+admin broadcasts. v1.4.9).
 
-## ✅ Migrations: ALL PASTED (user confirmed 2026-08-21)
+## ⚠️ START HERE: two NEW migrations are waiting
 
-**`9954`, `9955`, `9956` and `9957` are applied.** Nothing is waiting. Every
+**`9953_unpaid_ads.sql`** and **`9952_admin_messages.sql`** were written AFTER
+the user confirmed the queue clear, and have NOT been pasted. Both degrade
+safely — held ads simply are not held, and the broadcast form says the table is
+missing — so nothing is broken, but two features are off until they go in.
+**`9952` is the newest; the next migration takes 9951.**
+
+### Everything before them IS applied (user confirmed 2026-08-21)
+
+**`9954`, `9955`, `9956` and `9957` are applied.** Nothing else is waiting. Every
 feature below is fully on rather than degrading, so if one of them misbehaves,
-a pending migration is NOT the explanation — look at the code. **The next
-migration takes 9953.**
+a pending migration is NOT the explanation — look at the code.
 
 Consequences worth carrying:
 
@@ -225,6 +232,48 @@ no-card case: keeping the seller's text costs nothing and losing it helps
 nobody. The reply says which happened. Held ads are visible on /admin/ads
 under the `unpaid` filter, and deleting one refunds nothing (it was never
 charged) — pinned in `test/myads.test.mjs`.
+
+### Scheduled ADMIN BROADCASTS (migration 9952)
+
+The operator's own text, sent individually to every SMS subscriber. The user's
+request, then their answer when asked how it should behave: *"it would send out
+to all subscribers, in an individual message, and it would send only during
+active hours."*
+
+**It is NOT a line riding an ad batch** — that is what business sponsors are.
+It is its own message, composed on /admin/digests, and it obeys the send window
+exactly like an ad: nothing at nine at night, nothing on a Sunday, nothing
+after five on a Saturday.
+
+`sendAfter` is a FLOOR, not an appointment. The window, the cron tick and the
+segment budget decide the real moment, so a message scheduled for 6am on a
+Sunday goes out Monday morning rather than quietly missing its slot. Preserve
+that if anyone ever adds a "send at exactly" mode — an operator who schedules
+into a closed window must never lose the message.
+
+**Things here that are load-bearing:**
+
+- **`claimAdminMessage` is the concurrency guard.** It flips `scheduled` →
+  `sent` and reports whether THIS caller won, so two overlapping cron ticks
+  cannot both text four hundred people. Compose only on a true — and
+  `releaseAdminMessage` hands the claim back when composing throws, because a
+  broadcast marked sent that nobody received is the one failure with no way to
+  notice.
+- **Delivery reuses the digest outbox on purpose.** The blocklist, the rolling
+  24h segment budget, paced release, retries and the resumable drain are all
+  already there and already correct. A broadcast with its own sending path
+  would have to re-earn every one of them, and would be the one path that
+  forgets the blocklist.
+- **Categories deliberately do NOT apply.** A category preference is about
+  which ADS a member wants; a note from the operator about the service goes to
+  everyone still subscribed. The blocklist DOES apply, at compose and at drain.
+- **It runs after the ads in the cron**, so an ad someone PAID for goes out
+  ahead of a note from us — and if the segment budget can only cover one of the
+  two, that is the right order to find out in.
+- The compose box shows the live subscriber count and warns that anything over
+  160 characters costs TWO segments to every person on the list. `gsmSanitize`
+  on save is not cosmetic: one smart quote pasted from a word processor flips
+  the whole message to UCS-2 and doubles the bill.
 
 ### Things a future session must not get wrong here
 

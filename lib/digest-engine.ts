@@ -13,7 +13,12 @@ import { afterResponse } from "@/analytics/src/after";
 import { getEngineSettings, effectiveSmsCaps, type EngineSettings } from "@/lib/settings";
 import { safeGapRange } from "@/lib/paced-release";
 import {
+  adminMessageDue,
+  adminMessageSlotKey,
+} from "@/lib/admin-messages";
+import {
   allocateDigestNumber,
+  claimAdminMessage,
   claimDigestOutbox,
   countRecentOutboundContaining,
   createDigestIfAbsent,
@@ -28,10 +33,13 @@ import {
   getNewDigestAds,
   getQueuedBumps,
   getRecentDigestAdIds,
+  listDueAdminMessages,
   logMessage,
   markOutboxFailed,
   markOutboxSent,
   queuedOutboxCount,
+  recordAdminMessageSend,
+  releaseAdminMessage,
   requeueOutbox,
   reserveSms,
   type OutboxInsert,
@@ -999,6 +1007,85 @@ export async function runQueuedBroadcasts(
       settings,
     }),
   ];
+  return results;
+}
+
+/**
+ * Send every ADMIN BROADCAST that is due (session 020, user request; migration
+ * 9952) — the operator's own text, one individual message to every SMS
+ * subscriber, inside the send window only.
+ *
+ * The window check is the user's "only during active hours" and it is enforced
+ * HERE, at compose, as well as at drain. Building the rows early would stamp a
+ * paced-release schedule across hours nothing could send in, and the whole
+ * broadcast would then trickle out from the moment the window opened rather
+ * than going together.
+ *
+ * `claimAdminMessage` is the concurrency guard: it flips 'scheduled' to 'sent'
+ * and reports whether THIS caller won, so two overlapping cron ticks cannot
+ * both text four hundred people. Compose only on a true, and hand the claim
+ * back if composing fails — a broadcast marked sent that nobody received is
+ * the one outcome with no way to notice.
+ *
+ * Categories are deliberately NOT applied. A category preference is about
+ * which ADS a member wants; a note from the operator about the service itself
+ * goes to everyone who is still subscribed. The blocklist IS applied, at
+ * compose and again at drain.
+ */
+export async function runDueAdminMessages(now = new Date()): Promise<SlotResult[]> {
+  const settings = await getEngineSettings();
+  // Pauses stop bulk sending, and a broadcast is as bulk as it gets.
+  if (pauseBlocks("bulk", settings)) return [];
+  const windowOpen = smsWindowOpen(now, settings);
+  const due = await listDueAdminMessages(now.toISOString());
+  const results: SlotResult[] = [];
+
+  for (const message of due) {
+    if (!adminMessageDue(message, now, windowOpen)) continue;
+    const slotKey = adminMessageSlotKey(message.id);
+    if (!(await claimAdminMessage(message.id))) continue; // another tick has it
+    try {
+      const { hour } = etParts(now);
+      const { id: digestId, finalized } = await createDigestIfAbsent(slotKey, hour);
+      if (finalized) {
+        results.push({ slotKey, items: 0, recipients: 0, skipped: true });
+        continue;
+      }
+      const body = gsmSanitize(message.body);
+      const blocked = new Set((await listBlocked()).map((b) => b.phone));
+      const subscribers = (await listSubscribersWithCategories()).filter(
+        (s) => !blocked.has(s.phone),
+      );
+      const segments = segmentation(body).segments;
+      const rows: OutboxInsert[] = subscribers.map((s) => ({
+        digestId,
+        channel: "sms" as const,
+        address: s.phone,
+        part: 1,
+        parts: 1,
+        body,
+        segments,
+      }));
+      const queued = await enqueueDigestOutbox(rows);
+      await finalizeDigest(digestId, [], [], 0);
+      await recordAdminMessageSend(
+        message.id,
+        digestId,
+        rows.length,
+        segments * rows.length,
+      );
+      console.log(
+        `[digest] admin broadcast #${message.id}: ${rows.length} recipients, ` +
+          `${segments * rows.length} segments`,
+      );
+      results.push({ slotKey, items: 1, recipients: rows.length, queued, skipped: false });
+    } catch (e) {
+      // Give the claim back so the next tick retries. Without this a transient
+      // database blip would mark the broadcast sent forever.
+      console.error(`[digest] admin broadcast #${message.id} failed to compose:`, e);
+      await releaseAdminMessage(message.id).catch(() => {});
+    }
+  }
   return results;
 }
 
