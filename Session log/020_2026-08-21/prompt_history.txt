@@ -22,3 +22,9 @@ Credit issued $256, still unspent $120]
 
 these are still all wrong. Everyone, all 4 users should have paid nothing in,
 and have 40 in credit. My total credits given out should be 160 total.
+
+--- 2026-08-21 ---
+users,total_credit_dollars
+4,160.0000000000000000
+
+I reran the migration
