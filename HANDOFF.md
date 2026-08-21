@@ -3,21 +3,28 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-21 (session 022 — ad cards, editing in every status,
-Digests becomes Batches with a real queue preview, promote-to-Featured, and the
-/admin/digests crash. v1.5.10). ⚠️ A parallel session 021 (the call line) was in
-flight at the same time and lands its own section below when it merges — keep
-both.
+**Last updated:** 2026-08-21 (TWO sessions landed this day and both are below.
+Session 022 — ad cards, editing in every status, Digests becomes Batches with a
+real queue preview, promote-to-Featured, pictures on /admin/ads, and the bug
+that took /admin/digests down. Session 021, in flight at the same time — the
+call line no longer dials the operator's cell, admin TEST MODE, the first
+end-to-end category delivery tests, and Twilio Trust Hub verified at last.
+v1.5.11.)
 
-## ⚠️ START HERE: two NEW migrations are waiting
+## ✅ START HERE: the migration queue is CLEAR (user confirmed 2026-08-21)
 
-**`9953_unpaid_ads.sql`** and **`9952_admin_messages.sql`** were written AFTER
-the user confirmed the queue clear, and have NOT been pasted. Both degrade
-safely — held ads simply are not held, and the broadcast form says the table is
-missing — so nothing is broken, but two features are off until they go in.
-**`9952` is the newest; the next migration takes 9951.**
+**`9951`, `9952` and `9953` are all applied**, along with everything before
+them. Nothing is waiting. Every feature below is fully on rather than
+degrading, so if one misbehaves, a pending migration is NOT the explanation —
+look at the code. **`9951` is the newest; the next migration takes 9950 —
+confirm with `npm run check:migrations`, which reads `origin/main` too.**
 
-### Everything before them IS applied (user confirmed 2026-08-21)
+Consequences now live: held-unpaid ads are really held and released by a card
+(9953), scheduled admin broadcasts work (9952), and test ads carry the
+`is_test` label so they can be found and deleted (9951 —
+`delete from ads where is_test;`).
+
+### Everything before them was already applied (user confirmed 2026-08-21)
 
 **`9954`, `9955`, `9956` and `9957` are applied.** Nothing else is waiting. Every
 feature below is fully on rather than degrading, so if one of them misbehaves,
@@ -217,6 +224,181 @@ or 480px), and an 18-check editor walk including a real save on a **rejected**
 ad and a blank save refused without blanking the ad.
 
 Full detail: `Session log/022_2026-08-21c/session_log.md`.
+
+## Session 021, part two — TEST MODE, and the first end-to-end category tests
+
+### Part three — the parallel-session protocol (new_session_instructions §8)
+
+Sessions 021 and 022 collided on this date. Both claimed
+`Session log/021_2026-08-21b`, both rewrote the top of this file, and a stale
+local `main` (80 commits of unrelated history, from before a force-push) meant
+`git checkout main` silently restored a months-old working tree. The user's
+ask: *"I'm trying to figure out how to run several claude sessions at a time
+and commit to the same repo so I can move faster."*
+
+**The insight worth carrying: git does not protect you here.** Merge conflicts
+are the SAFE failure — they are loud and they get fixed. The dangerous
+collisions are the ones that merge cleanly: two sessions taking the same
+descending migration number produce two differently-named files, git merges
+both without a word, and because migrations are pasted BY HAND a human reading
+"9950 is applied" cannot tell there were two. The second never runs and its
+feature degrades quietly for weeks.
+
+- **`new_session_instructions.md` §8** is the standing protocol: fetch before
+  reading anything, claim the session folder against `origin/main` rather than
+  local disk, keep BOTH sides of a HANDOFF conflict, never `git checkout main`
+  to merge (merge into the branch, verify, push `HEAD:main` as a verified
+  fast-forward), merge small and often, and give each parallel session a
+  disjoint lane of files.
+- **`CLAUDE.md` gained a rule 0** so the fetch-first order is picked up at load
+  rather than only when §8 is read.
+- **`npm run check:migrations`** (`scripts/check-migrations.mjs`) is the one
+  piece of tooling, because it is the one collision that is a data bug rather
+  than a merge conflict. It fetches `origin/main` and fails on a duplicate
+  number locally OR a number already claimed remotely by a different filename,
+  and prints the next free number. Degrades to a local-only check with a loud
+  warning when offline. Verified by simulating the collision: both detectors
+  fire and it exits 1.
+
+Deliberately NOT done (offered, user declined for now): slug-based session
+folders instead of the `NNN_` counter, and shrinking `HANDOFF.md` — the hottest
+file in the repo, touched by 8 of 12 consecutive commits and the only thing
+that actually conflicted in the 021/022 merge.
+
+
+**Version 1.4.10 → 1.4.11** (§6: session 022 had already moved 1.4.9 → 1.4.10
+in parallel; this session shipped the call-line change and test mode, so the
+far-right digit moves once more from wherever it landed.)
+
+**Merge note:** sessions 021 and 022 ran at the same time. The code merged with
+ZERO conflicts — only this file collided, and session 022 had already written
+"keep both", which is what was done. Both sections are below, newest first.
+
+User request: *"a test mode in the admin side… send ads as though they were
+valid ads to my two test numbers."*
+
+**The design rule: test mode narrows the AUDIENCE and changes nothing else.**
+An ad posted while it is on is a real ad — real number, real price, real review
+queue, real batching, real category partitioning, real segment accounting. Only
+the recipient list is cut down. A faked pipeline proves nothing about the real
+one, which is the entire reason to have a bench.
+
+- **`lib/test-mode.ts`** — dependency-free decisions (like `lib/categories.ts`):
+  `parseTestNumbers`, `testModeActive`, `testModeState`, `testModeMinutesLeft`,
+  `narrowToTestNumbers`, `unsubscribedTestNumbers`. 43 unit checks.
+- **Enforced in the STORE layer** (`lib/store.ts`
+  `listSubscribersWithCategories`), not at the four call sites that ask who
+  receives a digest. The fifth call site somebody adds later is exactly the one
+  that would leak a test send to the whole list — same lesson as the ring-first
+  removal in part one.
+- **The narrowing FILTERS the real list; it never invents a recipient.** A test
+  number receives ads only if it is a genuine subscriber, with its own category
+  prefs, opt-out state and block status. That is what makes a category test
+  real. Settings names any test number that is not subscribed.
+- **`createAd` marks test ads** (`lib/engine-store.ts`), again in the dispatcher
+  rather than at its six callers. TWO flags on purpose: `webListing:false` is
+  what HIDES the ad (an existing, already-migrated filter, so hiding works with
+  no migration pasted), and `is_test` is the LABEL for finding and deleting them
+  afterwards (migration **9951**, degrades to unlabelled-but-hidden).
+- **The email edition is suppressed entirely** while test mode is on. The test
+  list is phone numbers and the email list has no phone to match against, so any
+  narrowing there would be a guess — and a wrong guess emails the real list.
+- **It expires itself after 4 hours.** This is the load-bearing safety
+  property, not a convenience: test mode left on is worse than an outage,
+  because ads keep flowing, every screen reads healthy, and the whole list
+  silently receives nothing. The deadline is STAMPED when the switch is flipped
+  (`adminSetTestMode`), so nothing has to remember to compute it. An absent or
+  corrupted timestamp reads as EXPIRED, never as forever. On-with-no-valid-test-
+  numbers reads as INERT rather than as a service-wide blackout.
+- Surfaced loudly: a `stopped`-level **TEST MODE** item first on the dashboard
+  health panel, the Settings panel with a live countdown, and `/api/health`.
+
+**No config migration was needed** for the settings themselves — `config` is a
+generic key/value table, so `test_mode` / `test_numbers` /
+`test_mode_expires_at` are just `EngineSettings` + `CONFIG_KEYS` entries.
+
+### Category testing — the gap was end-to-end, not unit
+
+The user said *"we've never done any category testing"*. Half true, and the
+half that matters: `test/categories.test.mjs` (91 checks) already covered the
+pure decisions well — `menuChoice` numbering, the toggle state machine,
+`adMatchesCategories` including the empty-set case, `partitionKey`, and a
+cross-check that `commands.ts`'s hardcoded word list cannot drift from
+`CATEGORY_KEYS`. What did NOT exist was **who actually receives which ad**.
+
+**`test/category-delivery.test.mjs`** (26 checks) covers it against the real
+composer, `buildCategorizedSmsRows` — which is pure, so no database is needed:
+a horses-only member gets the horse AND NOT the dog; two picks get both and not
+the third; the warned-dark empty set gets no row at all, not even a sponsor
+line; an uncategorized ad rides every non-empty set; identical preference sets
+share one composition (composing twice would bill twice); a member matching
+nothing gets no batch unless a sponsor line is riding; and `deliveredAdIds`
+only marks what actually went out. Verified non-vacuous by breaking
+`adMatchesCategories` — 11 checks failed, then restored.
+
+**The user's reported review-vs-welcome category mismatch was not real** (they
+confirmed: *"I was wrong, looks like the categories are right"*). Both surfaces
+read the same `CATEGORIES` constant. The only difference is the top row, and it
+is correct: ALL is a subscriber choice, Uncategorized is an ad state.
+
+### Twilio 18602 — CLOSED, AND THE PROFILE IS NOW VERIFIED
+
+The user sorted the EIN question themselves, resubmitted the Trust Hub profile,
+and **Twilio accepted and verified it**. The rejection that named this session's
+branch is resolved; no code was involved at any point.
+
+Kept for the future, because this took two sessions to get through: 18602 is
+"Business ID could not be verified", and it is an EXACT-MATCH failure against
+IRS records — legal name + EIN precisely as they appear on the CP-575 (or a
+147c letter if the CP-575 is lost), and a STREET address, since Twilio and TCR
+both reject PO Boxes. A newly issued EIN can also take 30–90 days to propagate
+to the validation databases, so a correct submission can still fail on timing
+alone.
+
+Verified across part two: tsc clean, build clean, unit **1464 → 1533**.
+
+## Session 021 (2026-08-21) — NOTHING DIALS THE OPERATOR'S CELL ANY MORE
+
+User decision, in their words: *"I don't want it to ring to my cell phone
+first."* Session 020 had already made the attendant menu answer first, but it
+kept the old ring-first path alive behind `VOICE_RING_FIRST`. That was the gap:
+the behaviour was one Vercel setting away from coming back, and the user's cell
+was still ringing — which means the variable was in fact set in production.
+
+**Deleted, not defaulted off** (the distinction is the whole point):
+
+- `lib/voice.ts` — `ringTwiml`, `whisperTwiml`, `acceptTwiml`,
+  `callWasAnswered`, `ringToPhones`, `ringFirst`, `ringSeconds`.
+- `app/api/voice/route.ts` — the `whisper`, `accept` and `after-ring` stages,
+  and the branch at the entry step. `case ""` now unconditionally answers with
+  the menu.
+- `app/api/health/route.ts` — the `VOICE_RING_TO` count (nothing to report).
+- Env: **`VOICE_RING_FIRST`, `VOICE_RING_TO` and `VOICE_RING_SECONDS` are dead.
+  ⚠️ USER: delete them from Vercel** — harmless if left, but they read as live
+  configuration and are not.
+
+`test/voice.test.mjs` asserts all seven names are absent from the module AND
+that no TwiML stage emits `<Dial` — the guard was verified to fail when an
+exported name was added to its list, so it is not a vacuous check. Voice suite
+49 → **80**; whole suite **1464/1464**, tsc clean, build clean.
+
+**One analytics change rode along, and it is worth knowing about.** The only
+`analytics.callInbound` emit for a non-voicemail call lived in `after-ring`,
+which is gone — and which had already been dead since session 020 turned
+ring-first off, so `call_inbound` in GA has silently been counting *voicemails
+only*. It now fires once at the entry step (`outcome: "attendant"`,
+`duration 0`), and the voicemail-stage emit was REMOVED so a voicemail is not
+counted twice. Net: one `call_inbound` per call, which is what "how many people
+phone rather than text" actually asked. The cost is that GA no longer breaks
+calls down by outcome — `/admin/calls` still does, exactly, per row.
+
+**Still true and unchanged:** Telnyx forwards the public number's voice calls
+to the Twilio number (Telnyx portal → Call Forwarding → Always); Twilio holds
+only the "A call comes in" webhook pointing at `/api/voice`. Neither console
+has a ring/forward setting for the cell — that only ever lived in this code.
+
+**Twilio Trust Hub (error 18602):** open when this part of the session began,
+RESOLVED before it ended — see the part-two section above. No code involved.
 
 ## Session 020 (2026-08-21) — THE SEND WINDOW MOVES, AND SATURDAY CLOSES EARLY
 

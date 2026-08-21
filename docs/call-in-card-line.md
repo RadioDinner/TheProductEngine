@@ -1,12 +1,18 @@
 # The call-in card line — setup
 
-FEATURES item 31. A member calls one phone number. **You and anyone else on
-the ring list are called first** — pick up and it's an ordinary conversation.
-If nobody answers within ~18 seconds, an auto-attendant takes over: press 1 to
-put a card on file (keyed on the phone's own keypad), press 2 to leave a
-message. A saved card immediately works everywhere the app charges — automatic
-top-up when an ad costs more than the member's ad credit, and "Bill their
-saved card" on /admin/users.
+FEATURES item 31. A member calls one phone number and **the auto-attendant
+answers on the first ring**: press 1 to put a card on file (keyed on the
+phone's own keypad), press 2 to leave a message. A saved card immediately works
+everywhere the app charges — automatic top-up when an ad costs more than the
+member's ad credit, and "Bill their saved card" on /admin/users.
+
+**Nothing rings your cell** (session 021, user decision). The line used to dial
+the operator's phones for ~18 seconds before the menu got its turn; that path,
+its answer-confirmation whisper, and the `VOICE_RING_FIRST` / `VOICE_RING_TO` /
+`VOICE_RING_SECONDS` variables are deleted rather than switched off, so no
+console or environment setting can put a caller back on hold listening to a
+phone ring. You still hear about every message: a voicemail texts everyone in
+`ADMIN_PHONES` and emails `ADMIN_EMAIL` with the audio attached.
 
 Served by the main app at **`/api/voice`** (`app/api/voice/route.ts`,
 `lib/voice.ts`). No second deployment. The standalone `pay-by-phone/` service
@@ -57,14 +63,12 @@ by text.
      will NOT work: Twilio signs webhooks with the auth token).
      **Required in production**: without it every voice webhook is rejected,
      because a forged one could attach a card to any phone number.
-   - `VOICE_RING_TO` — comma-separated 10-digit numbers to ring before the
-     attendant answers (e.g. `3306001834,3305551212`). Leave empty and the
-     attendant answers immediately.
-   - `VOICE_RING_SECONDS` — optional, default 18. **Keep it below your cells'
-     own voicemail delay** (usually 25–30 s), or a personal voicemail box
-     answers the call and the attendant never gets its turn.
    - `TWILIO_PAY_CONNECTOR` — only if you named the connector something other
      than `Default`.
+   - `ADMIN_PHONES` / `ADMIN_EMAIL` — where a voicemail is delivered. These are
+     now the *only* way a call reaches you, since nothing dials your cell.
+   - **Delete `VOICE_RING_FIRST`, `VOICE_RING_TO` and `VOICE_RING_SECONDS` if
+     they are still set** — the code no longer reads them (session 021).
 5. **Optional but recommended — call logging.** Paste
    `supabase/migrations/9972_call_log.sql` in the Supabase SQL editor, then
    set the number's **"Call status changes"** webhook to
@@ -73,8 +77,9 @@ by text.
    Without the status webhook you still get every call and its outcome — just
    not the authoritative total length. Without the migration the page is
    simply empty; logging never blocks a call.
-6. Check `/api/health` (with the `CRON_SECRET` bearer token): `TWILIO_AUTH_TOKEN`
-   should read `true` and `VOICE_RING_TO` should be the count of numbers.
+6. Check `/api/health` (with the `CRON_SECRET` bearer token):
+   `TWILIO_AUTH_TOKEN` should read `true`. (`VOICE_RING_TO` is no longer
+   reported — there is no ring list.)
 
 ### Keeping your one public number
 
@@ -86,27 +91,25 @@ application; clear that first if the portal objects.)
 
 ## Testing it
 
-1. Call the number **from a phone that is NOT on `VOICE_RING_TO`**. Your
-   phone (and anyone else on the list) should ring; whoever picks up hears
-   who is calling and must **press a key to take the call**. That keypress is
-   deliberate: a cell's voicemail answers when the phone is off or busy, and
-   without confirmation the caller would be bridged to a mailbox beep instead
-   of reaching the attendant. (Calling from a ring-list number is the
-   sharpest case — the carrier sends it straight to your own mailbox, which
-   then asks the caller for a voicemail password.)
-2. Don't answer. After ~18 seconds you should hear the attendant menu.
-3. Press **1**, listen for the authorization sentence, then key in a card
+1. Call the number from any phone. **No phone of yours should ring.** You
+   should hear the attendant menu immediately — "Thank you for calling The
+   Plain Exchange. To add a card on file, press 1. To leave a voicemail and
+   receive a callback, press 2." If a cell rings instead, the deploy carrying
+   this change has not gone out.
+2. Press **1**, listen for the authorization sentence, then key in a card
    (Stripe's test card `4242 4242 4242 4242`, any future expiry, any CVC, any
    ZIP, while the connector is in test mode).
-4. You should hear "your card ending in 4 2 4 2 is saved" and get a
+3. You should hear "your card ending in 4 2 4 2 is saved" and get a
    confirmation **text from the Telnyx line**.
-5. Open `/admin/users`, look up that phone: it should show **Card on file**
+4. Open `/admin/users`, look up that phone: it should show **Card on file**
    with the last 4 — no waiting, no manual step.
-6. Text `AD NEW …` from that phone with an empty balance: the ad posts and the
+5. Text `AD …` from that phone with an empty balance: the ad posts and the
    reply names the card charge. That's the whole point of the feature.
-7. Press **2** on another call and leave a message: every number in
-   `ADMIN_PHONES` gets a text with the recording link (the audio lives in the
-   Twilio console; the app never stores it).
+6. Press **2** on another call and leave a message: every number in
+   `ADMIN_PHONES` gets a text with the recording link, and `ADMIN_EMAIL` gets
+   the audio as an mp3 attachment (the recording itself lives in the Twilio
+   console; the app never stores it).
+7. Check `/admin/calls`: the call should be logged with its outcome.
 
 ## Moving the site onto the connector's Stripe account
 

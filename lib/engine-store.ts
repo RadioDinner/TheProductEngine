@@ -16,6 +16,8 @@ import { MAX_AD_PHOTOS } from "@/lib/photo-collage";
 import { FIXTURE_ADS, fixtureDate } from "@/lib/fixtures";
 import { AD_TTL_DAYS, type Ad, type AdPage, type AdQuery, type AdStatus } from "@/lib/ads";
 import { type AdminMessage } from "@/lib/admin-messages";
+import { getEngineSettings } from "@/lib/settings";
+import { testModeActive } from "@/lib/test-mode";
 import { websiteAdPhotos } from "@/lib/photo-collage";
 
 // ---------- types ----------
@@ -57,6 +59,9 @@ export interface StoredAd {
    * release charges this, not a recomputed price — an ad held on Monday must
    * not cost more on Wednesday because the price list changed (9953). */
   unpaidCents?: number | null;
+  /** Created while TEST MODE was on (migration 9951). The label only — the ad
+   * is kept off the public site by webListing:false. */
+  isTest?: boolean;
   /** Category key (items 22/25, migration 9976); null/undefined =
    * uncategorized — rides EVERY digest, shows under All on the site. NOT part
    * of the shared Supabase AD_SELECT (so nothing hard-depends on 9976); the
@@ -138,6 +143,9 @@ export interface NewAdInput {
    * public site. Omitted/true = listed — the default, and the only value
    * while web_addon_cents is 0. */
   webListing?: boolean;
+  /** Created while TEST MODE was on (session 021). Set by createAd, never by a
+   * caller. The LABEL only — `webListing: false` is what hides it. */
+  isTest?: boolean;
 }
 
 /**
@@ -430,6 +438,7 @@ const file = {
         ).toISOString(),
       }),
       ...(input.webListing === false && { webListing: false }),
+      ...(input.isTest === true && { isTest: true }),
     });
     save(store);
     return id;
@@ -1263,8 +1272,34 @@ const file = {
 
 // ---------- public interface (picks the implementation) ----------
 
+/**
+ * TEST MODE marks the ad here (session 021), for the same reason the recipient
+ * narrowing lives in lib/store.ts rather than in its callers: there are six
+ * places that create an ad, and the one added next year is the one that would
+ * put a test ad on the public website.
+ *
+ * TWO flags, deliberately, because they fail differently:
+ *
+ *  - `webListing: false` is what actually HIDES the ad. It is the existing,
+ *    already-migrated "keep this off the site" filter (lib/ads-supabase.ts
+ *    `web_listing.is.null,web_listing.eq.true`), so hiding works the moment
+ *    this deploys, with no migration pasted and nothing to forget.
+ *  - `isTest: true` is the LABEL, so test ads can be found and cleaned up
+ *    later, and so /admin/ads can badge them. It needs migration 9951, and it
+ *    degrades to "unlabelled but still hidden" until that is pasted — the
+ *    same shape the web_listing and unpaid_cents inserts already use.
+ *
+ * A test ad is otherwise a completely ordinary ad: real number, real price,
+ * real review queue, real broadcast. Only its audience and its visibility are
+ * narrowed.
+ */
 export async function createAd(input: NewAdInput, options: CreateAdOptions = {}): Promise<number> {
-  return supabaseConfigured ? remote.createAd(input, options) : file.createAd(input, options);
+  const settings = await getEngineSettings();
+  const asTest = testModeActive(settings, Date.now());
+  const finalInput = asTest ? { ...input, webListing: false, isTest: true } : input;
+  return supabaseConfigured
+    ? remote.createAd(finalInput, options)
+    : file.createAd(finalInput, options);
 }
 
 export async function getAdRecord(id: number): Promise<StoredAd | null> {

@@ -6,6 +6,7 @@
 const SUITES = [
   "config",
   "voice",
+  "test-mode",
   "send-window",
   "batch",
   "sponsor-schedule",
@@ -38,6 +39,7 @@ const SUITES = [
   "town-hall",
   "featured",
   "categories",
+  "category-delivery",
   "areas",
   "photo-collage",
   "collage-confirm",

@@ -3,7 +3,9 @@ import Link from "next/link";
 import {
   adminBlockNumber,
   adminSaveSettings,
+  adminSaveTestNumbers,
   adminSetPause,
+  adminSetTestMode,
   adminSetUnderAttack,
   adminUnblockNumber,
 } from "@/lib/admin-actions";
@@ -14,6 +16,14 @@ import { formatPrice, site } from "@/lib/config";
 import { hourLabel, operatorWindowLabel, smsWindowOpen } from "@/lib/digest-engine";
 import { LookupTester } from "@/components/LookupTester";
 import type { HandbookKey } from "@/lib/admin-handbook";
+import {
+  TEST_MODE_MAX_HOURS,
+  parseTestNumbers,
+  testModeMinutesLeft,
+  testModeState,
+  unsubscribedTestNumbers,
+} from "@/lib/test-mode";
+import { listSubscribersWithCategories } from "@/lib/store";
 import { Tip } from "@/components/Tip";
 
 export const metadata: Metadata = {
@@ -188,6 +198,19 @@ export default async function AdminSettings({
   // not have to work that out from the clock.
   const windowOpen = smsWindowOpen(new Date(), settings);
   const blocked = await listBlocked();
+  // Test mode (session 021). The state is computed the same way the SEND PATH
+  // computes it, so this panel can never claim a mode the engine is not in.
+  const nowMs = Date.now();
+  const testState = testModeState(settings, nowMs);
+  const testNumbers = parseTestNumbers(settings.testNumbers);
+  const testMinutesLeft = testModeMinutesLeft(settings, nowMs);
+  // Which test numbers are not actually subscribed. NOTE: while test mode is
+  // ON this list is already narrowed to the test numbers by the store layer,
+  // so the "not subscribed" warning is only meaningful before turning it on —
+  // which is exactly when the operator needs it.
+  const testUnsubscribedSource = testState === "active" ? [] : await listSubscribersWithCategories();
+  const unsubscribed =
+    testState === "active" ? [] : unsubscribedTestNumbers(testUnsubscribedSource, testNumbers);
   // The picture ladder is ONE setting (an array) but three form fields — the
   // operator thinks in "what does a 2-picture ad cost", not in array indexes.
   const values: Record<string, number> = {
@@ -305,6 +328,98 @@ export default async function AdminSettings({
           auto-tighten the per-number and service-wide SMS caps, and throttle outbound to the
           per-minute ceiling below. Pair it with the blocklist to kill bad actors — block them
           fast from <Link href="/admin/insights">Insights</Link>. <Tip k="settings.underAttack" />
+        </p>
+      </section>
+
+      <section className="card">
+        <h2 className="section-h">
+          Test mode{" "}
+          {testState === "active" && <span className="ad-sold">· ON — the list is getting nothing</span>}
+        </h2>
+        <p className="fine">
+          Send <strong>real ads</strong> to your test numbers and nobody else. Everything else
+          runs exactly as it does in production — real ad number, real price, real review
+          queue, real batching, real category filtering — so what you see on the test phone is
+          what a subscriber would have seen. Ads posted while it is on are kept{" "}
+          <strong>off the public website</strong> and labelled so you can delete them
+          afterwards.
+        </p>
+        <form action={adminSaveTestNumbers} className="inline-form">
+          <label htmlFor="test-numbers">Test numbers </label>
+          <input
+            id="test-numbers"
+            name="numbers"
+            type="text"
+            defaultValue={settings.testNumbers}
+            placeholder="3305551212, 3305551213"
+            className="admin-input"
+          />
+          <button className="btn btn-sm btn-secondary" type="submit">
+            Save numbers
+          </button>
+        </form>
+        <p className="fine">
+          {testNumbers.length === 0 ? (
+            <>
+              No usable test numbers. Ten digits each, separated by commas — until at least one
+              is saved, test mode stays <strong>inert</strong> rather than switching ads off for
+              everybody.
+            </>
+          ) : (
+            <>
+              Receiving: {testNumbers.map((n) => `(${n.slice(0, 3)}) ${n.slice(3, 6)}-${n.slice(6)}`).join(", ")}.{" "}
+              {unsubscribed.length > 0 && (
+                <>
+                  <strong>
+                    {unsubscribed
+                      .map((n) => `(${n.slice(0, 3)}) ${n.slice(3, 6)}-${n.slice(6)}`)
+                      .join(", ")}{" "}
+                    {unsubscribed.length === 1 ? "is" : "are"} not subscribed
+                  </strong>{" "}
+                  — text SUBSCRIBE from {unsubscribed.length === 1 ? "it" : "them"} first, or
+                  the phone will simply stay quiet. Test mode filters the real subscriber list;
+                  it never invents a recipient, which is the only way your category picks get
+                  tested for real.
+                </>
+              )}
+            </>
+          )}
+        </p>
+        <div className="sim-actions">
+          <form action={adminSetTestMode} className="inline-form">
+            <input type="hidden" name="on" value={testState === "active" ? "no" : "yes"} />
+            <button className="btn btn-sm btn-secondary" type="submit">
+              {testState === "active" ? "Turn test mode OFF" : "Turn test mode ON"}
+            </button>
+          </form>
+        </div>
+        <p className="fine">
+          {testState === "active" ? (
+            <>
+              <strong>
+                Live now — every ad is going to {testNumbers.length} test number
+                {testNumbers.length === 1 ? "" : "s"} and the subscriber list is receiving
+                nothing.
+              </strong>{" "}
+              It switches itself off in{" "}
+              {testMinutesLeft < 60
+                ? `${testMinutesLeft} min`
+                : `${Math.floor(testMinutesLeft / 60)}h ${testMinutesLeft % 60}m`}
+              , because a forgotten test mode is a silent outage — every screen looks healthy
+              while nobody receives anything. Turning it on again re-starts the clock.
+            </>
+          ) : testState === "expired" ? (
+            <>
+              The switch is ticked but the {TEST_MODE_MAX_HOURS}-hour window has run out, so ads
+              are going to the real list again. Turn it off and on to start a fresh window.
+            </>
+          ) : (
+            <>
+              Off — ads go to every subscriber as normal. While on, the email edition is
+              suppressed entirely (the test list is phone numbers, and guessing at which email
+              addresses to include is how a test run ends up mailing the real list).
+            </>
+          )}
         </p>
       </section>
 

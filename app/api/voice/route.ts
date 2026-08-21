@@ -6,6 +6,11 @@
  *
  * See lib/voice.ts for the flow, the TwiML, and the PCI rule (card digits
  * never reach this app — Twilio tokenizes them straight into Stripe).
+ *
+ * No stage here dials a phone (session 021, user decision). The ring / whisper
+ * / accept / after-ring stages are gone along with VOICE_RING_FIRST,
+ * VOICE_RING_TO and VOICE_RING_SECONDS — an inbound call goes straight to the
+ * attendant menu.
  */
 import { after, NextResponse, type NextRequest } from "next/server";
 import * as analytics from "@/analytics/src/server-events";
@@ -22,24 +27,16 @@ import { ensureAccount, getAccount, setAutoTopUp } from "@/lib/store";
 import {
   MENU_MAX_ATTEMPTS,
   VOICE_PATH,
-  acceptTwiml,
-  callWasAnswered,
   fetchRecordingMp3,
-  hangUpTwiml,
   menuTwiml,
   payConnector,
   payTwiml,
-  ringFirst,
-  ringSeconds,
-  ringToPhones,
-  ringTwiml,
   sayAndHangUpTwiml,
   spokenDigits,
   twimlSayThenVoicemail,
   voicemailEmail,
   voiceSignatureRejection,
   voicemailTwiml,
-  whisperTwiml,
 } from "@/lib/voice";
 
 // Attaching the card is three sequential Stripe calls on a live phone call —
@@ -142,61 +139,31 @@ async function handle(req: NextRequest) {
   const callSid = params.CallSid ?? "";
 
   switch (step) {
-    /* The menu answers immediately (session 020). With VOICE_RING_FIRST set,
-     * the operator's phones ring first instead and whoever picks up hears who
-     * is calling. */
+    /* The menu answers. Full stop — there is no branch here any more, because
+     * as of session 021 nothing dials the operator's phones (see lib/voice.ts).
+     * The caller hears "press 1 / press 2" on the first ring. */
     case "": {
       await startCall({
         callSid,
         fromPhone: caller,
         toPhone: normalizePhone(params.To ?? ""),
       });
-      // The menu answers FIRST (session 020, user decision). Ringing the
-      // operator ahead of it is opt-in via VOICE_RING_FIRST — keyed to its own
-      // flag rather than to "is VOICE_RING_TO set", so the deployment that
-      // asked for this change gets it without also having to clear a variable.
-      const phones = ringToPhones();
-      if (!ringFirst() || !phones.length) return xml(menu(req, 1));
-      return xml(
-        ringTwiml({
-          phones,
-          seconds: ringSeconds(),
-          actionUrl: stepUrl(req, "after-ring"),
-          whisperUrl: stepUrl(req, "whisper", caller ? { caller } : {}),
-        }),
-      );
-    }
-
-    case "whisper":
-      return xml(
-        whisperTwiml({
-          callerPhone: url.searchParams.get("caller"),
-          acceptUrl: stepUrl(req, "accept"),
-        }),
-      );
-
-    case "accept":
-      return xml(acceptTwiml(Boolean((params.Digits ?? "").trim())));
-
-    /* A person confirmed and talked = handled, nothing more to do. Everything
-     * else (no answer, busy, a voicemail box that picked up, a leg the
-     * whisper dropped) falls through to the attendant. */
-    case "after-ring": {
-      const answered = callWasAnswered(params.DialCallStatus, params.DialCallDuration);
-      await updateCall(callSid, {
-        outcome: answered ? "answered" : "attendant",
-        ...(answered && { durationSeconds: Number(params.DialCallDuration) }),
-      });
-      // How many people phone rather than text. This audience picks up the
-      // phone, and until now the only record of it was the call log.
+      // How many people phone rather than text. This used to be emitted from
+      // the after-ring stage, which no longer exists — so it is recorded on
+      // arrival instead, where it counts EVERY call rather than only the ones
+      // that ended in voicemail. The outcome here is what actually happened at
+      // this moment: the attendant took the call. A later stage may record a
+      // more specific outcome on the call log row (card saved, voicemail);
+      // this event is deliberately not restated there, so one call is one
+      // `call_inbound`.
       after(() =>
         analytics.callInbound({
           phone: caller || undefined,
-          outcome: answered ? "answered" : "attendant",
-          durationSeconds: answered ? Number(params.DialCallDuration) || 0 : 0,
+          outcome: "attendant",
+          durationSeconds: 0,
         }),
       );
-      return answered ? xml(hangUpTwiml()) : xml(menu(req, 1));
+      return xml(menu(req, 1));
     }
 
     case "menu": {
@@ -334,13 +301,11 @@ async function handle(req: NextRequest) {
         recordingUrl: recording || null,
         ...(params.RecordingDuration && { durationSeconds: Number(params.RecordingDuration) }),
       });
-      after(() =>
-        analytics.callInbound({
-          phone: caller || undefined,
-          outcome: "voicemail",
-          durationSeconds: Number(params.RecordingDuration) || 0,
-        }),
-      );
+      // No `callInbound` here: the entry step already emitted one for this
+      // call, and a second would double-count every voicemail against every
+      // other call. Which calls ended in a voicemail is a question /admin/calls
+      // answers exactly (outcome + recording + duration on the row), so the
+      // dimension is not lost — it just is not GA's to report.
       const from = caller ? await getAccount(caller) : null;
       const who = caller ? `+1${caller}${from ? "" : " (not a member yet)"}` : "an unknown number";
       for (const admin of admins) {
@@ -406,8 +371,15 @@ async function handle(req: NextRequest) {
       return new NextResponse(null, { status: 204 });
     }
 
+    /* An unrecognised step means we lost our place in the call, not that the
+     * caller is done — so serve the menu rather than hang up on them. The case
+     * that made this concrete: a call already ringing an operator's cell when
+     * the session-021 deploy landed posts back to `after-ring`, which no longer
+     * exists. That caller gets the card line instead of an apology and a dial
+     * tone. Cannot loop — the menu's own action URL is a step that exists, and
+     * MENU_MAX_ATTEMPTS caps the re-asks from there. */
     default:
-      console.error(`[voice] unknown step "${step}"`);
-      return xml(sayAndHangUpTwiml("Sorry, something went wrong. Goodbye."));
+      console.error(`[voice] unknown step "${step}" — recovering to the menu`);
+      return xml(menu(req, 1));
   }
 }

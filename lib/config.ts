@@ -38,7 +38,7 @@ export const site = {
    * This constant is the only place it is written down; the footer and the
    * health probe both read it, so they can never disagree.
    */
-  version: "1.5.10",
+  version: "1.5.11",
   tagline: "Buy and sell by text message",
   adsPerPage: 15,
 } as const;
@@ -323,6 +323,22 @@ export const engineDefaults = {
    * outboundThrottlePerMin. Pair it with the blocklist to kill bad actors fast.
    */
   underAttack: false,
+  /**
+   * TEST MODE (session 021). While on, ad broadcasts go ONLY to testNumbers —
+   * the real subscriber list receives nothing — and ads created while it is on
+   * are marked as test ads and kept off the public website.
+   *
+   * It expires by itself (testModeExpiresAt, set when the switch is flipped on;
+   * see lib/test-mode.ts). Left on it is worse than an outage, because every
+   * screen looks healthy while the whole list silently gets nothing — so the
+   * default state of a forgotten switch is OFF, not on forever.
+   */
+  testMode: false,
+  /** Comma-separated 10-digit numbers that receive ads while test mode is on.
+   * Empty makes test mode inert rather than a service-wide blackout. */
+  testNumbers: "",
+  /** ISO timestamp test mode turns itself off at. Empty/unparseable = expired. */
+  testModeExpiresAt: "",
   /**
    * Global outbound sends-per-minute ceiling enforced ONLY while underAttack is
    * on. Excess defers to the next cron tick (digests) or is dropped (replies),

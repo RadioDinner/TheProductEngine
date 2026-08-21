@@ -37,3 +37,7 @@ is this stuck?
 
 --- 2026-08-21 ---
 commit and merge
+
+--- 2026-08-21 ---
+[image: /admin/settings "Number checks (VoIP policy)" — checkboxes floating above their labels]
+This page doesn't look great. I can't clearly see what I toggling on and off, fix this

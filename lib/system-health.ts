@@ -27,6 +27,12 @@ export interface HealthInput {
   adsPaused: boolean;
   outboundPaused: boolean;
   underAttack: boolean;
+  /** TEST MODE in force: ads reach only the test numbers (session 021). */
+  testMode: boolean;
+  /** How many test numbers are receiving — 0 while test mode is off. */
+  testNumberCount: number;
+  /** Whole minutes until test mode expires itself. */
+  testMinutesLeft: number;
   /** Whether the SMS send window is open at this moment. */
   windowOpen: boolean;
   /** "7am–6pm Mon–Fri · 7am–5pm Sat" — operatorWindowLabel, the real hours. */
@@ -73,6 +79,29 @@ function worst(levels: HealthLevel[]): HealthLevel {
 
 export function systemHealth(input: HealthInput): HealthReport {
   const items: HealthItem[] = [];
+
+  // TEST MODE goes FIRST and reads as "stopped" (session 021). Ads are moving,
+  // so nothing else on this panel looks wrong — which is exactly why it has to
+  // shout. From the subscriber list's point of view this IS a full stop: every
+  // ad is going to a couple of test phones and nobody else is receiving
+  // anything. The forgotten-switch outage is silent by nature, so the panel
+  // has to be the thing that is not silent.
+  if (input.testMode) {
+    const left = input.testMinutesLeft;
+    items.push({
+      key: "test-mode",
+      label: "TEST MODE",
+      state: "ON",
+      level: "stopped",
+      detail:
+        `Ads are reaching ${input.testNumberCount} test number${input.testNumberCount === 1 ? "" : "s"} ` +
+        "and NOBODY ELSE — the subscriber list is receiving nothing, and new ads are kept off the website. " +
+        (left > 0
+          ? `It switches itself off in ${left < 60 ? `${left} min` : `${Math.floor(left / 60)}h ${left % 60}m`}. `
+          : "") +
+        "Turn it off on Settings the moment you are done testing.",
+    });
+  }
 
   items.push({
     key: "ads",

@@ -117,3 +117,84 @@ rules. When that happens:
   `Update new_session_instructions: <one-line summary>`.
 - Reflect the change in `CLAUDE.md` if it changes default behavior so future
   sessions pick it up at load.
+
+## 8. Working alongside other sessions (added session 021)
+
+The user runs SEVERAL Claude sessions against this repo at once, on purpose, to
+move faster. Assume at all times that another session is editing this repo
+right now. Two sessions collided on 2026-08-21 (021 and 022) and everything
+below is a direct lesson from that.
+
+The important thing to understand: **git does not protect you here.** The
+damage is not merge conflicts — those are loud and get fixed. It is the
+collisions that merge CLEANLY and leave the repo quietly wrong.
+
+### 8a. Start of every session, in this order
+
+1. **`git fetch origin main` FIRST** — before reading `HANDOFF.md`, before
+   claiming a session folder, before anything. Local refs go stale, and a
+   force-push leaves them not just behind but on an UNRELATED history (in 021
+   the local `main` was 80 commits divergent and `git checkout main` silently
+   restored a months-old working tree).
+2. **Read `HANDOFF.md` from the freshly fetched `origin/main`,** not from
+   whatever the container happens to have.
+3. **Claim the session folder against `origin/main`, not local disk.** Both
+   sessions on 2026-08-21 picked `021_2026-08-21b` because both looked only at
+   their own checkout. Check `git ls-tree origin/main "Session log/"` and take
+   the next free number; if the date already exists, add the letter suffix per
+   §1.
+4. **`npm run check:migrations`** before writing a migration AND again before
+   pushing. See 8c.
+
+### 8b. Where this repo collides
+
+The shared single-writer files and counters, in rough order of how often they
+bite:
+
+| Thing | Why | What to do |
+|---|---|---|
+| `HANDOFF.md` | Every session prepends a section at the same spot — 8 of 12 consecutive commits touched it | **KEEP BOTH SIDES**, newest session first. Never drop another session's section to resolve a conflict |
+| `Session log/NNN_` | Sequential counter | Claim against `origin/main` (8a.3) |
+| Migration number | Descending counter, and **merges cleanly when duplicated** | `npm run check:migrations` |
+| `FEATURES.md` item number | Sequential counter | Take the next number after a fetch; if two sessions land the same one, renumber yours in the merge |
+| `version` in `lib/config.ts` | Shared counter | Bump from whatever is on `origin/main` **at merge time**, not from what you saw at session start (§6) |
+
+If you know a parallel session is in flight, say so in your `HANDOFF.md`
+section and name what you expect to land. Session 022 wrote *"a parallel
+session 021 was in flight and lands its own section below when it merges —
+keep both"*, and that one sentence made the conflict trivial to resolve
+correctly hours later.
+
+### 8c. Migrations are the dangerous one
+
+Two sessions each take `lowest - 1`. The files have different names, so git
+merges both without a word, and the repo now holds two different migrations
+wearing the same number. Because migrations are pasted **by hand** into the
+Supabase SQL editor (§4), a human reading "9950 is applied" cannot tell there
+were two — so the second silently never runs and its feature degrades quietly
+for weeks.
+
+**`npm run check:migrations`** (`scripts/check-migrations.mjs`) catches it: it
+fetches `origin/main`, fails on a duplicate number locally or a number already
+claimed remotely by a different filename, and prints the next free number. It
+degrades to a local-only check with a loud warning when the network is down.
+
+### 8d. Merging
+
+- **Never `git checkout main` to merge.** Merge `origin/main` INTO your branch,
+  verify (`tsc`, `npm test`, `npm run build`) on the merged tree, then push
+  `HEAD:main` after confirming it is a fast-forward:
+  `git merge-base --is-ancestor origin/main HEAD`.
+- **Merge small and often.** A branch that sits all day is a branch that
+  collides with everything. Land each piece as soon as it is green.
+- **Re-verify after merging**, not just before. The other session's code is new
+  to yours, and a clean auto-merge is not a passing test suite.
+- Ask the user before pushing to `main` unless they have already said to.
+
+### 8e. Splitting work between sessions
+
+The single biggest win, and it costs nothing: **give each session a disjoint
+lane.** Two sessions on `lib/voice.ts` and `app/admin/ads/page.tsx` never
+conflict; two sessions both "improving admin" always will. When the user is
+about to start a parallel session, help them pick a lane that does not overlap
+the one in flight, and say which files this session is holding.
