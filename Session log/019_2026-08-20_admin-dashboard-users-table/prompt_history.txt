@@ -43,3 +43,6 @@ The support and sales line is the same. Both are (330) 275-1603‬. Make a self 
 
 --- 2026-08-20 ---
 I want to build a new "slots" feature of the admin/featured page. I want all 4 of the slots showing as rows with durations across dates. Does this make sense?
+
+--- 2026-08-20 ---
+Ok, write a handoff, commit everything to main and wrap this session

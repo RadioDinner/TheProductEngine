@@ -1,11 +1,32 @@
-# Session 019 — 2026-08-20 — the admin dashboard, and the members table as a real grid
+# Session 019 — 2026-08-20 — the admin dashboard, the members grid, and the money
 
-**Version 1.1.7 → 1.1.8** (§6: two features, so the far-right digit moves.
-The relocation of /admin was weighed as a possible "major change" and judged
-not to be — session 018 reworked the entire SMS send pipeline and still only
-moved the far-right digit, so that is the bar.)
+**Version 1.1.7 → 1.2.8.** Two moves, and the audit trail §6 asks for:
 
-**Git posture:** started on the designated branch
+1. Mid-session, when the work looked like TWO features (the grid and the
+   dashboard), the far-right digit moved: 1.1.7 → **1.1.8**. The relocation of
+   /admin was weighed as a possible "major change" and judged not to be —
+   session 018 reworked the entire SMS send pipeline and still only moved the
+   far-right digit, so that is the bar.
+2. At wrap the session had shipped **nine** features (listed below), which is
+   comfortably "4 or more", so the SECOND digit moved: 1.1.8 → **1.2.8**. Per
+   §6 the third digit is deliberately NOT reset.
+
+## What shipped (nine features, five commits, all on `main`)
+
+| Commit | What |
+|---|---|
+| `2f1f230` | The members grid + the admin dashboard with system health |
+| `afd81ff` | `docs/pricing.md` corrected; what a refund actually costs |
+| `139a924` | Cash vs granted credit, the refund guard, the 5% fee (migration 9957) |
+| `a2bf576` | Featured listings: four spots, the queue, event pricing (migration 9956) |
+| `402581c` | One phone number, self-service artwork, the slot timeline, the income report |
+
+The nine: **1** the members grid · **2** the dashboard + health · **3** the
+cash/granted split and refund guard · **4** the 5% refund-fee policy ·
+**5** featured listings as a product · **6** event-listing pricing ·
+**7** self-service artwork · **8** the slot timeline · **9** the income report.
+
+**Git posture (as run):** started on the designated branch
 `claude/admin-dashboard-users-table-7pp5dp`, which was 4 commits behind
 `origin/main` and had no unique commits — fast-forwarded onto `main` before
 starting. The user then said mid-session: *"youre good to commit as soon as you
@@ -254,26 +275,64 @@ same phone — so both were collapsed onto one `site.supportPhone` /
 
 ## For the next session
 
-- ⚠️ **TWO MIGRATIONS TO PASTE: `9957_money_kinds.sql` and
-  `9956_featured_requests.sql`.** Both degrade safely — until 9957 the
-  Adjust-balance form falls back to `adjustment` and the conservative reading
-  keeps refunds safe; until 9956 the request page shows the board and takes
-  calls but cannot queue anyone, and says so. 9956 was AMENDED after first
-  being written (it gained `image_src`); it is re-runnable, so paste it again
-  if an earlier copy already went in.
-- The original members-table/dashboard half of this session needed no
-  migration. `admin_saved_views.config`
-  gained an optional `widths` key, but it is a jsonb blob and `normalizeView`
-  tolerates its absence, so old saved views open at the default widths.
-- **The user's next topic, already asked for:** *"after you build/fix this,
-  lets look at the open money questions from previous sessions."* The open
-  money items are scattered across HANDOFF — the pricing seams in
-  `docs/pricing.md` (event-listing and featured prices still unset; the
-  website add-on's SMS self-serve purchase and per-ad admin toggle must be
-  built before `web_addon_cents` goes above 0; whether the starter credit
-  should be $180 rather than $150), the two Stripe accounts (payments made
-  before the session-016 move must be refunded in the OLD account, and the
-  junk OAuth-loop accounts should be closed), `bumpCost` never being decided
-  (session 005), and refunds being ledger-manual by design.
-- If a future session changes an admin feature, update its handbook entry —
-  `dashboard.*` is a new group with six entries.
+### ⚠️ Operator action queue
+
+1. **Paste `9957_money_kinds.sql`.** Until then the Adjust-balance form's kind
+   selector falls back to the legacy `adjustment`, and money.ts reads those
+   conservatively — refunds stay safe, but "cash collected" on /admin/money
+   keeps understating and the unclassified figure keeps growing.
+2. **Paste `9956_featured_requests.sql`.** Until then /featured shows the board
+   and takes calls and emails, but cannot queue anyone — and says so plainly
+   rather than failing. It was AMENDED mid-session (it gained `image_src`) and
+   is re-runnable, so paste it again if an earlier copy already went in.
+3. **Decide the two carried-over money items** listed under "Still open" below.
+
+### Still open (money)
+
+- **The old Stripe account.** Payments made before the session-016 account move
+  must be refunded THERE; the junk accounts from the OAuth loop should be
+  closed. Unchanged from session 016 — still the operator's.
+- **The website add-on** (`web_addon_cents` = 0). Two seams must be built
+  before it can go above $0: SMS self-serve purchase, and a per-ad admin
+  toggle. Documented in `docs/pricing.md`.
+- **Whether the starter credit should be $180 rather than $40** was a
+  session-016 note written against the OLD $150 sheet and is now stale — the
+  credit is $40, capped at the first 200 members ($8,000 maximum exposure).
+  Re-decide from the current sheet if it comes up, not from that note.
+- **A dormancy nudge** ("you still have $50 on your account") was recommended
+  and NOT built. The user chose the 5% refund fee instead; the nudge is still
+  the thing that turns a dead balance into an ad or a clean refund, and it
+  needs no lawyer. Worth revisiting once /admin/money shows a real
+  "still owed" figure.
+- **`bumpCost` never being decided** (session 005) is now moot: BUMP was
+  removed entirely in session 016. Struck from the open list.
+
+### Known gaps in what was built
+
+- **A featured request cannot pick a slot number, and does not need to** — the
+  scheduler assigns one. But approving a request does NOT yet create the
+  `featured_spots` row: the operator still adds the spot by hand with the
+  artwork attached to the request. Wiring approval → spot creation is the
+  obvious next increment.
+- **The income report reads up to 100,000 ledger rows** and says on the page
+  when it stopped. That is a glance, not an export; if the ledger outgrows it,
+  the honest fix is a proper export rather than a bigger ceiling.
+- **/admin/money will read all zeroes until there is real ledger activity.**
+  That is correct, not broken — it was verified against an empty dev store.
+
+### Prevalent things future-me should know
+
+- **The review queue lives at `/admin/review` now**, not `/admin`. Every
+  redirect follows it, and `notifyAdminNewAd`'s email link was fixed too — but
+  anything written from memory will get this wrong.
+- **`site.supportPhone` / `site.supportEmail` are the ONLY contact details.**
+  The user confirmed support and sales are the same line; there is deliberately
+  no second number to keep in step.
+- **Environment note (a real mistake worth not repeating):** `git checkout main
+  | tail && git reset --hard origin/main` took its exit status from `tail`, not
+  from `git checkout`, so the reset ran even though the checkout had aborted —
+  wiping every uncommitted edit to tracked files. They were rebuilt from
+  context and re-verified in full. Never chain a destructive git command behind
+  a pipeline whose exit status is not the command you care about.
+- The unit suite ended at **1369** (new this session: `system-health` 37,
+  `money` 62, `featured-schedule` 58; `user-table` 50 → 101).

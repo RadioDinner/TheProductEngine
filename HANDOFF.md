@@ -3,13 +3,27 @@
 Live cross-session state document (per `new_session_instructions.md`). Update
 this every session. Per-session detail lives in `Session log/`.
 
-**Last updated:** 2026-08-20 (session 019 — admin dashboard + the members grid,
-v1.1.8, on `main`).
+**Last updated:** 2026-08-20 (session 019 wrap — the admin dashboard, the
+members grid, and the money work. v1.2.8, all on `main`).
 
-## Session 019 (2026-08-20) — THE ADMIN DASHBOARD, and the members table as a real grid
+## ⚠️ START HERE: two migrations are waiting
 
-**Version 1.1.7 → 1.1.8** (§6: two features, far-right digit). On `main` — the
-user said mid-session "commit directly to main". **No migration this session.**
+**`9957_money_kinds.sql`** and **`9956_featured_requests.sql`** have NOT been
+pasted. Both degrade safely, so nothing is broken — but two features are only
+half on until they are. `9956` was amended mid-session and is re-runnable;
+paste it again if an earlier copy went in. Detail in each section below.
+
+## Session 019 (2026-08-20) — THE ADMIN DASHBOARD, THE MEMBERS GRID, AND THE MONEY
+
+**Version 1.1.7 → 1.2.8** (§6: nine features, so the SECOND digit moved; the
+far-right digit had already moved mid-session when the work looked like two.
+Full audit trail in the session log). Everything is on `main` — the user said
+mid-session "commit directly to main".
+
+Five commits: `2f1f230` (grid + dashboard) · `afd81ff` (pricing doc) ·
+`139a924` (cash vs granted, the refund guard, the 5% fee) · `a2bf576`
+(featured listings, event pricing) · `402581c` (one phone number,
+self-service artwork, the slot timeline, the income report).
 
 ### `/admin` is now a DASHBOARD. The review queue moved to `/admin/review`.
 
@@ -143,7 +157,33 @@ Things not to get wrong here:
    `site.supportEmail`, (330) 275-1603). The user confirmed support and sales
    are the same line; the separate sales fields were removed.
 
-Unit suite ended at **1369**.
+**The income report is at /admin/money** and answers the session-018 question
+directly. Three groups: what you have EARNED (split into the part paid with
+real money — the income figure — and the part paid with credit you gave), what
+you are HOLDING (cash collected, still owed to members as a share of it, paid
+back out), and what you have GIVEN away. It reads per-member on purpose:
+grants-first spending is a per-member rule, so summing raw ledger kinds
+service-wide would mis-split earned revenue the moment one member is on
+starter credit while another spends their own money. It stops at 100,000
+ledger rows and SAYS SO on the page when it does — a silently truncated money
+total is the kind of confident wrong number that gets acted on.
+
+### What is NOT built (deliberate, and the obvious next increment)
+
+- **Approving a featured request does not create the spot row.** It books the
+  start day and the timeline draws it, but the operator still adds the
+  `featured_spots` row by hand, using the artwork attached to the request.
+  Wiring approval → spot creation is the natural next step.
+- **No dormancy nudge** ("you still have $50 on your account"). It was
+  recommended and the user chose the 5% refund fee instead. Still the thing
+  that turns a dead balance into an ad or a clean refund, and it needs no
+  lawyer — worth revisiting once /admin/money shows a real "still owed"
+  figure.
+- **/admin/money reads all zeroes until there is real ledger activity.** That
+  is correct, not broken; it was verified against an empty dev store.
+
+Unit suite ended at **1369** (new this session: `system-health` 37, `money`
+62, `featured-schedule` 58; `user-table` 50 → 101).
 
 Full detail: `Session log/019_2026-08-20_admin-dashboard-users-table/session_log.md`.
 
